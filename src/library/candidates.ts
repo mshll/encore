@@ -17,6 +17,7 @@ export type VerifiedSong = {
   name: string;
   artists: string[];
   album: string;
+  albumArtUrl: string | null;
   releaseDate: string | null;
   durationMs: number;
   heard: boolean;
@@ -70,6 +71,7 @@ export class CandidateVerifier {
       name: match.name,
       artists,
       album: match.album.name,
+      albumArtUrl: match.album.images?.[0]?.url ?? null,
       releaseDate: match.album.release_date ?? null,
       durationMs: match.duration_ms,
       heard: plays > 0,

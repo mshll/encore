@@ -5,6 +5,7 @@ import { trackNotes, tracks } from "../db/schema";
 import { runAgent } from "../llm/agent";
 import { tagged, type FeatureContext } from "../llm/context";
 import { loadCatalog } from "../library/catalog";
+import { withArtwork } from "../library/artwork";
 import { artistProfile } from "../library/tools";
 import { songKey as makeSongKey } from "../plays/song";
 import { tasteProfile } from "../taste/profile";
@@ -22,7 +23,7 @@ export class NoteSubjectNotFoundError extends Error {}
 
 const MAX_FALLBACK_SOURCES = 5;
 
-type Subject = { songKey: string; uri: string; name: string; artist: string; album: string | null; releaseDate: string | null };
+type Subject = { songKey: string; uri: string; name: string; artist: string; album: string | null; releaseDate: string | null; albumArtUrl: string | null };
 
 async function resolveSubject(ctx: FeatureContext, input: { songKey?: string; uri?: string }): Promise<Subject> {
   const { db, spotify } = ctx;
@@ -30,15 +31,15 @@ async function resolveSubject(ctx: FeatureContext, input: { songKey?: string; ur
     const song = loadCatalog(db).songs.get(input.songKey);
     if (!song) throw new NoteSubjectNotFoundError("No song with that songKey in the history");
     const track = db.select().from(tracks).where(eq(tracks.uri, song.uri)).get();
-    return { songKey: song.songKey, uri: song.uri, name: song.name, artist: song.artist, album: song.album, releaseDate: track?.releaseDate ?? null };
+    return { songKey: song.songKey, uri: song.uri, name: song.name, artist: song.artist, album: song.album, releaseDate: track?.releaseDate ?? null, albumArtUrl: track?.albumArtUrl ?? null };
   }
   const known = db.select().from(tracks).where(eq(tracks.uri, input.uri!)).get();
-  if (known) return { songKey: known.songKey, uri: known.uri, name: known.name, artist: known.artist, album: known.album, releaseDate: known.releaseDate };
+  if (known) return { songKey: known.songKey, uri: known.uri, name: known.name, artist: known.artist, album: known.album, releaseDate: known.releaseDate, albumArtUrl: known.albumArtUrl };
   const id = /^spotify:track:([A-Za-z0-9]{22})$/.exec(input.uri!)?.[1];
   if (!id) throw new NoteSubjectNotFoundError("uri must be a Spotify track URI");
   const t = await spotify.track(id);
   const artist = t.artists[0]?.name ?? "Unknown artist";
-  return { songKey: makeSongKey(t.name, artist), uri: t.uri, name: t.name, artist, album: t.album.name, releaseDate: t.album.release_date ?? null };
+  return { songKey: makeSongKey(t.name, artist), uri: t.uri, name: t.name, artist, album: t.album.name, releaseDate: t.album.release_date ?? null, albumArtUrl: t.album.images?.[0]?.url ?? null };
 }
 
 function historyFacts(db: Db, s: Subject): string {
@@ -63,11 +64,11 @@ function historyFacts(db: Db, s: Subject): string {
   return lines.join("\n");
 }
 
-const view = (n: typeof trackNotes.$inferSelect) => ({ ...n, createdAt: new Date(n.createdAt).toISOString() });
+const view = (db: Db, n: typeof trackNotes.$inferSelect) => withArtwork(db, [{ ...n, createdAt: new Date(n.createdAt).toISOString() }])[0]!;
 
 export function cachedNote(db: Db, songKey: string) {
   const row = db.select().from(trackNotes).where(eq(trackNotes.songKey, songKey)).get();
-  return row ? view(row) : null;
+  return row ? view(db, row) : null;
 }
 
 export async function trackNote(ctx: FeatureContext, input: { songKey?: string; uri?: string }) {
@@ -115,11 +116,12 @@ export async function trackNote(ctx: FeatureContext, input: { songKey?: string; 
     uri: subject.uri,
     name: subject.name,
     artist: subject.artist,
+    albumArtUrl: subject.albumArtUrl,
     text,
     sources: [...sources].map(([url, title]) => ({ url, title })),
     model: result.final.model,
     createdAt: ctx.now(),
   };
   db.insert(trackNotes).values(row).onConflictDoNothing().run();
-  return { ...view(db.select().from(trackNotes).where(eq(trackNotes.songKey, subject.songKey)).get()!), cached: false };
+  return { ...view(db, db.select().from(trackNotes).where(eq(trackNotes.songKey, subject.songKey)).get()!), cached: false };
 }
