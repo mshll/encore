@@ -80,7 +80,7 @@ describe("auth gating", () => {
     expect(config.secureCookies).toBe(false);
   });
 
-  test("admin token works only on tagging routes", async () => {
+  test("admin token works on tagging routes and not on read routes", async () => {
     const { request } = testApp();
     const admin = { authorization: `Bearer ${ADMIN}` };
     expect((await request("/api/tags/vocabulary", { headers: admin })).status).toBe(200);

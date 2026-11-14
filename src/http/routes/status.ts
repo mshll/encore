@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import { sql } from "drizzle-orm";
 import { enrichmentProgress } from "../../ingest/live/enrich";
 import { getJobState, type JobState } from "../../jobs/state";
+import { budgetStatus, spendByFeature } from "../../llm/ledger";
 import { SPOTIFY_SCOPES } from "../../spotify/auth";
 import { tagCoverage } from "../../tags/service";
 import type { Env } from "../context";
@@ -15,7 +16,8 @@ const job = (state: JobState | undefined) => ({
 });
 
 export const statusRoutes = new Hono<Env>().get("/", (c) => {
-  const { db, spotifyAuth, spotify, config } = c.var.deps;
+  const { db, spotifyAuth, spotify, config, llm, now } = c.var.deps;
+  const budget = budgetStatus(db, config.timezone, config.llm.monthlyBudgetUsd, now());
   const auth = spotifyAuth.status();
   const gate = spotify.gate();
   const importState = getJobState(db, "import");
@@ -36,5 +38,16 @@ export const statusRoutes = new Hono<Env>().get("/", (c) => {
     import: importState ? { lastImportAt: iso(importState.lastSuccessAt), result: importState.data } : null,
     tags: tagCoverage(db),
     plays: counts,
+    llm: {
+      configured: llm.configured,
+      model: llm.model,
+      month: budget.month,
+      spentUsd: budget.spentUsd,
+      capUsd: budget.capUsd,
+      remainingUsd: budget.remainingUsd,
+      exhausted: budget.exhausted,
+      byFeature: spendByFeature(db, budget.month).map((f) => ({ feature: f.feature, calls: f.calls, usd: f.usd })),
+      jobs: { picks: job(getJobState(db, "picks")), digest: job(getJobState(db, "digest")), outcomes: job(getJobState(db, "outcomes")) },
+    },
   });
 });
