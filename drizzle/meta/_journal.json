@@ -15,6 +15,13 @@
       "when": 1794622686247,
       "tag": "0001_artists",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1794624300000,
+      "tag": "0002_live_radar_cleanup",
+      "breakpoints": true
     }
   ]
 }
