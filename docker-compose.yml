@@ -7,7 +7,7 @@ services:
     # Every app variable is passed through; an empty value means the app default (see README).
     environment:
       SPOTIFY_CLIENT_ID: ${SPOTIFY_CLIENT_ID:?SPOTIFY_CLIENT_ID is required}
-      PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-https://spotify.mshl.me}
+      PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:?PUBLIC_BASE_URL is required}
       SPOTIFY_REDIRECT_URI: ${SPOTIFY_REDIRECT_URI:-}
       SETUP_TOKEN: ${SETUP_TOKEN:-}
       ADMIN_TOKEN: ${ADMIN_TOKEN:-}

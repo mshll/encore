@@ -6,7 +6,9 @@ type Row = { ts: number; day: string; country: string; ms: number; music: number
 
 type Trip = { rows: Row[] };
 
-export function trips(db: Db, { range, homeCountry, minPlays, topTracks }: { range: Range; homeCountry: string; minPlays: number; topTracks: number }) {
+export function trips(db: Db, { range, homeCountry, minPlays, topTracks }: { range: Range; homeCountry?: string; minPlays: number; topTracks: number }) {
+  const home = homeCountry ?? mostPlayedCountry(db);
+  if (!home) return { homeCountry: null, trips: [] };
   const rows = db.all<Row>(sql`
     select p.ts, p.day, p.conn_country as country, coalesce(p.ms_played, t.duration_ms, 0) as ms, p.kind = 'track' as music,
       t.song_key, t.uri, t.name, t.artist, t.album_art_url, (p.source = 'api' or p.ms_played >= 30000) as listen
@@ -18,7 +20,7 @@ export function trips(db: Db, { range, homeCountry, minPlays, topTracks }: { ran
   const found: Trip[] = [];
   let current: Trip | null = null;
   for (const row of rows) {
-    if (row.country === homeCountry) {
+    if (row.country === home) {
       current = null;
       continue;
     }
@@ -29,13 +31,16 @@ export function trips(db: Db, { range, homeCountry, minPlays, topTracks }: { ran
     current.rows.push(row);
   }
   return {
-    homeCountry,
+    homeCountry: home,
     trips: found
       .filter((trip) => trip.rows.length >= minPlays)
       .map((trip) => summarize(trip, topTracks))
       .reverse(),
   };
 }
+
+export const mostPlayedCountry = (db: Db): string | undefined =>
+  db.all<{ country: string }>(sql`select conn_country as country from plays where conn_country is not null group by conn_country order by count(*) desc limit 1`)[0]?.country;
 
 function summarize({ rows }: Trip, topTracks: number) {
   const first = rows[0]!;

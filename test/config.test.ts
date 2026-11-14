@@ -3,8 +3,8 @@ import { loadConfig } from "../src/config";
 
 describe("config", () => {
   test("derives redirect URI, RP ID and cookie security from the public URL; empty values mean unset", () => {
-    const config = loadConfig({ SPOTIFY_CLIENT_ID: "id", PUBLIC_BASE_URL: "https://spotify.mshl.me", SPOTIFY_REDIRECT_URI: "", SETUP_TOKEN: "" });
-    expect(config).toMatchObject({ spotifyRedirectUri: "https://spotify.mshl.me/callback", rpId: "spotify.mshl.me", secureCookies: true, setupToken: undefined });
+    const config = loadConfig({ SPOTIFY_CLIENT_ID: "id", PUBLIC_BASE_URL: "https://spotify.example.com", SPOTIFY_REDIRECT_URI: "", SETUP_TOKEN: "" });
+    expect(config).toMatchObject({ spotifyRedirectUri: "https://spotify.example.com/callback", rpId: "spotify.example.com", secureCookies: true, setupToken: undefined });
   });
 
   test("paces Web API calls 2 s apart, enrichment every 120 s and album art every 4 s by default", () => {

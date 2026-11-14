@@ -54,7 +54,7 @@ export default function Trips() {
         <SkeletonRows rows={8} />
       ) : q.data.trips.length === 0 ? (
         <Empty title="No trips in this range">
-          A trip is 5 or more plays in a row from outside {countryName(q.data.homeCountry)}. Spotify’s export records the country; plays logged live from the
+          A trip is 5 or more plays in a row from outside {q.data.homeCountry ? countryName(q.data.homeCountry) : "your home country"}. Spotify’s export records the country; plays logged live from the
           API do not, so recent travel shows up after the next export.
         </Empty>
       ) : (

@@ -15,6 +15,7 @@ export const TZ = "Asia/Kuwait";
 export const testConfig = (env: Record<string, string> = {}) =>
   loadConfig({
     SPOTIFY_CLIENT_ID: "test-client",
+    TIMEZONE: TZ,
     PUBLIC_BASE_URL: "http://localhost:8888",
     SETUP_TOKEN: "setup-token-setup-token-123",
     ADMIN_TOKEN: "admin-token-admin-token-123",

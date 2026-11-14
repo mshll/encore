@@ -1,4 +1,4 @@
-export const DEFAULT_TIMEZONE = "Asia/Kuwait";
+export const DEFAULT_TIMEZONE = "UTC";
 
 const pad = (n: number) => String(n).padStart(2, "0");
 

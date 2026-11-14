@@ -17,7 +17,7 @@ Contract between the server and the web UI. All routes are JSON over HTTP on the
 
   `details` is present only on some errors. Status codes: `400` validation, `401` not signed in, `402` monthly LLM budget spent, `403` setup token wrong or `premium_required`, `404` not found, `409` precondition (`spotify_not_connected`, `no_active_device`), `413` file too large, `415` wrong content type, `422` Claude declined, `500` server error, `502` Spotify or Claude call failed (`spotify_failed`, `llm_failed`), `503` LLM not configured or Spotify calls paused (`spotify_paused`, `details: { reason, until }`). Assistant error codes are listed under [Assistant](#assistant-claude).
 - Timestamps (`ts`, `firstPlayed`, `lastPlayed`, `start`, `end`, ...) are ISO 8601 UTC strings.
-- Days, hours, weekdays, weeks, months are local time in `TIMEZONE` (default Asia/Kuwait). `day` is `YYYY-MM-DD`. `weekday` is ISO: 1 = Monday ... 7 = Sunday.
+- Days, hours, weekdays, weeks, months are local time in `TIMEZONE` (default UTC). `day` is `YYYY-MM-DD`. `weekday` is ISO: 1 = Monday ... 7 = Sunday.
 - `hours` values are rounded to 2 decimals. Rates (`skipRate`, `shuffleRate`, `share`) are 0..1 rounded to 3 decimals, or `null` when the denominator is 0.
 
 ### Common query parameters
@@ -51,7 +51,7 @@ Runs live in memory: a restart ends them.
 - **Artist**: grouped by artist name string. **Album**: grouped by (artist, album name).
 - **Context dimensions** (used by the skip split and skip profiles). Only rows with a known skip flag (export and live):
   - `hourBucket`: `night` 00-05, `morning` 06-11, `afternoon` 12-17, `evening` 18-23 (local hour).
-  - `dayType`: `weekend` = Friday or Saturday (Kuwait weekend), else `weekday`.
+  - `dayType`: `weekend` = Friday or Saturday, else `weekday`.
   - `shuffle`: `on` / `off`.
   - `device`: the device enum below.
   - `startMode`: `chosen` when `reason_start` is `clickrow`, `playbtn`, or `backbtn` (the owner picked this track); `auto` when it is `trackdone` or `fwdbtn` (the track arrived from the queue). Other start reasons (`appload`, `remote`, `trackerror`, `unknown`) are not a context value.
@@ -65,7 +65,7 @@ Runs live in memory: a restart ends them.
      - `mixed`: everything else (skipped often, but no clear context pattern in the data).
   `bestContext` / `worstContext` are the qualifying contexts with the lowest / highest skip rate.
 - **Era** (`/api/stats/eras`): top N artists by hours in the range; for each, hours per local month across a continuous month axis, the month with the most hours (`peakMonth`), and first/last play of all time (not limited to the range).
-- **Trip**: plays ordered by time, ignoring rows without `conn_country` (all API rows). A trip is a maximal run of consecutive plays whose country is not `HOME_COUNTRY` (default `KW`); a single home-country play ends it. A trip can span several countries. Trips with fewer than `minPlays` plays (default 5) are dropped. `days` counts local days from first to last play inclusive. Trip plays count all kinds (country is about location); `hours` and `topTracks` count music only.
+- **Trip**: plays ordered by time, ignoring rows without `conn_country` (all API rows). A trip is a maximal run of consecutive plays whose country is not `HOME_COUNTRY` (unset: the country with the most plays; `homeCountry` is `null` when no play has a country); a single home-country play ends it. A trip can span several countries. Trips with fewer than `minPlays` plays (default 5) are dropped. `days` counts local days from first to last play inclusive. Trip plays count all kinds (country is about location); `hours` and `topTracks` count music only.
 - **Forgotten**: songs with at least `minListens` listens (all time) and no play of any kind in the last `days` days.
 - **Export vs API and live**: export rows are the source of truth. Importing an export deletes API and live rows from the export's first to last timestamp (plus 999 ms, since export timestamps have second precision), and the poller and the watcher ignore plays at or before the newest export row (+999 ms). `apiPlaysRemoved` counts both.
 - **Live plays** (`source: "live"`): the `watch` job polls `GET /me/player` and turns state changes into plays. `ms_played` is the progress it observed (pauses excluded, forward seeks capped at wall time). `skipped` is true when the track changed before 90% of its duration; stopping playback is not a skip. `reason_end` is `trackdone` (reached the last 5 s), `fwdbtn` (changed earlier) or `endplay` (playback stopped); `reason_start` is the previous play's `trackdone`/`fwdbtn`, else `null`. All three are inferred, not Spotify's values. A gap between polls over `2 x WATCHER_IDLE_SECONDS + 30 s` leaves the end unknown (`skipped`, `reason_end` null). `device` comes from the Spotify device name and type; `contextUri` is the playlist or album played from. A watcher that starts mid-track counts the part before its first poll as played.
@@ -115,7 +115,8 @@ Artist rows (top artists, eras, skips, search, the artist page, the overview's `
 
 ```json
 {
-  "timezone": "Asia/Kuwait",
+  "timezone": "Europe/London",
+  "homeCountry": "GB",
   "spotify": {
     "connected": true,
     "userId": "abc123",
@@ -149,6 +150,7 @@ Artist rows (top artists, eras, skips, search, the artist page, the overview's `
 ```
 
 - `timezone`: the `TIMEZONE` used for every local day, hour and weekday. Format `ts` values in it to match the buckets.
+- `homeCountry`: `HOME_COUNTRY`, or the country with the most plays when unset; `null` when no play has a country.
 - `spotify.paused` is `null` or `{ "reason": "rate_limited" | "quota_exceeded", "until": "...", "since": "..." }`. While paused, the server makes no Spotify calls. `quota_exceeded` means the developer-account quota was hit; the pause lasts `QUOTA_BACKOFF_HOURS` (default 12) and the UI should show it.
 - `missingScopes`: scopes the server asks for that the stored grant lacks. Reconnect to grant them.
 - `spotify.pacing`: every Web API call goes through one queue, one call at a time, at least `SPOTIFY_MIN_INTERVAL_MS` (default 2000) apart. Calls made for a request (HTTP, Discord, MCP) go before calls made by scheduled jobs. `queued` counts calls waiting now; `calls` counts calls since the process started. The oEmbed art lookup is not a Web API call and is not paced.
@@ -354,7 +356,7 @@ No range. Params: `date` (`YYYY-MM-DD`, default today in `TIMEZONE`), `limit` (t
 Params: `minPlays` (default 5), `topTracks` (0-50, default 5). Newest first.
 
 ```json
-{ "homeCountry": "KW",
+{ "homeCountry": "GB",
   "trips": [{
     "start": "2026-02-05T23:06:55.000Z", "end": "2026-02-09T10:54:42.000Z", "startDay": "2026-02-06", "endDay": "2026-02-09", "days": 4,
     "countries": [{ "country": "GB", "plays": 39 }, { "country": "TR", "plays": 15 }],

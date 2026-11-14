@@ -1,5 +1,5 @@
 import { useMemo, useState, type KeyboardEvent } from "react";
-import { useClock, useTopArtists, useTopTracks } from "../api/queries";
+import { useClock, useTimezone, useTopArtists, useTopTracks } from "../api/queries";
 import { fmtHour, fmtHours, fmtInt, WEEKDAYS, WEEKDAYS_SHORT } from "../lib/format";
 import { useRange, type Range } from "../lib/range";
 import { useDesktop } from "../lib/useMedia";
@@ -62,7 +62,7 @@ function Heatmap({ cells, selected, onSelect, vertical }: { cells: Cell[]; selec
   const common = {
     role: "grid",
     tabIndex: 0,
-    "aria-label": "Listening by weekday and hour, Kuwait time. Use arrow keys to move.",
+    "aria-label": "Listening by weekday and hour. Use arrow keys to move.",
     onKeyDown: move,
     className: "outline-none focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-(--fg-primary) rounded-sm",
   } as const;
@@ -169,6 +169,7 @@ function CellDetail({ cell, range }: { cell: Cell; range: Range }) {
 export default function Clock() {
   const { range } = useRange();
   const q = useClock(range);
+  const timezone = useTimezone();
   const desktop = useDesktop();
   const [selected, setSelected] = useState<{ weekday: number; hour: number } | null>(null);
   const peak = useMemo(() => q.data?.cells.reduce((best, c) => (c.hours > best.hours ? c : best)), [q.data]);
@@ -191,7 +192,7 @@ export default function Clock() {
             <strong className="font-semibold text-primary">
               {plural(peak.weekday)} at {fmtHour(peak.hour)}
             </strong>
-            , {fmtHours(peak.hours)} in total. Times are Kuwait time.
+            , {fmtHours(peak.hours)} in total. Times are in {timezone}.
           </p>
           <div className={q.isPlaceholderData ? "opacity-60" : ""}>
             <Heatmap cells={q.data.cells} selected={current} onSelect={setSelected} vertical={!desktop} />

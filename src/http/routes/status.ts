@@ -1,5 +1,6 @@
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
+import { mostPlayedCountry } from "../../analytics/trips";
 import { enrichmentProgress } from "../../ingest/live/enrich";
 import { getJobState, type JobState } from "../../jobs/state";
 import { budgetStatus, spendByFeature } from "../../llm/ledger";
@@ -27,6 +28,7 @@ export const statusRoutes = new Hono<Env>().get("/", (c) => {
   )[0]!;
   return c.json({
     timezone: config.timezone,
+    homeCountry: config.homeCountry ?? mostPlayedCountry(db) ?? null,
     spotify: {
       connected: auth.connected,
       userId: auth.userId,

@@ -35,6 +35,7 @@ export type SkipProfile = Record<ContextDimension, ContextStat[]>;
 
 export type Status = {
   timezone: string;
+  homeCountry: string | null;
   spotify: {
     connected: boolean;
     userId: string | null;
@@ -264,7 +265,7 @@ export type Trip = {
   topTracks: { songKey: string; uri: string; name: string; artist: string; albumArtUrl: string | null; plays: number; listens: number; hours: number }[];
 };
 
-export type Trips = { homeCountry: string; trips: Trip[] };
+export type Trips = { homeCountry: string | null; trips: Trip[] };
 
 export type Energy = {
   coverage: { hoursTagged: number; hoursTotal: number; share: number | null };

@@ -1,8 +1,16 @@
 # encore
 
-Private, single-user Spotify dashboard. Imports the Spotify extended streaming history export, keeps logging new plays from the Spotify API, stores LLM-produced tags per song, serves analytics as JSON, and adds Claude features (sets, weekly picks, ask, liner notes, digests) on the web and in Discord. API contract: [docs/api.md](docs/api.md).
+Self-hosted, single-user Spotify dashboard. Imports the Spotify extended streaming history export, keeps logging new plays from the Spotify API, stores LLM-produced tags per song, serves analytics as JSON, and adds Claude features (sets, weekly picks, ask, liner notes, digests) on the web and in Discord. API contract: [docs/api.md](docs/api.md).
 
 Stack: Bun, TypeScript, Hono, SQLite (bun:sqlite + Drizzle), passkeys via @simplewebauthn/server.
+
+## What you need
+
+- A Spotify account and your extended streaming history: request it under Account, Privacy settings, "Extended streaming history". Spotify emails it within about 30 days.
+- A Spotify app from [developer.spotify.com/dashboard](https://developer.spotify.com/dashboard): Web API, development mode. Add your redirect URIs (`http://127.0.0.1:8888/callback` for local, `https://your-domain/callback` for a server) and put its client id in `SPOTIFY_CLIENT_ID`. No client secret is used.
+- Optional: an Anthropic API key for the Claude features, a Discord application for commands and posts, and an MCP client.
+
+Spotify limits development-mode apps. Some endpoints have a daily quota, counted per Spotify account across all your apps. When Spotify answers `QUOTA_EXCEEDED`, encore pauses only that endpoint until the time Spotify gives.
 
 ## Run locally
 
@@ -44,8 +52,8 @@ All config is env vars, validated at boot (the process exits on invalid values).
 | `HOST`, `PORT` | `127.0.0.1`, `8888` | Docker image uses `0.0.0.0`, `3000` |
 | `DATABASE_PATH` | `./data/encore.db` | Docker image uses `/data/encore.db` |
 | `WEB_DIST` | `./web/dist` | Served with SPA fallback when `index.html` exists |
-| `TIMEZONE` | `Asia/Kuwait` | IANA zone for day/hour buckets, applied at insert time |
-| `HOME_COUNTRY` | `KW` | For trips |
+| `TIMEZONE` | `UTC` | IANA zone for day/hour buckets, applied at insert time. Set it before the first import |
+| `HOME_COUNTRY` | most-played country | Two-letter code; trips are runs of plays outside it |
 | `JOBS_ENABLED` | `true` | Poller and enrichment |
 | `POLL_INTERVAL_SECONDS` | `300` | Min 60 |
 | `ENRICH_INTERVAL_SECONDS`, `ENRICH_BATCH_SIZE` | `120`, `1` | Seconds between enrichment runs, Web API calls per run (track or artist, most listened first) |
@@ -80,15 +88,15 @@ Re-importing is safe: rows already stored are skipped. Export rows replace API-l
 
 ## Deploy (Dokploy)
 
-`docker-compose.yml` builds one image and keeps SQLite in the named volume `encore-data` (mounted at `/data`). It exposes port 3000 without publishing it; point a Dokploy domain at service `encore`, port 3000. Every variable in the Environment table is passed through from Dokploy's environment; an empty or missing value means the default. `PUBLIC_BASE_URL` defaults to `https://spotify.mshl.me`; register `https://spotify.mshl.me/callback` in the Spotify app.
+`docker-compose.yml` builds one image and keeps SQLite in the named volume `encore-data` (mounted at `/data`). It exposes port 3000 without publishing it; point a Dokploy domain at service `encore`, port 3000. Every variable in the Environment table is passed through from Dokploy's environment; an empty or missing value means the default. Set `PUBLIC_BASE_URL` to the domain and register `PUBLIC_BASE_URL/callback` in the Spotify app.
 
 Production variables:
 
 | Need | Variables |
 | --- | --- |
-| Required | `SPOTIFY_CLIENT_ID` (compose refuses to start without it) |
+| Required | `SPOTIFY_CLIENT_ID`, `PUBLIC_BASE_URL` (compose refuses to start without them); `TIMEZONE` |
 | Required for first login | `SETUP_TOKEN` (can be removed after the first passkey) |
-| Required if not `https://spotify.mshl.me` | `PUBLIC_BASE_URL`, and `SPOTIFY_REDIRECT_URI` if the callback differs from `PUBLIC_BASE_URL/callback` |
+| Required if the callback differs from `PUBLIC_BASE_URL/callback` | `SPOTIFY_REDIRECT_URI` |
 | Optional: bearer import and tagging | `ADMIN_TOKEN` |
 | Optional: Claude features | `ANTHROPIC_API_KEY`; `MONTHLY_BUDGET_USD` (default 100) caps spend; `DJ_REPLANNER=llm` to re-plan DJ sessions with Claude |
 | Optional: Discord commands | `DISCORD_APPLICATION_ID`, `DISCORD_PUBLIC_KEY`, `DISCORD_OWNER_ID`; Interactions Endpoint URL `PUBLIC_BASE_URL/api/discord/interactions` |
@@ -130,3 +138,5 @@ src/jobs/                scheduler and persisted job state
 src/http/                Hono app and routes
 web/                     UI (Vite + React), built into web/dist; dither-kit charts vendored in web/src/components/dither-kit
 ```
+
+Weekends are Friday and Saturday in analytics, picks and DJ plans.

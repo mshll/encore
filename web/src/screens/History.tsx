@@ -1,7 +1,7 @@
 import { useWindowVirtualizer } from "@tanstack/react-virtual";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "wouter";
-import { useHistory, useTimezone, type HistoryFilters } from "../api/queries";
+import { useHistory, useStatus, useTimezone, type HistoryFilters } from "../api/queries";
 import type { Device, HistoryItem } from "../api/types";
 import { countryName, DEVICE_LABELS, fmtDuration, fmtInt, fmtTime } from "../lib/format";
 import { useRange } from "../lib/range";
@@ -60,6 +60,7 @@ function SearchField({ value, onChange }: { value: string; onChange: (v: string)
 }
 
 function PlayRow({ item, timezone, desktop }: { item: HistoryItem; timezone: string; desktop: boolean }) {
+  const homeCountry = useStatus().data?.homeCountry;
   const time = fmtTime(item.ts, timezone);
   const played = fmtDuration(item.msPlayed);
   const title = item.songKey ? (
@@ -109,7 +110,7 @@ function PlayRow({ item, timezone, desktop }: { item: HistoryItem; timezone: str
       <span className="truncate text-secondary">
         {[
           item.device === "unknown" ? null : DEVICE_LABELS[item.device],
-          item.country && item.country !== "KW" ? countryName(item.country) : null,
+          item.country && item.country !== homeCountry ? countryName(item.country) : null,
           item.source === "live" ? "live" : null,
         ]
           .filter(Boolean)

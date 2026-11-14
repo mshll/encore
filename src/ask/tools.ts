@@ -34,7 +34,7 @@ const songBrief = (s: { songKey: string; name: string; artist: string; album: st
 });
 
 /** Read-only tools over the play history. None of them reaches auth, session, passkey, token or ledger tables. */
-export function askTools(db: Db, homeCountry: string, now: number): AgentTool[] {
+export function askTools(db: Db, homeCountry: string | undefined, now: number): AgentTool[] {
   return [
     tool({
       name: "query_plays",

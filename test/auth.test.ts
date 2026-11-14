@@ -93,8 +93,8 @@ describe("auth gating", () => {
   });
 
   test("secure cookies in production", async () => {
-    const { request, config } = testApp({ PUBLIC_BASE_URL: "https://spotify.mshl.me" });
-    expect(config.rpId).toBe("spotify.mshl.me");
+    const { request, config } = testApp({ PUBLIC_BASE_URL: "https://spotify.example.com" });
+    expect(config.rpId).toBe("spotify.example.com");
     const authenticator = new SoftAuthenticator(config.publicBaseUrl, config.rpId);
     const res = await registerFirst(request, authenticator);
     expect(res.status).toBe(200);

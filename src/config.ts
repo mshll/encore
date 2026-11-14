@@ -20,8 +20,8 @@ const schema = z.object({
   SPOTIFY_REDIRECT_URI: z.url().optional(),
   SETUP_TOKEN: optionalSecret,
   ADMIN_TOKEN: optionalSecret,
-  TIMEZONE: timezone.default("Asia/Kuwait"),
-  HOME_COUNTRY: z.string().regex(/^[A-Z]{2}$/).default("KW"),
+  TIMEZONE: timezone.default("UTC"),
+  HOME_COUNTRY: z.string().regex(/^[A-Z]{2}$/).optional(),
   JOBS_ENABLED: z.enum(["true", "false"]).default("true").transform((v) => v === "true"),
   POLL_INTERVAL_SECONDS: z.coerce.number().int().min(60).default(300),
   ENRICH_INTERVAL_SECONDS: z.coerce.number().min(1).default(120),
@@ -85,7 +85,7 @@ export type Config = {
   setupToken?: string;
   adminToken?: string;
   timezone: string;
-  homeCountry: string;
+  homeCountry: string | undefined;
   jobsEnabled: boolean;
   pollIntervalMs: number;
   enrichIntervalMs: number;

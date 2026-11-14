@@ -265,6 +265,7 @@ describe("trips", () => {
       topTracks: [{ songKey: KEY_A, uri: A1, name: "Song A", artist: "Artist X", albumArtUrl: "https://img/a1", plays: 3, listens: 2, hours: 0.11 }],
     });
     expect(trips(db, { range: {}, homeCountry: "KW", minPlays: 1, topTracks: 0 }).trips.map((t) => t.startDay)).toEqual(["2026-02-01", "2026-01-02"]);
+    expect(trips(db, { range: {}, minPlays: 2, topTracks: 1 })).toEqual(result);
   });
 });
 

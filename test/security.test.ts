@@ -25,8 +25,8 @@ describe("cross-origin writes", () => {
   });
 
   test("sibling subdomains and other sites are rejected", async () => {
-    const { post } = signedIn({ PUBLIC_BASE_URL: "https://spotify.mshl.me" });
-    for (const origin of ["https://evil.mshl.me", "https://evil.example", "null", "http://spotify.mshl.me"]) {
+    const { post } = signedIn({ PUBLIC_BASE_URL: "https://spotify.example.com" });
+    for (const origin of ["https://evil.example.com", "https://evil.example", "null", "http://spotify.example.com"]) {
       const res = await post("/api/radar/seen", { ...json, origin }, "{}");
       expect(res.status).toBe(403);
       expect(await errorCode(res)).toBe("cross_origin_rejected");
