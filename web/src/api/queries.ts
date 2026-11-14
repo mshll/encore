@@ -20,9 +20,15 @@ import type {
   SetDetail,
   SetSummary,
   Spend,
-  Cleanup,
-  CleanupBatch,
-  CleanupKind,
+  Batch,
+  ItemStatus,
+  LibraryAnalysis,
+  LibrarySongs,
+  PlanConversation,
+  PlanDetail,
+  PlanSummary,
+  SongGroup,
+  Standing,
   DjSession,
   Energy,
   PlayerNow,
@@ -191,14 +197,52 @@ export const useTracks = (uris: string[]) =>
 export const useRadar = (status: "new" | "recent", days = 30) =>
   useQuery({ queryKey: ["radar", status, days], queryFn: () => get<Radar>("/api/radar", { status, days, limit: 200 }) });
 
-export const useCleanup = (kind: CleanupKind | undefined, status: "open" | "dismissed" | "applied") =>
-  useQuery({
-    queryKey: ["cleanup", kind ?? null, status],
-    queryFn: () => get<Cleanup>("/api/cleanup", { kind, status, limit: 500 }),
+export const useLibraryAnalysis = () => useQuery({ queryKey: ["library", "analysis"], queryFn: () => get<LibraryAnalysis>("/api/library/analysis") });
+
+export const groupQuery = (g: SongGroup) =>
+  g.kind === "unsaved"
+    ? { kind: g.kind }
+    : g.kind === "duplicates"
+      ? { kind: g.kind, where: g.where }
+      : { kind: g.kind, where: g.where, classes: g.classes?.join(","), artist: g.artist, savedMonth: g.savedMonth };
+
+const SONGS_PAGE = 100;
+
+export const useLibrarySongs = (group: SongGroup) =>
+  useInfiniteQuery({
+    queryKey: ["library", "songs", group],
+    queryFn: ({ pageParam }) => get<LibrarySongs>("/api/library/songs", { ...groupQuery(group), limit: SONGS_PAGE, offset: pageParam }),
+    initialPageParam: 0,
+    getNextPageParam: (last) => (last.offset + last.items.length < last.total ? last.offset + last.items.length : undefined),
+  });
+
+export const usePlans = () => useQuery({ queryKey: ["library", "plans"], queryFn: () => get<{ items: PlanSummary[] }>("/api/library/plans") });
+
+const PLAN_PAGE = 200;
+
+export const usePlan = (id: number, status: ItemStatus) =>
+  useInfiniteQuery({
+    queryKey: ["library", "plan", id, status],
+    queryFn: ({ pageParam }) => get<PlanDetail>(`/api/library/plans/${id}`, { status, limit: PLAN_PAGE, offset: pageParam }),
+    initialPageParam: 0,
+    getNextPageParam: (last) => (last.page.offset + last.items.length < last.page.total ? last.page.offset + last.items.length : undefined),
     placeholderData: keepPreviousData,
   });
 
-export const useCleanupBatches = () => useQuery({ queryKey: ["cleanup", "batches"], queryFn: () => get<{ items: CleanupBatch[] }>("/api/cleanup/batches") });
+const busy = (b: Batch) => b.status === "running" || b.undo.status === "running";
+
+/** Applied batches, newest first. Polled while one is applying or undoing, so the page shows the server's progress. */
+export const useBatches = () =>
+  useQuery({
+    queryKey: ["library", "batches"],
+    queryFn: () => get<{ items: Batch[] }>("/api/library/batches"),
+    refetchInterval: (q) => (q.state.data?.items.some(busy) ? 1000 : false),
+  });
+
+export const usePlanConversation = (threadId: number) =>
+  useQuery({ queryKey: ["library", "conversation", threadId], queryFn: () => get<PlanConversation>(`/api/library/conversations/${threadId}`) });
+
+export const useStanding = () => useQuery({ queryKey: ["library", "standing"], queryFn: () => get<{ items: Standing[] }>("/api/library/standing") });
 
 export const useSets = () =>
   useQuery({

@@ -7,7 +7,7 @@
     ?fixture=empty    a range with no plays
     ?fixture=new      a fresh install: nothing imported yet, setup not complete
     ?fixture=worst    real data bent to the limits: long names, huge counts, one-row lists, broken art, long Ask and set threads,
-                      a spent Claude budget, an unreadable stored key, applied and undone cleanup batches,
+                      a spent Claude budget, an unreadable stored key, long library plans, playlists and songs,
                       a finished setup
     ?fixture=untagged plays but no tagged songs (Patterns: Taste)
     ?player=playing   a fake track and queue; player controls answer ok without calling Spotify
@@ -30,6 +30,17 @@
     ?history=failed   applying fails: the database snapshot could not be written
     ?history=env      HISTORY_START sets 2024-01-01 and 269 plays before it are still stored
     History fixtures answer GET and POST /api/settings/history-start and GET /api/settings themselves: nothing is written.
+    ?library=apply       Spotify reads as connected; Apply and Undo are answered here and the batch runs for about 6 s, then ends
+    ?library=running     the newest open plan has an apply in progress (5 of its songs done)
+    ?library=done        it was applied a minute ago, 2 songs skipped as stale, Undo offered
+    ?library=partial     Spotify stopped part way: some songs applied, the rest not, Undo offered
+    ?library=failed      nothing was applied
+    ?library=undoing     its undo is in progress
+    ?library=undofailed  its undo stopped part way
+    ?library=undone      it was applied, then undone
+    ?library=disconnected Spotify reads as not connected (applying answers 409 spotify_not_connected)
+    ?library=unsynced    the library has never synced
+    Library fixtures answer the batch routes and Apply/Undo themselves: no Spotify call, nothing written.
 
   The choice sticks for the tab (sessionStorage) so in-app navigation keeps it; ?fixture=off clears it.
 */
@@ -37,7 +48,7 @@
 type Json = Record<string, unknown>;
 
 const params = new URLSearchParams(location.search);
-for (const key of ["fixture", "player", "run", "dj", "settings", "history"]) {
+for (const key of ["fixture", "player", "run", "dj", "settings", "history", "library"]) {
   const value = params.get(key);
   if (value === "off") sessionStorage.removeItem(`encore-${key}`);
   else if (value) sessionStorage.setItem(`encore-${key}`, value);
@@ -48,6 +59,7 @@ const run = sessionStorage.getItem("encore-run");
 const dj = sessionStorage.getItem("encore-dj");
 const settingsFixture = sessionStorage.getItem("encore-settings");
 const historyFixture = sessionStorage.getItem("encore-history");
+const libraryFixture = sessionStorage.getItem("encore-library");
 
 const LONG_ARTIST = "Bùi Thị Xuân Hương and the Extraordinarily Long-Named Orchestra of Hồ Chí Minh City";
 const LONG_SONG = "Somewhere Only We Know (Live at the Royal Albert Hall, 14 February 2004) [2024 Remaster]";
@@ -96,8 +108,8 @@ function emptyFor(path: string, isNew: boolean): unknown {
   if (path === "/api/stats/tags/genres" || path === "/api/stats/tags/moods") return { period: "month", coverage: { hoursTagged: 0, hoursTotal: 0, share: null }, totals: [], series: [] };
   if (path === "/api/stats/tags/energy") return { coverage: { hoursTagged: 0, hoursTotal: 0, share: null }, hours: Array.from({ length: 24 }, (_, hour) => ({ hour, energy: null, valence: null, listens: 0 })) };
   if (path === "/api/tags/pending") return { items: [], total: 0, limit: 1, offset: 0 };
-  if (path === "/api/cleanup/batches" || path === "/api/blocks") return { items: [] };
-  if (path === "/api/cleanup") return { counts: { saved_never_played: 0, saved_dislike: 0, playlist_skipped: 0, playlist_duplicate: 0 }, library: { savedTracks: 0, playlists: 0, syncing: false, lastSyncAt: null }, total: 0, limit: 500, offset: 0, items: [] };
+  if (path === "/api/library/batches" || path === "/api/library/plans" || path === "/api/library/standing" || path === "/api/blocks") return { items: [] };
+  if (path === "/api/library/analysis") return unsyncedLibrary(isNew);
   return null;
 }
 
@@ -225,20 +237,25 @@ function worsen(path: string, body: Json): unknown {
     return { ...body, turns: [...turns, ...long] };
   }
   if (path === "/api/ask/threads") return { items: (body.items as Json[]).slice(0, 1).map((t) => ({ ...t, title: `${LONG_SONG} ${LONG_ARTIST}?` })) };
-  if (path === "/api/cleanup") {
-    const items = (body.items as Json[]).slice(0, 2).map((it, i) => ({
-      ...it,
-      evidence: { ...(it.evidence as Json), name: i === 0 ? LONG_SONG : (it.evidence as Json).name, artist: LONG_ARTIST, albumArtUrl: i === 0 ? BROKEN_ART : null, plays: 98765, listens: 1, playlistName: LONG_ALBUM },
-    }));
-    return { ...body, counts: { saved_never_played: 1, saved_dislike: 123456, playlist_skipped: 0, playlist_duplicate: 2 }, total: items.length, items };
-  }
-  if (path === "/api/cleanup/batches")
+  if (path === "/api/library/analysis") {
+    const a = body as { playlists: Json[]; artists: Json[]; liked: Json; unsaved: { songs: Json[] } };
     return {
-      items: [
-        { id: 2, proposalIds: [1], actions: 1, appliedAt: new Date(Date.now() - 3_600_000).toISOString(), undoneAt: null },
-        { id: 1, proposalIds: [2, 3], actions: 123456, appliedAt: "2026-10-01T10:00:00.000Z", undoneAt: "2026-10-02T10:00:00.000Z" },
-      ],
+      ...a,
+      liked: { total: 1234567, classes: { active: 1, fading: 0, dormant: 1234566, never: 0 } },
+      playlists: [{ ...a.playlists[0], name: LONG_ALBUM, items: 98765, songs: 98000, duplicates: 765, overlap: { id: "x", name: LONG_SONG, shared: 12345 } }, ...a.playlists.slice(1, 2)],
+      artists: [{ ...a.artists[0], artist: LONG_ARTIST, total: 98765, dormant: 98000 }, ...a.artists.slice(1, 2)],
+      unsaved: { total: 123456, songs: a.unsaved.songs.slice(0, 1).map((x) => ({ ...x, name: LONG_SONG, artist: LONG_ARTIST, albumArtUrl: BROKEN_ART, listens: 98765 })) },
     };
+  }
+  if (path === "/api/library/plans")
+    return { items: (body.items as Json[]).map((p, i, all) => (i === all.findIndex((x) => x.status === "open") ? { ...p, title: `${LONG_SONG} ${LONG_ARTIST}`, counts: { ...(p.counts as Json), open: 123456, selected: 123000 } } : p)) };
+  if (/^\/api\/library\/plans\/\d+$/.test(path) || path === "/api/library/songs") {
+    const items = (body.items as Json[]).slice(0, 3).map((it, i) => {
+      const long = { name: LONG_SONG, artist: LONG_ARTIST, albumArtUrl: i === 0 ? BROKEN_ART : null };
+      return "evidence" in it ? { ...it, reason: `${String(it.reason)}; ${LONG_ALBUM}`, evidence: { ...(it.evidence as Json), ...long } } : { ...it, ...long };
+    });
+    return { ...body, items };
+  }
   if (path === "/api/blocks") return { items: [{ id: 1, kind: "artist", key: "x", label: LONG_ARTIST, reason: "never on weekly pick 2026-11-09", createdAt: "2026-11-09T10:00:00.000Z" }] };
   if (path === "/api/digests") return { items: (body.items as Json[]).slice(0, 1) };
   if (/^\/api\/digests\/\d+$/.test(path))
@@ -373,7 +390,14 @@ async function djSession() {
   };
 }
 
-const RUN_PATHS = [/^\/api\/picks\/generate$/, /^\/api\/sets$/, /^\/api\/sets\/\d+\/messages$/, /^\/api\/ask$/];
+const RUN_PATHS = [/^\/api\/picks\/generate$/, /^\/api\/sets$/, /^\/api\/sets\/\d+\/messages$/, /^\/api\/ask$/, /^\/api\/library\/conversations$/];
+
+const LIBRARY_STEPS: { name: string; input: Json }[] = [
+  { name: "library_overview", input: {} },
+  { name: "find_library_songs", input: { where: "liked", lastPlayed: ["over 6 months ago"] } },
+  { name: "find_library_songs", input: { where: "liked", artists: ["Kendrick Lamar"] } },
+  { name: "played_not_liked", input: {} },
+];
 const RUN_ID = "fixture-run";
 
 const STEPS: { name: string; input: Json }[] = [
@@ -412,14 +436,20 @@ function sse(frames: Frame[], signal: AbortSignal | null | undefined, endless: b
 }
 
 const stepFrames = (path: string, count: number): Frame[] => {
-  const last = path.includes("picks") ? "submit_picks" : path.includes("sets") ? "submit_set" : null;
-  const steps = STEPS.slice(0, count).map((s): Frame => ["tool", s, 1200]);
-  return last && count >= STEPS.length ? [...steps, ["tool", { name: last, input: {} }, 1200]] : steps;
+  const library = path.includes("library");
+  const last = path.includes("picks") ? "submit_picks" : path.includes("sets") ? "submit_set" : library ? "submit_plan" : null;
+  const steps = (library ? LIBRARY_STEPS : STEPS).slice(0, count).map((s): Frame => ["tool", s, 1200]);
+  return last && count >= (library ? LIBRARY_STEPS : STEPS).length ? [...steps, ["tool", { name: last, input: {} }, 1200]] : steps;
 };
 
 async function doneBody(path: string): Promise<unknown> {
   const real = <T>(p: string) => realFetch(p).then((r) => r.json() as Promise<T>);
   if (path === "/api/picks/generate") return real("/api/picks");
+  if (path === "/api/library/conversations") {
+    const plans = await real<{ items: { id: number; source: string; threadId: number | null; counts: { open: number } }[] }>("/api/library/plans");
+    const plan = plans.items.find((p) => p.source === "claude") ?? plans.items.find((p) => p.counts.open > 0);
+    return { planId: plan?.id ?? null, threadId: plan?.threadId ?? 1, reply: plan ? null : "Over 6 months, or never played too?", songs: plan?.counts.open ?? 0 };
+  }
   if (path === "/api/ask") {
     const threads = await real<{ items: { id: number }[] }>("/api/ask/threads");
     return { threadId: threads.items[0]?.id ?? 1, answer: ANSWER };
@@ -465,6 +495,103 @@ async function runFixture(path: string, method: string, signal: AbortSignal | nu
   return sse([opened, ...stepFrames(path, STEPS.length), ...text, ["done", await doneBody(path), 600]], signal, false);
 }
 
+function unsyncedLibrary(isNew: boolean) {
+  const zero = { active: 0, fading: 0, dormant: 0, never: 0 };
+  return {
+    library: { savedTracks: 0, playlists: 0, syncing: false, lastSyncAt: isNew ? null : "2026-11-14T03:10:03.651Z" },
+    historyStart: null,
+    rules: { fadingAfterDays: 90, dormantAfterDays: 180, unsavedMinListens: 10 },
+    liked: { total: 0, classes: zero },
+    savedMonths: [],
+    artists: [],
+    playlists: [],
+    overlaps: [],
+    unsaved: { total: 0, songs: [] },
+  };
+}
+
+const LIB_BATCH = 9000;
+/** The apply this tab started under ?library=apply: the batch runs on a clock instead of on Spotify. */
+let libApply: { planId: number; selected: number; startedAt: number; undoAt: number | null } | null = null;
+
+type PlanRow = { id: number; title: string; ruleKind: string | null; status: string; counts: { open: number; selected: number } };
+
+async function libraryPlan(): Promise<PlanRow | undefined> {
+  const plans = (await realFetch("/api/library/plans").then((r) => r.json())) as { items: PlanRow[] };
+  return plans.items.find((p) => p.status === "open" && p.counts.selected > 0);
+}
+
+async function libraryBatch(state: string, plan: PlanRow, at: number): Promise<Json> {
+  const detail = (await realFetch(`/api/library/plans/${plan.id}?limit=4`).then((r) => r.json())) as { items: { id: number; action: string; evidence: { name: string; artist: string } }[] };
+  const song = (i: number) => {
+    const it = detail.items[i % Math.max(1, detail.items.length)];
+    return { id: it?.id ?? i, name: it?.evidence.name ?? "Song", artist: it?.evidence.artist ?? "Artist", action: it?.action ?? "archive" };
+  };
+  const action = plan.ruleKind === "playlist_duplicate" ? "dedupe" : "archive";
+  const selected = plan.counts.selected;
+  const elapsed = Date.now() - at;
+  const live = state === "apply" ? (elapsed < 6000 ? "running" : "done") : state;
+  const running = live === "running";
+  const applied = running ? Math.min(selected, state === "apply" ? Math.floor((elapsed / 6000) * selected) : 5) : live === "failed" ? 0 : live === "partial" ? Math.ceil(selected / 2) : selected - (live === "done" ? Math.min(2, selected - 1) : 0);
+  const skipped = live === "done" && selected > 2 ? [{ ...song(0), reason: "No longer in your liked songs" }, { ...song(1), reason: "The playlist changed in Spotify since the last sync" }] : [];
+  const notApplied = live === "partial" || live === "failed" ? Array.from({ length: Math.min(3, selected - applied) }, (_, i) => song(i + 2)) : [];
+  const undoing = state === "undoing" || (libApply?.undoAt != null && Date.now() - libApply.undoAt < 4000);
+  const undone = state === "undone" || (libApply?.undoAt != null && !undoing);
+  const undo = undoing ? "running" : undone ? "done" : state === "undofailed" ? "failed" : null;
+  return {
+    id: LIB_BATCH,
+    planId: plan.id,
+    planTitle: plan.title,
+    status: running ? "running" : live === "undoing" || live === "undone" || live === "undofailed" ? "done" : live,
+    selected,
+    applied,
+    actions: { archive: 0, remove: 0, save: 0, add: 0, dedupe: 0, [action]: applied },
+    skipped,
+    notApplied,
+    error: live === "partial" || live === "failed" ? "Spotify API 502: Bad gateway" : null,
+    calls: Math.ceil(applied / 40) + 2,
+    canUndo: !running && applied > 0 && undo !== "done",
+    undo: { status: undo, error: undo === "failed" ? "Spotify API 500: Internal server error" : null, undoneAt: undo === "done" ? new Date(Date.now() - 60_000).toISOString() : null },
+    appliedAt: new Date(at).toISOString(),
+    finishedAt: running ? null : new Date(at + 6000).toISOString(),
+  };
+}
+
+async function libraryFixtureAnswer(path: string, method: string): Promise<Response | null> {
+  const state = libraryFixture!;
+  if (path === "/api/status" && method === "GET") {
+    const status = (await realFetch(path).then((r) => r.json())) as { spotify: Json };
+    status.spotify = { ...status.spotify, connected: state !== "disconnected" };
+    return json(status);
+  }
+  if (state === "unsynced" && path === "/api/library/analysis") return json(unsyncedLibrary(true));
+  if (state === "disconnected" && /^\/api\/library\/plans\/\d+\/apply$/.test(path))
+    return json({ error: { code: "spotify_not_connected", message: "Spotify is not connected" } }, 409);
+  if (state === "apply" && method === "POST") {
+    const applying = path.match(/^\/api\/library\/plans\/(\d+)\/apply$/);
+    if (applying) {
+      const plan = (await libraryPlan()) ?? null;
+      if (!plan) return null;
+      libApply = { planId: Number(applying[1]), selected: plan.counts.selected, startedAt: Date.now(), undoAt: null };
+      return json({ batch: await libraryBatch("apply", { ...plan, id: Number(applying[1]) }, libApply.startedAt) }, 202);
+    }
+    if (path === `/api/library/batches/${LIB_BATCH}/undo` && libApply) {
+      libApply.undoAt = Date.now();
+      const plan = await libraryPlan();
+      return json({ batch: await libraryBatch("apply", { ...plan!, id: libApply.planId }, libApply.startedAt) }, 202);
+    }
+  }
+  if (path === "/api/library/batches" && method === "GET") {
+    const real = (await realFetch(path).then((r) => r.json())) as { items: Json[] };
+    const plan = await libraryPlan();
+    if (state === "apply" && !libApply) return json(real);
+    if (!plan || state === "unsynced" || state === "disconnected") return json(real);
+    const at = state === "apply" ? libApply!.startedAt : Date.now() - 60_000;
+    return json({ items: [await libraryBatch(state, state === "apply" ? { ...plan, id: libApply!.planId } : plan, at), ...real.items] });
+  }
+  return null;
+}
+
 window.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
   const url = new URL(typeof input === "string" ? input : input instanceof URL ? input.href : input.url, location.origin);
   const path = url.pathname;
@@ -494,6 +621,10 @@ window.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
   }
   if (historyFixture) {
     const answer = await historyFixtureAnswer(path, method, init);
+    if (answer) return answer;
+  }
+  if (libraryFixture) {
+    const answer = await libraryFixtureAnswer(path, method);
     if (answer) return answer;
   }
   if (!fixture || method !== "GET") return realFetch(input, init);

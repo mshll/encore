@@ -29,6 +29,14 @@ Listening                      Play                        Secondary            
 
 Shell, on every surface: sidebar (desktop) or tab bar + More sheet (phone), command palette (⌘K, G then key),
 docked player bar with the queue panel (desktop) or mini player + now-playing sheet (phone).
+
+Library /library
+├── Overview      /library               the state of liked songs and playlists
+│   └── Songs     /library/songs         the songs behind one figure, with Make a plan
+├── Plans         /library/plans         review, Claude, applied with Undo, dismissed
+│   ├── Plan      /library/plans/:id
+│   └── Claude    /library/claude/:id    a conversation whose first turn was a question
+└── Instructions  /library/instructions  standing instructions, kept out of picks and sets
 ```
 
 The source of truth for paths, labels, icons and shortcuts is `web/src/app/nav.ts`. The desktop sidebar shows every surface in its three groups (Listening, Play, Secondary) with Settings at the foot; there is no More menu. Setup leaves the sidebar once onboarding is complete (read from `/api/onboarding`, hidden until it loads), unless it is the open page; Settings (Open setup) and the palette still reach it. Phone tabs are the four Listening surfaces plus More, a sheet with search and the Play, Secondary and Foot surfaces.
@@ -51,7 +59,11 @@ The source of truth for paths, labels, icons and shortcuts is `web/src/app/nav.t
 | Sets `/sets` | Make me a playlist from a prompt | Make a set | `sets`, `sets/:id`, set run (stream), `dj/start`, `dj`, `dj/stop` | Built |
 | Ask `/ask` | Answer a question about my listening | Ask | `ask/threads`, `ask/threads/:id`, ask run (stream) | Built |
 | Recaps `/recaps` | What happened this week or month? | Open the latest recap | `digests`, `digests/:id` | Built |
-| Library `/library` | What in my saved songs and playlists should go? | Review proposals | `cleanup`, `cleanup/dismiss`, `cleanup/apply`, `cleanup/batches`, `cleanup/batches/:id/undo`, `blocks` | Built |
+| Library: Overview `/library` | What state are my liked songs and playlists in? | Open the songs behind a figure | `library/analysis` | Built |
+| Library: songs `/library/songs` | Which songs are behind this figure? | Make a plan from them | `library/songs` (paged), `library/plans` (POST) | Built |
+| Library: Plans `/library/plans` | What is waiting for review, what did I apply, and what should Claude tidy? | Review a plan | `library/plans`, `library/batches` (polled while one runs), `library/batches/:id/undo`, `library/plans/:id/restore`, conversation run (stream) | Built |
+| Library: plan `/library/plans/:id` | What exactly would this plan change? | Apply | `library/plans/:id` (paged by status), `library/plans/:id/items`, `.../apply`, `.../dismiss`, `.../restore`, `library/batches`, `library/conversations/:id` and its run | Built |
+| Library: Instructions `/library/instructions` | What does Claude plan on a schedule, and what is kept out of picks? | Add an instruction | `library/standing`, `blocks` | Built |
 | Setup `/setup` | Is encore connected and fed? | Do the next missing step | `onboarding`, `spotify/authorize`, `import`, `settings` | Built |
 | Settings `/settings/*` | How does encore run? | Save a change | `settings`, `settings/claude/verify`, `settings/discord/register`, `spotify/disconnect`, `spotify/poll`, `llm/spend`, `auth/logout`, passkey routes | Built |
 
@@ -79,11 +91,11 @@ Monthly charts that span a long quiet lead-in or a gap in the history start afte
 | Session (DJ session) | Queue panel (desktop) and now-playing sheet (phone): the session shows next to the queue it drives, with Stop |
 | Ask | Ask |
 | Digests | Recaps |
-| Cleanup (incl. blocks) | Library |
+| Cleanup (incl. blocks) | Library. Proposals by kind: Library Plans (the four ready-made rule plans). Select and Remove: the plan page (tick, Archive or Remove, Apply). Applied with Undo: Plans, Applied, and the plan page. Blocks: Library Instructions |
 | Settings (incl. onboarding parts) | Setup (first run and missing steps), Settings (everything that stays) |
 | SignIn | Sign-in screen outside the shell (`surfaces/SignIn.tsx`) |
 
-No capability was dropped. Old URLs are not redirected.
+No capability was dropped. Old URLs are not redirected. The first Library (`surfaces/Library.tsx`, proposals in four tabs) became the Library tabs above; its counts are the ready-made plans, and Dismiss is per song or per plan on the plan page.
 
 ## 2. Tokens
 
@@ -151,6 +163,7 @@ Phosphor, regular weight; `fill` only for the active nav item and the playing st
 - **Main plus side column.** `SIDE_COLUMNS` (`lg:grid-cols-[minmax(0,1fr)_minmax(0,320px)]`): the main answer left, small related lists right.
 - **Setting rows.** `SettingRows` separates rows with spacing only, no hairlines; a section heading groups them. A hairline is kept for selection or a table, never to divide settings.
 - **Conversation** (`ui/Conversation`). Ask and the set page. With no messages the composer sits under the header with the starters below it. From the first message, or a starting run, the composer is pinned to the foot of the conversation column and the messages scroll above it: in the page panel it sticks to the bottom of the scroll area (so it clears the player bar, the mini player, the tab bar and the safe area, which sit outside that area; the viewport resizes for the on-screen keyboard); in a side column (`contained`, the set page from `lg`) the thread has its own scroll box. The view follows new messages and a streaming run while the reader is at the end; scrolled up, Jump to latest appears above the composer. Notices tied to the composer (a failed run, Claude not set up, the cap spent, Spotify paused) sit in the pinned block with it. During a run the send button is Stop, so `RunProgress` in a thread has no Cancel. The composer glides between the two places (`--dur-move`, `--ease-move`; instant with reduced motion).
+- **Plan review** (`surfaces/library/PlanPage`). Header with Apply (primary, names the count) and a More menu (Dismiss). Under it the apply as the server reports it (`BatchStatus`: progress while running, what was and was not applied, skipped songs with their reasons, Undo); it never says failed while a batch runs. Songs are grouped by action and place: a group heading with a tick for the whole group and Archive or Remove, then rows with a tick, art 40, the reason, and a menu (switch, Dismiss). Status tabs (To review, Applied, Skipped, Dismissed) show only when they hold songs. A Claude plan has its conversation in the side column (`contained`); on a phone it opens in a sheet from Change with Claude. The Apply confirm states each consequence, including the new date added for liked songs taken out.
 - **Start a session.** `StartSessionButton` (secondary, small) sits beside a list of songs worth a session (Overview top songs, Forgotten, an era, keepers in Skips, a trip). It opens the queue panel, where the session runs.
 
 ### State order
@@ -216,7 +229,7 @@ All in `web/src/ui/` unless noted. Props listed are the ones that matter.
 | `AppLink`, `useRangeHref` | `ui/AppLink` | A link that keeps the current range |
 | Paths | `app/paths` | `artistPath(name)`, `songPath(key)`, `albumPath(artist, album)` |
 
-`/dev/kit` (dev builds only) shows every primitive in its states. Fixtures: add `?fixture=loading|error|empty|new|worst|untagged|off`, `?player=playing`, `?dj=active` or `?run=running|starting|done|failed|budget|unconfigured|paused` (Claude runs answered by the fixture, never the server), `?history=before|none|slow|failed|env` (Settings, Ignore plays before; answered by the fixture, nothing deleted) to any dev URL (`web/src/dev/fixtures.ts`); the choice sticks for the tab until `off`.
+`/dev/kit` (dev builds only) shows every primitive in its states. Fixtures: add `?fixture=loading|error|empty|new|worst|untagged|off`, `?player=playing`, `?dj=active` or `?run=running|starting|done|failed|budget|unconfigured|paused` (Claude runs answered by the fixture, never the server), `?history=before|none|slow|failed|env` (Settings, Ignore plays before; answered by the fixture, nothing deleted), `?library=apply|running|done|partial|failed|undoing|undofailed|undone|disconnected|unsynced` (Library apply and undo states; Apply and Undo answered by the fixture, no Spotify call) to any dev URL (`web/src/dev/fixtures.ts`); the choice sticks for the tab until `off`.
 
 ## 6. Charts
 

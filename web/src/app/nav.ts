@@ -71,6 +71,12 @@ export const FOR_YOU_TABS = [
   { path: "/for-you/releases", label: "Releases" },
 ];
 
+export const LIBRARY_TABS = [
+  { path: "/library", label: "Overview" },
+  { path: "/library/plans", label: "Plans" },
+  { path: "/library/instructions", label: "Instructions" },
+];
+
 export const SETTINGS_TABS = [
   { path: "/settings/general", label: "General" },
   { path: "/settings/spotify", label: "Spotify" },

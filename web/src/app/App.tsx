@@ -26,7 +26,12 @@ const Setup = lazy(() => import("../surfaces/Setup").then((m) => ({ default: m.S
 const Settings = lazy(() => import("../surfaces/Settings").then((m) => ({ default: m.Settings })));
 const Recaps = lazy(() => import("../surfaces/Recaps").then((m) => ({ default: m.Recaps })));
 const Recap = lazy(() => import("../surfaces/Recaps").then((m) => ({ default: m.Recap })));
-const Library = lazy(() => import("../surfaces/Library").then((m) => ({ default: m.Library })));
+const LibraryOverview = lazy(() => import("../surfaces/library/Overview").then((m) => ({ default: m.LibraryOverview })));
+const LibrarySongs = lazy(() => import("../surfaces/library/Songs").then((m) => ({ default: m.LibrarySongs })));
+const LibraryPlans = lazy(() => import("../surfaces/library/Plans").then((m) => ({ default: m.LibraryPlans })));
+const PlanPage = lazy(() => import("../surfaces/library/PlanPage").then((m) => ({ default: m.PlanPage })));
+const PlanThreadPage = lazy(() => import("../surfaces/library/PlanThread").then((m) => ({ default: m.PlanThreadPage })));
+const LibraryInstructions = lazy(() => import("../surfaces/library/Instructions").then((m) => ({ default: m.LibraryInstructions })));
 const SignIn = lazy(() => import("../surfaces/SignIn").then((m) => ({ default: m.SignIn })));
 const Kit = import.meta.env.DEV ? lazy(() => import("../dev/Kit").then((m) => ({ default: m.Kit }))) : null;
 
@@ -88,7 +93,12 @@ export function App() {
           <Route path="/recaps/:id">{(p) => <Recap key={p.id} id={Number(p.id)} />}</Route>
           <Route path="/recaps" component={Recaps} />
 
-          <Route path="/library" component={Library} />
+          <Route path="/library" component={LibraryOverview} />
+          <Route path="/library/songs" component={LibrarySongs} />
+          <Route path="/library/plans" component={LibraryPlans} />
+          <Route path="/library/plans/:id">{(p) => <PlanPage key={p.id} id={Number(p.id)} />}</Route>
+          <Route path="/library/claude/:id">{(p) => <PlanThreadPage key={p.id} threadId={Number(p.id)} />}</Route>
+          <Route path="/library/instructions" component={LibraryInstructions} />
 
           <Route path="/setup" component={Setup} />
 
