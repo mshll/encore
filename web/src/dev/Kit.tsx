@@ -7,6 +7,7 @@ import { EncoreMark, Lockup } from "../ui/Brand";
 import { Button, IconButton } from "../ui/Button";
 import { Composer } from "../ui/Composer";
 import { Confirm, Dialog, DialogClose } from "../ui/Dialog";
+import { EntityHeader, EntityHeaderSkeleton } from "../ui/EntityHeader";
 import { Field, Input } from "../ui/Field";
 import { Kbd, MOD_KEY } from "../ui/Kbd";
 import { DotsThreeIcon, MagnifyingGlassIcon, PlayIcon, PlusIcon, ShuffleIcon, SparkleIcon, XIcon } from "../ui/icons";
@@ -14,6 +15,7 @@ import { MenuItem, MenuPopup, MenuRoot, MenuSeparator, MenuTrigger } from "../ui
 import { Page, PageHeader, Section } from "../ui/Page";
 import { PopoverPopup, PopoverRoot, PopoverTrigger } from "../ui/Popover";
 import { RunProgress } from "../ui/RunProgress";
+import { SearchField } from "../ui/SearchField";
 import { Segmented } from "../ui/Segmented";
 import { Select } from "../ui/Select";
 import { Skeleton } from "../ui/Skeleton";
@@ -60,6 +62,7 @@ export function Kit() {
   const [dialog, setDialog] = useState(false);
   const [confirm, setConfirm] = useState(false);
   const [text, setText] = useState("");
+  const [search, setSearch] = useState("");
   const [metric, setMetric] = useState<"hours" | "plays">("hours");
   const figures: StatItem<"hours" | "plays">[] = [
     { id: "hours", label: "Time listened", value: "1,284", unit: "hours", delta: 0.12, compare: "from 1,146" },
@@ -136,6 +139,9 @@ export function Kit() {
             <Input icon={MagnifyingGlassIcon} aria-label="Search" placeholder="Search" className="w-64" />
             <Input invalid aria-label="Invalid example" defaultValue="Wrong" className="w-40" />
           </Row>
+          <Row label="SearchField">
+            <SearchField label="Search artists" placeholder="Artist name…" value={search} onChange={setSearch} />
+          </Row>
           <Field label="Monthly cap" hint="In US dollars." error={undefined}>
             {(p) => <Input {...p} defaultValue="20" className="w-40" />}
           </Field>
@@ -206,6 +212,21 @@ export function Kit() {
               <HeatLegend />
             </div>
           </StatStrip>
+        </Section>
+        <Section title="Entity header">
+          <EntityHeader
+            title="Glimpse of Us"
+            art={null}
+            credits="Joji · SMITHEREENS"
+            detail="First played 29 Dec 2024, last played 2 months ago"
+            actions={
+              <Button variant="accent" icon={PlayIcon}>
+                Play
+              </Button>
+            }
+            aside={<Button>All time</Button>}
+          />
+          <EntityHeaderSkeleton round />
         </Section>
         <Section title="States">
           <Skeleton className="h-10 w-full" />

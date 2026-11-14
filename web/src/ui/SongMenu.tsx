@@ -1,6 +1,6 @@
 import { ContextMenu } from "@base-ui/react/context-menu";
 import { Menu } from "@base-ui/react/menu";
-import type { ReactNode } from "react";
+import type { CSSProperties, ReactNode } from "react";
 import { useLocation } from "wouter";
 import { openInSpotify, usePlayback } from "../player/playback";
 import { iconButtonClass } from "./Button";
@@ -65,10 +65,22 @@ export function SongMenu({ song, className }: { song: SongRef; className?: strin
 }
 
 /** Right-click on a song row opens the same menu. */
-export function SongContext({ song, children, className, render = "div" }: { song: SongRef; children: ReactNode; className?: string; render?: "div" | "li" }) {
+export function SongContext({
+  song,
+  children,
+  className,
+  style,
+  render = "div",
+}: {
+  song: SongRef;
+  children: ReactNode;
+  className?: string;
+  style?: CSSProperties;
+  render?: "div" | "li";
+}) {
   return (
     <ContextMenu.Root>
-      <ContextMenu.Trigger render={render === "li" ? <li /> : <div />} className={className}>
+      <ContextMenu.Trigger render={render === "li" ? <li /> : <div />} className={className} style={style}>
         {children}
       </ContextMenu.Trigger>
       <ContextMenu.Portal>
