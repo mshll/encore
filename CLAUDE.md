@@ -16,6 +16,7 @@ Self-hosted, single-user Spotify dashboard. Read [README.md](README.md) for setu
 - Never store or log `ip_addr` from the export.
 - Every Claude call goes through `src/llm` so the ledger records it and the monthly cap applies.
 - Never log tokens, keys or cookies.
+- Never reset, recreate or rename the data volume, and never deploy with fresh volumes. The database holds track and artist details that cost days of Spotify quota to fetch again. Schema changes go through additive migrations.
 
 ## Spotify
 
