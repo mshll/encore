@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { useDesktop } from "../lib/useMedia";
+import { DataTable } from "./DataTable";
 import { Area, Line } from "../components/dither-kit/area";
 import { AreaChart, LineChart } from "../components/dither-kit/area-chart";
 import { Bar } from "../components/dither-kit/bar";
@@ -35,37 +36,15 @@ function Frame({
 }) {
   const [head, ...values] = columns;
   return (
-    <figure
-      role="group"
-      aria-label={label}
-      className="relative w-full [&_.font-mono]:font-sans [&_.font-mono]:text-caption-base [&_.font-mono]:tabular-nums"
-      style={{ height }}
-    >
-      <div aria-hidden className="size-full">
+    <figure role="group" aria-label={label} className="flex w-full flex-col gap-2">
+      <div aria-hidden className="relative w-full [&_.font-mono]:font-sans [&_.font-mono]:text-caption-base [&_.font-mono]:tabular-nums" style={{ height }}>
         {children}
       </div>
-      <table className="sr-only">
-        <caption>{label}</caption>
-        <thead>
-          <tr>
-            {columns.map((c) => (
-              <th key={c.key} scope="col">
-                {c.label}
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((r, i) => (
-            <tr key={i}>
-              <th scope="row">{String(r[head!.key])}</th>
-              {values.map((c) => (
-                <td key={c.key}>{format(Number(r[c.key] ?? 0))}</td>
-              ))}
-            </tr>
-          ))}
-        </tbody>
-      </table>
+      <DataTable
+        label={label}
+        head={columns.map((c) => c.label)}
+        rows={rows.map((r, i) => ({ key: String(i), cells: [String(r[head!.key]), ...values.map((c) => format(Number(r[c.key] ?? 0)))] }))}
+      />
     </figure>
   );
 }
@@ -166,10 +145,12 @@ export function DitherLine({
   valueLabel,
   xFormat,
   format,
+  yDomain,
   height = 200,
 }: {
   label: string;
   rows: Row[];
+  yDomain?: readonly [number, number];
   xKey: string;
   tipLabel: string;
   valueKey: string;
@@ -191,7 +172,7 @@ export function DitherLine({
       rows={rows}
       format={format}
     >
-      <LineChart data={rows} config={config} margins={{ left: 44 }} className="size-full">
+      <LineChart data={rows} config={config} yDomain={yDomain} margins={{ left: 44 }} className="size-full">
         <Grid />
         <XAxis dataKey={xKey} tickFormatter={(v, i) => xFormat(String(v), i)} maxTicks={ticks} />
         <YAxis tickFormatter={(v) => (v === 0 ? "0" : format(v))} />

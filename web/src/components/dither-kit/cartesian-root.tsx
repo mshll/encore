@@ -34,6 +34,8 @@ const DEFAULT_MARGINS: Margins = {
 export type CartesianChartProps<TData extends Row> = {
   data: TData[]
   config: ChartConfig
+  /** Fixed value domain for the y axis, e.g. a 1-5 rating scale. */
+  yDomain?: readonly [number, number]
   children: ReactNode
   stackType?: StackType
   margins?: Partial<Margins>
@@ -79,6 +81,7 @@ export function CartesianRoot<TData extends Row>({
   Canvas,
   data,
   config,
+  yDomain,
   children,
   stackType = "default",
   margins: marginsProp,
@@ -106,6 +109,7 @@ export function CartesianRoot<TData extends Row>({
     // Safe: the controller only reads row[key] for the configured series keys.
     data: data as Record<string, unknown>[],
     config,
+    yDomain,
     stackType,
     dimensions: size,
     margins,

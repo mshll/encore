@@ -93,7 +93,8 @@ export function indexAtBand(px: number, length: number, plotWidth: number) {
  * positive values keep a floor at the plot bottom, while diverging data (values
  * below zero) draws below a zero baseline that sits somewhere inside the plot.
  */
-export function buildYScale(min: number, max: number, plotHeight: number) {
+export function buildYScale(min: number, max: number, plotHeight: number, domain?: readonly [number, number]) {
+  if (domain) return scaleLinear().domain(domain).range([plotHeight, 0]).clamp(true)
   const lo = Math.min(0, min)
   const hi = Math.max(0, max)
   // Guard a degenerate (zero-width) domain so `nice()` and the range map stay

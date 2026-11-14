@@ -66,6 +66,8 @@ function MoodProfile({ range }: { range: Range }) {
   );
 }
 
+const ENERGY_DOMAIN = [1, 5] as const;
+
 function EnergyByHour({ range }: { range: Range }) {
   const q = useEnergy(range);
   if (!q.data || !q.data.coverage.share) return null;
@@ -80,6 +82,7 @@ function EnergyByHour({ range }: { range: Range }) {
         tipLabel="title"
         valueKey="energy"
         valueLabel="Energy"
+        yDomain={ENERGY_DOMAIN}
         xFormat={(h) => fmtHour(Number(h))}
         format={(v) => v.toFixed(1)}
       />

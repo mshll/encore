@@ -182,6 +182,7 @@ export function useChartController({
   chartType,
   data,
   config,
+  yDomain,
   stackType,
   dimensions,
   margins,
@@ -198,6 +199,7 @@ export function useChartController({
   chartType: ChartType
   data: Row[]
   config: ChartConfig
+  yDomain?: readonly [number, number]
   stackType: StackType
   dimensions: Dimensions
   margins: Margins
@@ -344,8 +346,8 @@ export function useChartController({
     [xCenter, stacked, bandwidth]
   )
   const y = useMemo(
-    () => buildYScale(min, max, plotHeight),
-    [min, max, plotHeight]
+    () => buildYScale(min, max, plotHeight, yDomain),
+    [min, max, plotHeight, yDomain]
   )
 
   // Stable so `common` and the value stay stable; re-created only on config.
