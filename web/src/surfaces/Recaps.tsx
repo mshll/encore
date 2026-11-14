@@ -1,313 +1,260 @@
 import { useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
+import { Redirect, useLocation } from "wouter";
 import { ApiError, request } from "../api/client";
-import { useDigest, useDigests, useLifetime, useRadar, useStatus, useTimezone } from "../api/queries";
-import type { Digest, DigestItem } from "../api/types";
+import { useDigest, useDigests, useLatestRecapKey, useLifetime, useRecapPeriod, useTimezone } from "../api/queries";
+import type { Digest, RecapKind, RecapPeriod } from "../api/types";
 import { assistantProblem } from "../lib/assistant";
-import { fmtDate, fmtDay, fmtDayRange, fmtHoursValue, fmtInt, fmtMonthLong, fmtPct } from "../lib/format";
+import { fmtDate, fmtDay, fmtDayShort } from "../lib/format";
+import { useRun } from "../lib/useRun";
 import { AppLink } from "../ui/AppLink";
-import { Artwork } from "../ui/Artwork";
-import { Button } from "../ui/Button";
-import { Icon } from "../ui/Icon";
-import { CaretRightIcon, NewspaperIcon } from "../ui/icons";
+import { Button, IconButton } from "../ui/Button";
+import { useClaudeGate } from "../ui/ClaudeNotice";
+import { CaretLeftIcon, CaretRightIcon, NewspaperIcon } from "../ui/icons";
 import { Notice } from "../ui/Notice";
-import { Page, PageHeader, Section, useDocumentTitle } from "../ui/Page";
+import { dimWhile, Page, Section, SECTIONS, useDocumentTitle } from "../ui/Page";
+import { Segmented } from "../ui/Segmented";
 import { Skeleton } from "../ui/Skeleton";
 import { EmptyState, ErrorState, FirstUseState } from "../ui/States";
+import { RecapPlaylistActions } from "./recaps/Playlist";
+import { ShareRecap } from "./recaps/Share";
+import { RecapSections } from "./recaps/Sections";
 
-type Kind = DigestItem["kind"];
+const SLUGS = { weekly: "week", monthly: "month", yearly: "year" } as const satisfies Record<RecapKind, string>;
+type Slug = (typeof SLUGS)[RecapKind];
+const KIND_OF: Record<Slug, RecapKind> = { week: "weekly", month: "monthly", year: "yearly" };
+const KIND_OPTIONS = (Object.entries(SLUGS) as [RecapKind, Slug][]).map(([, slug]) => ({ value: slug, label: slug === "week" ? "Week" : slug === "month" ? "Month" : "Year" }));
+const NOUN: Record<RecapKind, string> = { weekly: "week", monthly: "month", yearly: "year" };
 
-export const recapPeriod = (d: DigestItem) => (d.kind === "monthly" ? fmtMonthLong(d.periodKey) : fmtDayRange(d.from, d.to));
-const KIND_LABEL: Record<Kind, string> = { weekly: "Weekly recap", monthly: "Monthly recap" };
+export const recapPath = (kind: RecapKind, key: string) => `/recaps/${SLUGS[kind]}/${key}`;
+export const isRecapSlug = (slug: string): slug is Slug => slug in KIND_OF;
 
-const paragraphs = (text: string) => text.split(/\n+/).map((p) => p.trim()).filter(Boolean);
-
-function WriteRecaps({ missing }: { missing: Kind[] }) {
-  const queryClient = useQueryClient();
-  const status = useStatus();
-  const [writing, setWriting] = useState<Kind | null>(null);
-  const [problem, setProblem] = useState<string | null>(null);
-  if (missing.length === 0) return null;
-  const llm = status.data?.llm;
-  const blocked = !llm ? null : !llm.configured ? "Claude is not set up." : llm.exhausted ? "This month’s Claude budget is spent." : null;
-  const write = async (kind: Kind) => {
-    setWriting(kind);
-    setProblem(null);
-    try {
-      await request("/api/digests/generate", { json: { kind } });
-      await queryClient.invalidateQueries({ queryKey: ["digests"] });
-    } catch (error) {
-      setProblem(assistantProblem(error));
-    } finally {
-      setWriting(null);
-    }
-  };
-  if (blocked)
-    return (
-      <p className="text-secondary">
-        {blocked}{" "}
-        <AppLink to="/settings/claude" className="font-medium text-primary underline underline-offset-2">
-          Claude settings
-        </AppLink>
-      </p>
-    );
+function Frame({ kind, period, children }: { kind: RecapKind; period?: RecapPeriod; children: ReactNode }) {
+  const [, navigate] = useLocation();
   return (
-    <div className="flex flex-col items-start gap-3">
-      <div className="flex flex-col gap-2 md:flex-row">
-        {missing.map((kind) => (
-          <Button key={kind} disabled={writing !== null} busy={writing === kind} busyLabel="Writing" onClick={() => void write(kind)}>
-            {kind === "weekly" ? "Write last week’s recap" : "Write last month’s recap"}
-          </Button>
-        ))}
+    <Page width="read">
+      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+        <Segmented label="Recap length" value={SLUGS[kind]} onChange={(slug) => navigate(`/recaps/${slug}`)} options={KIND_OPTIONS} className="md:w-60" />
+        <nav aria-label={`Other ${NOUN[kind]}s`} className="flex items-center gap-1">
+          <IconButton
+            icon={CaretLeftIcon}
+            label={period?.previous ? `Previous ${NOUN[kind]}` : `No earlier ${NOUN[kind]}`}
+            variant="ghost"
+            disabled={!period?.previous}
+            onClick={() => period?.previous && navigate(recapPath(kind, period.previous))}
+          />
+          <span className="min-w-0 flex-1 truncate text-center font-medium text-primary md:min-w-44 md:flex-none">{period ? period.label : <Skeleton className="mx-auto h-4 w-28" />}</span>
+          <IconButton
+            icon={CaretRightIcon}
+            label={period?.next ? `Next ${NOUN[kind]}` : `No later ${NOUN[kind]}`}
+            variant="ghost"
+            disabled={!period?.next}
+            onClick={() => period?.next && navigate(recapPath(kind, period.next))}
+          />
+        </nav>
       </div>
-      {problem && <Notice tone="danger">{problem}</Notice>}
+      {children}
+    </Page>
+  );
+}
+
+/** `/recaps`: the newest recap written, or the month that just ended. */
+export function Recaps() {
+  const list = useDigests();
+  const lifetime = useLifetime();
+  const latest = list.data?.items[0];
+  if (lifetime.data && !lifetime.data.firstPlayed)
+    return (
+      <Frame kind="monthly">
+        <FirstUseState icon={NewspaperIcon} description="Recaps of each week, month and year appear here once your listening is imported." />
+      </Frame>
+    );
+  if (list.isError)
+    return (
+      <Frame kind="monthly">
+        <ErrorState error={list.error} onRetry={() => list.refetch()} />
+      </Frame>
+    );
+  if (!list.data) return <Frame kind="monthly">{<BodySkeleton />}</Frame>;
+  return latest ? <Redirect to={recapPath(latest.kind, latest.periodKey)} replace /> : <Redirect to="/recaps/month" replace />;
+}
+
+/** `/recaps/week` and friends: the newest period of that length. */
+export function RecapKindLatest({ slug }: { slug: string }) {
+  const kind = isRecapSlug(slug) ? KIND_OF[slug] : null;
+  const latest = useLatestRecapKey(kind ?? "monthly");
+  if (!kind) return <Redirect to="/recaps" replace />;
+  if (latest.isError)
+    return (
+      <Frame kind={kind}>
+        <ErrorState error={latest.error} onRetry={() => latest.refetch()} />
+      </Frame>
+    );
+  return latest.data ? <Redirect to={recapPath(kind, latest.data.key)} replace /> : <Frame kind={kind}>{<BodySkeleton />}</Frame>;
+}
+
+/** `/recaps/:id`, the old address of a recap, from links in Discord and Overview. */
+export function RecapById({ id }: { id: number }) {
+  const q = useDigest(id);
+  if (q.data) return <Redirect to={recapPath(q.data.kind, q.data.periodKey)} replace />;
+  const missing = q.error instanceof ApiError && q.error.status === 404;
+  return (
+    <Frame kind="monthly">
+      {missing ? (
+        <EmptyState size="page" icon={NewspaperIcon} title="This recap does not exist" action={<AppLink to="/recaps">Open Recaps</AppLink>} />
+      ) : q.isError ? (
+        <ErrorState error={q.error} onRetry={() => q.refetch()} />
+      ) : (
+        <BodySkeleton />
+      )}
+    </Frame>
+  );
+}
+
+function BodySkeleton() {
+  return (
+    <div aria-busy className="flex flex-col gap-10">
+      <div className="flex flex-col gap-3">
+        <Skeleton className="h-10 w-4/5" />
+        <Skeleton className="h-4 w-48" />
+      </div>
+      {[0, 1].map((i) => (
+        <div key={i} className="flex flex-col gap-3">
+          <Skeleton className="h-4 w-24" />
+          <Skeleton className="h-4 w-full" />
+          <Skeleton className="h-4 w-2/3" />
+        </div>
+      ))}
     </div>
   );
 }
 
-function Latest({ item }: { item: DigestItem }) {
-  const q = useDigest(item.id);
-  const lead = q.data ? paragraphs(q.data.text)[0] : null;
-  return (
-    <AppLink to={`/recaps/${item.id}`} className="group -mx-3 flex flex-col gap-2 rounded-lg px-3 py-3 transition-colors duration-150 hover:bg-fill">
-      <span className="text-caption text-secondary">{KIND_LABEL[item.kind]}, the latest</span>
-      <span className="font-display text-figure text-balance text-primary">{recapPeriod(item)}</span>
-      {q.isError ? null : lead === null ? (
-        <span aria-hidden className="flex flex-col gap-2">
-          <Skeleton className="h-4 w-full" />
-          <Skeleton className="h-4 w-2/3" />
-        </span>
-      ) : (
-        <span className="line-clamp-3 text-body text-pretty text-primary">{lead}</span>
-      )}
-      <span className="text-body-sm font-medium text-primary underline-offset-2 group-hover:underline">Read the recap</span>
-    </AppLink>
-  );
-}
-
-function RecapRow({ item, timezone }: { item: DigestItem; timezone: string }) {
-  return (
-    <li>
-      <AppLink to={`/recaps/${item.id}`} className="-mx-2 flex min-h-(--row-h) items-center gap-3 rounded-md px-2 py-1.5 transition-colors duration-150 hover:bg-fill">
-        <span className="flex min-w-0 flex-1 flex-col">
-          <span className="truncate text-primary">{recapPeriod(item)}</span>
-          <span className="truncate text-caption text-secondary">
-            {KIND_LABEL[item.kind]}, written {fmtDate(item.createdAt, timezone)}
-          </span>
-        </span>
-        <Icon icon={CaretRightIcon} className="text-tertiary" />
-      </AppLink>
-    </li>
-  );
-}
-
-export function Recaps() {
-  const q = useDigests();
-  const timezone = useTimezone();
-  const items = q.data?.items ?? [];
-  const missing = (["weekly", "monthly"] as Kind[]).filter((k) => !items.some((d) => d.kind === k));
-  const lifetime = useLifetime();
-  const firstUse = lifetime.data !== undefined && !lifetime.data.firstPlayed;
-  return (
-    <Page>
-      <PageHeader title="Recaps" />
-      {q.isError ? (
-        <ErrorState error={q.error} onRetry={() => q.refetch()} />
-      ) : !q.data ? (
-        <div aria-busy className="flex flex-col gap-10">
-          <div className="flex flex-col gap-3">
-            <Skeleton className="h-3 w-32" />
-            <Skeleton className="h-8 w-64" />
-            <Skeleton className="h-4 w-full" />
-            <Skeleton className="h-4 w-2/3" />
-          </div>
-          <div className="flex flex-col gap-4">
-            {[0, 1, 2, 3].map((i) => (
-              <Skeleton key={i} className="h-9 w-full" />
-            ))}
-          </div>
-        </div>
-      ) : items.length === 0 && firstUse ? (
-        <FirstUseState icon={NewspaperIcon} description="Recaps are written from what you play. Import your history or connect Spotify first." />
-      ) : items.length === 0 ? (
-        <EmptyState
-          size="page"
-          icon={NewspaperIcon}
-          title="No recaps yet"
-          description="A weekly recap arrives each week and a monthly one on the 1st. You can write the last one now."
-          action={<WriteRecaps missing={missing} />}
-        />
-      ) : (
-        <>
-          <Latest item={items[0]!} />
-          {items.length > 1 && (
-            <Section title="Earlier">
-              <ul className="flex flex-col">
-                {items.slice(1).map((d) => (
-                  <RecapRow key={d.id} item={d} timezone={timezone} />
-                ))}
-              </ul>
-            </Section>
-          )}
-          <WriteRecaps missing={missing} />
-        </>
-      )}
-    </Page>
-  );
-}
-
-type Facts = {
-  totals?: { hours: number; baselineHours: number; listens: number; baselineListens: number; skipRate: number | null; baselineSkipRate: number | null; uniqueArtists: number };
-  topArtists?: { artist: string; hours: number; baselineHours: number }[];
+const yesterday = (timezone: string) => {
+  const today = new Intl.DateTimeFormat("en-CA", { timeZone: timezone, year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
+  return new Date(Date.parse(`${today}T00:00:00Z`) - 86_400_000).toISOString().slice(0, 10);
 };
 
-function Numbers({ digest }: { digest: Digest }) {
-  const facts = digest.facts as Facts;
-  const t = facts.totals;
-  if (!t) return null;
-  const rows: [string, string, string][] = [
-    ["Hours", fmtHoursValue(t.hours), fmtHoursValue(t.baselineHours)],
-    ["Listens", fmtInt(t.listens), fmtInt(t.baselineListens)],
-    ["Skipped", fmtPct(t.skipRate), fmtPct(t.baselineSkipRate)],
-    ...(facts.topArtists ?? []).slice(0, 3).map((a): [string, string, string] => [a.artist, `${fmtHoursValue(a.hours)} h`, `${fmtHoursValue(a.baselineHours)} h`]),
-  ];
-  const usual = digest.kind === "weekly" ? "Usual week" : "Usual month";
+/** Writes, completes or brings up to date one period's recap. With Claude ready it runs on the server as a run; without, it is a plain request. */
+function useWriteRecap(kind: RecapKind, key: string) {
+  const queryClient = useQueryClient();
+  const gate = useClaudeGate({ needsSpotify: false });
+  const refresh = () => void queryClient.invalidateQueries({ queryKey: ["digests"] });
+  const run = useRun<Digest>({ key: "/api/digests/generate", onDone: refresh });
+  const [busy, setBusy] = useState(false);
+  const [problem, setProblem] = useState<string | null>(null);
+  const write = async () => {
+    setProblem(null);
+    if (gate.ready && !gate.blocked) {
+      const done = await run.start("/api/digests/generate", { kind, key });
+      if (done) refresh();
+      return;
+    }
+    setBusy(true);
+    try {
+      await request("/api/digests/generate", { json: { kind, key } });
+      refresh();
+    } catch (error) {
+      setProblem(assistantProblem(error));
+    } finally {
+      setBusy(false);
+    }
+  };
+  return { gate, run, busy, problem: problem ?? run.problem, write, withClaude: gate.ready && !gate.blocked };
+}
+
+/** Writes the recap. While a run is going (also one resumed after leaving the page) it shows busy, with Cancel beside it. */
+function WriteButton({ writer, label, variant, size }: { writer: ReturnType<typeof useWriteRecap>; label: string; variant?: "primary"; size?: "sm" }) {
   return (
-    <Section title="The numbers behind it">
-      <table className="-mx-3 w-[calc(100%+24px)] table-fixed border-separate border-spacing-x-3 tabular">
-        <caption className="sr-only">Numbers this recap used, against the usual</caption>
-        <thead>
-          <tr className="text-caption text-secondary">
-            <th scope="col" className="pb-2 text-left font-normal">
-              <span className="sr-only">Measure</span>
-            </th>
-            <th scope="col" className="w-24 pb-2 text-right font-normal md:w-32">
-              {digest.kind === "weekly" ? "This week" : "This month"}
-            </th>
-            <th scope="col" className="w-24 pb-2 text-right font-normal md:w-32">
-              {usual}
-            </th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map(([label, now, before], i) => (
-            <tr key={`${label}-${i}`}>
-              <th scope="row" className="py-1.5 text-left align-top font-normal break-words text-primary">
-                {label}
-              </th>
-              <td className="py-1.5 text-right align-top text-primary">{now}</td>
-              <td className="py-1.5 text-right align-top text-secondary">{before}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </Section>
+    <div className="flex items-center gap-2">
+      <Button variant={variant} size={size} busy={writer.busy || writer.run.running} busyLabel="Writing" onClick={() => void writer.write()}>
+        {label}
+      </Button>
+      {writer.run.running && (
+        <Button variant="ghost" size={size} onClick={writer.run.cancel}>
+          Cancel
+        </Button>
+      )}
+    </div>
   );
 }
 
-const DAY = 86_400_000;
-
-function Releases({ digest }: { digest: Digest }) {
-  const days = Math.min(365, Math.max(1, Math.ceil((Date.now() - Date.parse(`${digest.from}T00:00:00Z`)) / DAY)));
-  const radar = useRadar("recent", days);
-  const items = (radar.data?.items ?? []).filter((r) => r.releaseDate >= digest.from && r.releaseDate <= digest.to);
-  if (items.length === 0) return null;
+function Missing({ period }: { period: RecapPeriod }) {
+  const writer = useWriteRecap(period.kind, period.key);
+  if (period.reason === "before_history")
+    return <EmptyState size="page" icon={NewspaperIcon} title={`Your history starts ${period.historyStart ? fmtDay(period.historyStart) : "later"}`} description={`There is nothing to recap for ${period.label}.`} />;
+  if (period.reason === "not_ended") return <EmptyState size="page" icon={NewspaperIcon} title={`${period.label} is not over yet`} />;
   return (
-    <Section title={digest.kind === "weekly" ? "Released that week" : "Released that month"}>
-      <ul className="flex flex-col">
-        {items.slice(0, 6).map((r) => (
-          <li key={r.id}>
-            <a href={r.url} target="_blank" rel="noreferrer" className="-mx-2 flex min-h-(--row-h) items-center gap-3 rounded-md px-2 py-1.5 transition-colors duration-150 hover:bg-fill">
-              <Artwork src={r.imageUrl} kind="album" box={48} />
-              <span className="flex min-w-0 flex-col">
-                <span className="truncate text-primary">{r.name}</span>
-                <span className="truncate text-caption text-secondary">
-                  {r.artist}, {fmtDay(r.releaseDate)}
-                </span>
-              </span>
-            </a>
-          </li>
-        ))}
-      </ul>
-    </Section>
+    <div className="flex flex-col items-center gap-4">
+      <EmptyState
+        size="page"
+        icon={NewspaperIcon}
+        title={`No recap of ${period.label} yet`}
+        description={period.inProgress ? `It covers ${fmtDayShort(period.from)} to ${fmtDayShort(period.to)} so far.` : undefined}
+        action={<WriteButton writer={writer} variant="primary" label="Write the recap" />}
+      />
+      {writer.gate.blocked && <Notice tone="info">The recap will show the numbers alone. {writer.gate.blocked}</Notice>}
+      {writer.problem && <Notice tone="danger" onRetry={() => void writer.write()}>{writer.problem}</Notice>}
+    </div>
   );
 }
 
-function Neighbours({ id }: { id: number }) {
-  const list = useDigests();
-  const items = list.data?.items ?? [];
-  const i = items.findIndex((d) => d.id === id);
-  if (i < 0) return null;
-  const newer = items[i - 1];
-  const older = items[i + 1];
-  if (!newer && !older) return null;
-  return (
-    <nav aria-label="Other recaps" className="grid grid-cols-2 gap-4">
-      <div>
-        {older && (
-          <AppLink to={`/recaps/${older.id}`} className="-mx-2 flex flex-col rounded-md px-2 py-1.5 transition-colors duration-150 hover:bg-fill">
-            <span className="text-caption text-secondary">Older</span>
-            <span className="truncate text-primary">{recapPeriod(older)}</span>
-          </AppLink>
-        )}
-      </div>
-      <div>
-        {newer && (
-          <AppLink to={`/recaps/${newer.id}`} className="-mx-2 flex flex-col items-end rounded-md px-2 py-1.5 text-right transition-colors duration-150 hover:bg-fill">
-            <span className="text-caption text-secondary">Newer</span>
-            <span className="max-w-full truncate text-primary">{recapPeriod(newer)}</span>
-          </AppLink>
-        )}
-      </div>
-    </nav>
-  );
-}
-
-export function Recap({ id }: { id: number }) {
-  const q = useDigest(id);
+function Recap({ period, recap }: { period: RecapPeriod; recap: Digest }) {
   const timezone = useTimezone();
-  useDocumentTitle(q.data ? recapPeriod(q.data) : "Recap");
-  const notFound = q.error instanceof ApiError && q.error.status === 404;
+  const writer = useWriteRecap(period.kind, period.key);
+  const page = recap.page;
+  const wordless = recap.lines === null && page.legacyText === null;
+  const behind = page.inProgress && recap.to < yesterday(timezone);
+  const action = behind ? "Bring up to date" : wordless && writer.withClaude ? "Add Claude’s lines" : null;
   return (
-    <Page width="read" crumb={q.data ? recapPeriod(q.data) : q.isError ? null : undefined}>
-      <div className="flex flex-col gap-4">
-        {q.data ? (
-          <header className="flex flex-col">
-            <p className="text-caption text-secondary">
-              {KIND_LABEL[q.data.kind]}, written {fmtDate(q.data.createdAt, timezone)}
-            </p>
-            <h1 className="font-display text-display text-balance text-primary">{recapPeriod(q.data)}</h1>
-          </header>
-        ) : (
-          !q.isError && (
-            <div aria-busy className="flex flex-col gap-3">
-              <Skeleton className="h-3 w-40" />
-              <Skeleton className="h-11 w-72" />
-            </div>
-          )
-        )}
-      </div>
+    <>
+      <header className="flex flex-col gap-3">
+        <h1 className="font-display text-display text-balance text-primary">{page.headline}</h1>
+        <p className="text-secondary">
+          {[
+            page.inProgress ? `So far, to ${fmtDayShort(page.span.to)}` : null,
+            page.compare ? `Compared with ${page.compare.label}` : null,
+            `Written ${fmtDate(recap.createdAt, timezone)}`,
+          ]
+            .filter(Boolean)
+            .join(" · ")}
+        </p>
+        {page.note && <p className="text-secondary text-pretty">{page.note}</p>}
+        <div className="flex flex-wrap items-center gap-2">
+          {(action || writer.run.running) && <WriteButton writer={writer} size="sm" label={action ?? "Write the recap"} />}
+          <ShareRecap recap={recap} />
+        </div>
+        {writer.problem && <Notice tone="danger">{writer.problem}</Notice>}
+      </header>
+      {page.quiet && <p className="text-secondary">Almost no listening this {NOUN[page.kind]}, so there is little to show.</p>}
+      <RecapSections page={page} songsActions={<RecapPlaylistActions period={period} songs={page.sections.find((s) => s.id === "songs")?.songs ?? []} />} />
+      {page.legacyText && (
+        <Section title="As written then">
+          <div className="max-w-[60ch] text-body whitespace-pre-line text-pretty text-secondary">{page.legacyText}</div>
+        </Section>
+      )}
+    </>
+  );
+}
+
+/** `/recaps/:kind/:key`: one period of the timeline. */
+export function RecapPeriodPage({ slug, periodKey }: { slug: string; periodKey: string }) {
+  const kind = isRecapSlug(slug) ? KIND_OF[slug] : null;
+  const q = useRecapPeriod(kind ?? "monthly", periodKey);
+  useDocumentTitle(q.data ? `Recap, ${q.data.label}` : "Recap");
+  if (!kind) return <Redirect to="/recaps" replace />;
+  const notFound = q.error instanceof ApiError && q.error.status === 404;
+  const period = q.data;
+  return (
+    <Frame kind={kind} period={period}>
       {notFound ? (
-        <EmptyState size="page" icon={NewspaperIcon} title="This recap does not exist" />
+        <EmptyState size="page" icon={NewspaperIcon} title="This recap does not exist" action={<AppLink to="/recaps">Open Recaps</AppLink>} />
       ) : q.isError ? (
         <ErrorState error={q.error} onRetry={() => q.refetch()} />
-      ) : !q.data ? (
-        <div aria-busy className="flex flex-col gap-3">
-          {[0, 1, 2, 3, 4].map((i) => (
-            <Skeleton key={i} className={i === 4 ? "h-4 w-1/2" : "h-4 w-full"} />
-          ))}
-        </div>
+      ) : !period ? (
+        <BodySkeleton />
       ) : (
-        <>
-          <article className="flex flex-col gap-4">
-            <p className="text-heading text-pretty text-primary">{paragraphs(q.data.text)[0]}</p>
-            <div className="text-body whitespace-pre-line text-pretty text-primary">{paragraphs(q.data.text).slice(1).join("\n\n")}</div>
-          </article>
-          <Numbers digest={q.data} />
-          <Releases digest={q.data} />
-          <Neighbours id={id} />
-        </>
+        <div className={`${SECTIONS} ${dimWhile(q.isPlaceholderData)}`}>{period.recap ? <Recap key={period.key} period={period} recap={period.recap} /> : <Missing key={period.key} period={period} />}</div>
       )}
-    </Page>
+    </Frame>
   );
 }

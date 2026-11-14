@@ -26,7 +26,8 @@ function setup(transport: LlmTransport | null = null, env: Record<string, string
   const fetchFn = (async (input: string | URL | Request, init?: RequestInit) => {
     const url = String(input);
     if (!url.startsWith("https://discord.com")) return spotifyFake.fetchFn(input, init);
-    discordCalls.push({ method: init?.method ?? "GET", path: url.replace("https://discord.com/api/v10", ""), body: JSON.parse(String(init?.body ?? "null")) });
+    const body = init?.body instanceof FormData ? { ...JSON.parse(String(init.body.get("payload_json"))), files: [...init.body.keys()].filter((k) => k.startsWith("files[")) } : JSON.parse(String(init?.body ?? "null"));
+    discordCalls.push({ method: init?.method ?? "GET", path: url.replace("https://discord.com/api/v10", ""), body });
     return new Response(JSON.stringify({ id: "m1" }), { status: 200 });
   }) as typeof fetch;
   const spotify = new SpotifyClient(db, new SpotifyAuth(db, config, settings, fetchFn, time.now), settings, fetchFn, time.now);
@@ -140,8 +141,10 @@ describe("assistant on Discord", () => {
     const posts = discordCalls.filter((c) => c.method === "POST");
     expect(posts.map((p) => p.path)).toEqual(["/channels/7/messages", "/channels/7/messages"]);
     expect(posts[1]!.body).toMatchObject({
-      content: "Your week, 2026-01-25 to 2026-01-31\n\nA quiet week.",
-      embeds: [{ title: "New releases from artists you play", description: "[New EP](https://open.spotify.com/album/alb1) by Artist, single 2026-01-30" }],
+      content: "Your week, 25 – 31 Jan 2026\n\nA quiet week.",
+      embeds: [{ image: { url: "attachment://recap.png" } }, { title: "New releases from artists you play", description: "[New EP](https://open.spotify.com/album/alb1) by Artist, single 30 Jan 2026" }],
+      attachments: [{ id: 0, filename: "recap.png" }],
+      files: ["files[0]"],
       allowed_mentions: { parse: [] },
     });
   });

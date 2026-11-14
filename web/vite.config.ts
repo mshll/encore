@@ -10,6 +10,6 @@ export default defineConfig({
     host: "127.0.0.1",
     port: 8888,
     strictPort: true,
-    proxy: { "/api": api, "/callback": api },
+    proxy: { "/api": api, "/callback": api, "^/s/": api },
   },
 });

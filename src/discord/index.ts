@@ -4,6 +4,7 @@ import { registerCoreCommands } from "./commands/core";
 import { InteractionHandler } from "./interactions";
 import { DiscordRegistry, type DiscordContext } from "./registry";
 import { DiscordRest } from "./rest";
+import type { MessageFile } from "./types";
 
 export type Discord = { config: DiscordConfig; registry: DiscordRegistry; rest: DiscordRest; interactions: InteractionHandler };
 
@@ -46,7 +47,7 @@ export async function registerCommands(discord: Discord) {
   return discord.rest.registerGuildCommands(discord.config.guildId, discord.registry.definitions());
 }
 
-export function postToChannel(discord: Discord, message: Parameters<DiscordRest["postMessage"]>[1]) {
+export function postToChannel(discord: Discord, message: Parameters<DiscordRest["postMessage"]>[1], file?: MessageFile) {
   if (!discord.config.channelId) throw new Error("DISCORD_CHANNEL_ID is not set");
-  return discord.rest.postMessage(discord.config.channelId, message);
+  return file ? discord.rest.postMessageWithFile(discord.config.channelId, message, file) : discord.rest.postMessage(discord.config.channelId, message);
 }

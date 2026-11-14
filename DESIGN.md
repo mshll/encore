@@ -11,7 +11,7 @@ encore answers three jobs: **what have I been listening to**, **what should I pl
 ```
 Listening                      Play                        Secondary            Foot
 ├── Home              /        ├── For you    /for-you     ├── Recaps  /recaps  └── Settings /settings
-├── Plays             /plays   │   ├── Weekly picks  /picks   │   └── /recaps/:id      ├── general
+├── Plays             /plays   │   ├── Weekly picks  /picks   │   └── /recaps/:kind/:key ├── general
 ├── Music             /music   │   ├── Forgotten favourites  ├── Library /library        ├── spotify
 │   ├── Artists   /artists     │   ├── Most played lately    └── Setup   /setup          ├── claude
 │   ├── Albums    /albums      │   ├── New from your artists                             ├── integrations
@@ -61,7 +61,7 @@ The source of truth for paths, labels, icons and shortcuts is `web/src/app/nav.t
 | New from your artists `/for-you/new-releases` | What did artists I play release? | Play | the playlist's routes, plus `radar`, `radar/seen` | Built |
 | Sets `/sets` | Make me a playlist from a prompt | Make a set | `sets`, `sets/:id`, set run (stream), `dj/start`, `dj`, `dj/stop` | Built |
 | Ask `/ask` | Answer a question about my listening | Ask | `ask/threads`, `ask/threads/:id`, ask run (stream) | Built |
-| Recaps `/recaps` | What happened this week or month? | Open the latest recap | `digests`, `digests/:id` | Built |
+| Recaps `/recaps` | What changed in how I listen, and what was this week, month or year? | Write the recap of a period that has none | `digests`, `digests/periods/:kind/:key`, `digests/latest/:kind`, `digests/:id`, `digests/periods/:kind/:key/playlist`, `digests/periods/:kind/:key/cover`, `living` (This year so far), `digests/:id/card`, `shares`, recap run (stream) | Built |
 | Library: Overview `/library` | What state are my liked songs and playlists in? | Open the songs behind a figure | `library/analysis` | Built |
 | Library: songs `/library/songs` | Which songs are behind this figure? | Make a plan from them | `library/songs` (paged), `library/plans` (POST) | Built |
 | Library: Plans `/library/plans` | What is waiting for review, what did I apply, and what should Claude tidy? | Review a plan | `library/plans`, `library/batches` (polled while one runs), `library/batches/:id/undo`, `library/plans/:id/restore`, conversation run (stream) | Built |
@@ -73,6 +73,8 @@ The source of truth for paths, labels, icons and shortcuts is `web/src/app/nav.t
 Built surfaces are the reference implementations: Home (`surfaces/Home.tsx`), Plays (list-led), Patterns: When (chart-led). Music lists and the entity pages (`surfaces/Music.tsx`, `surfaces/entity/*`) follow Plays and Home's listening section.
 
 Monthly charts that span a long quiet lead-in or a gap in the history start after the first 5% of the total when that cuts more than a year (`lib/leadIn.ts`), and say what they left out.
+
+Outside the app, one page needs no session: a shared recap at `/s/:token`. It is server-rendered HTML with no script and no app shell (`src/share/html.ts`): the encore mark, the period, the headline, then the recap's sections with the same inline charts drawn in CSS (the dither tile as an SVG data URI). System fonts, the app's light and dark colour roles, one 680 px column with a 16 px gutter. Nothing on it links into the app or names the owner. Security model: [docs/sharing.md](docs/sharing.md).
 
 ### Where every old screen went
 
@@ -293,7 +295,7 @@ All in `web/src/ui/` unless noted. Props listed are the ones that matter.
 | `AppLink`, `useRangeHref` | `ui/AppLink` | A link that keeps the current range |
 | Paths | `app/paths` | `artistPath(name)`, `songPath(key)`, `albumPath(artist, album)` |
 
-`/dev/kit` (dev builds only) shows every primitive in its states. Fixtures: add `?fixture=loading|error|empty|new|worst|untagged|off`, `?player=playing`, `?dj=active` or `?run=running|starting|done|failed|budget|unconfigured|paused` (Claude runs answered by the fixture, never the server), `?history=before|none|slow|failed|env` (Settings, Ignore plays before; answered by the fixture, nothing deleted), `?living=connected|first|fresh|deferred|failed|empty|removed|scope|refreshing` (For you and its playlists; switches and refreshes answered by the fixture, nothing sent to Spotify), `?library=apply|running|done|partial|failed|undoing|undofailed|undone|disconnected|unsynced` (Library apply and undo states; Apply and Undo answered by the fixture, no Spotify call) to any dev URL (`web/src/dev/fixtures.ts`); the choice sticks for the tab until `off`.
+`/dev/kit` (dev builds only) shows every primitive in its states. Fixtures: add `?fixture=loading|error|empty|new|worst|untagged|off`, `?player=playing`, `?dj=active` or `?run=running|starting|done|failed|budget|unconfigured|paused` (Claude runs answered by the fixture, never the server), `?history=before|none|slow|failed|env` (Settings, Ignore plays before; answered by the fixture, nothing deleted), `?living=connected|first|fresh|deferred|failed|empty|removed|scope|refreshing` (For you and its playlists; switches and refreshes answered by the fixture, nothing sent to Spotify), `?library=apply|running|done|partial|failed|undoing|undofailed|undone|disconnected|unsynced` (Library apply and undo states; Apply and Undo answered by the fixture, no Spotify call), `?recap=none|facts|first|quiet|spotify|saved` (Recaps: real periods bent to no recap yet, no Claude lines, history starting inside the period, almost no listening, Spotify connected, the playlist already saved; saving answered by the fixture) to any dev URL (`web/src/dev/fixtures.ts`); the choice sticks for the tab until `off`.
 
 ## 6. Charts
 
@@ -308,8 +310,15 @@ One family: dithered halftone in Spotify green.
 | `RateMeter` | `charts/RateMeter` | A rate on a fixed 0 to 100% track, with an optional tick for a reference rate (skip rate by context, share by device). Next to a printed figure |
 | `DitherHeatmap`, `HeatLegend` | `charts/DitherHeatmap` | A grid of values (weekday by hour, artist by month). One tab stop, arrow keys move the selection. Column labels can be elements (artist avatars on phone) |
 | `BudgetBar` | `charts/BudgetBar` | Spend against a cap: `spent`, `cap`, `label`. Turns red with a cap mark once spent reaches the cap |
+| `InlinePair` | `charts/Inline` | This period over the one before as two short bars on one scale (dithered now, grey before). Inside a sentence, next to the figures |
+| `InlineChange` | `charts/Inline` | The change from before to now as an arrow and a percentage, in neutral ink ("new", "no change" when there is nothing to divide) |
+| `InlineColumns` | `charts/Inline` | A word-sized row of columns (each day, each hour) with one marked column. Sums long series into at most `bars` columns |
+| `InlineShare` | `charts/Inline` | A share of the whole on a short track, with a tick where it stood before |
+| `ArtChip` | `charts/Inline` | 20 px artwork beside a name, clamped to one line. The name is the label; the image is decoration |
 | `ditherTile(level)`, `levelFor(share)` | `charts/ditherTile` | The halftone as a CSS background for anything that is not a canvas |
 | `DataTable` | `charts/DataTable` | "View data": the accessible table behind every chart |
+
+Inline charts are sized for a line of text and sit next to the figure they draw, never in place of it. Each takes a `label`: the sentence a screen reader hears instead of the picture ("42 h, against 30 h in October"). Recaps use them first; they are built to be reused (Ask). `/dev/kit` shows each one.
 
 Rules: a chart answers one question and has a printed figure or sentence that states the answer ("Busiest: Fridays, 22:00 to 23:00"). Axis labels in `text-caption text-tertiary`. Every chart has a `DataTable`. Hover tooltips repeat data, they never hold it alone.
 

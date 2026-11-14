@@ -1,6 +1,7 @@
 import { eq } from "drizzle-orm";
 import { picks } from "../db/schema";
-import { isDigestDue, generateDigest, digestPeriod, type DigestKind } from "../digest/service";
+import { dueKey, generateDigest, isDigestDue } from "../digest/service";
+import { RECAP_KINDS } from "../digest/periods";
 import type { FeatureContext } from "../llm/context";
 import { LlmBudgetExceededError } from "../llm/errors";
 import { refreshPickLibraryState, refreshPickOutcomes } from "../picks/outcomes";
@@ -80,16 +81,15 @@ export function createAssistantJobs(ctx: FeatureContext, spotifyAuth: SpotifyAut
       name: "digest",
       intervalMs: () => HOUR_MS,
       run: withPublish(async () => {
-          if (!llm.configured) return { skipped: "llm_not_configured" };
           const now = ctx.now();
           const { timezone, llm: llmSettings } = ctx.settings.get();
           const today = localTime(now, timezone).day;
           const generated: string[] = [];
-          for (const kind of ["weekly", "monthly"] as DigestKind[]) {
+          for (const kind of RECAP_KINDS) {
             if (!isDigestDue(db, kind, timezone, llmSettings.digestSlot, now)) continue;
-            const key = digestPeriod(kind, today).key;
+            const key = dueKey(kind, today, llmSettings.digestSlot.weekday);
             if (!claimAttempt(ctx, `digest_${kind}_attempts`, key)) continue;
-            await generateDigest(ctx, kind);
+            await generateDigest(ctx, kind, key);
             generated.push(`${kind}:${key}`);
           }
           return generated.length ? { generated } : { skipped: "not_due" };

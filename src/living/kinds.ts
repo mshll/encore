@@ -2,10 +2,10 @@ import type { AbstractStyle } from "../covers/style";
 import type { Hue } from "../covers/tint";
 import type { Db } from "../db/client";
 import { LIVING_KINDS, type LivingKind, type LivingTrack } from "../db/schema";
-import { forgottenTracks, mostPlayedTracks, newReleaseTracks, picksTracks, thisMonthTracks, type BuildContext } from "./build";
+import { forgottenTracks, mostPlayedTracks, newReleaseTracks, picksTracks, thisMonthTracks, thisYearTracks, type BuildContext } from "./build";
 
-/** Refreshed once per local day, week (from Monday) or month, or when its source changes. */
-export type LivingSchedule = "daily" | "weekly" | "monthly" | "picks" | "releases";
+/** Refreshed once per local day, week (from Monday) or month, or when its source changes. `yearly-weekly`: each week, and when the year turns. */
+export type LivingSchedule = "daily" | "weekly" | "monthly" | "yearly-weekly" | "picks" | "releases";
 
 export type LivingKindSpec = {
   id: LivingKind;
@@ -19,6 +19,8 @@ export type LivingKindSpec = {
   perRefresh?: number;
   cover: { style: AbstractStyle; colours: { lead: Hue; second: Hue } };
   build: (db: Db, ctx: BuildContext) => LivingTrack[];
+  /** Makes no playlist while there is nothing to put in it. */
+  waitForSongs?: boolean;
 };
 
 export const LIVING_CAP = 50;
@@ -72,6 +74,16 @@ export const LIVING: Record<LivingKind, LivingKindSpec> = {
     schedule: "monthly",
     cover: { style: "tiles", colours: { lead: { h: 0.3, s: 0.55 }, second: { h: 0.36, s: 0.6 } } },
     build: thisMonthTracks,
+  },
+  "this-year": {
+    id: "this-year",
+    name: "This year so far",
+    about: (ctx) => `The songs that defined ${new Intl.DateTimeFormat("en-GB", { year: "numeric", timeZone: ctx.timezone }).format(ctx.now)} so far`,
+    mode: "replace",
+    schedule: "yearly-weekly",
+    cover: { style: "tiles", colours: { lead: { h: 0.02, s: 0.7 }, second: { h: 0.98, s: 0.6 } } },
+    build: (db, ctx) => thisYearTracks(db, ctx, LIVING_CAP),
+    waitForSongs: true,
   },
 };
 

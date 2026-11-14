@@ -2,7 +2,13 @@ import { Hono } from "hono";
 import { z } from "zod";
 import { ask, deleteAskThread, getAskThread, listAskThreads } from "../../ask/service";
 import { PICK_STATES } from "../../db/schema";
-import { generateDigest, listDigests, renderDigest } from "../../digest/service";
+import { CARD_FORMATS, makeCard } from "../../covers/card";
+import { recapCardInput } from "../../digest/card";
+import { recapCover, recapCoverSource } from "../../digest/cover";
+import { RECAP_KINDS, latestKey } from "../../digest/periods";
+import { recapPlaylistSongs, saveRecapPlaylist } from "../../digest/playlist";
+import { generateDigest, getDigest, listDigests, recapPeriod, renderDigest } from "../../digest/service";
+import { localTime } from "../../plays/localTime";
 import { budgetStatus, spendDetail } from "../../llm/ledger";
 import { listBlocks, removeBlock } from "../../library/blocks";
 import { cachedNote, trackNote } from "../../notes/service";
@@ -142,17 +148,52 @@ export const noteRoutes = new Hono<Env>()
     return c.json(await mapped(() => trackNote(featureContext(c), body)));
   });
 
-const kind = z.enum(["weekly", "monthly"]);
+const kind = z.enum(RECAP_KINDS);
 
 export const digestRoutes = new Hono<Env>()
   .get("/", (c) => {
     const q = parse(z.object({ kind: kind.optional(), limit: z.coerce.number().int().min(1).max(100).default(20) }), c.req.query());
     return c.json({ items: listDigests(c.var.deps.db, q.kind, q.limit) });
   })
+  .get("/periods/:kind/:key", async (c) => {
+    const { db, now, settings } = c.var.deps;
+    const p = parse(z.object({ kind, key: z.string().max(10) }), c.req.param());
+    const today = localTime(now(), settings.get().timezone).day;
+    return c.json(await mapped(() => recapPeriod(db, p.kind, p.key, today)));
+  })
+  .get("/periods/:kind/:key/cover", async (c) => {
+    const { db, now, settings } = c.var.deps;
+    const p = parse(z.object({ kind, key: z.string().max(10) }), c.req.param());
+    const songs = await mapped(() => recapPlaylistSongs(db, p.kind, p.key, localTime(now(), settings.get().timezone).day));
+    if (songs.length === 0) throw new ApiError(404, "not_found", "Not found");
+    const source = recapCoverSource(p.kind, p.key, songs);
+    const headers = { etag: `"${source.key}"`, "cache-control": c.req.query("v") === source.key ? "private, max-age=31536000, immutable" : "private, no-cache" };
+    if (c.req.header("if-none-match") === headers.etag) return c.body(null, 304, headers);
+    return c.body(new Uint8Array(await recapCover(source)), 200, { ...headers, "content-type": "image/jpeg" });
+  })
+  .post("/periods/:kind/:key/playlist", async (c) => {
+    const { db, spotify, now, settings } = c.var.deps;
+    const p = parse(z.object({ kind, key: z.string().max(10) }), c.req.param());
+    const today = localTime(now(), settings.get().timezone).day;
+    return c.json(await mapped(() => saveRecapPlaylist({ db, spotify, now, today }, p.kind, p.key)));
+  })
+  .get("/latest/:kind", (c) => {
+    const { now, settings } = c.var.deps;
+    const p = parse(z.object({ kind }), c.req.param());
+    const { timezone, llm } = settings.get();
+    return c.json({ kind: p.kind, key: latestKey(p.kind, localTime(now(), timezone).day, llm.digestSlot.weekday) });
+  })
   .get("/:id", async (c) => c.json(await mapped(() => renderDigest(c.var.deps.db, parse(id, c.req.param()).id))))
+  .get("/:id/card", async (c) => {
+    const digest = await mapped(() => getDigest(c.var.deps.db, parse(id, c.req.param()).id));
+    const { format } = parse(z.object({ format: z.enum(CARD_FORMATS).default("wide") }), c.req.query());
+    const png = await makeCard({ ...recapCardInput(digest.page), format });
+    const name = `encore-${digest.label.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "")}${format === "square" ? "-square" : ""}.png`;
+    return c.body(new Uint8Array(png), 200, { "content-type": "image/png", "content-disposition": `attachment; filename="${name}"`, "cache-control": "private, no-cache" });
+  })
   .post("/generate", async (c) => {
-    const body = parse(z.object({ kind }), await jsonBody(c));
-    return c.json(await mapped(() => generateDigest(featureContext(c), body.kind)));
+    const body = parse(z.object({ kind, key: z.string().max(10).optional() }), await jsonBody(c));
+    return respond(c, (ctx) => generateDigest(ctx, body.kind, body.key));
   });
 
 export const llmRoutes = new Hono<Env>().get("/spend", (c) => {

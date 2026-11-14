@@ -1,14 +1,16 @@
 import { describe, expect, test } from "bun:test";
 import type Anthropic from "@anthropic-ai/sdk";
 import type { Db } from "../src/db/client";
-import { llmCalls, picks } from "../src/db/schema";
-import { digestFacts, monthlyWindows, weeklyWindows } from "../src/digest/facts";
-import { allowedNumbers, unsupportedNumbers } from "../src/digest/numbers";
-import { CODE_RENDERED, generateDigest, isDigestDue, listDigests, renderDigest } from "../src/digest/service";
+import { digests, llmCalls } from "../src/db/schema";
+import { recapFacts } from "../src/digest/facts";
+import { RECAP_SCHEMA } from "../src/digest/lines";
+import { baselineSpan, coveredSpan, humanDatesIn, latestKey, periodLabel, periodSpan } from "../src/digest/periods";
+import { CODE_RENDERED, generateDigest, getDigest, isDigestDue, RecapPeriodError } from "../src/digest/service";
+import { Llm } from "../src/llm/client";
 import { createAssistantJobs } from "../src/jobs/assistant";
 import { trackNote } from "../src/notes/service";
 import { songKey } from "../src/plays/song";
-import { TZ, uri } from "./helpers";
+import { play, seed, TZ, uri } from "./helpers";
 import { featureCtx, message, scripted, seedLibrary, text } from "./llmFakes";
 
 const WOODS = songKey("Woods", "Mac Miller");
@@ -48,82 +50,158 @@ describe("notes", () => {
   });
 });
 
-describe("digest numbers", () => {
-  test("windows", () => {
-    expect(weeklyWindows("2026-02-01")).toEqual({ period: { from: "2026-01-25", to: "2026-01-31" }, baseline: { from: "2025-12-28", to: "2026-01-24" } });
-    expect(monthlyWindows("2026-03-01")).toEqual({ period: { from: "2026-02-01", to: "2026-02-28" }, baseline: { from: "2025-11-01", to: "2026-01-31" } });
+const lines = (headline: string, takes: Record<string, string> = {}) => message([text(JSON.stringify({ headline, takes: Object.entries(takes).map(([section, t]) => ({ section, text: t })) }))]);
+
+/** January from seedLibrary, plus Woods each day from 2 to 11 February. */
+function seedFebruary(db: Db) {
+  seed(db, [], Array.from({ length: 10 }, (_, i) => play(`2026-02-${String(i + 2).padStart(2, "0")}T20:00:00Z`, uri("w1"), 200_000, { skipped: false })));
+}
+
+describe("recap periods", () => {
+  test("a week is the seven days before the recap weekday, a month the calendar month before today", () => {
+    expect(latestKey("weekly", "2026-01-30", 5)).toBe("2026-01-29");
+    expect(periodSpan("weekly", "2026-01-29")).toEqual({ from: "2026-01-23", to: "2026-01-29" });
+    expect(latestKey("monthly", "2026-03-01", 5)).toBe("2026-02");
+    expect(periodSpan("monthly", "2026-02")).toEqual({ from: "2026-02-01", to: "2026-02-28" });
   });
 
-  test("facts are computed in code, with the baseline scaled to the period length", () => {
-    const { db } = featureCtx(null);
-    seedLibrary(db);
-    insertPick(db, Date.parse("2026-01-05T10:00:00Z"));
-    insertPick(db, Date.parse("2026-01-11T10:00:00Z"));
-    const { period, baseline } = weeklyWindows("2026-01-11");
-    const f = digestFacts(db, TZ, period, baseline);
-    expect(f.period).toEqual({ from: "2026-01-04", to: "2026-01-10", days: 7 });
-    expect(f.baseline.days).toBe(28);
-    // 7 days x (200 s + 10 s + 200 s + 5 s) = 2,905 s; baseline 3 days of the same, x 7/28.
-    expect(f.totals).toMatchObject({ hours: 0.8, baselineHours: 0.1, listens: 14, baselineListens: 2, uniqueArtists: 2, uniqueSongs: 3, skipRate: 0.5, baselineSkipRate: 0.5 });
-    expect(f.topArtists[0]).toEqual({ artist: "Mac Miller", hours: 0.8, baselineHours: 0.1 });
-    expect(f.risingArtists.map((a) => a.artist)).toEqual(["Mac Miller"]);
-    expect(f.newArtists.count).toBe(0);
-    expect(f.skipRateDelta).toBe(0);
-    expect(f.assistant).toEqual({ picksMade: 1, picksPlayed: 0, setsBuilt: 0 });
+  test("the current year is covered up to yesterday and compared with the same stretch of the year before", () => {
+    const covered = coveredSpan("yearly", "2026", "2026-11-15")!;
+
+    expect(covered).toEqual({ from: "2026-01-01", to: "2026-11-14", inProgress: true });
+    expect(baselineSpan("yearly", "2026", covered)).toEqual({ from: "2025-01-01", to: "2025-11-14" });
+    expect(coveredSpan("monthly", "2026-11", "2026-11-15")).toBeNull();
+  });
+
+  test("labels and dates are written for people", () => {
+    expect([periodLabel("weekly", "2026-11-13"), periodLabel("weekly", "2026-11-03"), periodLabel("monthly", "2026-10"), periodLabel("yearly", "2026")]).toEqual([
+      "7 – 13 Nov 2026",
+      "28 Oct – 3 Nov 2026",
+      "October 2026",
+      "2026",
+    ]);
+    expect(humanDatesIn("Busiest on 2026-10-22, not 2026-13-45.")).toBe("Busiest on 22 Oct 2026, not 2026-13-45.");
   });
 });
 
-function insertPick(db: Db, createdAt: number) {
-  db.insert(picks)
-    .values({ week: `w${createdAt}`, position: 1, uri: uri(`p${createdAt}`), songKey: `k${createdAt}`, name: "n", artist: "a", album: null, releaseDate: null, reason: "r", distance: "near", state: "new", stateAt: 0, createdAt })
-    .run();
-}
-
-describe("digest", () => {
-  test("generated once per period with low effort and no tools, then stored and rendered", async () => {
-    const fake = scripted(message([text("A quieter week.")]));
-    const { ctx, db } = featureCtx(fake.transport, [], {}, "2026-01-11T08:00:00Z");
+describe("recap facts", () => {
+  test("totals, artists and songs come from the plays, compared with the period before", () => {
+    const { db } = featureCtx(null);
     seedLibrary(db);
-    const first = await generateDigest(ctx, "weekly");
-    expect(first).toMatchObject({ created: true, kind: "weekly", periodKey: "2026-01-10", from: "2026-01-04", to: "2026-01-10", text: "A quieter week." });
-    expect(await generateDigest(ctx, "weekly")).toMatchObject({ created: false, id: first.id });
-    expect(fake.requests).toHaveLength(1);
-    const req = fake.requests[0]!;
-    expect(req.tools).toBeUndefined();
-    expect(req.output_config).toEqual({ effort: "low" });
-    expect(JSON.stringify(req.messages[0])).toContain('\\"listens\\":14');
-    expect(renderDigest(db, first.id).rendered).toBe("Your week, 2026-01-04 to 2026-01-10\n\nA quieter week.");
-    expect(listDigests(db, "weekly", 10)).toHaveLength(1);
+    seedFebruary(db);
+
+    const f = recapFacts(db, "monthly", { ...periodSpan("monthly", "2026-02"), inProgress: false }, periodSpan("monthly", "2026-01"));
+
+    expect(f.totals).toMatchObject({ hours: 0.56, listens: 10, artists: 1, songs: 1, before: { hours: 1.21, listens: 21 } });
+    expect(f.artists[0]).toMatchObject({ artist: "Mac Miller", hours: 0.56, before: 1.14 });
+    expect(f.daily).toHaveLength(28);
+    expect(f.finds).toEqual({ songs: { count: 0, ofNew: 0, top: [] }, artists: { count: 0, ofNew: 0, top: [] } });
   });
 
-  test("a digest stating numbers outside the facts is rewritten once", async () => {
-    const fake = scripted(message([text("**You doubled** your listening: 14 listens, about 7.7 times more.")]), message([text("14 listens, up from 2.")]));
-    const { ctx, db } = featureCtx(fake.transport, [], {}, "2026-01-11T08:00:00Z");
+  test("without earlier history there is no baseline and no finds", () => {
+    const { db } = featureCtx(null);
     seedLibrary(db);
-    const digest = await generateDigest(ctx, "weekly");
-    expect(digest).toMatchObject({ text: "14 listens, up from 2.", model: "claude-opus-5-5" });
-    expect(fake.requests[1]!.messages.at(-1)!.content).toBe("These numbers are not in the facts: 7.7. Rewrite the digest using only numbers that appear in the facts. Don't compute new ones.");
+
+    const f = recapFacts(db, "monthly", { ...periodSpan("monthly", "2026-01"), inProgress: false }, null);
+
+    expect([f.baseline, f.totals.before, f.finds, f.movers]).toEqual([null, null, null, { up: [], down: [] }]);
+  });
+});
+
+describe("recaps", () => {
+  test("Claude writes the headline and takes as structured output; the numbers stay in the facts", async () => {
+    const fake = scripted(lines("A quieter month, still mostly Mac Miller", { listening: "Much less than January.", artists: "One artist all month." }));
+    const { ctx, db } = featureCtx(fake.transport, [], {}, "2026-03-02T08:00:00Z");
+    seedLibrary(db);
+    seedFebruary(db);
+
+    const recap = await generateDigest(ctx, "monthly");
+
+    expect(fake.requests[0]!.output_config).toEqual({ effort: "low", format: { type: "json_schema", schema: RECAP_SCHEMA } });
+    expect(recap).toMatchObject({ created: true, periodKey: "2026-02", title: "Your month, February 2026", page: { headline: "A quieter month, still mostly Mac Miller", headlineBy: "claude", compare: { label: "January 2026" } } });
+    expect(recap.page.sections.map((s) => [s.id, s.take])).toEqual([
+      ["listening", "Much less than January."],
+      ["artists", "One artist all month."],
+      ["songs", null],
+      ["taste", null],
+      ["rhythm", null],
+    ]);
+    expect(recap.text.split("\n").slice(0, 2)).toEqual(["A quieter month, still mostly Mac Miller", "Much less than January. 34 minutes of music, 54% less than January 2026 (1.2 hours), across 1 artist."]);
   });
 
-  test("after a second failure the digest is written from the facts in code", async () => {
-    const fake = scripted(message([text("You listened 777 hours.")]), message([text("You listened 778 hours.")]));
-    const { ctx, db } = featureCtx(fake.transport, [], {}, "2026-01-11T08:00:00Z");
+  test("lines with digits are sent back once, then dropped", async () => {
+    const fake = scripted(lines("Up 50%", { listening: "Twice as much." }), lines("Up 50% again", { listening: "About twice as much." }));
+    const { ctx, db } = featureCtx(fake.transport, [], {}, "2026-03-02T08:00:00Z");
     seedLibrary(db);
-    const digest = await generateDigest(ctx, "weekly");
-    expect(digest.model).toBe(CODE_RENDERED);
-    expect(digest.text.split("\n")[0]).toBe("0.8 hours of music this week, against 0.1 in a typical week before it.");
-    expect(unsupportedNumbers(digest.text, allowedNumbers(digest.facts))).toEqual([]);
-    expect(fake.requests).toHaveLength(2);
+    seedFebruary(db);
+
+    const recap = await generateDigest(ctx, "monthly");
+
+    expect(String(fake.requests[1]!.messages.at(-1)!.content)).toBe("These lines have digits in them: Up 50%. Write them again with no digits; the page shows the numbers.");
+    expect(recap.lines).toEqual({ headline: null, takes: { listening: "About twice as much." } });
+    expect(recap.page).toMatchObject({ headline: "34 minutes of music, most of it Mac Miller", headlineBy: "facts" });
   });
 
-  test("due on the configured weekday and hour (local), and on the 1st for the monthly recap", () => {
+  test("without Claude the recap is stored with the numbers alone, and gets its words once Claude is there", async () => {
+    const { ctx, db } = featureCtx(null, [], {}, "2026-03-02T08:00:00Z");
+    seedLibrary(db);
+    seedFebruary(db);
+    const bare = await generateDigest(ctx, "monthly");
+    const fake = scripted(lines("Mostly Mac Miller"));
+
+    const worded = await generateDigest({ ...ctx, llm: new Llm(db, ctx.settings, () => fake.transport, ctx.now) }, "monthly");
+
+    expect([bare.model, bare.lines, bare.page.headlineBy]).toEqual([CODE_RENDERED, null, "facts"]);
+    expect([worded.created, worded.id, worded.page.headline]).toEqual([false, bare.id, "Mostly Mac Miller"]);
+  });
+
+  test("a period that has not ended, or that the history does not reach, cannot be recapped", async () => {
+    const { ctx, db } = featureCtx(null, [], {}, "2026-03-02T08:00:00Z");
+    seedLibrary(db);
+
+    await expect(generateDigest(ctx, "monthly", "2026-03")).rejects.toBeInstanceOf(RecapPeriodError);
+    await expect(generateDigest(ctx, "monthly", "2025-11")).rejects.toBeInstanceOf(RecapPeriodError);
+  });
+
+  test("the current year is recapped so far and brought up to date on a later day", async () => {
+    const { ctx, db, time } = featureCtx(null, [], {}, "2026-01-15T08:00:00Z");
+    seedLibrary(db);
+    const first = await generateDigest(ctx, "yearly");
+    time.set("2026-02-10T08:00:00Z");
+    seedFebruary(db);
+
+    const later = await generateDigest(ctx, "yearly");
+
+    expect([first.to, first.inProgress, first.title]).toEqual(["2026-01-14", true, "Your year so far, 2026"]);
+    expect([later.id, later.to, later.page.sections[0]]).toEqual([first.id, "2026-02-09", expect.objectContaining({ listens: 29 })]);
+  });
+
+  test("a recap stored before recaps were pages opens as a page, with its text kept and its dates made readable", () => {
+    const { db } = featureCtx(null);
+    seedLibrary(db);
+    const facts = {
+      period: { from: "2026-01-01", to: "2026-01-31", days: 31 },
+      baseline: { from: "2025-10-01", to: "2025-12-31", days: 92 },
+      totals: { hours: 1.2, baselineHours: 0.4, listens: 21, baselineListens: 8, uniqueArtists: 3, uniqueSongs: 4 },
+      topArtists: [{ artist: "Mac Miller", hours: 1.1, baselineHours: 0.4 }],
+      busiestDay: { day: "2026-01-02", hours: 0.2 },
+    };
+    const row = db.insert(digests).values({ kind: "monthly", periodKey: "2026-01", fromDay: "2026-01-01", toDay: "2026-01-31", facts, text: "January recap: more Mac Miller.\n\nBusiest on 2026-01-02.", model: "m", createdAt: 0 }).returning().get();
+
+    const recap = getDigest(db, row.id);
+
+    expect(recap.page).toMatchObject({ headline: "January recap: more Mac Miller.", headlineBy: "text", compare: { label: "a typical month before it", scaled: true }, legacyText: "January recap: more Mac Miller.\n\nBusiest on 2 Jan 2026." });
+    expect(recap.page.sections.map((s) => s.id)).toEqual(["listening", "artists", "songs", "rhythm"]);
+  });
+
+  test("due on the recap weekday and hour (local), on the 1st for the month and on 1 January for the year", () => {
     const { db } = featureCtx(null);
     const slot = { weekday: 5, hour: 9 };
-    expect(isDigestDue(db, "weekly", TZ, slot, Date.parse("2026-01-30T05:59:00Z"))).toBe(false);
-    expect(isDigestDue(db, "weekly", TZ, slot, Date.parse("2026-01-30T06:00:00Z"))).toBe(true);
-    expect(isDigestDue(db, "weekly", TZ, slot, Date.parse("2026-01-29T06:00:00Z"))).toBe(false);
-    expect(isDigestDue(db, "monthly", TZ, slot, Date.parse("2026-02-01T06:00:00Z"))).toBe(true);
-    expect(isDigestDue(db, "monthly", TZ, slot, Date.parse("2026-02-02T06:00:00Z"))).toBe(false);
+
+    const due = (kind: "weekly" | "monthly" | "yearly", iso: string) => isDigestDue(db, kind, TZ, slot, Date.parse(iso));
+
+    expect([due("weekly", "2026-01-30T05:59:00Z"), due("weekly", "2026-01-30T06:00:00Z"), due("weekly", "2026-01-29T06:00:00Z")]).toEqual([false, true, false]);
+    expect([due("monthly", "2026-02-01T06:00:00Z"), due("monthly", "2026-02-02T06:00:00Z"), due("yearly", "2026-01-01T06:00:00Z"), due("yearly", "2026-01-02T06:00:00Z")]).toEqual([true, false, true, false]);
   });
 });
 
@@ -139,7 +217,7 @@ describe("scheduled LLM jobs", () => {
       .run();
     const jobs = createAssistantJobs(ctx, auth);
     expect(await jobs.picks.run()).toMatchObject({ skipped: "budget_exceeded", month: "2026-01" });
-    expect(await jobs.digest.run()).toMatchObject({ skipped: "budget_exceeded" });
+    expect(await jobs.digest.run()).toEqual({ generated: ["weekly:2026-01-29"] });
     expect(fake.requests).toHaveLength(0);
   });
 

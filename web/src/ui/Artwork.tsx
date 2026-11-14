@@ -19,7 +19,7 @@ export function sizedArt(url: string, size: ArtSize) {
   return url;
 }
 
-const BOX = { 24: "size-6", 32: "size-8", 40: "size-10", 48: "size-12", 56: "size-14", 64: "size-16" } as const;
+const BOX = { 20: "size-5", 24: "size-6", 32: "size-8", 40: "size-10", 48: "size-12", 56: "size-14", 64: "size-16" } as const;
 export type ArtBox = keyof typeof BOX;
 
 /** What the artwork shows. Sets the shape (artists are round) and the glyph drawn when there is no image. */
