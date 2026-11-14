@@ -15,11 +15,15 @@ export function EncoreMark({ size = 16, className }: { size?: 16 | 32 | 48; clas
   );
 }
 
+/**
+ * Mark and wordmark, optically centred: the wordmark's box is trimmed to its x-height band ("encore" has no ascenders
+ * or descenders, so that band is all of its ink), and the row centres that band on the mark's centre.
+ */
 export function Lockup({ size = 16 }: { size?: 16 | 32 }) {
   return (
     <span className={cx("flex items-center text-primary", size === 32 ? "gap-3" : "gap-2")}>
       <EncoreMark size={size} />
-      <span className={cx("font-display", size === 32 ? "text-title" : "text-wordmark")}>encore</span>
+      <span className={cx("font-display [text-box:trim-both_ex_alphabetic]", size === 32 ? "text-title" : "text-wordmark")}>encore</span>
     </span>
   );
 }
