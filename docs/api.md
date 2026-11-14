@@ -760,7 +760,7 @@ Revokes the link for good: from then on it answers like an unknown one. `{ "shar
 
 ### `GET /s/:token` (public)
 
-The shared page: server-rendered HTML with no script, the same for every visitor (the session cookie is never read). Each `GET` counts a view. `og:` and `twitter:` tags point at `PUBLIC_BASE_URL/s/<token>/card.png`. Headers: `X-Robots-Tag: noindex, nofollow, noarchive`, `Referrer-Policy: no-referrer`, `Cache-Control: no-store`, the app's CSP. A malformed, unknown, revoked or expired token gets the same `404` page. `429` past 60 requests a minute per client or 1200 a minute in all, on every `/s/*` route.
+The shared page: server-rendered HTML with no script, the same for every visitor (the session cookie is never read). Each `GET` counts a view. `og:` and `twitter:` tags point at `PUBLIC_BASE_URL/s/<token>/card.png`. Headers: `X-Robots-Tag: noindex, nofollow, noarchive`, `Referrer-Policy: no-referrer`, `Cache-Control: no-store`, the app's CSP. A malformed, unknown, revoked or expired token gets the same `404` page, as does any other path under `/s`. `429` past 60 requests a minute per client or 1200 a minute in all, on every `/s/*` route.
 
 ### `GET /s/:token/card.png` (public)
 

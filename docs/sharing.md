@@ -30,7 +30,8 @@ Only three routes, all under `/s/:token`, all without a session:
 | `GET /s/:token/snapshot.json` | The snapshot the page is drawn from |
 
 A token that is malformed, unknown, revoked or expired gets one and the same `404` page, with no hint of which. The
-lookup is by hash, so there is nothing to compare character by character.
+lookup is by hash, so there is nothing to compare character by character. Any other address under `/s` gets the same
+`404` page, never the app.
 
 The routes never read the session cookie. The owner signed in sees exactly the page a stranger sees, and nothing on it
 links back into the app.

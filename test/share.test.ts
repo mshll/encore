@@ -1,4 +1,8 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, spyOn, test } from "bun:test";
+import { mkdtempSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import * as sessions from "../src/auth/sessions";
 import { createSession } from "../src/auth/sessions";
 import { digests, llmCalls, plays, shares, spotifyAuth } from "../src/db/schema";
 import { generateDigest } from "../src/digest/service";
@@ -148,6 +152,85 @@ describe("share links", () => {
     for (let i = 0; i < 60; i++) await probe();
 
     expect([(await probe()).status, (await t.open(`/s/${randomToken()}`, { "x-forwarded-for": "203.0.113.10" })).status]).toEqual([429, 404]);
+  });
+});
+
+describe("public share routes in the app", () => {
+  const SHELL = "<title>encore shell</title>";
+  const withShell = () => {
+    const dist = mkdtempSync(join(tmpdir(), "encore-web-"));
+    writeFileSync(join(dist, "index.html"), `<!doctype html>${SHELL}`);
+    return setup({ WEB_DIST: dist });
+  };
+  const headersOf = (res: Response) => ["x-robots-tag", "referrer-policy", "cache-control"].map((h) => res.headers.get(h));
+
+  test("every /s response carries no-index, no-referrer, no-store and the app policy", async () => {
+    const t = await withShell();
+    const { url } = await t.make();
+    const live = pathOf(url);
+
+    const answers = await Promise.all([live, `${live}/card.png`, `${live}/snapshot.json`, `/s/${randomToken()}`, `${live}/other`, "/s", "/s/"].map((p) => t.open(p)));
+
+    for (const res of answers) {
+      expect(headersOf(res)).toEqual(["noindex, nofollow, noarchive", "no-referrer", "no-store"]);
+      expect(res.headers.get("content-security-policy")).toContain("script-src 'self'");
+    }
+  });
+
+  test("a rate-limited /s answer carries the same headers", async () => {
+    const t = await setup();
+    const probe = () => t.open(`/s/${randomToken()}`, { "x-forwarded-for": "203.0.113.20" });
+    for (let i = 0; i < 60; i++) await probe();
+
+    const res = await probe();
+
+    expect([res.status, ...headersOf(res)]).toEqual([429, "noindex, nofollow, noarchive", "no-referrer", "no-store"]);
+  });
+
+  test("/s is answered without the session check, even for a write without an origin", async () => {
+    const t = await setup();
+    const { url } = await t.make();
+    const checks = spyOn(sessions, "isValidSession");
+
+    const page = await t.open(pathOf(url), { cookie: t.cookie });
+    const write = await t.app.request(pathOf(url), { method: "POST", headers: { cookie: t.cookie } });
+
+    expect([page.status, write.status, page.headers.get("set-cookie"), checks.mock.calls.length]).toEqual([200, 404, null, 0]);
+    checks.mockRestore();
+  });
+
+  test("the app shell is never served under /s", async () => {
+    const t = await withShell();
+    const { url } = await t.make();
+
+    const answers = await Promise.all(["/s", "/s/", `/s/${randomToken()}`, `${pathOf(url)}/other`, `${pathOf(url)}/card.png/x`].map((p) => t.open(p)));
+
+    expect(answers.map((r) => r.status)).toEqual([404, 404, 404, 404, 404]);
+    for (const res of answers) expect(await res.text()).not.toContain(SHELL);
+  });
+
+  test("the owner's share routes need the session", async () => {
+    const t = await setup();
+
+    const answers = await Promise.all([
+      t.app.request("/api/shares"),
+      t.app.request("/api/shares/1", { method: "DELETE", headers: { origin: ORIGIN } }),
+    ]);
+
+    expect(answers.map((r) => r.status)).toEqual([401, 401]);
+  });
+
+  test("the owner's share writes need the same origin, even with the session", async () => {
+    const t = await setup();
+    const { share } = await t.make();
+    const body = JSON.stringify({ kind: "recap", ref: t.recap.id });
+
+    const answers = await Promise.all([
+      t.app.request("/api/shares", { method: "POST", headers: { cookie: t.cookie, origin: "https://evil.example", "content-type": "application/json" }, body }),
+      t.app.request(`/api/shares/${share.id}`, { method: "DELETE", headers: { cookie: t.cookie, "sec-fetch-site": "cross-site" } }),
+    ]);
+
+    expect(answers.map((r) => r.status)).toEqual([403, 403]);
   });
 });
 

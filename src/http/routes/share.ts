@@ -55,7 +55,8 @@ export const PUBLIC_SHARE_HEADERS = { "x-robots-tag": "noindex, nofollow, noarch
 /**
  * The public side of a share: its page, its card and its snapshot, nothing else. Never reads the session cookie, so
  * the owner signed in sees exactly what a stranger sees. A token that is malformed, unknown, revoked or expired gets
- * one and the same 404. Limits are per app, made with the routes.
+ * one and the same 404, as does any other address under /s, so the app shell is never served there. Limits are per app,
+ * made with the routes.
  */
 export function publicShareRoutes(limits = { perClient: 60, everyone: 1200 }) {
   const perClient = rateLimit(limits.perClient, 60_000);
@@ -89,5 +90,6 @@ export function publicShareRoutes(limits = { perClient: 60, everyone: 1200 }) {
       const row = resolveShare(db, c.req.param("token"), now());
       if (!row) return c.json({ error: { code: "not_found", message: "Not found" } }, 404);
       return c.json(row.snapshot);
-    });
+    })
+    .all("*", (c) => c.html(notFoundPage(), 404));
 }
