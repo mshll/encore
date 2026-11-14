@@ -15,9 +15,20 @@ bun run dev                   # http://localhost:8888
 
 Open the app on `http://localhost:8888`, not `127.0.0.1`: passkeys need a domain name, and `localhost` is one. Spotify only allows a loopback IP for local redirect URIs, so the OAuth callback goes to `http://127.0.0.1:8888/callback`. The callback does not need the session cookie; it redirects back to `PUBLIC_BASE_URL` when done.
 
-First login: register a passkey with `SETUP_TOKEN` (`POST /api/auth/register/options` and `/verify`, see the API doc). After that, only a signed-in session can add passkeys.
+First login: open the app and enter `SETUP_TOKEN` to create a passkey. After that, only a signed-in session can add passkeys.
 
-Checks: `bun test`, `bun run typecheck`.
+Checks: `bun test`, `bun run typecheck`, and `cd web && bun run typecheck`.
+
+### Web UI
+
+The UI lives in `web/` (Vite, React, TypeScript, Tailwind, Base UI). For UI work run the API on another port and let Vite own 8888, so the URLs above stay the same:
+
+```sh
+PORT=8889 bun run dev                       # API, jobs included
+cd web && bun install && bun run dev        # http://localhost:8888, proxies /api and /callback to 8889
+```
+
+`cd web && bun run build` writes `web/dist`; `bun run start` then serves it on 8888 with the API. The Docker image builds it the same way.
 
 ## Environment
 
@@ -70,5 +81,5 @@ src/tags/                tag vocabulary, validation, storage
 src/analytics/           pure query functions
 src/jobs/                scheduler and persisted job state
 src/http/                Hono app and routes
-web/                     reserved for the UI (Vite + React), built into web/dist
+web/                     UI (Vite + React), built into web/dist; dither-kit charts vendored in web/src/components/dither-kit
 ```
