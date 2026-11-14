@@ -5,7 +5,7 @@ import { history } from "../src/analytics/history";
 import { clock, devices, overview, timeSeries } from "../src/analytics/overview";
 import { forgotten, onThisDay } from "../src/analytics/recall";
 import { search } from "../src/analytics/search";
-import { classify, momentSplit, skips } from "../src/analytics/skips";
+import { classify, momentSplit, skipContext, skips } from "../src/analytics/skips";
 import { energyByHour, genreSeries, moodSeries } from "../src/analytics/tags";
 import { eras, topAlbums, topArtists, topTracks } from "../src/analytics/top";
 import { trips } from "../src/analytics/trips";
@@ -160,6 +160,36 @@ describe("skips", () => {
     expect(result.quickSkips.map((t) => t.uri)).toEqual([C]);
     expect(result.neverSkipped).toEqual([]);
     expect(skips(db, { range: {}, minPlays: 3, limit: 10 }).mostSkippedTracks.map((t) => t.uri)).toEqual([A1]);
+  });
+
+  test("context profile over every play with a known skip flag", () => {
+    const { profile } = skipContext(baseFixture(), { range: {}, weekendDays: WEEKEND });
+    expect(profile.device).toEqual([
+      { value: "ios", plays: 3, skips: 1, skipRate: 0.333 },
+      { value: "mac", plays: 1, skips: 1, skipRate: 1 },
+    ]);
+    expect(profile.shuffle.find((v) => v.value === "on")).toEqual({ value: "on", plays: 1, skips: 1, skipRate: 1 });
+  });
+
+  test("positions bucket skips by the share of the song played, leaving out songs without a duration", () => {
+    const db = testDb();
+    seed(
+      db,
+      [track("p", "Song P", "Artist P", null, { durationMs: 200000 }), track("q", "Song Q", "Artist Q", null)],
+      [
+        play("2026-01-01T10:00:00Z", uri("p"), 1000, { skipped: true }),
+        play("2026-01-01T11:00:00Z", uri("p"), 99000, { skipped: true }),
+        play("2026-01-01T12:00:00Z", uri("p"), 250000, { skipped: true }),
+        play("2026-01-01T13:00:00Z", uri("p"), 200000),
+        play("2026-01-01T14:00:00Z", uri("q"), 1000, { skipped: true }),
+      ],
+    );
+    const { positions } = skipContext(db, { range: {}, weekendDays: WEEKEND });
+    expect(positions).toHaveLength(10);
+    expect(positions[0]).toEqual({ start: 0, end: 0.1, skips: 1 });
+    expect(positions[4]).toEqual({ start: 0.4, end: 0.5, skips: 1 });
+    expect(positions[9]).toEqual({ start: 0.9, end: 1, skips: 1 });
+    expect(positions.reduce((sum, p) => sum + p.skips, 0)).toBe(3);
   });
 });
 

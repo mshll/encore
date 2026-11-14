@@ -4,7 +4,7 @@ import { artistPage, albumPage, trackPage } from "../../analytics/entities";
 import { history } from "../../analytics/history";
 import { clock, devices, overview, timeSeries } from "../../analytics/overview";
 import { forgotten, onThisDay } from "../../analytics/recall";
-import { momentSplit, skips } from "../../analytics/skips";
+import { momentSplit, skipContext, skips } from "../../analytics/skips";
 import { search } from "../../analytics/search";
 import { energyByHour, genreSeries, moodSeries } from "../../analytics/tags";
 import { eras, topAlbums, topArtists, topTracks } from "../../analytics/top";
@@ -61,7 +61,8 @@ export const statsRoutes = new Hono<Env>()
   })
   .get("/skips", (c) => {
     const q = parse(ranged({ minPlays: int(1, 1000, 10), limit: int(1, 200, 50) }), c.req.query());
-    return c.json(skips(c.var.deps.db, { range: range(q), minPlays: q.minPlays, limit: q.limit }));
+    const db = c.var.deps.db;
+    return c.json({ ...skips(db, { range: range(q), minPlays: q.minPlays, limit: q.limit }), ...skipContext(db, { range: range(q), weekendDays: c.var.deps.settings.get().weekendDays }) });
   })
   .get("/skips/split", (c) => {
     const q = parse(

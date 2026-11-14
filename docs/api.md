@@ -421,11 +421,13 @@ Params: `minPlays` (default 10, plays with a known skip flag needed to appear in
   "mostSkippedTracks": [Song],
   "mostSkippedArtists": [{ "artist": "CeeLo Green", "imageUrl": null, ...Stats }],
   "quickSkips": [Song],
-  "neverSkipped": [Song]
+  "neverSkipped": [Song],
+  "profile": SkipProfile,
+  "positions": [{ "start": 0, "end": 0.1, "skips": 5210 }]
 }
 ```
 
-`mostSkipped*` sort by skip rate, then volume. `quickSkips` sorts by quick-skip count. `neverSkipped` is songs with 0 skips, sorted by plays.
+`mostSkipped*` sort by skip rate, then volume. `quickSkips` sorts by quick-skip count. `neverSkipped` is songs with 0 skips, sorted by plays. `profile` is the skip rate per context value over every play in the range with a known skip flag (see Context dimensions). `positions` is always 10 entries: skipped plays by the share of the song played before the skip (`start` inclusive, `end` exclusive; a play longer than the song counts in the last entry). Skips of songs without a known duration are left out, so `positions` can sum to less than `summary.skips`.
 
 ### `GET /api/stats/skips/split`
 
