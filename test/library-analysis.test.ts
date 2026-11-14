@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { createSession } from "../src/auth/sessions";
 import type { Db } from "../src/db/client";
-import { appPlaylists, llmThreads, ownedPlaylists, playlistItems, savedTracks, sets } from "../src/db/schema";
+import { appPlaylists, livingPlaylists, llmThreads, ownedPlaylists, playlistItems, savedTracks, sets } from "../src/db/schema";
 import { groupEntries, libraryAnalysis, loadLibrary, plainReason, playClass } from "../src/library/analysis";
 import { appOwnedPlaylistIds } from "../src/library/owned";
 import { play, seed, testApp, testDb, track, TZ, uri } from "./helpers";
@@ -77,6 +77,8 @@ describe("library analysis", () => {
     playlist(db, "p2", ["a", "c"]);
     playlist(db, "app", ["c"]);
     playlist(db, "set", ["d"]);
+    playlist(db, "living", ["e"]);
+    db.insert(livingPlaylists).values({ kind: "picks", enabled: true, playlistId: "living", createdAt: NOW, updatedAt: NOW }).run();
     db.insert(appPlaylists).values({ purpose: "archive", playlistId: "app", createdAt: NOW }).run();
     const threadId = db.insert(llmThreads).values({ feature: "sets", system: "[]", messages: [], createdAt: NOW, updatedAt: NOW }).returning().get().id;
     db.insert(sets).values({ threadId, request: "r", title: "t", description: "", version: 1, playlistId: "set", createdAt: NOW, updatedAt: NOW }).run();
@@ -89,12 +91,12 @@ describe("library analysis", () => {
     expect(analysis.liked).toEqual({ total: 5, classes: { active: 1, fading: 1, dormant: 2, never: 1 } });
   });
 
-  test("leaves out playlists encore owns: app playlists and saved sets", () => {
+  test("leaves out playlists encore owns: app playlists, saved sets and self-updating playlists", () => {
     const db = library();
 
     const ids = libraryAnalysis(snapshot(db)).playlists.map((p) => p.id);
 
-    expect([ids, appOwnedPlaylistIds(db).sort()]).toEqual([["p1", "p2"], ["app", "set"]]);
+    expect([ids, appOwnedPlaylistIds(db).sort()]).toEqual([["p1", "p2"], ["app", "living", "set"]]);
   });
 
   test("describes each playlist: items, extra copies, classes, last play of any song in it, biggest overlap", () => {

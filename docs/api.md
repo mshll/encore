@@ -804,7 +804,7 @@ Refresh now, with the same rules and response as switching on. `outcome.status` 
 
 What state the liked songs and own playlists are in. Read only; changes go through [plans](#plans).
 
-**Play class** of a song, from its last listen (a play of 30 s or more; see Metric definitions) and nothing else, so a skip neither condemns a song nor keeps it in rotation: `active` (last listen under 90 days ago), `fading` (90 to 179 days), `dormant` (180 days or more), `never` (no listen since history starts: the `historyStart` setting, else the first stored play). Playlists encore owns (the DJ session playlist, the archive, saved sets, self-updating playlists: `app_playlists`, `sets.playlist_id` and `living_playlists.playlist_id` once that table exists) are never part of the library; the `library` job does not sync them.
+**Play class** of a song, from its last listen (a play of 30 s or more; see Metric definitions) and nothing else, so a skip neither condemns a song nor keeps it in rotation: `active` (last listen under 90 days ago), `fading` (90 to 179 days), `dormant` (180 days or more), `never` (no listen since history starts: the `historyStart` setting, else the first stored play). Playlists encore owns (the DJ session playlist, the archive, saved sets, self-updating playlists: `app_playlists`, `sets.playlist_id` and `living_playlists.playlist_id`) are never part of the library; the `library` job does not sync them.
 
 ### `GET /api/library/analysis`
 
