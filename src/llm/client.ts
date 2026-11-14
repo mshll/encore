@@ -4,7 +4,7 @@ import type { Config } from "../config";
 import type { Db } from "../db/client";
 import type { LlmFeature } from "../db/schema";
 import { callCost } from "./cost";
-import { LlmNotConfiguredError, LlmRefusalError } from "./errors";
+import { LlmAbortedError, LlmNotConfiguredError, LlmRefusalError } from "./errors";
 import { assertWithinBudget, recordCall } from "./ledger";
 
 export type StreamParams = BetaMessageStreamParams;
@@ -14,7 +14,18 @@ export type ToolDefinition = Anthropic.Beta.BetaToolUnion;
 export type Effort = "low" | "medium" | "high" | "xhigh" | "max";
 
 /** One API request. Swapped for a scripted fake in tests. */
-export type LlmTransport = (params: StreamParams, onText: (delta: string) => void) => Promise<LlmMessage>;
+export type LlmTransport = (params: StreamParams, onText: (delta: string) => void, signal?: AbortSignal) => Promise<LlmMessage>;
+
+/** A request that failed after it may have been billed. `partial` carries whatever usage the stream reported. */
+export class LlmAttemptError extends Error {
+  constructor(
+    readonly reason: unknown,
+    readonly partial: LlmMessage | undefined,
+    readonly retryable: boolean,
+  ) {
+    super(reason instanceof Error ? reason.message : String(reason));
+  }
+}
 
 export type CallInput = {
   feature: LlmFeature;
@@ -32,16 +43,18 @@ const MAX_JSON_RETRIES = 2;
 
 export function sdkTransport(apiKey: string): LlmTransport {
   const client = new Anthropic({ apiKey });
-  return async (params, onText) => {
-    for (let attempt = 0; ; attempt++) {
-      const stream = client.beta.messages.stream(params);
-      stream.on("text", onText);
-      try {
-        return await stream.finalMessage();
-      } catch (error) {
-        if (error instanceof Anthropic.APIError || attempt >= MAX_JSON_RETRIES) throw error;
-        console.error(`[llm] tool input was not parseable JSON, re-issuing the request: ${error instanceof Error ? error.message : error}`);
-      }
+  return async (params, onText, signal) => {
+    const stream = client.beta.messages.stream(params);
+    const abort = () => stream.abort();
+    signal?.addEventListener("abort", abort, { once: true });
+    if (signal?.aborted) abort();
+    stream.on("text", onText);
+    try {
+      return await stream.finalMessage();
+    } catch (error) {
+      throw new LlmAttemptError(error, stream.currentMessage, !(error instanceof Anthropic.APIError) && !signal?.aborted);
+    } finally {
+      signal?.removeEventListener("abort", abort);
     }
   };
 }
@@ -52,7 +65,13 @@ export class Llm {
     private readonly config: Pick<Config, "timezone" | "llm">,
     private readonly transport: LlmTransport | null,
     private readonly now: () => number = Date.now,
+    private readonly signal?: AbortSignal,
   ) {}
+
+  /** The same client, with every request cancelled when `signal` aborts. */
+  withSignal(signal: AbortSignal): Llm {
+    return new Llm(this.db, this.config, this.transport, this.now, signal);
+  }
 
   get configured() {
     return this.transport !== null;
@@ -84,19 +103,36 @@ export class Llm {
       fallbacks: "default",
       betas: BETAS,
     };
-    const started = this.now();
-    const message = await this.transport!(params, input.onText ?? (() => {}));
-    const cost = callCost(message.usage, this.config.llm.model, this.config.llm.prices, this.config.llm.webSearchPerRequest);
-    recordCall(this.db, this.config.timezone, {
-      ...cost,
-      ts: started,
-      feature: input.feature,
-      ref: input.ref ?? null,
-      requestedModel: this.config.llm.model,
-      model: message.model,
-      stopReason: message.stop_reason,
-      durationMs: this.now() - started,
-    });
+    for (let attempt = 0; ; attempt++) {
+      if (this.signal?.aborted) throw new LlmAbortedError();
+      const started = this.now();
+      const record = (message: LlmMessage, stopReason: string | null) =>
+        recordCall(this.db, this.config.timezone, {
+          ...callCost(message.usage, this.config.llm.model, this.config.llm.prices, this.config.llm.webSearchPerRequest),
+          ts: started,
+          feature: input.feature,
+          ref: input.ref ?? null,
+          requestedModel: this.config.llm.model,
+          model: message.model,
+          stopReason,
+          durationMs: this.now() - started,
+        });
+      try {
+        const message = await this.transport!(params, input.onText ?? (() => {}), this.signal);
+        record(message, message.stop_reason);
+        return this.checked(message);
+      } catch (error) {
+        if (!(error instanceof LlmAttemptError)) throw error;
+        if (error.partial?.usage) record(error.partial, this.signal?.aborted ? "aborted" : "error");
+        if (this.signal?.aborted) throw new LlmAbortedError();
+        if (!error.retryable || attempt >= MAX_JSON_RETRIES) throw error.reason;
+        console.error(`[llm] tool input was not parseable JSON, re-issuing the request: ${error.message}`);
+        this.assertAvailable();
+      }
+    }
+  }
+
+  private checked(message: LlmMessage): LlmMessage {
     if (message.stop_reason === "refusal") throw new LlmRefusalError(message.stop_details?.category ?? null);
     return message;
   }

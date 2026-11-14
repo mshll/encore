@@ -5,7 +5,7 @@ import { DigestNotFoundError } from "../digest/service";
 import { ThreadNotFoundError } from "../ask/service";
 import type { AgentEvent } from "../llm/agent";
 import type { FeatureContext } from "../llm/context";
-import { LlmBudgetExceededError, LlmIncompleteError, LlmNotConfiguredError, LlmRefusalError, LlmTruncatedError } from "../llm/errors";
+import { LlmAbortedError, LlmBudgetExceededError, LlmIncompleteError, LlmNotConfiguredError, LlmRefusalError, LlmTruncatedError } from "../llm/errors";
 import { NoteSubjectNotFoundError } from "../notes/service";
 import { PicksExistError, PicksNotSubmittedError } from "../picks/service";
 import { PickNotFoundError } from "../picks/state";
@@ -53,10 +53,13 @@ const wantsStream = (c: Context) => c.req.header("accept")?.includes("text/event
  * JSON by default. With `Accept: text/event-stream` the response is SSE: `text` and `tool` events while
  * Claude works, then one `done` event with the same body the JSON response would have, or one `error` event.
  */
-export async function respond<T>(c: Context<Env>, run: (onEvent?: (e: AgentEvent) => void) => Promise<T>, status: 200 | 201 = 200, keepAliveMs = 5_000) {
-  if (!wantsStream(c)) return c.json((await mapped(() => run())) as object, status);
+export async function respond<T>(c: Context<Env>, run: (ctx: FeatureContext, onEvent?: (e: AgentEvent) => void) => Promise<T>, status: 200 | 201 = 200, keepAliveMs = 5_000) {
+  const base = featureContext(c);
+  if (!wantsStream(c)) return c.json((await mapped(() => run(base))) as object, status);
   await mapped(() => c.var.deps.services.llm.assertAvailable());
   return streamSSE(c, async (stream) => {
+    const cancel = new AbortController();
+    stream.onAbort(() => cancel.abort());
     let chain = Promise.resolve();
     const send = (event: string, data: unknown) => {
       chain = chain.then(() => stream.writeSSE({ event, data: JSON.stringify(data) }));
@@ -68,9 +71,10 @@ export async function respond<T>(c: Context<Env>, run: (onEvent?: (e: AgentEvent
       });
     }, keepAliveMs);
     try {
-      const result = await run((e) => (e.type === "text" ? send("text", { delta: e.delta }) : send("tool", { name: e.name, input: e.input })));
+      const result = await run({ ...base, llm: base.llm.withSignal(cancel.signal) }, (e) => (e.type === "text" ? send("text", { delta: e.delta }) : send("tool", { name: e.name, input: e.input })));
       send("done", result);
     } catch (error) {
+      if (error instanceof LlmAbortedError) return;
       const api = toApiError(error);
       if (!(api instanceof ApiError)) console.error(error);
       send("error", { error: api instanceof ApiError ? { code: api.code, message: api.message, ...(api.details ? { details: api.details } : {}) } : { code: "internal", message: "Internal server error" } });

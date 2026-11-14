@@ -148,6 +148,11 @@ const priceOverrides = z.record(
   z.strictObject({ input: z.number().min(0), output: z.number().min(0), cacheWrite5m: z.number().min(0), cacheWrite1h: z.number().min(0), cacheRead: z.number().min(0) }),
 );
 
+function pricedModel(prices: Record<string, ModelPrice>, model: string): Record<string, ModelPrice> {
+  if (!prices[model]) throw new Error(`Invalid configuration: LLM_MODEL: no price for ${model}; add it to LLM_PRICES`);
+  return prices;
+}
+
 function parsePrices(raw: string | undefined): Record<string, ModelPrice> {
   if (!raw) return DEFAULT_PRICES;
   let json: unknown;
@@ -196,7 +201,7 @@ export function loadConfig(env: Record<string, string | undefined> = process.env
     llm: {
       apiKey: e.ANTHROPIC_API_KEY,
       model: e.LLM_MODEL,
-      prices: parsePrices(e.LLM_PRICES),
+      prices: pricedModel(parsePrices(e.LLM_PRICES), e.LLM_MODEL),
       webSearchPerRequest: 0.01,
       monthlyBudgetUsd: e.MONTHLY_BUDGET_USD,
       picksPerWeek: e.PICKS_PER_WEEK,

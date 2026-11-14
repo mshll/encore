@@ -21,9 +21,12 @@ type Counts = {
 };
 
 function priceFor(prices: Record<string, ModelPrice>, model: string, fallbackModel: string): ModelPrice {
-  const price = prices[model] ?? prices[fallbackModel];
-  if (!price) throw new Error(`No price configured for model ${model}`);
-  return price;
+  return prices[model] ?? prices[fallbackModel] ?? mostExpensive(prices);
+}
+
+/** An unpriced model is charged at the highest configured rate, so the ledger never undercounts a billed call. */
+function mostExpensive(prices: Record<string, ModelPrice>): ModelPrice {
+  return Object.values(prices).reduce((a, b) => (b.output > a.output ? b : a));
 }
 
 function countsCost(c: Counts, price: ModelPrice): number {

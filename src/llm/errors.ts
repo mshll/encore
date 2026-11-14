@@ -27,3 +27,9 @@ export class LlmTruncatedError extends Error {
 }
 
 export class LlmIncompleteError extends Error {}
+
+export class LlmAbortedError extends Error {
+  constructor() {
+    super("The request was cancelled");
+  }
+}

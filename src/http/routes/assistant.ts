@@ -24,7 +24,7 @@ const text = (max: number) => z.string().trim().min(1).max(max);
 export const setRoutes = new Hono<Env>()
   .post("/", async (c) => {
     const body = parse(z.object({ request: text(2000) }), await jsonBody(c));
-    return respond(c, (onEvent) => createSet(featureContext(c), body.request, onEvent), 201);
+    return respond(c, (ctx, onEvent) => createSet(ctx, body.request, onEvent), 201);
   })
   .get("/", (c) => {
     const q = parse(paging(100, 20), c.req.query());
@@ -39,7 +39,7 @@ export const setRoutes = new Hono<Env>()
     const setId = parse(id, c.req.param()).id;
     const body = parse(z.object({ message: text(2000) }), await jsonBody(c));
     if (!getSet(c.var.deps.db, setId)) throw new ApiError(404, "not_found", "Not found");
-    return respond(c, (onEvent) => refineSet(featureContext(c), setId, body.message, onEvent));
+    return respond(c, (ctx, onEvent) => refineSet(ctx, setId, body.message, onEvent));
   })
   .post("/:id/playlist", async (c) => {
     const { db, spotify, now } = c.var.deps;
@@ -78,7 +78,7 @@ export const pickRoutes = new Hono<Env>()
     const q = parse(z.object({ limit: z.coerce.number().int().min(1).max(104).default(12) }), c.req.query());
     return c.json({ items: pickWeeks(c.var.deps.db, q.limit) });
   })
-  .post("/generate", (c) => respond(c, (onEvent) => generatePicks(featureContext(c), onEvent), 201))
+  .post("/generate", (c) => respond(c, (ctx, onEvent) => generatePicks(ctx, onEvent), 201))
   .patch("/:id", async (c) => {
     const { db, config, spotify, now } = c.var.deps;
     const pickId = parse(id, c.req.param()).id;
@@ -101,7 +101,7 @@ export const blockRoutes = new Hono<Env>()
 export const askRoutes = new Hono<Env>()
   .post("/", async (c) => {
     const body = parse(z.object({ question: text(1000), threadId: z.number().int().min(1).optional() }), await jsonBody(c));
-    return respond(c, (onEvent) => ask(featureContext(c), body.question, body.threadId ?? null, onEvent));
+    return respond(c, (ctx, onEvent) => ask(ctx, body.question, body.threadId ?? null, onEvent));
   })
   .get("/threads", (c) => {
     const q = parse(z.object({ limit: z.coerce.number().int().min(1).max(100).default(20) }), c.req.query());

@@ -2,8 +2,9 @@ import { describe, expect, test } from "bun:test";
 import { z } from "zod";
 import { DEFAULT_PRICES } from "../src/config";
 import { echoable, runAgent, tool, ToolError } from "../src/llm/agent";
+import { LlmAttemptError, type LlmTransport } from "../src/llm/client";
 import { callCost } from "../src/llm/cost";
-import { LlmBudgetExceededError, LlmNotConfiguredError, LlmRefusalError, LlmTruncatedError } from "../src/llm/errors";
+import { LlmAbortedError, LlmBudgetExceededError, LlmNotConfiguredError, LlmRefusalError, LlmTruncatedError } from "../src/llm/errors";
 import { budgetStatus, monthSpend, spendByFeature } from "../src/llm/ledger";
 import { featureCtx, message, scripted, text, toolCall, toolUse, usage } from "./llmFakes";
 
@@ -185,5 +186,55 @@ describe("agent loop", () => {
       { type: "text", text: "rest", citations: null },
     ] as never[];
     expect(echoable(content).map((b: { type: string }) => b.type)).toEqual(["text", "fallback", "thinking", "text"]);
+  });
+});
+
+describe("spend that used to escape the ledger", () => {
+  const callInput = { feature: "ask" as const, system: ["s"], messages: [{ role: "user" as const, content: "q" }], effort: "low" as const, maxTokens: 100 };
+
+  test("a failed attempt that reported usage is recorded before the retry", async () => {
+    let attempts = 0;
+    const transport: LlmTransport = async () => {
+      if (attempts++ === 0) throw new LlmAttemptError(new SyntaxError("bad tool json"), message([text("partial")]), true);
+      return message([text("ok")]);
+    };
+    const { ctx } = featureCtx(transport);
+    await ctx.llm.call(callInput);
+    const rows = spendByFeature(ctx.db, "2026-02");
+    expect(rows[0]!.calls).toBe(2);
+    expect(monthSpend(ctx.db, "2026-02")).toBeCloseTo((2 * (1_000 * 4 + 100 * 20)) / 1e6, 10);
+  });
+
+  test("a retry stops when the failed attempts reach the cap", async () => {
+    const transport: LlmTransport = async () => {
+      throw new LlmAttemptError(new SyntaxError("bad tool json"), message([text("x")], "end_turn", { usage: usage({ output_tokens: 1_000_000 }) }), true);
+    };
+    const { ctx } = featureCtx(transport, [], { MONTHLY_BUDGET_USD: "5" });
+    await expect(ctx.llm.call(callInput)).rejects.toBeInstanceOf(LlmBudgetExceededError);
+    expect(spendByFeature(ctx.db, "2026-02")[0]!.calls).toBe(1);
+  });
+
+  test("a model with no price is charged at the highest configured rate", () => {
+    const cost = callCost(usage({ input_tokens: 0, output_tokens: 1_000_000 }), "claude-unknown", prices, 0);
+    expect(cost.usd).toBe(Math.max(...Object.values(prices).map((p) => p.output)) * 1_000_000);
+  });
+
+  test("an unpriced LLM_MODEL fails at boot", () => {
+    expect(() => featureCtx(null, [], { LLM_MODEL: "claude-unknown" })).toThrow(/LLM_MODEL/);
+  });
+
+  test("cancelling stops the request, records what was used and makes no further call", async () => {
+    const cancel = new AbortController();
+    let calls = 0;
+    const transport: LlmTransport = async (_params, _onText, signal) => {
+      calls++;
+      cancel.abort();
+      throw new LlmAttemptError(new Error("aborted"), message([text("half")]), !signal?.aborted);
+    };
+    const { ctx } = featureCtx(transport);
+    await expect(ctx.llm.withSignal(cancel.signal).call(callInput)).rejects.toBeInstanceOf(LlmAbortedError);
+    await expect(ctx.llm.withSignal(cancel.signal).call(callInput)).rejects.toBeInstanceOf(LlmAbortedError);
+    expect(calls).toBe(1);
+    expect(spendByFeature(ctx.db, "2026-02")[0]!.calls).toBe(1);
   });
 });
