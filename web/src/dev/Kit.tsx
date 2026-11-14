@@ -12,6 +12,7 @@ import { Button, IconButton } from "../ui/Button";
 import { Checkbox } from "../ui/Checkbox";
 import { Combobox } from "../ui/Combobox";
 import { Composer } from "../ui/Composer";
+import { Conversation } from "../ui/Conversation";
 import { CopyField } from "../ui/CopyField";
 import { Confirm, Dialog, DialogClose } from "../ui/Dialog";
 import { EntityHeader, EntityHeaderSkeleton } from "../ui/EntityHeader";
@@ -75,6 +76,53 @@ const RUN: RunState = {
 };
 
 /** Every primitive in its states, for the gate. Dev builds only. */
+/** A thread in a fixed box: empty with starters, then pinned once a message is sent. Clear goes back. */
+function ConversationDemo() {
+  const [draft, setDraft] = useState("");
+  const [said, setSaid] = useState<string[]>([]);
+  const send = (text: string) => {
+    setSaid((s) => [...s, text]);
+    setDraft("");
+  };
+  return (
+    <div className="flex h-96 flex-col gap-3">
+      <Conversation
+        contained
+        follow={said.length}
+        messages={
+          said.length > 0 && (
+            <ol className="flex flex-col gap-4">
+              {said.map((m, i) => (
+                <li key={i} className="flex flex-col gap-2">
+                  <p className="max-w-[85%] self-end rounded-lg bg-fill px-3 py-2 text-pretty">{m}</p>
+                  <p className="text-pretty">Mostly Frank Ocean and Mac Miller, late at night, with fewer skips than any other hour.</p>
+                </li>
+              ))}
+            </ol>
+          )
+        }
+        composer={<Composer value={draft} onChange={setDraft} onSubmit={() => send(draft.trim())} label="Ask about your listening" placeholder="What did I play most last winter?" />}
+        empty={
+          <ul className="mt-4 flex flex-col">
+            {["What do I play on Fridays?", "Which songs do I skip only on weekends?"].map((q) => (
+              <li key={q}>
+                <button type="button" className="-mx-2 flex min-h-(--control-h) w-full items-center rounded-md px-2 text-left hover:bg-fill" onClick={() => send(q)}>
+                  {q}
+                </button>
+              </li>
+            ))}
+          </ul>
+        }
+      />
+      {said.length > 0 && (
+        <Button size="sm" className="self-start" onClick={() => setSaid([])}>
+          Clear
+        </Button>
+      )}
+    </div>
+  );
+}
+
 export function Kit() {
   const [seg, setSeg] = useState<"a" | "b" | "c">("a");
   const [sel, setSel] = useState("week");
@@ -317,6 +365,9 @@ export function Kit() {
             The Anthropic API did not answer. Try again in a minute.
           </Notice>
           <Composer value="" onChange={() => {}} onSubmit={() => {}} label="Describe a set" disabled notice="Claude is not set up." />
+        </Section>
+        <Section title="Conversation">
+          <ConversationDemo />
         </Section>
       </div>
     </Page>

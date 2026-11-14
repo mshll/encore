@@ -150,6 +150,7 @@ Phosphor, regular weight; `fill` only for the active nav item and the playing st
 - **Entity page.** `EntityHeader` (artwork, title, credits, first and last play, Play plus secondary actions, range picker as `aside`) > stat strip driving the listening chart > main plus side column (ranked songs; albums, releases, versions) > skips in context, full width.
 - **Main plus side column.** `SIDE_COLUMNS` (`lg:grid-cols-[minmax(0,1fr)_minmax(0,320px)]`): the main answer left, small related lists right.
 - **Setting rows.** `SettingRows` separates rows with spacing only, no hairlines; a section heading groups them. A hairline is kept for selection or a table, never to divide settings.
+- **Conversation** (`ui/Conversation`). Ask and the set page. With no messages the composer sits under the header with the starters below it. From the first message, or a starting run, the composer is pinned to the foot of the conversation column and the messages scroll above it: in the page panel it sticks to the bottom of the scroll area (so it clears the player bar, the mini player, the tab bar and the safe area, which sit outside that area; the viewport resizes for the on-screen keyboard); in a side column (`contained`, the set page from `lg`) the thread has its own scroll box. The view follows new messages and a streaming run while the reader is at the end; scrolled up, Jump to latest appears above the composer. Notices tied to the composer (a failed run, Claude not set up, the cap spent, Spotify paused) sit in the pinned block with it. During a run the send button is Stop, so `RunProgress` in a thread has no Cancel. The composer glides between the two places (`--dur-move`, `--ease-move`; instant with reduced motion).
 - **Start a session.** `StartSessionButton` (secondary, small) sits beside a list of songs worth a session (Overview top songs, Forgotten, an era, keepers in Skips, a trip). It opens the queue panel, where the session runs.
 
 ### State order
@@ -203,8 +204,9 @@ All in `web/src/ui/` unless noted. Props listed are the ones that matter.
 | `Artwork` | `ui/Artwork` | `src`, `kind` artist, album, song, playlist, `box` 24 to 64 or fill. Kind sets the shape (artists round) and the placeholder glyph. Loading is the bare fill; missing and broken images show the kind's glyph (microphone, record, note, playlist) in `text-tertiary` on `bg-fill`. Decorative: the name sits beside it |
 | `SongMenu`, `SongContext` | `ui/SongMenu` | `song { uri, name, songKey?, artist? }` |
 | `RangePicker` | `ui/RangePicker` | Reads and writes `from`/`to` in the URL |
-| `RunProgress` | `ui/RunProgress` | `run` (from `useRun`), `title`, `onCancel` |
+| `RunProgress` | `ui/RunProgress` | `run` (from `useRun`), `title`, `onCancel` (omit in a `Conversation`: the composer's Stop cancels) |
 | `Composer` | `ui/Composer` | `value`, `onChange`, `onSubmit`, `onStop`, `running`, `label`, `notice`, `footer` |
+| `Conversation` | `ui/Conversation` | A thread with its composer (Ask, the set page). `messages` (null while empty), `composer` (the composer with its notices), `empty` (starters, under the composer while empty), `follow` (changes when a message is added), `startAtEnd`, `thread`, `contained` (own scroll box, fills the parent's height) |
 | `useClaudeGate` | `ui/ClaudeNotice` | Gate: `needsSpotify`; returns `ready`, `blocked` (no API key, monthly cap spent: disable the run and show it as the composer `notice`), `warning` (Spotify paused, shown as a `Notice`), `spend` (composer `footer`) |
 | `StartSessionButton` | `ui/StartSessionButton` | Starts a DJ session and opens the queue panel |
 | `BlockedList` | `surfaces/BlockedList` | Songs and artists kept out of picks and sets, with Allow. Picks and Library |

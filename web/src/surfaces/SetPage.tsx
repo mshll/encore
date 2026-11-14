@@ -9,6 +9,7 @@ import { artistPath, songPath } from "../app/paths";
 import { assistantProblem } from "../lib/assistant";
 import { fmtAgo, fmtInt } from "../lib/format";
 import { showToast } from "../lib/toast";
+import { useMedia } from "../lib/useMedia";
 import { useRun } from "../lib/useRun";
 import { openInSpotify, usePlayback } from "../player/playback";
 import { AppLink } from "../ui/AppLink";
@@ -16,6 +17,7 @@ import { Artwork } from "../ui/Artwork";
 import { Button, buttonClass, IconButton } from "../ui/Button";
 import { useClaudeGate } from "../ui/ClaudeNotice";
 import { Composer } from "../ui/Composer";
+import { Conversation } from "../ui/Conversation";
 import { Confirm } from "../ui/Dialog";
 import { Icon } from "../ui/Icon";
 import { ArrowUpRightIcon, MicrophoneStageIcon, MusicNoteIcon, PlayIcon, PlaylistIcon, PushPinIcon, QueueIcon, TrashIcon } from "../ui/icons";
@@ -128,7 +130,7 @@ function TrackRow({ item, added, onPin, onRemove }: { item: SetTrack; added: boo
   );
 }
 
-function Conversation({ set, onRefined }: { set: SetDetail; onRefined: (result: SetResult) => void }) {
+function SetConversation({ set, contained, onRefined }: { set: SetDetail; contained: boolean; onRefined: (result: SetResult) => void }) {
   const [text, setText] = useState("");
   const [sent, setSent] = useState<string | null>(null);
   const [stopped, setStopped] = useState(false);
@@ -149,38 +151,40 @@ function Conversation({ set, onRefined }: { set: SetDetail; onRefined: (result: 
     }
     onRefined(result);
   };
+  const cancel = () => {
+    run.cancel();
+    setStopped(true);
+    if (sent) setText(sent);
+  };
   return (
-    <div className="flex flex-col gap-5">
-      <ol className="flex flex-col gap-4">
-        {entries.map((e, i) =>
-          e.kind === "change" ? (
-            <li key={`c${e.change.version}`} className="flex flex-col gap-0.5 text-caption text-secondary">
-              <span className="font-medium text-primary">Version {e.change.version}</span>
-              {changeLines(e.change).map((l) => (
-                <span key={l} className="text-pretty">
-                  {l}
-                </span>
-              ))}
-            </li>
-          ) : (
-            <li key={i} className={e.role === "owner" ? "max-w-[85%] self-end rounded-lg bg-fill px-3 py-2 text-pretty" : "text-pretty text-secondary"}>
-              {e.text}
-            </li>
-          ),
-        )}
-        {run.running && sent && <li className="max-w-[85%] self-end rounded-lg bg-fill px-3 py-2 text-pretty">{sent}</li>}
-      </ol>
-      {run.running ? (
-        <RunProgress
-          run={run}
-          title="Changing the set"
-          onCancel={() => {
-            run.cancel();
-            setStopped(true);
-            if (sent) setText(sent);
-          }}
-        />
-      ) : (
+    <Conversation
+      contained={contained}
+      follow={entries.length + (run.running && sent ? 1 : 0)}
+      messages={
+        <div className="flex flex-col gap-5">
+          <ol className="flex flex-col gap-4">
+            {entries.map((e, i) =>
+              e.kind === "change" ? (
+                <li key={`c${e.change.version}`} className="flex flex-col gap-0.5 text-caption text-secondary">
+                  <span className="font-medium text-primary">Version {e.change.version}</span>
+                  {changeLines(e.change).map((l) => (
+                    <span key={l} className="text-pretty">
+                      {l}
+                    </span>
+                  ))}
+                </li>
+              ) : (
+                <li key={i} className={e.role === "owner" ? "max-w-[85%] self-end rounded-lg bg-fill px-3 py-2 text-pretty" : "text-pretty text-secondary"}>
+                  {e.text}
+                </li>
+              ),
+            )}
+            {run.running && sent && <li className="max-w-[85%] self-end rounded-lg bg-fill px-3 py-2 text-pretty">{sent}</li>}
+          </ol>
+          {run.running && <RunProgress run={run} title="Changing the set" />}
+        </div>
+      }
+      composer={
         <>
           {run.problem && (
             <Notice tone="danger" onRetry={gate.blocked || !text.trim() ? undefined : send}>
@@ -194,13 +198,15 @@ function Conversation({ set, onRefined }: { set: SetDetail; onRefined: (result: 
             value={text}
             onChange={setText}
             onSubmit={send}
+            onStop={cancel}
+            running={run.running}
             disabled={Boolean(gate.blocked)}
             notice={gate.blocked ?? gate.warning}
             footer={gate.spend}
           />
         </>
-      )}
-    </div>
+      }
+    />
   );
 }
 
@@ -351,6 +357,7 @@ export function SetPage({ id }: { id: number }) {
   const dj = useDj();
   const queryClient = useQueryClient();
   const [removing, setRemoving] = useState<SetTrack | null>(null);
+  const wide = useMedia("(min-width: 1024px)");
 
   const replace = (set: SetDetail) => {
     queryClient.setQueryData(["sets", id], set);
@@ -396,33 +403,35 @@ export function SetPage({ id }: { id: number }) {
 
   return (
     <Page>
-      <PageHeader title={set.title} description={set.description || undefined} actions={<SetActions set={set} playing={Boolean(playing)} />} />
-      {(set.items.length > 0 || playing) && (
-        <div className="-mt-6 flex flex-col gap-4 md:-mt-8">
-          {set.items.length > 0 && <p className="text-secondary tabular">{summary(set)}</p>}
-          {playing && <SessionLine session={playing} />}
-        </div>
-      )}
-      <div className="grid gap-10 lg:grid-cols-[minmax(0,1fr)_minmax(0,360px)] lg:gap-12">
-        <Section title="Songs">
-          {set.items.length === 0 ? (
-            <EmptyState icon={PlaylistIcon} title="No songs yet" description="Answer the question to build the set." />
-          ) : (
-            <ol className="flex flex-col">
-              {set.items.map((item) => (
-                <TrackRow
-                  key={item.songKey}
-                  item={item}
-                  added={added.has(item.songKey)}
-                  onPin={() => edit(item, { method: "PATCH", json: { pinned: !item.pinned } })}
-                  onRemove={() => setRemoving(item)}
-                />
-              ))}
-            </ol>
+      <div className="grid gap-10 md:gap-12 lg:grid-cols-[minmax(0,1fr)_minmax(0,360px)]">
+        <div className="flex min-w-0 flex-col gap-10 md:gap-12">
+          <PageHeader title={set.title} description={set.description || undefined} actions={<SetActions set={set} playing={Boolean(playing)} />} />
+          {(set.items.length > 0 || playing) && (
+            <div className="-mt-6 flex flex-col gap-4 md:-mt-8">
+              {set.items.length > 0 && <p className="text-secondary tabular">{summary(set)}</p>}
+              {playing && <SessionLine session={playing} />}
+            </div>
           )}
-        </Section>
-        <Section title="Conversation" className="lg:sticky lg:top-6 lg:self-start">
-          <Conversation set={set} onRefined={(r) => replace(r.set)} />
+          <Section title="Songs">
+            {set.items.length === 0 ? (
+              <EmptyState icon={PlaylistIcon} title="No songs yet" description="Answer the question to build the set." />
+            ) : (
+              <ol className="flex flex-col">
+                {set.items.map((item) => (
+                  <TrackRow
+                    key={item.songKey}
+                    item={item}
+                    added={added.has(item.songKey)}
+                    onPin={() => edit(item, { method: "PATCH", json: { pinned: !item.pinned } })}
+                    onRemove={() => setRemoving(item)}
+                  />
+                ))}
+              </ol>
+            )}
+          </Section>
+        </div>
+        <Section title="Conversation" className="lg:sticky lg:top-8 lg:h-[calc(100dvh-var(--bottom-chrome)-var(--inset)-64px)]">
+          <SetConversation set={set} contained={wide} onRefined={(r) => replace(r.set)} />
         </Section>
       </div>
       <Confirm

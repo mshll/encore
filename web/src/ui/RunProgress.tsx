@@ -17,8 +17,9 @@ const elapsedLabel = (s: number) => (s < 60 ? `${s} s` : `${Math.floor(s / 60)} 
 /**
  * A server-owned run (picks, sets, ask) as it happens: status with elapsed time, Cancel pinned right,
  * then the steps so far, newest first. Leaving the page stops listening, not the run.
+ * Without `onCancel` there is no Cancel: in a conversation the composer's Stop cancels.
  */
-export function RunProgress({ run, title, onCancel }: { run: RunState; title: string; onCancel: () => void }) {
+export function RunProgress({ run, title, onCancel }: { run: RunState; title: string; onCancel?: () => void }) {
   const elapsed = useElapsed(run.startedAt);
   const steps = [...run.steps].reverse().slice(0, 8);
   const counts = [
@@ -33,9 +34,11 @@ export function RunProgress({ run, title, onCancel }: { run: RunState; title: st
           <p className="truncate font-medium">{title}</p>
           <span className="shrink-0 text-caption text-secondary tabular">{elapsedLabel(elapsed)}</span>
         </div>
-        <Button size="sm" onClick={onCancel}>
-          Cancel
-        </Button>
+        {onCancel && (
+          <Button size="sm" onClick={onCancel}>
+            Cancel
+          </Button>
+        )}
       </div>
       <ol className="flex flex-col gap-1 pl-[18px]">
         {steps.length === 0 && <li className="text-secondary">Reading your listening…</li>}

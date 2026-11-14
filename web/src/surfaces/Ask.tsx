@@ -13,6 +13,7 @@ import { AppLink } from "../ui/AppLink";
 import { buttonClass } from "../ui/Button";
 import { useClaudeGate } from "../ui/ClaudeNotice";
 import { Composer } from "../ui/Composer";
+import { Conversation } from "../ui/Conversation";
 import { cx } from "../ui/cx";
 import { Confirm } from "../ui/Dialog";
 import { Icon } from "../ui/Icon";
@@ -222,18 +223,15 @@ export function Ask({ id }: { id?: string }) {
   const showStarters = threadId === null && !pending && !run.running && starters.length > 0 && !gate.blocked;
   const missing = thread.error instanceof ApiError && thread.error.status === 404;
 
-  const conversation =
-    threadId === null ? null : missing ? (
-      <EmptyState
-        icon={ChatCircleTextIcon}
-        title="This question does not exist"
-        action={
-          <AppLink to="/ask" className={buttonClass()}>
-            Ask something new
-          </AppLink>
-        }
-      />
-    ) : thread.isError ? (
+  const cancel = () => {
+    run.cancel();
+    setStopped(true);
+    if (pending) setText(pending);
+    setPending(null);
+  };
+
+  const threadBody =
+    threadId === null ? null : thread.isError ? (
       <ErrorState error={thread.error} onRetry={() => thread.refetch()} />
     ) : !thread.data ? (
       <div aria-hidden className="flex flex-col gap-3">
@@ -246,66 +244,89 @@ export function Ask({ id }: { id?: string }) {
       <Turns turns={turns} lastSteps={finished?.thread === threadId && !pending ? <RunSteps steps={finished.steps} seconds={finished.seconds} /> : null} />
     );
 
+  const live = pending || run.running;
+  const messages = (threadBody || live) && (
+    <div className="flex flex-col gap-8">
+      {threadBody}
+      {live && (
+        <div className="flex flex-col gap-5">
+          {pending && <Question text={pending} />}
+          <RunProgress run={run} title="Answering" />
+          {run.text && <Answer text={run.text} />}
+        </div>
+      )}
+    </div>
+  );
+
   const composer = (
-    <div className="flex flex-col gap-3">
+    <>
       {run.problem && (
         <Notice tone="danger" onRetry={gate.blocked || !text.trim() ? undefined : () => ask(text.trim())}>
           {run.problem}
         </Notice>
       )}
       {stopped && <p className="text-secondary">Stopped.</p>}
-      {!run.running && !missing && (
-        <Composer
-          label={threadId ? "Ask a follow-up" : "Ask about your listening"}
-          placeholder={threadId ? "Ask a follow-up" : "Why did I stop playing…, what do I play when…"}
-          value={text}
-          onChange={setText}
-          onSubmit={() => ask(text.trim())}
-          maxLength={1000}
-          disabled={Boolean(gate.blocked)}
-          notice={gate.blocked}
-          footer={gate.spend}
-        />
-      )}
-    </div>
+      <Composer
+        label={threadId ? "Ask a follow-up" : "Ask about your listening"}
+        placeholder={threadId ? "Ask a follow-up" : "Why did I stop playing…, what do I play when…"}
+        value={text}
+        onChange={setText}
+        onSubmit={() => ask(text.trim())}
+        onStop={cancel}
+        running={Boolean(live)}
+        maxLength={1000}
+        disabled={Boolean(gate.blocked)}
+        notice={gate.blocked}
+        footer={gate.spend}
+      />
+    </>
   );
 
-  const main = (
-    <div className="flex min-w-0 flex-col gap-8">
-      {conversation}
-      {(pending || run.running) && (
-        <div className="flex flex-col gap-5">
-          {pending && <Question text={pending} />}
-          <RunProgress
-            run={run}
-            title="Answering"
-            onCancel={() => {
-              run.cancel();
-              setStopped(true);
-              if (pending) setText(pending);
-              setPending(null);
-            }}
-          />
-          {run.text && <Answer text={run.text} />}
-        </div>
-      )}
-      {composer}
-      {showStarters && (
-        <ul className="-mt-4 flex flex-col">
-          {starters.map((s) => (
-            <li key={s}>
-              <button
-                type="button"
-                className="-mx-2 flex min-h-(--control-h) w-[calc(100%+16px)] items-center rounded-md px-2 py-2 text-left text-pretty transition-colors duration-150 hover:bg-fill"
-                onClick={() => ask(s)}
-              >
-                {s}
-              </button>
-            </li>
-          ))}
-        </ul>
-      )}
-    </div>
+  const starterList = showStarters && (
+    <ul className="mt-4 flex flex-col">
+      {starters.map((s) => (
+        <li key={s}>
+          <button
+            type="button"
+            className="-mx-2 flex min-h-(--control-h) w-[calc(100%+16px)] items-center rounded-md px-2 py-2 text-left text-pretty transition-colors duration-150 hover:bg-fill"
+            onClick={() => ask(s)}
+          >
+            {s}
+          </button>
+        </li>
+      ))}
+    </ul>
+  );
+
+  const main = missing ? (
+    <EmptyState
+      icon={ChatCircleTextIcon}
+      title="This question does not exist"
+      action={
+        <AppLink to="/ask" className={buttonClass()}>
+          Ask something new
+        </AppLink>
+      }
+    />
+  ) : (
+    <Conversation
+      messages={messages}
+      composer={composer}
+      follow={turns.length + (pending ? 1 : 0)}
+      startAtEnd
+      thread={threadId}
+      empty={
+        <>
+          {starterList}
+          {!desktop && (
+            <nav aria-label="Your questions" className="mt-10 flex flex-col gap-2">
+              <h2 className="text-heading font-medium">Your questions</h2>
+              <ThreadList activeId={null} />
+            </nav>
+          )}
+        </>
+      }
+    />
   );
 
   const header = (
@@ -335,28 +356,22 @@ export function Ask({ id }: { id?: string }) {
 
   if (desktop)
     return (
-      <Page>
+      <Page className={cx("min-h-full", messages && !missing && "pb-0!")}>
         {header}
-        <div className="grid grid-cols-[220px_minmax(0,1fr)] gap-12">
-          <nav aria-label="Your questions" className="flex min-w-0 flex-col gap-2">
+        <div className="grid flex-1 grid-cols-[220px_minmax(0,1fr)] gap-12">
+          <nav aria-label="Your questions" className="flex min-w-0 flex-col gap-2 pb-16">
             <h2 className="text-caption text-secondary">Your questions</h2>
             <ThreadList activeId={threadId} />
           </nav>
-          <div className="max-w-[720px]">{main}</div>
+          <div className="flex max-w-[720px] flex-col">{main}</div>
         </div>
       </Page>
     );
 
   return (
-    <Page width="read">
+    <Page width="read" className={cx("min-h-full", messages && !missing && "pb-0!")}>
       {header}
       {main}
-      {threadId === null && (
-        <nav aria-label="Your questions" className="flex flex-col gap-2">
-          <h2 className="text-heading font-medium">Your questions</h2>
-          <ThreadList activeId={null} />
-        </nav>
-      )}
     </Page>
   );
 }
