@@ -4,14 +4,16 @@ import { insertPlays, type PlayInput } from "../../plays/store";
 import type { SpotifyClient } from "../../spotify/client";
 import { exportCoveredUntil } from "../export/import";
 import { saveSpotifyTrack } from "./enrich";
+import { coveredByLive } from "./reconcile";
 
-export type PollResult = { received: number; inserted: number; skippedCoveredByExport: number };
+export type PollResult = { received: number; inserted: number; skippedCoveredByExport: number; skippedCoveredByLive: number };
 
 export async function pollRecentlyPlayed(db: Db, spotify: SpotifyClient, config: Pick<Config, "timezone">): Promise<PollResult> {
   const { items } = await spotify.recentlyPlayed();
   const cutoff = exportCoveredUntil(db) ?? -Infinity;
   const fresh = items.filter((item) => item.track?.uri?.startsWith("spotify:track:") && Date.parse(item.played_at) > cutoff);
-  const playRows: PlayInput[] = fresh.map((item) => {
+  const unseen = fresh.filter((item) => !coveredByLive(db, item.track.uri, Date.parse(item.played_at)));
+  const playRows: PlayInput[] = unseen.map((item) => {
     const ts = Date.parse(item.played_at);
     return {
       dedupeKey: `api:${ts}:${item.track.uri}`,
@@ -25,5 +27,5 @@ export async function pollRecentlyPlayed(db: Db, spotify: SpotifyClient, config:
   });
   for (const track of new Map(fresh.map((item) => [item.track.uri, item.track])).values()) saveSpotifyTrack(db, track);
   const inserted = insertPlays(db, playRows, config.timezone);
-  return { received: items.length, inserted, skippedCoveredByExport: items.length - fresh.length };
+  return { received: items.length, inserted, skippedCoveredByExport: items.length - fresh.length, skippedCoveredByLive: fresh.length - unseen.length };
 }

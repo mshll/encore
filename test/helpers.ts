@@ -5,6 +5,7 @@ import { createJobs } from "../src/jobs/definitions";
 import { SpotifyAuth } from "../src/spotify/auth";
 import { SpotifyClient } from "../src/spotify/client";
 import { openDb, type Db } from "../src/db/client";
+import { spotifyAuth as spotifyAuthTable } from "../src/db/schema";
 import { insertPlays, upsertTracks, type PlayInput, type TrackInput } from "../src/plays/store";
 
 export const TZ = "Asia/Kuwait";
@@ -69,3 +70,25 @@ export function testApp(env: Record<string, string> = {}) {
   };
   return { db, config, app, request };
 }
+
+export type FetchCall = { url: string; method: string; body: unknown };
+
+export function routeFetch(routes: (call: FetchCall) => Response | Promise<Response> | undefined) {
+  const calls: FetchCall[] = [];
+  const fn = (async (input: string | URL | Request, init?: RequestInit) => {
+    const call = { url: String(input), method: init?.method ?? "GET", body: typeof init?.body === "string" ? JSON.parse(init.body) : undefined };
+    calls.push(call);
+    const res = await routes(call);
+    if (!res) throw new Error(`Unexpected fetch ${call.method} ${call.url}`);
+    return res;
+  }) as typeof fetch;
+  return { fn, calls };
+}
+
+export function connectSpotify(db: Db, userId: string | null = "owner") {
+  db.insert(spotifyAuthTable)
+    .values({ id: 1, accessToken: "access", refreshToken: "refresh", expiresAt: Date.now() + 3_600_000, scope: "", spotifyUserId: userId, updatedAt: 0 })
+    .run();
+}
+
+export const noContent = () => new Response(null, { status: 204 });

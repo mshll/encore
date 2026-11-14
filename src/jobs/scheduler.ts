@@ -1,7 +1,7 @@
 import type { Db } from "../db/client";
 import { getJobState, setJobState } from "./state";
 
-export type Job = { name: string; intervalMs: number; run: () => Promise<Record<string, unknown> | void> };
+export type Job = { name: string; intervalMs: number; run: () => Promise<Record<string, unknown> | void>; nextDelayMs?: () => number };
 
 export async function runJob(db: Db, job: Job, now = Date.now) {
   const startedAt = now();
@@ -23,7 +23,7 @@ export function startScheduler(db: Db, jobs: Job[]): () => void {
     const timer = setTimeout(async () => {
       timers.delete(timer);
       await runJob(db, job);
-      if (!stopped) schedule(job, job.intervalMs);
+      if (!stopped) schedule(job, job.nextDelayMs?.() ?? job.intervalMs);
     }, delayMs);
     timers.add(timer);
   };

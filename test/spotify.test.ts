@@ -147,7 +147,7 @@ describe("poller", () => {
     expect((await pollRecentlyPlayed(db, client, config)).inserted).toBe(1);
     response = items(["2026-02-01T10:05:00.000Z", spotifyTrack("t2", "Two", "Artist")], ["2026-02-01T10:00:00.000Z", spotifyTrack("t1", "One", "Artist")]);
     const second = await pollRecentlyPlayed(db, client, config);
-    expect(second).toEqual({ received: 2, inserted: 1, skippedCoveredByExport: 0 });
+    expect(second).toEqual({ received: 2, inserted: 1, skippedCoveredByExport: 0, skippedCoveredByLive: 0 });
     const rows = db.all<{ source: string; ms_played: number | null }>(sql`select source, ms_played from plays`);
     expect(rows).toEqual([
       { source: "api", ms_played: null },
@@ -189,7 +189,7 @@ describe("poller", () => {
       ],
       TZ,
     );
-    expect(await pollRecentlyPlayed(db, client, config)).toEqual({ received: 2, inserted: 1, skippedCoveredByExport: 1 });
+    expect(await pollRecentlyPlayed(db, client, config)).toEqual({ received: 2, inserted: 1, skippedCoveredByExport: 1, skippedCoveredByLive: 0 });
   });
 });
 
