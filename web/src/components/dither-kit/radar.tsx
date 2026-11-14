@@ -17,7 +17,7 @@ export function Radar({ dataKey, variant = "gradient" }: RadarProps) {
   const ctx = usePolarPart("Radar", "radar")
   const { registerVariant, unregisterVariant } = ctx
 
-  if (process.env.NODE_ENV !== "production" && !ctx.config[dataKey]) {
+  if (import.meta.env.DEV && !ctx.config[dataKey]) {
     console.warn(
       `<Radar dataKey="${dataKey}" />: "${dataKey}" is not in the chart \`config\`. Add it so the series has a colour and label.`
     )
