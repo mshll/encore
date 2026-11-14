@@ -1,5 +1,6 @@
 import { createMcpHandler, McpServer } from "@modelcontextprotocol/server";
 import { z } from "zod";
+import { PLAY_OUTCOMES } from "../analytics/common";
 import { artistPage, albumPage, trackPage } from "../analytics/entities";
 import { history } from "../analytics/history";
 import { overview } from "../analytics/overview";
@@ -44,13 +45,14 @@ export function createEncoreMcpServer({ db, settings, services, now }: McpDeps):
   server.registerTool(
     "history",
     {
-      description: "Individual plays, newest first. Filter by date range, artist, song key, track URI, skipped flag or text.",
+      description:
+        "Individual plays, newest first. Filter by date range, artist, song key, track URI, outcome or text. Each song play has an outcome: through (it ended or was left in its outro: the last 20% or last 30 seconds), early (next pressed in the first 30 seconds), midway (next pressed later), interrupted (back, another song chosen, app closed, error: not a skip), or null when unknown. A skip is not a dislike.",
       inputSchema: z.object({
         ...range,
         artist: z.string().min(1).optional(),
         songKey: z.string().min(1).optional(),
         uri: trackUri.optional(),
-        skipped: z.boolean().optional(),
+        outcomes: z.array(z.enum(PLAY_OUTCOMES)).optional(),
         q: z.string().min(1).max(200).optional(),
         limit: z.number().int().min(1).max(200).default(50),
         offset: z.number().int().min(0).default(0),

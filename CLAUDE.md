@@ -11,6 +11,7 @@ Self-hosted, single-user Spotify dashboard. Read [README.md](README.md) for setu
 ## Product rules
 
 - A skip is not a dislike. Use skips as context, never as a negative signal on their own.
+- A skip is next pressed before the song's outro. Leaving in the outro is played through; going back, choosing another song or the app closing is no skip. The outcome is defined once, in `src/analytics/common.ts` (`playOutcome` and its SQL twin `OUTCOME`); never write a skip, listen or played-through test inline.
 - Cleanup never removes saved songs or playlist items by itself. It lists proposals; only an explicit approval through the HTTP route applies them, and every batch can be undone.
 - Never start playback without a user action.
 - Never store or log `ip_addr` from the export.

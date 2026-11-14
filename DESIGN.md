@@ -47,13 +47,13 @@ The source of truth for paths, labels, icons and shortcuts is `web/src/app/nav.t
 | Surface | Answers | Primary action | API | Status |
 | --- | --- | --- | --- | --- |
 | Home `/` | What should I listen to now, and what is new for me? Then: how have I been listening? | Play what encore made (a cover, a pick) | `living`, `picks`, `radar`, `sets`, `digests`, `status`; then `stats/overview` (range and the range before), `stats/timeseries`, `stats/top/*`, `stats/on-this-day` | Built |
-| Plays `/plays` | What exactly did I play, when, where? | Search and filter the log | `history` (paged, `q`, `skipped`, `device`, `source`, `artist`, `songKey`), `status`, `stats/overview` (first use) | Built |
+| Plays `/plays` | What exactly did I play, when, where? | Search and filter the log | `history` (paged, `q`, `outcome`, `device`, `source`, `artist`, `songKey`), `status`, `stats/overview` (first use) | Built |
 | Music `/music/*` | Who and what do I play most, and which favourites did I drop? | Open an artist, album or song | `stats/top/*` (paged, `sort`, `q`), `stats/forgotten`, `stats/overview` (counts) | Built |
 | Artist, album, song pages | Everything about one artist, album or song | Play it | `entities/artist`, `entities/album`, `entities/track`, `notes` (liner notes), `radar` (artist releases) | Built |
 | Patterns: When | When in the week do I listen? | Pick a weekday and hour to see what fills it | `stats/clock`, `stats/top/tracks` and `top/artists` with `weekday` and `hour` | Built |
 | Patterns: Eras | Which artists defined which months? | Pick an era | `stats/eras`, `entities/artist` and `stats/top/artists` for the picked month | Built |
 | Patterns: Taste | Which genres, moods and energy over time? | Switch genres and moods | tag stats (`stats/tags/*`), `stats/timeseries`, `tags/pending` | Built |
-| Patterns: Skips | Where do songs get skipped, and in what context? | Pick a moment class | `stats/skips` (with `positions` and `profile`), `stats/skips/split` | Built |
+| Patterns: Skips | How do plays end, and in what context do I skip? | Pick a moment class | `stats/skips` (with `summary.outcomes` and `profile`), `stats/skips/split` | Built |
 | Patterns: Places | Where and on what do I listen (trips, devices)? | Pick a trip | `stats/trips`, `stats/devices` | Built |
 | For you `/for-you` | What has encore made for me, and is it fresh? | Open a playlist (or play it from its cover) | `living`, `picks` (new this week), `radar` (unseen), `living/:kind` (play an off playlist) | Built |
 | For you: a playlist `/for-you/:kind` | What is in this playlist, and is it in my Spotify? | Play it | `living/:kind`, `living/:kind/refresh`, `living/:kind/refreshes/:id`, `living/:kind/cover`, `living` (Spotify gate) | Built |
@@ -305,7 +305,7 @@ One family: dithered halftone in Spotify green.
 | `DitherBars`, `DitherStack`, `DitherLine`, `DitherRadar` | `charts/Dither` | Bars, stacked series, lines, radar. All draw through the vendored kit in `components/dither-kit/` |
 | `DitherMeter` | `charts/DitherMeter` | A share bar in a row, always next to a printed figure |
 | `ContextRates`, `contextRates()` | `charts/ContextRates` | Skip rate by context (weekday, hour, device, source) as `RateMeter` rows against the overall rate. Skips and the entity pages |
-| `RateMeter` | `charts/RateMeter` | A rate on a fixed 0 to 100% track, with an optional tick for a reference rate (skip rate by context, share by device). Next to a printed figure |
+| `RateMeter` | `charts/RateMeter` | A rate on a fixed 0 to 100% track, with an optional tick for a reference rate (skip rate by context, share by device, how plays end on Skips). Next to a printed figure |
 | `DitherHeatmap`, `HeatLegend` | `charts/DitherHeatmap` | A grid of values (weekday by hour, artist by month). One tab stop, arrow keys move the selection. Column labels can be elements (artist avatars on phone) |
 | `BudgetBar` | `charts/BudgetBar` | Spend against a cap: `spent`, `cap`, `label`. Turns red with a cap mark once spent reaches the cap |
 | `ditherTile(level)`, `levelFor(share)` | `charts/ditherTile` | The halftone as a CSS background for anything that is not a canvas |
@@ -321,7 +321,7 @@ Apply the owner's ladder to every string: does it need to surface, does the labe
 - Empty states say what is missing and the one step that fixes it: "No plays in this range" + the range picker.
 - Errors say what failed and offer "Try again". No apology.
 - Buttons are verbs: "Play", "Make a set", "Set up encore". A busy button swaps its label in place ("Waiting for passkey").
-- Skips are context, never judgement: "Skipped", never "disliked".
+- Skips are context, never judgement: "Skipped", never "disliked". A play ends one of four ways, always in these words: Played through, Skipped early, Skipped midway, Interrupted. Leaving in a song's outro is Played through; going back or choosing another song is Interrupted, never a skip. A skip rate counts only plays whose ending is known.
 - No hint under a self-explanatory label. No caption defending a design decision.
 
 ## 8. Do and don't

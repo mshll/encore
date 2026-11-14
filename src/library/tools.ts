@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import { z } from "zod";
 import { musicWhere, songStatsSql, type SongRow } from "../analytics/common";
+import { MOMENT_WORDS } from "../analytics/skips";
 import type { Db } from "../db/client";
 import { tool, ToolError, type AgentTool } from "../llm/agent";
 import { SpotifyBlockedError, SpotifyNotConnectedError, SpotifyApiError } from "../spotify/errors";
@@ -11,14 +12,7 @@ import { loadCatalog, type CatalogSong, type ContextCounts, type DayType, type H
 
 const day = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 const HOUR_BUCKETS = ["night", "morning", "afternoon", "evening"] as const;
-/** Moment classes in the words Claude sees, so an internal id never ends up in text the owner reads. */
-const PATTERNS = {
-  keeper: "usually played through",
-  wrong_moment: "played through at some times, skipped at others",
-  dislike: "skipped nearly everywhere",
-  mixed: "skipped often, no clear pattern",
-  unclassified: "too few plays to tell",
-} as const;
+const PATTERNS = { ...MOMENT_WORDS, unclassified: "too few plays to tell" };
 const PATTERN_WORDS = Object.values(PATTERNS) as [string, ...string[]];
 const patternOf = (cls: CatalogSong["class"]) => PATTERNS[cls ?? "unclassified"];
 
@@ -34,7 +28,7 @@ export const findSongsInput = z.strictObject({
   language: z.string().optional().describe("ISO 639-1 code or 'instrumental'."),
   playedFrom: day.optional().describe("Only songs listened to on or after this local day (YYYY-MM-DD); stats then cover this window."),
   playedTo: day.optional().describe("Only songs listened to on or before this local day; stats then cover this window."),
-  patterns: z.array(z.enum(PATTERN_WORDS)).optional().describe("How the owner plays the song across contexts; 'too few plays to tell' means fewer than 8 plays with skip data."),
+  patterns: z.array(z.enum(PATTERN_WORDS)).optional().describe("How the owner plays the song across contexts; 'too few plays to tell' means fewer than 8 plays with a known outcome."),
   maxSkipRate: z.number().min(0).max(1).optional(),
   minListens: z.number().int().min(0).optional(),
   notPlayedForDays: z.number().int().min(1).optional().describe("Only songs not played in the last N days."),
@@ -152,7 +146,7 @@ export function libraryTools(db: Db, blocked: Blocked, now: number, weekendDays:
     tool({
       name: "find_songs",
       description:
-        "Search the owner's own listening history (songs they have played). Use it to find songs that fit a request by tags, artist, era, how they play it or time-of-day fit, and to check what the owner already knows. Filters combine with AND. Returns at most 40 songs plus the total match count.",
+        "Search the owner's own listening history (songs they have played). Use it to find songs that fit a request by tags, artist, era, how they play it or time-of-day fit, and to check what the owner already knows. Filters combine with AND. Returns at most 40 songs plus the total match count. A skip rate is the share of plays where the owner pressed next before the song's outro (its last 20% or last 30 seconds); leaving in the outro counts as played through, and going back or choosing another song is no skip. A skip is context, not a dislike.",
       schema: findSongsInput,
       run: (input) => findSongs(db, blocked, input, now, weekendDays),
     }),

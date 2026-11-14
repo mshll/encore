@@ -1,4 +1,5 @@
 import { eq, sql } from "drizzle-orm";
+import { LISTEN } from "../../analytics/common";
 import type { Db, DbOrTx } from "../../db/client";
 import { artists, tracks } from "../../db/schema";
 import { linkArtists, upsertTracks } from "../../plays/store";
@@ -12,7 +13,7 @@ export const MAX_ENRICH_ATTEMPTS = 3;
 export type EnrichResult = { tracks: number; artists: number; failed: number };
 export type ArtResult = { attempted: number; found: number; failed: number };
 
-const LISTENS = sql.raw("coalesce(sum(p.source = 'api' or p.ms_played >= 30000), 0)");
+const LISTENS = sql`coalesce(sum(${LISTEN}), 0)`;
 
 type Pending = { id: string; listens: number };
 

@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import type { Db } from "../db/client";
-import { hours, MS, MUSIC, musicWhere, periodExpr, rate, type Period, type Range } from "./common";
+import { hours, LISTEN, MS, MUSIC, musicWhere, periodExpr, rate, type Period, type Range } from "./common";
 
 const TAGGED = sql.raw("plays p join tracks t on t.uri = p.track_uri join track_tags tg on tg.song_key = t.song_key");
 
@@ -37,7 +37,7 @@ export const moodSeries = (db: Db, { range, period }: { range: Range; period: Pe
 export function energyByHour(db: Db, { range }: { range: Range }) {
   const rows = db.all<{ hour: number; energy: number; valence: number; listens: number }>(sql`
     select p.hour, avg(tg.energy) as energy, avg(tg.valence) as valence, count(*) as listens
-    from ${TAGGED} where ${musicWhere(range)} and (p.source = 'api' or p.ms_played >= 30000)
+    from ${TAGGED} where ${musicWhere(range)} and ${LISTEN}
     group by p.hour`);
   return {
     coverage: tagCoverage(db, range),

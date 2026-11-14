@@ -50,7 +50,7 @@ export function play(ts: string, trackUri: string, msPlayed: number | null, extr
     skipped: source === "api" ? null : false,
     shuffle: source === "api" ? null : false,
     reasonStart: source === "api" ? null : "trackdone",
-    reasonEnd: source === "api" ? null : "trackdone",
+    reasonEnd: source === "api" ? null : extra.skipped ? "fwdbtn" : "trackdone",
     device: source === "api" ? "unknown" : "ios",
     connCountry: source === "api" ? null : "KW",
     source,

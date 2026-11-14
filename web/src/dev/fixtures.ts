@@ -80,9 +80,9 @@ const BROKEN_ART = "data:image/png;base64,AAAA";
 
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
 
-const SPLIT_PARAMS = { params: { minPlays: 8, minContextPlays: 5, keeperBelow: 0.25, dislikeAtLeast: 0.75, worksAtMost: 1 / 3, failsAtLeast: 2 / 3 } };
+const SPLIT_PARAMS = { params: { minPlays: 8, minContextPlays: 5, keeperBelow: 0.25, skippedEverywhereAtLeast: 0.75, worksAtMost: 1 / 3, failsAtLeast: 2 / 3 } };
 
-const ZERO_STATS = { hours: 0, plays: 0, listens: 0, skips: 0, skipRate: null, quickSkips: 0, firstPlayed: null, lastPlayed: null };
+const ZERO_STATS = { hours: 0, plays: 0, listens: 0, skips: 0, skipRate: null, earlySkips: 0, firstPlayed: null, lastPlayed: null };
 
 function emptyFor(path: string, isNew: boolean): unknown {
   if (path === "/api/stats/overview")
@@ -105,15 +105,14 @@ function emptyFor(path: string, isNew: boolean): unknown {
   if (path === "/api/stats/skips")
     return {
       minPlays: 10,
-      summary: { plays: 0, skips: 0, skipRate: null, quickSkips: 0 },
+      summary: { plays: 0, skips: 0, skipRate: null, earlySkips: 0, outcomes: { through: 0, early: 0, midway: 0, interrupted: 0, unknown: 0 } },
       mostSkippedTracks: [],
       mostSkippedArtists: [],
-      quickSkips: [],
+      earlySkips: [],
       neverSkipped: [],
       profile: { hourBucket: [], dayType: [], shuffle: [], device: [], startMode: [] },
-      positions: Array.from({ length: 10 }, (_, i) => ({ start: i / 10, end: (i + 1) / 10, skips: 0 })),
     };
-  if (path === "/api/stats/skips/split") return { ...SPLIT_PARAMS, eligibleSongs: 0, counts: { keeper: 0, wrong_moment: 0, dislike: 0, mixed: 0 }, songs: [] };
+  if (path === "/api/stats/skips/split") return { ...SPLIT_PARAMS, eligibleSongs: 0, counts: { keeper: 0, wrong_moment: 0, skipped_everywhere: 0, mixed: 0 }, songs: [] };
   if (path === "/api/stats/trips") return { homeCountry: "KW", trips: [] };
   if (path === "/api/stats/devices") return { period: "year", totals: [], series: [] };
   if (path === "/api/stats/tags/genres" || path === "/api/stats/tags/moods") return { period: "month", coverage: { hoursTagged: 0, hoursTotal: 0, share: null }, totals: [], series: [] };
@@ -149,7 +148,7 @@ function worsen(path: string, body: Json): unknown {
   }
   if (path.startsWith("/api/entities/")) {
     const tracks = ((body.tracks as Json[] | undefined) ?? []).slice(0, 1).map((t) => ({ ...t, name: LONG_SONG, artist: LONG_ARTIST, album: LONG_ALBUM, albumArtUrl: BROKEN_ART, hours: 98765.4, plays: 1234567 }));
-    const totals = { ...(body.totals as Json), hours: 123456.7, plays: 9876543, listens: 8765432, skips: 4567890, quickSkips: 1234567 };
+    const totals = { ...(body.totals as Json), hours: 123456.7, plays: 9876543, listens: 8765432, skips: 4567890, earlySkips: 1234567 };
     return {
       ...body,
       ...(body.artist ? { artist: LONG_ARTIST } : {}),
@@ -173,10 +172,10 @@ function worsen(path: string, body: Json): unknown {
     const series = (body.series as { artist: string; hours: number[] }[]).slice(0, 2).map((x, i) => ({ artist: i === 0 ? LONG_ARTIST : x.artist, hours: i === 0 ? [98765.4] : x.hours.slice(-1) }));
     return { months: (body.months as string[]).slice(-1), series, artists };
   }
-  if (path === "/api/stats/skips") return { ...body, summary: { plays: 9876543, skips: 4938271, skipRate: 0.5, quickSkips: 4938271 } };
+  if (path === "/api/stats/skips") return { ...body, summary: { plays: 9876543, skips: 4938271, skipRate: 0.5, earlySkips: 4938271, outcomes: { through: 3950617, early: 4938271, midway: 1, interrupted: 987654, unknown: 0 } } };
   if (path === "/api/stats/skips/split") {
     const songs = (body.songs as Json[]).slice(0, 1).map((x) => ({ ...x, name: LONG_SONG, artist: LONG_ARTIST, albumArtUrl: BROKEN_ART, plays: 98765 }));
-    return { ...body, eligibleSongs: 1234567, counts: { keeper: 123456, wrong_moment: 987654, dislike: 1, mixed: 0 }, songs };
+    return { ...body, eligibleSongs: 1234567, counts: { keeper: 123456, wrong_moment: 987654, skipped_everywhere: 1, mixed: 0 }, songs };
   }
   if (path === "/api/stats/trips") {
     const trip = (body.trips as Json[])[0];

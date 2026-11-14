@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { MS, MUSIC, musicWhere } from "../analytics/common";
+import { LISTEN, MS, MUSIC, musicWhere } from "../analytics/common";
 import { overview } from "../analytics/overview";
 import { topArtists, topTracks } from "../analytics/top";
 import type { Db } from "../db/client";
@@ -53,14 +53,14 @@ function shareChanges(db: Db, column: "genres" | "moods", period: Window, baseli
 function mood(db: Db, w: Window) {
   const r = db.all<{ energy: number | null; valence: number | null }>(sql`
     select avg(tg.energy) as energy, avg(tg.valence) as valence from ${MUSIC} join track_tags tg on tg.song_key = t.song_key
-    where ${musicWhere(w)} and (p.source = 'api' or p.ms_played >= 30000)`)[0];
+    where ${musicWhere(w)} and ${LISTEN}`)[0];
   return { energy: r?.energy == null ? null : r1(r.energy), valence: r?.valence == null ? null : r1(r.valence) };
 }
 
 function firsts(db: Db, w: Window, key: "t.artist" | "t.song_key", limit: number) {
   const k = sql.raw(key);
   const rows = db.all<{ key: string; name: string; artist: string; listens: number }>(sql`
-    select ${k} as key, min(t.name) as name, min(t.artist) as artist, sum(p.source = 'api' or p.ms_played >= 30000) as listens
+    select ${k} as key, min(t.name) as name, min(t.artist) as artist, sum(${LISTEN}) as listens
     from ${MUSIC} where ${musicWhere(w)} and ${k} not in (select ${k} from ${MUSIC} where ${musicWhere({}, sql`p.day < ${w.from}`)})
     group by ${k} order by listens desc`);
   return {

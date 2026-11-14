@@ -102,7 +102,7 @@ export function SkipContext({ totals, profile, minPlays = 5, lead }: { totals: S
         {lead}
         <p className="text-body text-pretty">
           Skipped in {fmtPct(totals.skipRate)} of plays
-          {totals.quickSkips > 0 && <>, {fmtInt(totals.quickSkips)} of them within 5 seconds</>}.
+          {totals.earlySkips > 0 && <>, {fmtInt(totals.earlySkips)} of them in the first 30 seconds</>}.
           {bw && (
             <>
               {" "}

@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import type { Db } from "../db/client";
-import { hours, type Range } from "./common";
+import { hours, LISTEN, type Range } from "./common";
 
 type Row = { ts: number; day: string; country: string; ms: number; music: number; song_key: string | null; uri: string | null; name: string | null; artist: string | null; album_art_url: string | null; listen: number };
 
@@ -11,7 +11,7 @@ export function trips(db: Db, { range, homeCountry, minPlays, topTracks }: { ran
   if (!home) return { homeCountry: null, trips: [] };
   const rows = db.all<Row>(sql`
     select p.ts, p.day, p.conn_country as country, coalesce(p.ms_played, t.duration_ms, 0) as ms, p.kind = 'track' as music,
-      t.song_key, t.uri, t.name, t.artist, t.album_art_url, (p.source = 'api' or p.ms_played >= 30000) as listen
+      t.song_key, t.uri, t.name, t.artist, t.album_art_url, ${LISTEN} as listen
     from plays p left join tracks t on t.uri = p.track_uri
     where p.conn_country is not null
       ${range.from ? sql`and p.day >= ${range.from}` : sql``}

@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { createSession } from "../src/auth/sessions";
-import { testApp, uri } from "./helpers";
+import { play, seed, testApp, track, uri } from "./helpers";
 
 function signedIn() {
   const app = testApp();
@@ -59,11 +59,21 @@ describe("http", () => {
     expect((await get("/api/entities/track")).status).toBe(400);
     expect((await get(`/api/entities/track?uri=${uri("zz")}`)).status).toBe(404);
     expect((await get("/api/stats/skips/split?class=meh")).status).toBe(400);
+    expect((await get("/api/history?outcome=skipped")).status).toBe(400);
     expect((await get("/api/search")).status).toBe(400);
     expect(await (await get("/api/search?q=x")).json()).toEqual({ artists: [], songs: [], albums: [] });
-    for (const path of ["/api/stats/clock", "/api/stats/eras", "/api/stats/trips", "/api/stats/on-this-day", "/api/stats/forgotten", "/api/stats/devices", "/api/stats/tags/genres", "/api/history?skipped=true"]) {
+    for (const path of ["/api/stats/clock", "/api/stats/eras", "/api/stats/trips", "/api/stats/on-this-day", "/api/stats/forgotten", "/api/stats/devices", "/api/stats/tags/genres", "/api/history?outcome=early,midway"]) {
       expect((await get(path)).status).toBe(200);
     }
+  });
+
+  test("history filters by outcome", async () => {
+    const { db, get } = signedIn();
+    seed(db, [track("a", "A", "Artist", null, { durationMs: 200_000 })], [play("2026-01-01T10:00:00Z", uri("a"), 5_000, { skipped: true }), play("2026-01-01T11:00:00Z", uri("a"), 200_000)]);
+
+    const body = (await (await get("/api/history?outcome=early,midway")).json()) as { total: number; items: { outcome: string }[] };
+
+    expect(body).toMatchObject({ total: 1, items: [{ outcome: "early" }] });
   });
 
   test("Spotify authorize URL uses PKCE and the callback rejects unknown state", async () => {

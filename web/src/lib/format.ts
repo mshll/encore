@@ -1,4 +1,4 @@
-import type { ContextDimension, Device, MomentClass } from "../api/types";
+import type { ContextDimension, Device, MomentClass, PlayOutcome } from "../api/types";
 
 const int = new Intl.NumberFormat("en");
 const one = new Intl.NumberFormat("en", { maximumFractionDigits: 1 });
@@ -162,9 +162,16 @@ export function contextLabel(dimension: ContextDimension, value: string, weekend
   return CONTEXT_VALUES[value] ?? value;
 }
 
+export const OUTCOME_LABELS: Record<PlayOutcome, string> = {
+  through: "Played through",
+  early: "Skipped early",
+  midway: "Skipped midway",
+  interrupted: "Interrupted",
+};
+
 export const CLASS_LABELS: Record<MomentClass, string> = {
   wrong_moment: "Wrong moment",
-  dislike: "Skipped everywhere",
+  skipped_everywhere: "Skipped everywhere",
   keeper: "Keeper",
   mixed: "Mixed",
 };

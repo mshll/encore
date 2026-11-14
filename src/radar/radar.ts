@@ -1,5 +1,6 @@
 import { and, count, desc, eq, gte, inArray, isNull, sql } from "drizzle-orm";
 import type { Settings } from "../settings/settings";
+import { LISTEN } from "../analytics/common";
 import type { Db } from "../db/client";
 import { radarArtists, releases, tracks } from "../db/schema";
 import { saveSpotifyTrack } from "../ingest/live/enrich";
@@ -20,7 +21,7 @@ const NEW_GRACE_DAYS = 1;
 export function radarCandidates(db: Db, minListens: number, now: number): RadarCandidate[] {
   return db.all<RadarCandidate>(sql`
     with listened as (
-      select t.artist, coalesce(sum(p.source = 'api' or p.ms_played >= 30000), 0) as listens
+      select t.artist, coalesce(sum(${LISTEN}), 0) as listens
       from plays p join tracks t on t.uri = p.track_uri
       where p.kind = 'track' and p.ts >= ${now - YEAR_MS}
       group by t.artist having listens >= ${minListens}

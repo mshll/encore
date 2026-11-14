@@ -1,4 +1,5 @@
 import { inArray, sql } from "drizzle-orm";
+import { LISTEN } from "../analytics/common";
 import type { Db } from "../db/client";
 import { trackTags, tracks } from "../db/schema";
 import type { TagInput } from "./schema";
@@ -15,7 +16,7 @@ export function pendingTracks(db: Db, limit: number, offset: number): { items: P
   const songs = sql`
     with song_plays as (
       select t.song_key, t.uri, t.name, t.artist, t.album, count(*) as plays,
-        sum(p.source = 'api' or p.ms_played >= 30000) as listens
+        sum(${LISTEN}) as listens
       from plays p join tracks t on t.uri = p.track_uri
       where p.kind = 'track' and t.song_key not in (select song_key from track_tags)
       group by t.uri

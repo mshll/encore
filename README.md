@@ -15,7 +15,7 @@ One instance serves one person. Your data stays in a single SQLite file on your 
 - **Home**: what encore made for you (its playlists, this week's picks, new releases, your latest set) and one box to ask Claude or make a set; then time listened, plays and listens for any range, with top artists, songs and albums.
 - **Plays**: the full log, searchable and filterable by device and source.
 - **Music**: every artist, album and song you have played, each with its own page, plus favourites you stopped playing.
-- **Patterns**: when in the week you listen, which artists defined which months, genres and moods over time, where songs get skipped, and trips and devices.
+- **Patterns**: when in the week you listen, which artists defined which months, genres and moods over time, how plays end and when you skip, and trips and devices.
 
 **Play** (needs an Anthropic API key)
 
@@ -100,7 +100,7 @@ The full list, with defaults: [docs/configuration.md](docs/configuration.md). Th
 - The `ip_addr` field in the Spotify export is never stored.
 - Secrets saved from the dashboard are encrypted at rest and never returned by the API.
 - encore never starts playback, removes saved songs or edits your playlists without an action from you. It refills only the playlists it made and you switched on, and never deletes one.
-- A skipped song is treated as context (time, device, position), never as a dislike on its own.
+- A skip is pressing next before a song's outro; leaving in the outro counts as played through, and going back or choosing another song is no skip. A skip is treated as context (time, device), never as a dislike on its own.
 
 ## Development
 

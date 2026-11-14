@@ -1,4 +1,5 @@
 import { desc, eq } from "drizzle-orm";
+import { isSkip, playOutcome } from "../analytics/common";
 import type { Db } from "../db/client";
 import { djSessions } from "../db/schema";
 import type { WatchEvent } from "../ingest/live/watcher";
@@ -67,11 +68,13 @@ export class DjService {
     const contextUri = `spotify:playlist:${session.playlistId}`;
     if (event.type === "finished") {
       const { play } = event;
-      if (play.contextUri !== contextUri || play.skipped === null || !session.uris.includes(play.trackUri)) return;
-      const skipStreak = play.skipped ? session.skipStreak + 1 : 0;
+      const outcome = playOutcome(play);
+      if (play.contextUri !== contextUri || (outcome !== "through" && !isSkip(outcome)) || !session.uris.includes(play.trackUri)) return;
+      const skipped = isSkip(outcome);
+      const skipStreak = skipped ? session.skipStreak + 1 : 0;
       if (skipStreak >= this.skipTrigger()) this.replanDue = true;
       this.update(session.id, {
-        outcomes: [...session.outcomes, { uri: play.trackUri, outcome: play.skipped ? "skipped" : "finished" }],
+        outcomes: [...session.outcomes, { uri: play.trackUri, outcome: skipped ? "skipped" : "finished" }],
         skipStreak,
       });
       return;

@@ -1,6 +1,5 @@
 import { sql } from "drizzle-orm";
-import { HOUR_BUCKET, dayTypeSql } from "../analytics/common";
-import { momentSplit, type MomentClass } from "../analytics/skips";
+import { HOUR_BUCKET, dayTypeSql, LISTEN, MUSIC, SKIP_KNOWN, SKIPPED } from "../analytics/common";
 import type { Db } from "../db/client";
 import { dayTypeOf } from "../library/catalog";
 import { localTime, type Locale } from "../plays/localTime";
@@ -66,17 +65,17 @@ function contextFit(db: Db, songKeys: string[], hour: number, weekday: number, w
   const bucket = hour < 6 ? "night" : hour < 12 ? "morning" : hour < 18 ? "afternoon" : "evening";
   const dayType = dayTypeOf(weekday, weekendDays);
   const rows = db.all<{ song_key: string; dim: string; plays: number; skips: number }>(sql`
-    select t.song_key, 'hour' as dim, count(*) as plays, sum(p.skipped = 1) as skips
-    from plays p join tracks t on t.uri = p.track_uri
-    where p.kind = 'track' and p.skipped is not null and ${HOUR_BUCKET} = ${bucket} and t.song_key in (${sql.join(
+    select t.song_key, 'hour' as dim, count(*) as plays, sum(${SKIPPED}) as skips
+    from ${MUSIC}
+    where p.kind = 'track' and ${SKIP_KNOWN} and ${HOUR_BUCKET} = ${bucket} and t.song_key in (${sql.join(
       songKeys.map((k) => sql`${k}`),
       sql`, `,
     )})
     group by t.song_key
     union all
-    select t.song_key, 'day' as dim, count(*) as plays, sum(p.skipped = 1) as skips
-    from plays p join tracks t on t.uri = p.track_uri
-    where p.kind = 'track' and p.skipped is not null and ${dayTypeSql(weekendDays)} = ${dayType} and t.song_key in (${sql.join(
+    select t.song_key, 'day' as dim, count(*) as plays, sum(${SKIPPED}) as skips
+    from ${MUSIC}
+    where p.kind = 'track' and ${SKIP_KNOWN} and ${dayTypeSql(weekendDays)} = ${dayType} and t.song_key in (${sql.join(
       songKeys.map((k) => sql`${k}`),
       sql`, `,
     )})
@@ -94,7 +93,7 @@ function topUpCandidates(db: Db, exclude: Set<string>): string[] {
     .all<{ uri: string }>(sql`
       select uri from (
         select t.uri, t.song_key, row_number() over (partition by t.song_key order by count(*) desc) as rn,
-          sum(sum(p.source = 'api' or p.ms_played >= 30000)) over (partition by t.song_key) as listens
+          sum(sum(${LISTEN})) over (partition by t.song_key) as listens
         from plays p join tracks t on t.uri = p.track_uri join track_tags tt on tt.song_key = t.song_key
         where p.kind = 'track' group by t.uri
       ) where rn = 1 and listens >= ${MIN_TOP_UP_LISTENS} order by listens desc limit ${TOP_UP_POOL}`)
@@ -105,9 +104,6 @@ function topUpCandidates(db: Db, exclude: Set<string>): string[] {
 export function createDefaultReplanner(db: Db, locale: () => Locale): Replanner {
   return async (input) => {
     const { timezone, weekendDays } = locale();
-    const classes = new Map<string, MomentClass>(
-      momentSplit(db, { range: {}, minPlays: 8, minContextPlays: 5, limit: 100_000, weekendDays }).songs.map((s) => [s.songKey, s.class]),
-    );
     const exclude = new Set([...input.exclude, ...input.upcoming]);
     const known = songInfo(db, [...input.finished, ...input.skipped]);
     const liked = profile(input.finished.flatMap((u) => known.get(u) ?? []));
@@ -121,7 +117,7 @@ export function createDefaultReplanner(db: Db, locale: () => Locale): Replanner 
       .map((uri, order) => {
         const song = info.get(uri);
         if (!song) return { uri, order, score: 0.5, keep: order < input.upcoming.length };
-        const keep = classes.get(song.songKey) !== "dislike" && !skippedKeys.has(song.songKey);
+        const keep = !skippedKeys.has(song.songKey);
         const score = (fit.get(song.songKey) ?? 0.5) + similarity(song, liked) - similarity(song, disliked);
         return { uri, order, score, keep };
       })

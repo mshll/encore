@@ -83,7 +83,7 @@ describe("top lists", () => {
   test("tracks merge the same song across URIs", () => {
     const [a, c] = topTracks(baseFixture(), { range: {}, limit: 10 });
     expect(a).toMatchObject({ songKey: KEY_A, uri: A1, plays: 3, listens: 2, skips: 1, skipRate: 0.333, firstPlayed: "2026-01-05T10:00:00.000Z", lastPlayed: "2026-02-01T10:00:00.000Z" });
-    expect(c).toMatchObject({ uri: C, plays: 2, listens: 1, skipRate: 1, quickSkips: 1 });
+    expect(c).toMatchObject({ uri: C, plays: 2, listens: 1, skipRate: 1, earlySkips: 1 });
   });
 
   test("tracks and artists narrow to a local weekday and hour", () => {
@@ -174,21 +174,24 @@ describe("clock and devices", () => {
 });
 
 describe("skips", () => {
-  test("rates, quick skips and never-skipped with thresholds", () => {
+  test("rates, early skips and never-skipped with thresholds", () => {
     const db = baseFixture();
+
     const result = skips(db, { range: {}, minPlays: 1, limit: 10 });
-    expect(result.summary).toEqual({ plays: 5, skips: 2, skipRate: 0.5, quickSkips: 1 });
+
+    expect(result.summary).toEqual({ plays: 5, skips: 2, skipRate: 0.5, earlySkips: 2, outcomes: { through: 2, early: 2, midway: 0, interrupted: 0, unknown: 1 } });
     expect(result.mostSkippedTracks.map((t) => [t.uri, t.skipRate])).toEqual([
       [C, 1],
       [A1, 0.333],
     ]);
-    expect(result.quickSkips.map((t) => t.uri)).toEqual([C]);
+    expect(result.earlySkips.map((t) => t.uri)).toEqual([A1, C]);
     expect(result.neverSkipped).toEqual([]);
     expect(skips(db, { range: {}, minPlays: 3, limit: 10 }).mostSkippedTracks.map((t) => t.uri)).toEqual([A1]);
   });
 
-  test("context profile over every play with a known skip flag", () => {
+  test("context profile over every play with a known outcome", () => {
     const { profile } = skipContext(baseFixture(), { range: {}, weekendDays: WEEKEND });
+
     expect(profile.device).toEqual([
       { value: "ios", plays: 3, skips: 1, skipRate: 0.333 },
       { value: "mac", plays: 1, skips: 1, skipRate: 1 },
@@ -196,55 +199,52 @@ describe("skips", () => {
     expect(profile.shuffle.find((v) => v.value === "on")).toEqual({ value: "on", plays: 1, skips: 1, skipRate: 1 });
   });
 
-  test("positions bucket skips by the share of the song played, leaving out songs without a duration", () => {
+  test("an exit in the outro is played through and does not count against the song", () => {
     const db = testDb();
     seed(
       db,
-      [track("p", "Song P", "Artist P", null, { durationMs: 200000 }), track("q", "Song Q", "Artist Q", null)],
+      [track("p", "Song P", "Artist P", null, { durationMs: 200000 })],
       [
-        play("2026-01-01T10:00:00Z", uri("p"), 1000, { skipped: true }),
-        play("2026-01-01T11:00:00Z", uri("p"), 99000, { skipped: true }),
-        play("2026-01-01T12:00:00Z", uri("p"), 250000, { skipped: true }),
-        play("2026-01-01T13:00:00Z", uri("p"), 200000),
-        play("2026-01-01T14:00:00Z", uri("q"), 1000, { skipped: true }),
+        play("2026-01-01T10:00:00Z", uri("p"), 170000, { skipped: true, reasonEnd: "fwdbtn" }),
+        play("2026-01-01T11:00:00Z", uri("p"), 200000),
+        play("2026-01-01T12:00:00Z", uri("p"), 90000, { skipped: true, reasonEnd: "backbtn" }),
       ],
     );
-    const { positions } = skipContext(db, { range: {}, weekendDays: WEEKEND });
-    expect(positions).toHaveLength(10);
-    expect(positions[0]).toEqual({ start: 0, end: 0.1, skips: 1 });
-    expect(positions[4]).toEqual({ start: 0.4, end: 0.5, skips: 1 });
-    expect(positions[9]).toEqual({ start: 0.9, end: 1, skips: 1 });
-    expect(positions.reduce((sum, p) => sum + p.skips, 0)).toBe(3);
+
+    const result = skips(db, { range: {}, minPlays: 1, limit: 10 });
+
+    expect(result.summary).toMatchObject({ skips: 0, skipRate: 0, outcomes: { through: 2, early: 0, midway: 0, interrupted: 1, unknown: 0 } });
   });
 });
 
-describe("wrong moment vs dislike", () => {
+describe("moment split", () => {
   const night = (d: number) => `2026-01-${String(d).padStart(2, "0")}T22:00:00Z`;
   const morning = (d: number) => `2026-01-${String(d).padStart(2, "0")}T06:00:00Z`;
 
   function splitFixture() {
     const db = testDb();
     const ids = ["w", "d", "k", "m"];
+    const next = { skipped: true, reasonEnd: "fwdbtn" };
     const plays = [];
     for (let i = 1; i <= 5; i++) {
       plays.push(play(night(i), uri("w"), 200000, { reasonStart: "clickrow" }));
-      plays.push(play(morning(i), uri("w"), 2000, { skipped: true, reasonStart: "trackdone" }));
-      plays.push(play(night(i + 10), uri("d"), 2000, { skipped: true, reasonStart: "clickrow" }));
-      plays.push(play(morning(i + 10), uri("d"), 2000, { skipped: true }));
+      plays.push(play(morning(i), uri("w"), 2000, { ...next, reasonStart: "trackdone" }));
+      plays.push(play(night(i + 10), uri("d"), 2000, { ...next, reasonStart: "clickrow" }));
+      plays.push(play(morning(i + 10), uri("d"), 2000, next));
     }
     for (let i = 1; i <= 10; i++) {
-      plays.push(play(morning(i + 15), uri("k"), 200000, { skipped: i === 1 }));
-      plays.push(play(morning(i + 15).replace("06:", "07:"), uri("m"), 50000, { skipped: i % 2 === 0 }));
+      plays.push(play(morning(i + 15), uri("k"), 200000, i === 1 ? next : {}));
+      plays.push(play(morning(i + 15).replace("06:", "07:"), uri("m"), 50000, i % 2 === 0 ? next : {}));
     }
-    seed(db, ids.map((id) => track(id, `Song ${id}`, "Artist", "Album")), plays);
+    seed(db, ids.map((id) => track(id, `Song ${id}`, "Artist", "Album", { durationMs: 240000 })), plays);
     return db;
   }
 
   test("classifies songs by how their skip rate depends on context", () => {
     const result = momentSplit(splitFixture(), { range: {}, minPlays: 8, minContextPlays: 3, limit: 10, weekendDays: WEEKEND });
     const byUri = Object.fromEntries(result.songs.map((s) => [s.uri, s.class]));
-    expect(byUri).toEqual({ [uri("w")]: "wrong_moment", [uri("d")]: "dislike", [uri("k")]: "keeper", [uri("m")]: "mixed" });
-    expect(result.counts).toEqual({ keeper: 1, wrong_moment: 1, dislike: 1, mixed: 1 });
+    expect(byUri).toEqual({ [uri("w")]: "wrong_moment", [uri("d")]: "skipped_everywhere", [uri("k")]: "keeper", [uri("m")]: "mixed" });
+    expect(result.counts).toEqual({ keeper: 1, wrong_moment: 1, skipped_everywhere: 1, mixed: 1 });
     const w = result.songs.find((s) => s.uri === uri("w"))!;
     expect(w.bestContext).toMatchObject({ skipRate: 0, plays: 5 });
     expect(w.worstContext).toMatchObject({ skipRate: 1, plays: 5 });
@@ -252,7 +252,7 @@ describe("wrong moment vs dislike", () => {
 
   test("filters by class and drops songs under the play threshold", () => {
     const db = splitFixture();
-    expect(momentSplit(db, { range: {}, minPlays: 8, minContextPlays: 3, limit: 10, only: "dislike", weekendDays: WEEKEND }).songs.map((s) => s.uri)).toEqual([uri("d")]);
+    expect(momentSplit(db, { range: {}, minPlays: 8, minContextPlays: 3, limit: 10, only: "skipped_everywhere", weekendDays: WEEKEND }).songs.map((s) => s.uri)).toEqual([uri("d")]);
     expect(momentSplit(db, { range: {}, minPlays: 11, minContextPlays: 3, limit: 10, weekendDays: WEEKEND }).eligibleSongs).toBe(0);
   });
 
@@ -260,7 +260,7 @@ describe("wrong moment vs dislike", () => {
     const ctx = (skipRate: number) => ({ dimension: "hourBucket" as const, value: "x", plays: 5, skips: 0, skipRate });
     expect(classify(0.1, [ctx(1)])).toBe("keeper");
     expect(classify(0.9, [ctx(0.2), ctx(1)])).toBe("wrong_moment");
-    expect(classify(0.9, [ctx(0.9)])).toBe("dislike");
+    expect(classify(0.9, [ctx(0.9)])).toBe("skipped_everywhere");
     expect(classify(0.9, [ctx(0.2)])).toBe("mixed");
     expect(classify(0.5, [ctx(0.5)])).toBe("mixed");
   });
@@ -359,12 +359,12 @@ describe("history", () => {
     const all = history(db, { range: {}, limit: 2, offset: 0 });
     expect(all.total).toBe(5);
     expect(all.items.map((i) => i.ts)).toEqual(["2026-03-01T10:00:00.000Z", "2026-02-01T10:00:00.000Z"]);
-    expect(history(db, { range: {}, skipped: true, limit: 10, offset: 0 }).total).toBe(2);
+    expect(history(db, { range: {}, outcomes: ["early", "midway"], limit: 10, offset: 0 }).total).toBe(2);
     expect(history(db, { range: {}, q: "remastered", limit: 10, offset: 0 }).items.map((i) => i.uri)).toEqual([A2]);
     expect(history(db, { range: {}, q: "100%", limit: 10, offset: 0 }).total).toBe(0);
     expect(history(db, { range: {}, device: "mac", limit: 10, offset: 0 }).total).toBe(1);
     expect(history(db, { range: {}, songKey: KEY_A, limit: 10, offset: 0 }).total).toBe(3);
-    expect(history(db, { range: {}, source: "api", limit: 10, offset: 0 }).items[0]).toMatchObject({ uri: C, msPlayed: null, skipped: null });
+    expect(history(db, { range: {}, source: "api", limit: 10, offset: 0 }).items[0]).toMatchObject({ uri: C, msPlayed: null, outcome: null });
     expect(history(db, { range: {}, kind: "episode", limit: 10, offset: 0 }).items[0]).toMatchObject({ name: "Ep", kind: "episode" });
   });
 });

@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { sql } from "drizzle-orm";
+import { playOutcome } from "../src/analytics/common";
 import { step, type Observation, type Snapshot } from "../src/ingest/live/observe";
 import { Watcher } from "../src/ingest/live/watcher";
 import { getJobState } from "../src/jobs/state";
@@ -60,13 +61,14 @@ describe("watcher state machine", () => {
     expect(current?.reasonStart).toBe("fwdbtn");
   });
 
-  test("changing after 90% is not a skip", () => {
+  test("changing in the outro is flagged like Spotify's next but counts as played through", () => {
     const { finished } = run([
       [0, snap(A, 170_000)],
       [15_000, snap(A, 185_000)],
       [16_000, snap(B, 0)],
     ]);
-    expect(finished[0]).toMatchObject({ skipped: false, reasonEnd: "fwdbtn" });
+
+    expect(playOutcome(finished[0]!)).toBe("through");
   });
 
   test("pause and resume count only progress that was played", () => {

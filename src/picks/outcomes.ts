@@ -15,7 +15,7 @@ export function refreshPickOutcomes(db: Db) {
       tx.update(picks)
         .set({
           plays: plays.length,
-          finished: plays.filter((x) => x.outcome === "finished").length,
+          finished: plays.filter((x) => x.outcome === "through").length,
           playDays: new Set(plays.map((x) => x.day)).size,
           firstPlayedAt: plays[0]?.ts ?? null,
         })
@@ -62,7 +62,7 @@ export function pickOutcomeSummary(db: Db): string {
   if (rows.length === 0) return "Weekly picks: none yet.";
   const describe = (r: (typeof rows)[number]) => {
     const hit = isHit({ finished: r.finished, playDays: r.play_days, inLibrary: r.in_library === null ? null : r.in_library === 1, state: r.state });
-    return `${r.name} - ${r.artist} [${r.distance}, ${r.state}, plays ${r.plays}, finished ${r.finished}, ${hit ? "HIT" : "no hit"}]`;
+    return `${r.name} - ${r.artist} [${r.distance}, ${r.state}, plays ${r.plays}, played through ${r.finished}, ${hit ? "HIT" : "no hit"}]`;
   };
-  return `Weekly picks, newest first (a hit = finished at least once and replayed on another day, saved to the library, or marked saved): ${rows.map(describe).join("; ")}`;
+  return `Weekly picks, newest first (a hit = played through at least once and replayed on another day, saved to the library, or marked saved): ${rows.map(describe).join("; ")}`;
 }

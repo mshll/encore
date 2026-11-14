@@ -1,7 +1,8 @@
 export type Period = "day" | "week" | "month" | "year";
 export type Device = "ios" | "android" | "mac" | "windows" | "linux" | "web" | "console" | "tv" | "speaker" | "car" | "unknown" | "other";
 export type PlayKind = "track" | "episode" | "audiobook" | "video";
-export type MomentClass = "keeper" | "wrong_moment" | "dislike" | "mixed";
+export type MomentClass = "keeper" | "wrong_moment" | "skipped_everywhere" | "mixed";
+export type PlayOutcome = "through" | "early" | "midway" | "interrupted";
 export type ContextDimension = "hourBucket" | "dayType" | "shuffle" | "device" | "startMode";
 
 export type Stats = {
@@ -10,7 +11,7 @@ export type Stats = {
   listens: number;
   skips: number;
   skipRate: number | null;
-  quickSkips: number;
+  earlySkips: number;
   firstPlayed: string | null;
   lastPlayed: string | null;
 };
@@ -305,20 +306,18 @@ export type Clock = { cells: { weekday: number; hour: number; hours: number; pla
 
 export type Skips = {
   minPlays: number;
-  summary: { plays: number; skips: number; skipRate: number | null; quickSkips: number };
+  summary: { plays: number; skips: number; skipRate: number | null; earlySkips: number; outcomes: Record<PlayOutcome | "unknown", number> };
   mostSkippedTracks: Song[];
   mostSkippedArtists: ArtistStats[];
-  quickSkips: Song[];
+  earlySkips: Song[];
   neverSkipped: Song[];
   profile: SkipProfile;
-  /** Always 10: skipped plays by the share of the song played before the skip. */
-  positions: { start: number; end: number; skips: number }[];
 };
 
 export type ContextRef = { dimension: ContextDimension; value: string; plays: number; skips: number; skipRate: number };
 
 export type SkipSplit = {
-  params: { minPlays: number; minContextPlays: number; keeperBelow: number; dislikeAtLeast: number; worksAtMost: number; failsAtLeast: number };
+  params: { minPlays: number; minContextPlays: number; keeperBelow: number; skippedEverywhereAtLeast: number; worksAtMost: number; failsAtLeast: number };
   eligibleSongs: number;
   counts: Record<MomentClass, number>;
   songs: (Song & { class: MomentClass; bestContext: ContextRef | null; worstContext: ContextRef | null })[];
@@ -408,7 +407,7 @@ export type HistoryItem = {
   album: string | null;
   albumArtUrl: string | null;
   msPlayed: number | null;
-  skipped: boolean | null;
+  outcome: PlayOutcome | null;
   shuffle: boolean | null;
   reasonStart: string | null;
   reasonEnd: string | null;

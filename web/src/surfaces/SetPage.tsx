@@ -66,9 +66,9 @@ function TrackRow({ item, added, onPin, onRemove }: { item: SetTrack; added: boo
   const origin = item.kind === "new" ? "New to you" : item.history ? `${fmtInt(item.history.listens)} listens` : null;
   const played =
     item.dj.finished + item.dj.skipped > 0
-      ? `In sessions: ${fmtInt(item.dj.finished)} finished, ${fmtInt(item.dj.skipped)} skipped`
+      ? `In sessions: ${fmtInt(item.dj.finished)} played through, ${fmtInt(item.dj.skipped)} skipped`
       : item.outcome.plays > 0
-        ? `Played ${fmtInt(item.outcome.plays)} ${item.outcome.plays === 1 ? "time" : "times"} since, ${fmtInt(item.outcome.finished)} finished`
+        ? `Played ${fmtInt(item.outcome.plays)} ${item.outcome.plays === 1 ? "time" : "times"} since, ${fmtInt(item.outcome.finished)} played through`
         : null;
   return (
     <li className="group -mx-2 flex gap-3 rounded-md px-2 py-3 transition-colors duration-150 hover:bg-fill">

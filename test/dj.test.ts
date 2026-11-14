@@ -34,7 +34,11 @@ function setup(replanner: Replanner, respond: (call: FetchCall) => Response | un
 }
 
 const started = (trackUri: string, contextUri: string | null = CONTEXT) => ({ type: "started" as const, observation: { trackUri, contextUri } as Observation });
-const finished = (trackUri: string, skipped: boolean) => ({ type: "finished" as const, play: { trackUri, contextUri: CONTEXT, skipped } as FinishedPlay });
+const ended = (trackUri: string, reasonEnd: FinishedPlay["reasonEnd"], msPlayed: number) => ({
+  type: "finished" as const,
+  play: { trackUri, contextUri: CONTEXT, reasonEnd, msPlayed, durationMs: 200_000 } as FinishedPlay,
+});
+const finished = (trackUri: string, skipped: boolean) => (skipped ? ended(trackUri, "fwdbtn", 10_000) : ended(trackUri, "trackdone", 200_000));
 
 describe("dj session", () => {
   test("start fills an app-owned playlist and plays it in order with shuffle off", async () => {
@@ -107,6 +111,26 @@ describe("dj session", () => {
     expect(dj.active()?.skipStreak).toBe(1);
   });
 
+  test("next pressed in the outro is played through and resets the streak", async () => {
+    const { dj } = setup(async () => []);
+    await dj.start(set);
+
+    dj.onWatchEvent(finished(set[0]!, true));
+    dj.onWatchEvent(ended(set[1]!, "fwdbtn", 185_000));
+
+    expect(dj.active()).toMatchObject({ skipStreak: 0, outcomes: [{ outcome: "skipped" }, { outcome: "finished" }] });
+  });
+
+  test("going back is no skip and leaves the streak alone", async () => {
+    const { dj } = setup(async () => []);
+    await dj.start(set);
+
+    dj.onWatchEvent(finished(set[0]!, true));
+    dj.onWatchEvent(ended(set[1]!, "endplay", 5_000));
+
+    expect(dj.active()).toMatchObject({ skipStreak: 1, outcomes: [{ outcome: "skipped" }] });
+  });
+
   test("leaving the playlist ends the session", async () => {
     const { dj } = setup(async () => []);
     await dj.start(set);
@@ -130,15 +154,15 @@ describe("dj session", () => {
 });
 
 describe("default re-planner", () => {
-  test("drops disliked songs and moves toward the tags of finished songs", async () => {
+  test("keeps a song skipped everywhere but ranks it by context fit, and moves toward the tags of played-through songs", async () => {
     const db = testDb();
     const tracks = ["f", "s", "x", "y", "d"].map((id) => track(id, `Song ${id}`, `Artist ${id}`, "Album"));
-    const dislikePlays = Array.from({ length: 10 }, (_, i) => play(`2026-01-0${(i % 9) + 1}T10:00:00Z`, uri("d"), 5000, { skipped: true }));
+    const dislikePlays = Array.from({ length: 10 }, (_, i) => play(`2026-01-0${(i % 9) + 1}T10:00:00Z`, uri("d"), 5000, { skipped: true, reasonEnd: "fwdbtn" }));
     seed(db, tracks, dislikePlays);
     const tag = (id: string, genres: TagInput["genres"], energy: number): TagInput => ({ uri: uri(id), genres, moods: ["calm"], energy, valence: 3, language: "en", model: "t", confidence: "high" });
     upsertTags(db, [tag("f", ["jazz"], 2), tag("s", ["metal"], 5), tag("x", ["metal"], 5), tag("y", ["jazz"], 2), tag("d", ["jazz"], 2)]);
     const replan = createDefaultReplanner(db, () => ({ timezone: "Asia/Kuwait", weekendDays: WEEKEND }));
     const next = await replan({ finished: [uri("f")], skipped: [uri("s")], current: uri("f"), upcoming: [uri("x"), uri("d"), uri("y")], exclude: [uri("f"), uri("s")], now: Date.parse("2026-11-14T10:00:00Z") });
-    expect(next).toEqual([uri("y"), uri("x")]);
+    expect(next).toEqual([uri("y"), uri("d"), uri("x")]);
   });
 });
