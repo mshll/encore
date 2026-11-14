@@ -72,7 +72,7 @@ export function createEncoreMcpServer({ db, settings, services, now }: McpDeps):
       }),
     },
     async ({ query, artist, album, songKey, uri }) => {
-      const page = { range: {}, period: "month" as const };
+      const page = { range: {}, period: "month" as const, weekendDays: settings.get().weekendDays };
       if (songKey || uri) return json(trackPage(db, { ...page, songKey, uri }));
       if (artist && album) return json(albumPage(db, { ...page, artist, album }));
       if (artist) return json(artistPage(db, { ...page, artist }));

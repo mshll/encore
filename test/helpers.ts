@@ -13,6 +13,7 @@ import { spotifyAuth as spotifyAuthTable } from "../src/db/schema";
 import { insertPlays, upsertTracks, type PlayInput, type TrackInput } from "../src/plays/store";
 
 export const TZ = "Asia/Kuwait";
+export const WEEKEND = [5, 6];
 
 export const testConfig = (env: Record<string, string> = {}) =>
   loadConfig({

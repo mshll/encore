@@ -35,6 +35,7 @@ export type SkipProfile = Record<ContextDimension, ContextStat[]>;
 
 export type Status = {
   timezone: string;
+  weekendDays: number[];
   homeCountry: string | null;
   spotify: {
     connected: boolean;

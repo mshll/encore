@@ -1,6 +1,6 @@
 import { sql, type SQL } from "drizzle-orm";
 import { z } from "zod";
-import { DAY_TYPE, HOUR_BUCKET, SHUFFLE, periodExpr } from "../analytics/common";
+import { dayTypeSql, HOUR_BUCKET, SHUFFLE, periodExpr } from "../analytics/common";
 import type { Db } from "../db/client";
 import { DEVICES, PLAY_SOURCES } from "../db/schema";
 import { GENRES, MOODS } from "../tags/vocabulary";
@@ -34,7 +34,7 @@ export const queryPlaysInput = z.strictObject({
 
 export type QueryPlaysInput = z.infer<typeof queryPlaysInput>;
 
-const GROUP_SQL: Record<(typeof GROUPS)[number], SQL> = {
+const groupExpressions = (weekendDays: readonly number[]): Record<(typeof GROUPS)[number], SQL> => ({
   year: sql.raw("substr(p.day, 1, 4)"),
   month: sql.raw("substr(p.day, 1, 7)"),
   week: periodExpr("week"),
@@ -42,7 +42,7 @@ const GROUP_SQL: Record<(typeof GROUPS)[number], SQL> = {
   weekday: sql.raw("p.weekday"),
   hour: sql.raw("p.hour"),
   hourBucket: HOUR_BUCKET,
-  dayType: DAY_TYPE,
+  dayType: dayTypeSql(weekendDays),
   artist: sql.raw("t.artist"),
   song: sql.raw("t.song_key"),
   album: sql.raw("t.album"),
@@ -53,7 +53,7 @@ const GROUP_SQL: Record<(typeof GROUPS)[number], SQL> = {
   language: sql.raw("tg.language"),
   source: sql.raw("p.source"),
   shuffle: SHUFFLE,
-};
+});
 
 const METRIC_SQL: Record<(typeof METRICS)[number], SQL> = {
   plays: sql.raw("count(*)"),
@@ -74,7 +74,8 @@ const list = (values: (string | number)[]) =>
   );
 
 /** Builds a read-only aggregate over music plays from whitelisted fragments; every user value is a bound parameter. */
-export function queryPlays(db: Db, input: QueryPlaysInput) {
+export function queryPlays(db: Db, input: QueryPlaysInput, weekendDays: readonly number[]) {
+  const groupSql = groupExpressions(weekendDays);
   const groups = input.groupBy ?? [];
   const metrics = input.metrics ?? ["plays", "listens", "hours"];
   const where: SQL[] = [sql`p.kind = 'track'`];
@@ -100,7 +101,7 @@ export function queryPlays(db: Db, input: QueryPlaysInput) {
   if (groups.includes("genre")) joins.push(sql`join json_each(tg.genres) jg`);
   if (groups.includes("mood")) joins.push(sql`join json_each(tg.moods) jm`);
 
-  const selects: SQL[] = groups.map((g) => sql`${GROUP_SQL[g]} as ${sql.identifier(g)}`);
+  const selects: SQL[] = groups.map((g) => sql`${groupSql[g]} as ${sql.identifier(g)}`);
   if (groups.includes("song")) selects.push(sql`min(t.name) as name`, sql`min(t.artist) as songArtist`);
   selects.push(...metrics.map((m) => sql`${METRIC_SQL[m]} as ${sql.identifier(m)}`));
 
@@ -111,7 +112,7 @@ export function queryPlays(db: Db, input: QueryPlaysInput) {
     select ${sql.join(selects, sql`, `)}
     from ${sql.join(joins, sql` `)}
     where ${sql.join(where, sql` and `)}
-    ${groups.length ? sql`group by ${sql.join(groups.map((g) => GROUP_SQL[g]), sql`, `)}` : sql``}
+    ${groups.length ? sql`group by ${sql.join(groups.map((g) => groupSql[g]), sql`, `)}` : sql``}
     order by ${sql.identifier(orderKey)} ${direction}
     limit ${limit + 1}`;
   const rows = db.all<Record<string, unknown>>(query);

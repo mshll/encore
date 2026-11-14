@@ -163,18 +163,18 @@ export async function generatePicks(ctx: FeatureContext, onEvent?: (e: AgentEven
 
 async function generateWeek(ctx: FeatureContext, week: string, onEvent?: (e: AgentEvent) => void) {
   const { db, llm, spotify } = ctx;
-  const { timezone, llm: llmSettings } = ctx.settings.get();
+  const { timezone, weekendDays, llm: llmSettings } = ctx.settings.get();
   const now = ctx.now();
   llm.assertAvailable();
   const { picksPerWeek: count, picksFarOut: far } = llmSettings;
   const blocked = blockedSets(db);
   const verifier = new CandidateVerifier(db, spotify, blocked, MAX_SEARCHES_PER_RUN, ctx.now);
-  const system = [PICKS_SYSTEM, tagged("taste_profile", tasteProfile(db, timezone, now))];
+  const system = [PICKS_SYSTEM, tagged("taste_profile", tasteProfile(db, { timezone, weekendDays }, now))];
   const messages: MessageParam[] = [
     {
       role: "user",
       content: [
-        `Choose this week's picks (week of ${week}). Owner's local time: ${localNow(timezone, now)}.`,
+        `Choose this week's picks (week of ${week}). Owner's local time: ${localNow({ timezone, weekendDays }, now)}.`,
         `Pick exactly ${count} songs: ${count - far} near the owner's taste and ${far} further out.`,
         tagged("past_picks", historyText(db, now)),
       ].join("\n\n"),
@@ -207,7 +207,7 @@ async function generateWeek(ctx: FeatureContext, week: string, onEvent?: (e: Age
     feature: "picks",
     ref: `week:${week}`,
     system,
-    tools: [...libraryTools(db, blocked, now), verifyTool(verifier), submit],
+    tools: [...libraryTools(db, blocked, now, weekendDays), verifyTool(verifier), submit],
     serverTools: [{ type: "web_search_20260209", name: "web_search", max_uses: WEB_SEARCH_MAX_USES }],
     messages,
     effort: "high",

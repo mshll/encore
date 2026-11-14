@@ -59,7 +59,7 @@ export function createLlmReplanner(ctx: FeatureContext, fallback: Replanner, opt
         },
       });
       const prompt = [
-        `Owner's local time: ${localNow(ctx.settings.get().timezone, input.now)}.`,
+        `Owner's local time: ${localNow(ctx.settings.get(), input.now)}.`,
         tagged("finished_this_session", list(input.finished)),
         tagged("skipped_this_session", list(input.skipped)),
         tagged("now_playing", input.current ? line(info.get(input.current), input.current) : "nothing"),
@@ -67,7 +67,7 @@ export function createLlmReplanner(ctx: FeatureContext, fallback: Replanner, opt
       ].join("\n\n");
       const run = runAgent(ctx.llm, {
         feature: "dj",
-        system: [DJ_REPLAN_SYSTEM, tagged("taste_profile", tasteProfile(ctx.db, ctx.settings.get().timezone, input.now))],
+        system: [DJ_REPLAN_SYSTEM, tagged("taste_profile", tasteProfile(ctx.db, ctx.settings.get(), input.now))],
         tools: [setTail],
         messages: [{ role: "user", content: prompt }],
         effort: "low",

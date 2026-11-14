@@ -73,7 +73,7 @@ export const statsRoutes = new Hono<Env>()
       }),
       c.req.query(),
     );
-    return c.json(momentSplit(c.var.deps.db, { range: range(q), minPlays: q.minPlays, minContextPlays: q.minContextPlays, limit: q.limit, only: q.class }));
+    return c.json(momentSplit(c.var.deps.db, { range: range(q), minPlays: q.minPlays, minContextPlays: q.minContextPlays, limit: q.limit, only: q.class, weekendDays: c.var.deps.settings.get().weekendDays }));
   })
   .get("/forgotten", (c) => {
     const q = parse(z.object({ days: int(1, 3650, 90), minListens: int(1, 10_000, 10), limit: int(1, 200, 50) }), c.req.query());
@@ -101,11 +101,11 @@ export const statsRoutes = new Hono<Env>()
 export const entityRoutes = new Hono<Env>()
   .get("/artist", (c) => {
     const q = parse(ranged({ name: z.string().min(1), period }), c.req.query());
-    return c.json(found(artistPage(c.var.deps.db, { artist: q.name, range: range(q), period: q.period })));
+    return c.json(found(artistPage(c.var.deps.db, { artist: q.name, range: range(q), period: q.period, weekendDays: c.var.deps.settings.get().weekendDays })));
   })
   .get("/album", (c) => {
     const q = parse(ranged({ artist: z.string().min(1), album: z.string().min(1), period }), c.req.query());
-    return c.json(found(albumPage(c.var.deps.db, { artist: q.artist, album: q.album, range: range(q), period: q.period })));
+    return c.json(found(albumPage(c.var.deps.db, { artist: q.artist, album: q.album, range: range(q), period: q.period, weekendDays: c.var.deps.settings.get().weekendDays })));
   })
   .get("/track", (c) => {
     const q = parse(
@@ -115,7 +115,7 @@ export const entityRoutes = new Hono<Env>()
       }),
       c.req.query(),
     );
-    return c.json(found(trackPage(c.var.deps.db, { songKey: q.songKey, uri: q.uri, range: range(q), period: q.period })));
+    return c.json(found(trackPage(c.var.deps.db, { songKey: q.songKey, uri: q.uri, range: range(q), period: q.period, weekendDays: c.var.deps.settings.get().weekendDays })));
   });
 
 const historyQuery = ranged({

@@ -62,6 +62,7 @@ All env values are validated at boot (the process exits on invalid values). See 
 | `ADMIN_TOKEN` | unset | Setting, secret. Min 24 chars. Bearer token for `/api/tags/*` and `POST /api/import` only |
 | `TIMEZONE` | `UTC` | IANA zone for day/hour buckets, applied at insert time. Set it before the first import |
 | `HOME_COUNTRY` | most-played country | Two-letter code; trips are runs of plays outside it |
+| `WEEKEND_DAYS` | `5,6` | ISO weekdays (1 = Monday) that count as the weekend in analytics, picks, sets and DJ plans |
 | `JOBS_ENABLED` | `true` | Poller and enrichment |
 | `POLL_INTERVAL_SECONDS` | `300` | Min 60 |
 | `ENRICH_INTERVAL_SECONDS`, `ENRICH_BATCH_SIZE` | `120`, `1` | Seconds between enrichment runs, Web API calls per run (track or artist, most listened first) |
@@ -149,7 +150,7 @@ src/http/                Hono app and routes
 web/                     UI (Vite + React), built into web/dist; dither-kit charts vendored in web/src/components/dither-kit
 ```
 
-Weekends are Friday and Saturday in analytics, picks and DJ plans.
+Weekend days are a setting (`WEEKEND_DAYS`, default Friday and Saturday). Unlike the timezone, a change applies to all stored plays at once: the weekday is stored, the weekend is decided at query time.
 
 ## License
 

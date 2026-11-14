@@ -28,3 +28,6 @@ export function localTime(ts: number, timezone: string): LocalTime {
     weekday: weekdays[parts.weekday!]!,
   };
 }
+
+/** Where and when the owner lives: the zone for local buckets and the ISO weekdays that count as the weekend. */
+export type Locale = { timezone: string; weekendDays: readonly number[] };

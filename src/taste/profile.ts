@@ -6,7 +6,7 @@ import { topArtists, topTracks } from "../analytics/top";
 import type { Db } from "../db/client";
 import { loadCatalog, type HourBucket } from "../library/catalog";
 import { listBlocks } from "../library/blocks";
-import { localTime } from "../plays/localTime";
+import { localTime, type Locale } from "../plays/localTime";
 import { pickOutcomeSummary } from "../picks/outcomes";
 import { setOutcomeSummary } from "../sets/outcomes";
 
@@ -52,7 +52,7 @@ function languages(db: Db) {
 }
 
 /** Deterministic, compact summary of the owner's taste. Stable for a given data state and day so it caches as a prompt prefix. */
-export function buildTasteProfile(db: Db, timezone: string, now: number): string {
+export function buildTasteProfile(db: Db, { timezone, weekendDays }: Locale, now: number): string {
   const today = localTime(now, timezone).day;
   const all = overview(db, { range: {} });
   if (all.plays === 0) return "# Taste profile\n\nNo listening history yet.";
@@ -96,7 +96,7 @@ export function buildTasteProfile(db: Db, timezone: string, now: number): string
     "",
   );
 
-  const catalog = loadCatalog(db);
+  const catalog = loadCatalog(db, weekendDays);
   const songs = [...catalog.songs.values()];
   const tagged = songs.filter((s) => s.tags).length;
   lines.push(
@@ -162,11 +162,11 @@ export function buildTasteProfile(db: Db, timezone: string, now: number): string
 
 let cached: { db: Db; key: string; text: string } | null = null;
 
-export function tasteProfile(db: Db, timezone: string, now: number): string {
+export function tasteProfile(db: Db, locale: Locale, now: number): string {
   const blocks = db.all<{ n: number; o: number }>(
     sql`select (select count(*) from blocks) as n, (select coalesce(max(state_at), 0) from picks) + (select coalesce(sum(plays_after), 0) from set_items) as o`,
   )[0]!;
-  const key = `${localTime(now, timezone).day}:${loadCatalog(db).version}:${blocks.n}:${blocks.o}`;
-  if (cached?.db !== db || cached.key !== key) cached = { db, key, text: buildTasteProfile(db, timezone, now) };
+  const key = `${localTime(now, locale.timezone).day}:${locale.timezone}:${loadCatalog(db, locale.weekendDays).version}:${blocks.n}:${blocks.o}`;
+  if (cached?.db !== db || cached.key !== key) cached = { db, key, text: buildTasteProfile(db, locale, now) };
   return cached.text;
 }

@@ -29,6 +29,7 @@ export const statusRoutes = new Hono<Env>().get("/", (c) => {
   )[0]!;
   return c.json({
     timezone: settings.timezone,
+    weekendDays: settings.weekendDays,
     homeCountry: settings.homeCountry ?? mostPlayedCountry(db) ?? null,
     spotify: {
       connected: auth.connected,

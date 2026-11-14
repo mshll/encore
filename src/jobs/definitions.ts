@@ -39,7 +39,7 @@ export function createJobs(db: Db, settings: SettingsSource, spotifyAuth: Spotif
         if (!spotifyAuth.status().connected) return { cursor, skipped: "spotify_not_connected" };
         if (!syncDue(cursor, now(), current().librarySyncMs)) return { cursor };
         const step = await syncStep({ db, spotify, spotifyAuth, appPlaylistIds: () => services.playlists.ids() }, cursor, now());
-        return { cursor: step.cursor, calls: step.calls, ...(step.passCompleted ? { proposals: refreshProposals(db, now()) } : {}) };
+        return { cursor: step.cursor, calls: step.calls, ...(step.passCompleted ? { proposals: refreshProposals(db, now(), current().weekendDays) } : {}) };
       },
       nextDelayMs: () => {
         const { libraryPageMs, librarySyncMs } = current();

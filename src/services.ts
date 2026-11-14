@@ -26,7 +26,7 @@ export function createServices(db: Db, config: Config, settings: SettingsSource,
   const player = new PlayerApi(spotify);
   const watcher = new Watcher(db, player, settings, now);
   const playlists = new AppPlaylists(db, spotify, now);
-  const deterministic = createDefaultReplanner(db, () => settings.get().timezone);
+  const deterministic = createDefaultReplanner(db, () => settings.get());
   const llmReplanner = createLlmReplanner(assistant, deterministic);
   const replanner: Replanner = (input) => (settings.get().djReplanner === "llm" ? llmReplanner : deterministic)(input);
   const dj = new DjService(db, player, playlists, replanner, () => settings.get().djSkipTrigger, now);

@@ -10,6 +10,7 @@ import { llmCalls, passkeys, sessions } from "../src/db/schema";
 import { createThread } from "../src/llm/threads";
 import { songKey } from "../src/plays/song";
 import { featureCtx, message, scripted, seedLibrary, text, toolCall, toolResults } from "./llmFakes";
+import { WEEKEND } from "./helpers";
 
 const FORBIDDEN = ["spotify_auth", "sessions", "passkeys", "oauth_states", "llm_calls", "llm_threads"];
 
@@ -77,7 +78,7 @@ describe("ask tools are read-only and scoped to listening data", () => {
     const { db } = featureCtx(null);
     seedLibrary(db);
     seedSecrets(db);
-    const tools = askTools(db, "KW", Date.parse("2026-02-01T00:00:00Z"));
+    const tools = askTools(db, { homeCountry: "KW", weekendDays: WEEKEND }, Date.parse("2026-02-01T00:00:00Z"));
     const runTool = (name: string, input: unknown) => {
       const t = tools.find((x) => x.name === name)!;
       return (t.run as (i: unknown) => unknown)(t.schema.parse(input));
@@ -90,7 +91,7 @@ describe("ask tools are read-only and scoped to listening data", () => {
         expect(JSON.stringify(out)).not.toContain("sess-secret");
       }
       for (const bad of INJECTIONS) {
-        queryPlays(db, queryPlaysInput.parse({ text: bad, artists: [bad], songKeys: [bad], groupBy: ["song"] }));
+        queryPlays(db, queryPlaysInput.parse({ text: bad, artists: [bad], songKeys: [bad], groupBy: ["song"] }), WEEKEND);
         await runTool("search_library", { q: bad });
         await runTool("artist_history", { artist: bad });
       }
@@ -107,10 +108,10 @@ describe("ask tools are read-only and scoped to listening data", () => {
     const { db } = featureCtx(null);
     seedLibrary(db);
     for (const bad of INJECTIONS) {
-      const r = queryPlays(db, queryPlaysInput.parse({ text: bad, groupBy: ["song"] }));
+      const r = queryPlays(db, queryPlaysInput.parse({ text: bad, groupBy: ["song"] }), WEEKEND);
       expect(r.rows).toEqual([]);
     }
-    expect(queryPlays(db, queryPlaysInput.parse({ text: "woo" })).rows as unknown[]).toEqual([{ plays: 20, listens: 10, hours: 0.58 }]);
+    expect(queryPlays(db, queryPlaysInput.parse({ text: "woo" }), WEEKEND).rows as unknown[]).toEqual([{ plays: 20, listens: 10, hours: 0.58 }]);
   });
 
   test("group, metric and order keys outside the whitelist are rejected before any SQL is built", () => {

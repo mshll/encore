@@ -8,7 +8,7 @@ import { SpotifyAuth } from "../src/spotify/auth";
 import { SpotifyClient } from "../src/spotify/client";
 import type { TagInput } from "../src/tags/schema";
 import { upsertTags } from "../src/tags/service";
-import { connectSpotify, jsonResponse, noContent, play, routeFetch, seed, testConfig, testDb, track, uri, type FetchCall, testSettings } from "./helpers";
+import { connectSpotify, jsonResponse, noContent, play, routeFetch, seed, testConfig, testDb, track, uri, type FetchCall, testSettings, WEEKEND } from "./helpers";
 
 const PLAYLIST = "pl0000000000000000000a";
 const CONTEXT = `spotify:playlist:${PLAYLIST}`;
@@ -137,7 +137,7 @@ describe("default re-planner", () => {
     seed(db, tracks, dislikePlays);
     const tag = (id: string, genres: TagInput["genres"], energy: number): TagInput => ({ uri: uri(id), genres, moods: ["calm"], energy, valence: 3, language: "en", model: "t", confidence: "high" });
     upsertTags(db, [tag("f", ["jazz"], 2), tag("s", ["metal"], 5), tag("x", ["metal"], 5), tag("y", ["jazz"], 2), tag("d", ["jazz"], 2)]);
-    const replan = createDefaultReplanner(db, () => "Asia/Kuwait");
+    const replan = createDefaultReplanner(db, () => ({ timezone: "Asia/Kuwait", weekendDays: WEEKEND }));
     const next = await replan({ finished: [uri("f")], skipped: [uri("s")], current: uri("f"), upcoming: [uri("x"), uri("d"), uri("y")], exclude: [uri("f"), uri("s")], now: Date.parse("2026-11-14T10:00:00Z") });
     expect(next).toEqual([uri("y"), uri("x")]);
   });

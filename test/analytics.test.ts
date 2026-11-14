@@ -13,7 +13,7 @@ import { artists, tracks } from "../src/db/schema";
 import { songKey } from "../src/plays/song";
 import { linkArtists } from "../src/plays/store";
 import { upsertTags } from "../src/tags/service";
-import { play, seed, testDb, track, uri } from "./helpers";
+import { play, seed, testDb, track, uri, WEEKEND } from "./helpers";
 
 const A1 = uri("a1");
 const A2 = uri("a2");
@@ -186,7 +186,7 @@ describe("wrong moment vs dislike", () => {
   }
 
   test("classifies songs by how their skip rate depends on context", () => {
-    const result = momentSplit(splitFixture(), { range: {}, minPlays: 8, minContextPlays: 3, limit: 10 });
+    const result = momentSplit(splitFixture(), { range: {}, minPlays: 8, minContextPlays: 3, limit: 10, weekendDays: WEEKEND });
     const byUri = Object.fromEntries(result.songs.map((s) => [s.uri, s.class]));
     expect(byUri).toEqual({ [uri("w")]: "wrong_moment", [uri("d")]: "dislike", [uri("k")]: "keeper", [uri("m")]: "mixed" });
     expect(result.counts).toEqual({ keeper: 1, wrong_moment: 1, dislike: 1, mixed: 1 });
@@ -197,8 +197,8 @@ describe("wrong moment vs dislike", () => {
 
   test("filters by class and drops songs under the play threshold", () => {
     const db = splitFixture();
-    expect(momentSplit(db, { range: {}, minPlays: 8, minContextPlays: 3, limit: 10, only: "dislike" }).songs.map((s) => s.uri)).toEqual([uri("d")]);
-    expect(momentSplit(db, { range: {}, minPlays: 11, minContextPlays: 3, limit: 10 }).eligibleSongs).toBe(0);
+    expect(momentSplit(db, { range: {}, minPlays: 8, minContextPlays: 3, limit: 10, only: "dislike", weekendDays: WEEKEND }).songs.map((s) => s.uri)).toEqual([uri("d")]);
+    expect(momentSplit(db, { range: {}, minPlays: 11, minContextPlays: 3, limit: 10, weekendDays: WEEKEND }).eligibleSongs).toBe(0);
   });
 
   test("classify rules", () => {
@@ -271,7 +271,7 @@ describe("trips", () => {
 
 describe("entity pages", () => {
   test("track page merges URIs", () => {
-    const page = trackPage(baseFixture(), { uri: A2, range: {}, period: "month" })!;
+    const page = trackPage(baseFixture(), { uri: A2, range: {}, period: "month", weekendDays: WEEKEND })!;
     expect(page.songKey).toBe(KEY_A);
     expect(page.totals).toMatchObject({ plays: 3, listens: 2, skipRate: 0.333 });
     expect(page.uris.map((u) => [u.uri, u.plays])).toEqual([
@@ -288,13 +288,13 @@ describe("entity pages", () => {
 
   test("artist and album pages, and missing entities", () => {
     const db = baseFixture();
-    const artist = artistPage(db, { artist: "Artist X", range: {}, period: "month" })!;
+    const artist = artistPage(db, { artist: "Artist X", range: {}, period: "month", weekendDays: WEEKEND })!;
     expect(artist.totals.plays).toBe(3);
     expect(artist.tracks).toHaveLength(1);
     expect(artist.albums.map((a) => a.album)).toEqual(["Album 1", "Album 1 Deluxe"]);
-    expect(albumPage(db, { artist: "Artist Y", album: "Album 2", range: {}, period: "month" })!.totals.plays).toBe(2);
-    expect(artistPage(db, { artist: "Nobody", range: {}, period: "month" })).toBeNull();
-    expect(trackPage(db, { uri: uri("zz"), range: {}, period: "month" })).toBeNull();
+    expect(albumPage(db, { artist: "Artist Y", album: "Album 2", range: {}, period: "month", weekendDays: WEEKEND })!.totals.plays).toBe(2);
+    expect(artistPage(db, { artist: "Nobody", range: {}, period: "month", weekendDays: WEEKEND })).toBeNull();
+    expect(trackPage(db, { uri: uri("zz"), range: {}, period: "month", weekendDays: WEEKEND })).toBeNull();
   });
 });
 
@@ -378,7 +378,7 @@ describe("images", () => {
       ["Artist X", "https://img/x"],
       ["Artist Y", null],
     ]);
-    expect(artistPage(db, { artist: "Artist X", range: {}, period: "month" })!.imageUrl).toBe("https://img/x");
+    expect(artistPage(db, { artist: "Artist X", range: {}, period: "month", weekendDays: WEEKEND })!.imageUrl).toBe("https://img/x");
     expect(search(db, { q: "artist", limit: 5 }).artists.map((a) => a.imageUrl)).toEqual(["https://img/x", null]);
     expect(topTracks(db, { range: {}, limit: 1 })[0]).toMatchObject({ uri: A1, albumArtUrl: "https://img/a2" });
   });

@@ -51,7 +51,7 @@ Runs live in memory: a restart ends them.
 - **Artist**: grouped by artist name string. **Album**: grouped by (artist, album name).
 - **Context dimensions** (used by the skip split and skip profiles). Only rows with a known skip flag (export and live):
   - `hourBucket`: `night` 00-05, `morning` 06-11, `afternoon` 12-17, `evening` 18-23 (local hour).
-  - `dayType`: `weekend` = Friday or Saturday, else `weekday`.
+  - `dayType`: `weekend` on the `weekendDays` setting's ISO weekdays (default 5, 6: Friday and Saturday), else `weekday`. Decided at query time, so a change applies to all stored plays.
   - `shuffle`: `on` / `off`.
   - `device`: the device enum below.
   - `startMode`: `chosen` when `reason_start` is `clickrow`, `playbtn`, or `backbtn` (the owner picked this track); `auto` when it is `trackdone` or `fwdbtn` (the track arrived from the queue). Other start reasons (`appload`, `remote`, `trackerror`, `unknown`) are not a context value.
@@ -116,6 +116,7 @@ Artist rows (top artists, eras, skips, search, the artist page, the overview's `
 ```json
 {
   "timezone": "Europe/London",
+  "weekendDays": [5, 6],
   "homeCountry": "GB",
   "spotify": {
     "connected": true,
@@ -150,6 +151,7 @@ Artist rows (top artists, eras, skips, search, the artist page, the overview's `
 ```
 
 - `timezone`: the `TIMEZONE` used for every local day, hour and weekday. Format `ts` values in it to match the buckets.
+- `weekendDays`: ISO weekdays that count as the weekend (`dayType`). Use it wherever the UI labels weekends.
 - `homeCountry`: `HOME_COUNTRY`, or the country with the most plays when unset; `null` when no play has a country.
 - `spotify.paused` is `null` or `{ "reason": "rate_limited" | "quota_exceeded", "until": "...", "since": "..." }`. While paused, the server makes no Spotify calls. `quota_exceeded` means the developer-account quota was hit; the pause lasts `QUOTA_BACKOFF_HOURS` (default 12) and the UI should show it.
 - `missingScopes`: scopes the server asks for that the stored grant lacks. Reconnect to grant them.
