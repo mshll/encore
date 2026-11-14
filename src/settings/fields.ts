@@ -68,8 +68,6 @@ const numeric = (
   return { ...base, type, secret: false, default: def, schema, ...bounds };
 };
 
-const flag = (base: Base, def: boolean): SettingField => ({ ...base, type: "boolean", secret: false, default: def, schema: z.boolean() });
-
 const choice = (base: Base, options: readonly [string, ...string[]], def: string): SettingField => ({
   ...base,
   type: "enum",
@@ -123,7 +121,6 @@ export function settingFields(models: readonly [string, ...string[]]): SettingFi
     numeric({ key: "picksFarOut", group: "picks", env: "PICKS_FAR_OUT" }, "integer", 1, { min: 0, max: 20 }),
     numeric({ key: "picksWeekday", group: "picks", env: "PICKS_WEEKDAY" }, "integer", 5, { min: 1, max: 7, unit: "weekday" }),
     numeric({ key: "picksHour", group: "picks", env: "PICKS_HOUR" }, "integer", 10, { min: 0, max: 23, unit: "hour" }),
-    flag({ key: "picksPlaylist", group: "picks", env: "PICKS_PLAYLIST" }, false),
 
     numeric({ key: "digestWeekday", group: "digest", env: "DIGEST_WEEKDAY" }, "integer", 5, { min: 1, max: 7, unit: "weekday" }),
     numeric({ key: "digestHour", group: "digest", env: "DIGEST_HOUR" }, "integer", 9, { min: 0, max: 23, unit: "hour" }),

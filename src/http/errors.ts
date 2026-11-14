@@ -1,6 +1,7 @@
 import type { Context } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { z } from "zod";
+import { MissingScopeError } from "../living/refresh";
 import { NoActiveDeviceError, PremiumRequiredError } from "../player/api";
 import { SettingsValidationError } from "../settings/store";
 import { SpotifyApiError, SpotifyBlockedError, SpotifyNotConfiguredError, SpotifyNotConnectedError } from "../spotify/errors";
@@ -40,6 +41,7 @@ function spotifyError(error: unknown): ApiError | null {
   if (error instanceof SpotifyNotConnectedError) return new ApiError(409, "spotify_not_connected", "Connect Spotify first");
   if (error instanceof SpotifyBlockedError) return new ApiError(503, "spotify_paused", error.message, { reason: error.reason, until: new Date(error.blockedUntil).toISOString() });
   if (error instanceof SpotifyApiError) return new ApiError(502, "spotify_failed", error.message);
+  if (error instanceof MissingScopeError) return new ApiError(409, "missing_scope", "Connect Spotify again to allow playlist changes", { scope: error.scope });
   return null;
 }
 

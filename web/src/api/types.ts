@@ -57,7 +57,7 @@ export type Status = {
   import: null | { lastImportAt: string | null; result: ImportResult | null };
   tags: { songs: number; tagged: number; coverage: number | null };
   plays: { plays: number; music: number; api: number; live: number };
-  live: { watch: JobStatus; radar: JobStatus; library: JobStatus };
+  live: { watch: JobStatus; radar: JobStatus; library: JobStatus; living: JobStatus };
   integrations: { discord: boolean; mcp: boolean };
   llm: LlmStatus;
 };
@@ -506,3 +506,48 @@ export type Cleanup = {
 };
 
 export type CleanupBatch = { id: number; proposalIds: number[]; actions: number; appliedAt: string; undoneAt: string | null };
+
+export type LivingKind = "picks" | "forgotten" | "most-played" | "new-releases" | "this-month";
+export type LivingStatus = "refreshed" | "unchanged" | "empty" | "deferred" | "failed" | "removed";
+export type LivingSchedule = "daily" | "weekly" | "monthly" | "picks" | "releases";
+export type LivingTrigger = "enable" | "schedule" | "manual" | "picks";
+
+export type LivingSong = { uri: string; songKey: string; name: string; artist: string; album: string | null; albumArtUrl: string | null };
+
+export type LivingPlaylist = {
+  kind: LivingKind;
+  name: string;
+  about: string;
+  mode: "replace" | "rolling";
+  schedule: LivingSchedule;
+  cap: number;
+  enabled: boolean;
+  playlist: { id: string; url: string } | null;
+  removedAt: string | null;
+  coverUrl: string;
+  status: LivingStatus | null;
+  error: string | null;
+  attemptedAt: string | null;
+  checkedAt: string | null;
+  changedAt: string | null;
+  /** Local day `YYYY-MM-DD`; null while off and for kinds refreshed when their source changes. */
+  nextRefresh: string | null;
+  count: number;
+  available: number;
+};
+
+export type LivingList = { spotify: { connected: boolean; canWrite: boolean; canUploadCovers: boolean }; items: LivingPlaylist[] };
+
+export type LivingChange = { id: number; at: string; trigger: LivingTrigger; count: number; added: LivingSong[]; removed: LivingSong[]; current: boolean };
+
+export type LivingDetail = LivingPlaylist & {
+  items: (LivingSong & { artistImageUrl: string | null })[];
+  preview: (LivingSong & { artistImageUrl: string | null })[];
+  history: LivingChange[];
+};
+
+export type LivingRefresh = { id: number; at: string; trigger: LivingTrigger; items: (LivingSong & { artistImageUrl: string | null })[]; added: LivingSong[]; removed: LivingSong[] };
+
+export type LivingOutcome = { kind: LivingKind; status: LivingStatus | "off"; calls: number; cover?: "uploaded" | "unchanged" | "missing_scope" | "failed" };
+
+export type LivingUpdate = { outcome: LivingOutcome; playlist: LivingDetail };

@@ -5,6 +5,7 @@ import { enrich, fetchAlbumArt } from "../ingest/live/enrich";
 import { pollRecentlyPlayed } from "../ingest/live/poller";
 import { WATCH_JOB } from "../ingest/live/watcher";
 import { syncDue, syncStep, type SyncCursor } from "../library/sync";
+import { livingPlaylistIds, markRemovedPlaylists, runLiving } from "../living/refresh";
 import { runRadar } from "../radar/radar";
 import type { Services } from "../services";
 import type { SettingsSource } from "../settings/settings";
@@ -13,9 +14,11 @@ import type { SpotifyClient } from "../spotify/client";
 import type { Job } from "./scheduler";
 import { getJobState } from "./state";
 
-export type Jobs = { poll: Job; enrich: Job; art: Job; watch: Job; radar: Job; library: Job };
+export type Jobs = { poll: Job; enrich: Job; art: Job; watch: Job; radar: Job; library: Job; living: Job };
 
 export const LIBRARY_JOB = "library";
+export const LIVING_JOB = "living";
+const LIVING_TICK_MS = 10 * 60_000;
 
 export function libraryCursor(db: Db): SyncCursor {
   return (getJobState(db, LIBRARY_JOB)?.data?.cursor as SyncCursor | undefined) ?? { phase: "idle", completedAt: null };
@@ -38,7 +41,17 @@ export function createJobs(db: Db, settings: SettingsSource, spotifyAuth: Spotif
         const cursor = libraryCursor(db);
         if (!spotifyAuth.status().connected) return { cursor, skipped: "spotify_not_connected" };
         if (!syncDue(cursor, now(), current().librarySyncMs)) return { cursor };
-        const step = await syncStep({ db, spotify, spotifyAuth, appPlaylistIds: () => services.playlists.ids() }, cursor, now());
+        const step = await syncStep(
+          {
+            db,
+            spotify,
+            spotifyAuth,
+            appPlaylistIds: () => [...services.playlists.ids(), ...livingPlaylistIds(db)],
+            appPlaylistsListed: (listed, startedAt) => markRemovedPlaylists(db, listed, startedAt, now()),
+          },
+          cursor,
+          now(),
+        );
         return { cursor: step.cursor, calls: step.calls, ...(step.passCompleted ? { proposals: refreshProposals(db, now(), current().weekendDays) } : {}) };
       },
       nextDelayMs: () => {
@@ -48,6 +61,7 @@ export function createJobs(db: Db, settings: SettingsSource, spotifyAuth: Spotif
         return Math.max(libraryPageMs, cursor.completedAt + librarySyncMs - now());
       },
     },
+    living: { name: LIVING_JOB, intervalMs: () => LIVING_TICK_MS, run: whenConnected(() => runLiving({ db, spotify, settings, now })) },
   };
 }
 

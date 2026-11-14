@@ -18,7 +18,6 @@ export type LlmConfig = {
   picksPerWeek: number;
   picksFarOut: number;
   picksSlot: { weekday: number; hour: number };
-  picksPlaylist: boolean;
   digestSlot: { weekday: number; hour: number };
 };
 
@@ -74,7 +73,6 @@ export type RawSettings = {
   picksFarOut: number;
   picksWeekday: number;
   picksHour: number;
-  picksPlaylist: boolean;
   digestWeekday: number;
   digestHour: number;
   djReplanner: "deterministic" | "llm";
@@ -146,7 +144,6 @@ export function resolveSettings(v: RawSettings, prices: Record<string, ModelPric
       picksPerWeek: v.picksPerWeek,
       picksFarOut: Math.min(v.picksFarOut, v.picksPerWeek),
       picksSlot: { weekday: v.picksWeekday, hour: v.picksHour },
-      picksPlaylist: v.picksPlaylist,
       digestSlot: { weekday: v.digestWeekday, hour: v.digestHour },
     },
     discord:

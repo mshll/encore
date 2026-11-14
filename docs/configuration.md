@@ -32,7 +32,7 @@ All env values are validated at boot (the process exits on invalid values). See 
 | `ART_INTERVAL_SECONDS` | `4` | Seconds between album-art lookups through Spotify's public oEmbed endpoint |
 | `SPOTIFY_MIN_INTERVAL_MS` | `2000` | Minimum spacing between Spotify Web API calls. All calls share one queue; calls made for a request go before calls made by jobs |
 | `QUOTA_BACKOFF_HOURS` | `12` | Pause after a Spotify `QUOTA_EXCEEDED` 429 |
-| `JOBS_DISABLED` | empty | Comma-separated job names to skip: `poll`, `enrich`, `art`, `watch`, `radar`, `library` |
+| `JOBS_DISABLED` | empty | Comma-separated job names to skip: `poll`, `enrich`, `art`, `watch`, `radar`, `library`, `living` |
 | `WATCHER_ACTIVE_SECONDS`, `WATCHER_IDLE_SECONDS`, `WATCHER_BACKOFF_MAX_SECONDS` | `15`, `60`, `900` | Player watcher cadence while playing, while idle, and the longest back-off after a 429 |
 | `DJ_SKIP_TRIGGER` | `2` | Consecutive skips in a DJ session that trigger a re-plan |
 | `DJ_REPLANNER`, `DJ_REPLAN_TIMEOUT_SECONDS` | `deterministic`, `20` | `llm` re-plans with Claude; any error, refusal, spent budget or timeout falls back to the deterministic plan |
@@ -48,7 +48,6 @@ All env values are validated at boot (the process exits on invalid values). See 
 | `MONTHLY_BUDGET_USD` | `100` | Claude spend cap per local month. At the cap, LLM endpoints return `402` and LLM jobs skip |
 | `PICKS_PER_WEEK`, `PICKS_FAR_OUT` | `5`, `1` | Weekly picks, and how many of them are far from the owner's taste |
 | `PICKS_WEEKDAY`, `PICKS_HOUR` | `5`, `10` | When weekly picks run (ISO weekday, local hour) |
-| `PICKS_PLAYLIST` | `false` | Mirror the week's picks into one private playlist |
 | `DIGEST_WEEKDAY`, `DIGEST_HOUR` | `5`, `9` | Weekly digest slot; the monthly recap runs on the 1st at `DIGEST_HOUR` |
 
 Weekend days are a setting (`WEEKEND_DAYS`, default Friday and Saturday). Unlike the timezone, a change applies to all stored plays at once: the weekday is stored, the weekend is decided at query time.

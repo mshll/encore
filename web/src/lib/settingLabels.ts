@@ -12,7 +12,6 @@ export const SETTING_LABELS: Record<string, { label: string; hint?: string }> = 
   picksFarOut: { label: "Far from your taste", hint: "How many of the weekly picks." },
   picksWeekday: { label: "Day" },
   picksHour: { label: "Time" },
-  picksPlaylist: { label: "Copy picks to a private playlist" },
   digestWeekday: { label: "Day" },
   digestHour: { label: "Time" },
   djReplanner: { label: "Re-plan with" },

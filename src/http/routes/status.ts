@@ -44,7 +44,7 @@ export const statusRoutes = new Hono<Env>().get("/", (c) => {
     enrichment: { ...enrichmentProgress(db), ...job(getJobState(db, "enrich")), art: job(getJobState(db, "art")) },
     import: importState ? { lastImportAt: iso(importState.lastSuccessAt), result: importState.data } : null,
     tags: tagCoverage(db),
-    live: { watch: job(getJobState(db, "watch")), radar: job(getJobState(db, "radar")), library: job(getJobState(db, "library")) },
+    live: { watch: job(getJobState(db, "watch")), radar: job(getJobState(db, "radar")), library: job(getJobState(db, "library")), living: job(getJobState(db, "living")) },
     plays: counts,
     integrations: { discord: settings.discord !== null, mcp: settings.mcpToken !== undefined },
     llm: {

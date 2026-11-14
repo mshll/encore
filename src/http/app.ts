@@ -14,6 +14,7 @@ import { cleanupRoutes } from "./routes/cleanup";
 import { discordRoutes } from "./routes/discord";
 import { djRoutes } from "./routes/dj";
 import { importRoutes } from "./routes/imports";
+import { livingRoutes } from "./routes/living";
 import { mcpRoutes } from "./routes/mcp";
 import { onboardingRoutes } from "./routes/onboarding";
 import { playerRoutes } from "./routes/player";
@@ -100,6 +101,7 @@ export function createApp(deps: Deps) {
   app.route("/api/tracks", trackRoutes);
   app.route("/api/dj", djRoutes);
   app.route("/api/radar", radarRoutes);
+  app.route("/api/living", livingRoutes);
   app.route("/api/cleanup", cleanupRoutes);
   app.all("/api/*", () => {
     throw new ApiError(404, "not_found", "Unknown API route");

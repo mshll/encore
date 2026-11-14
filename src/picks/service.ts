@@ -2,17 +2,15 @@ import { asc, desc, eq, sql } from "drizzle-orm";
 import { z } from "zod";
 import type { Db } from "../db/client";
 import { picks } from "../db/schema";
-import { getJobState, setJobState } from "../jobs/state";
 import { runAgent, tool, type AgentEvent } from "../llm/agent";
 import type { MessageParam } from "../llm/client";
 import { localNow, tagged, type FeatureContext } from "../llm/context";
 import { artistKey, blockedSets, type Blocked } from "../library/blocks";
 import { withArtwork } from "../library/artwork";
+import { refreshPicksPlaylist } from "../living/refresh";
 import { CandidateVerifier } from "../library/candidates";
 import { libraryTools, verifyTool } from "../library/tools";
 import { localTime } from "../plays/localTime";
-import { playlistDescription } from "../sets/playlist";
-import type { SpotifyClient } from "../spotify/client";
 import { tasteProfile } from "../taste/profile";
 import { isHit, pickStats } from "./outcomes";
 import { PICKS_SYSTEM } from "./prompt";
@@ -21,7 +19,6 @@ const MAX_SEARCHES_PER_RUN = 40;
 const WEB_SEARCH_MAX_USES = 15;
 const RESURFACE_AFTER_MS = 28 * 86_400_000;
 const HISTORY_WEEKS = 12;
-const PLAYLIST_STATE = "picks_playlist";
 
 export class PicksExistError extends Error {
   constructor(readonly week: string) {
@@ -215,7 +212,7 @@ async function generateWeek(ctx: FeatureContext, week: string, onEvent?: (e: Age
     onEvent,
   });
   if (!saved) throw new PicksNotSubmittedError();
-  if (llmSettings.picksPlaylist) await syncPicksPlaylist(db, spotify, timezone, ctx.now());
+  await refreshPicksPlaylist({ db, spotify, settings: ctx.settings, now: ctx.now });
   return weekPicks(db, week, ctx.now());
 }
 
@@ -263,31 +260,3 @@ export function pickWeeks(db: Db, limit: number) {
 }
 
 export const pickViews = (db: Db, rows: (typeof picks.$inferSelect)[]) => withArtwork(db, rows.map(view));
-
-/** Mirrors the current week's picks (except "never") into one private playlist, updated in place. */
-export async function syncPicksPlaylist(db: Db, spotify: SpotifyClient, timezone: string, now: number) {
-  const week = weekOf(now, timezone);
-  const uris = db
-    .select()
-    .from(picks)
-    .where(eq(picks.week, week))
-    .orderBy(asc(picks.position))
-    .all()
-    .filter((p) => p.state !== "never")
-    .map((p) => p.uri);
-  const details = { name: "encore picks", description: playlistDescription(`Weekly picks for the week of ${week}.`) };
-  let state = getJobState(db, PLAYLIST_STATE)?.data as { playlistId: string; url: string } | undefined;
-  if (!state) {
-    const created = await spotify.createPlaylist({ ...details, public: false });
-    state = { playlistId: created.id, url: created.external_urls.spotify };
-    setJobState(db, PLAYLIST_STATE, { lastSuccessAt: now, data: state });
-  } else {
-    await spotify.updatePlaylistDetails(state.playlistId, details);
-  }
-  await spotify.replacePlaylistItems(state.playlistId, uris);
-  return { ...state, tracks: uris.length };
-}
-
-export function picksPlaylist(db: Db) {
-  return (getJobState(db, PLAYLIST_STATE)?.data as { playlistId: string; url: string } | undefined) ?? null;
-}

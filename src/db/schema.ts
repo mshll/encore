@@ -194,8 +194,24 @@ export const releases = sqliteTable(
     firstSeenAt: integer("first_seen_at").notNull(),
     isNew: integer("is_new", { mode: "boolean" }).notNull(),
     seenAt: integer("seen_at"),
+    /** When the release's track list was stored in `release_tracks`. */
+    tracksFetchedAt: integer("tracks_fetched_at"),
   },
   (t) => [index("releases_date").on(t.releaseDate), index("releases_artist").on(t.artistId)],
+);
+
+/** The first tracks of a new release, from one album tracks call, for the New from your artists playlist. */
+export const releaseTracks = sqliteTable(
+  "release_tracks",
+  {
+    releaseId: text("release_id").notNull(),
+    position: integer("position").notNull(),
+    uri: text("uri").notNull(),
+    songKey: text("song_key").notNull(),
+    name: text("name").notNull(),
+    artist: text("artist").notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.releaseId, t.position] })],
 );
 
 export const savedTracks = sqliteTable("saved_tracks", {
@@ -254,5 +270,50 @@ export const cleanupBatches = sqliteTable("cleanup_batches", {
   appliedAt: integer("applied_at").notNull(),
   undoneAt: integer("undone_at"),
 });
+
+export const LIVING_KINDS = ["picks", "forgotten", "most-played", "new-releases", "this-month"] as const;
+export type LivingKind = (typeof LIVING_KINDS)[number];
+export const LIVING_STATUSES = ["refreshed", "unchanged", "empty", "deferred", "failed", "removed"] as const;
+export type LivingStatus = (typeof LIVING_STATUSES)[number];
+export const LIVING_TRIGGERS = ["enable", "schedule", "manual", "picks"] as const;
+export type LivingTrigger = (typeof LIVING_TRIGGERS)[number];
+export type LivingTrack = { uri: string; songKey: string; name: string; artist: string; album: string | null; albumArtUrl: string | null };
+
+/** A playlist in the owner's account that encore keeps refilling: one row per kind, the same Spotify playlist for good. */
+export const livingPlaylists = sqliteTable("living_playlists", {
+  kind: text("kind", { enum: LIVING_KINDS }).primaryKey(),
+  enabled: integer("enabled", { mode: "boolean" }).notNull(),
+  playlistId: text("playlist_id"),
+  playlistUrl: text("playlist_url"),
+  createdAt: integer("created_at"),
+  /** The owner deleted the playlist in Spotify. Switching the kind on again makes a new one. */
+  removedAt: integer("removed_at"),
+  /** Cover key of the image last uploaded to the playlist. */
+  coverUploadKey: text("cover_upload_key"),
+  /** Outcome of the last attempt, with its error when it failed. */
+  status: text("status", { enum: LIVING_STATUSES }),
+  error: text("error"),
+  attemptedAt: integer("attempted_at"),
+  /** Last attempt that reached a result: refreshed, unchanged or empty. The schedule counts from here. */
+  checkedAt: integer("checked_at"),
+  updatedAt: integer("updated_at").notNull(),
+});
+
+/** Every refresh that changed a living playlist, with its full contents afterwards and what it added and removed. */
+export const livingRefreshes = sqliteTable(
+  "living_refreshes",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    kind: text("kind", { enum: LIVING_KINDS }).notNull(),
+    playlistId: text("playlist_id").notNull(),
+    trigger: text("trigger", { enum: LIVING_TRIGGERS }).notNull(),
+    items: text("items", { mode: "json" }).$type<LivingTrack[]>().notNull(),
+    added: text("added", { mode: "json" }).$type<LivingTrack[]>().notNull(),
+    removed: text("removed", { mode: "json" }).$type<LivingTrack[]>().notNull(),
+    calls: integer("calls").notNull(),
+    at: integer("at").notNull(),
+  },
+  (t) => [index("living_refreshes_kind").on(t.kind, t.at)],
+);
 
 export * from "./assistantSchema";

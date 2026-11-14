@@ -348,7 +348,7 @@ function VerifyClaude({ form }: { form: SettingsForm }) {
 
 function ClaudeTab({ status }: { status: Status }) {
   const claude = useSettingsForm(["claudeApiKey", "claudeModel", "monthlyBudgetUsd"]);
-  const picks = useSettingsForm(["picksPerWeek", "picksFarOut", "picksWeekday", "picksHour", "picksPlaylist"]);
+  const picks = useSettingsForm(["picksPerWeek", "picksFarOut", "picksWeekday", "picksHour"]);
   const digest = useSettingsForm(["digestWeekday", "digestHour"]);
   const dj = useSettingsForm(["djReplanner", "djReplanTimeoutSeconds", "djSkipTrigger"]);
   const storage = claude.settings.data?.secretStorage.available ?? true;
@@ -367,7 +367,7 @@ function ClaudeTab({ status }: { status: Status }) {
             {scheduleOff ? "Scheduled runs are off on this server." : <JobLine job={status.llm.jobs.picks} />}
           </>
         }
-        keys={["picksPerWeek", "picksFarOut", "picksWeekday", "picksHour", "picksPlaylist"]}
+        keys={["picksPerWeek", "picksFarOut", "picksWeekday", "picksHour"]}
         form={picks}
       />
       <SettingsBlock

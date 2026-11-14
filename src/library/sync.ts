@@ -9,7 +9,7 @@ import type { Page, PlaylistEntry, SavedTrack, SimplifiedPlaylist, SpotifyTrack 
 export type SyncCursor =
   | { phase: "idle"; completedAt: number | null }
   | { phase: "saved"; passStartedAt: number; offset: number }
-  | { phase: "playlists"; passStartedAt: number; offset: number; seen: string[]; queue: QueuedPlaylist[] }
+  | { phase: "playlists"; passStartedAt: number; offset: number; seen: string[]; queue: QueuedPlaylist[]; appSeen?: string[] }
   | { phase: "items"; passStartedAt: number; queue: QueuedPlaylist[]; offset: number };
 
 type QueuedPlaylist = { id: string; snapshotId: string };
@@ -19,7 +19,14 @@ export type SyncStep = { cursor: SyncCursor; calls: number; passCompleted: boole
 const PAGE = 50;
 const isTrack = (track: SpotifyTrack | null | undefined): track is SpotifyTrack => Boolean(track?.uri?.startsWith("spotify:track:"));
 
-export type LibrarySyncDeps = { db: Db; spotify: SpotifyClient; spotifyAuth: SpotifyAuth; appPlaylistIds: () => string[] };
+export type LibrarySyncDeps = {
+  db: Db;
+  spotify: SpotifyClient;
+  spotifyAuth: SpotifyAuth;
+  appPlaylistIds: () => string[];
+  /** Called once a pass has listed every playlist in the owner's library, with the encore playlists among them. */
+  appPlaylistsListed?: (listed: Set<string>, listingStartedAt: number) => void;
+};
 
 async function ownerId({ spotify, spotifyAuth }: LibrarySyncDeps): Promise<string> {
   const known = spotifyAuth.status().userId;
@@ -66,7 +73,9 @@ export async function syncStep(deps: LibrarySyncDeps, cursor: SyncCursor, now: n
       if (stored?.snapshotId !== p.snapshot_id || stored.syncedAt === null) queue.push({ id: p.id, snapshotId: p.snapshot_id });
     }
     const seen = [...cursor.seen, ...own.map((p) => p.id)];
-    if (page.next) return { cursor: { ...cursor, offset: cursor.offset + PAGE, seen, queue }, calls: 1, passCompleted: false };
+    const appSeen = [...(cursor.appSeen ?? []), ...page.items.filter((p) => p && appOwned.has(p.id)).map((p) => p.id)];
+    if (page.next) return { cursor: { ...cursor, offset: cursor.offset + PAGE, seen, queue, appSeen }, calls: 1, passCompleted: false };
+    deps.appPlaylistsListed?.(new Set(appSeen), cursor.passStartedAt);
     const gone = db.select({ id: ownedPlaylists.id }).from(ownedPlaylists).where(notInArray(ownedPlaylists.id, seen.length ? seen : [""])).all().map((r) => r.id);
     if (gone.length) {
       db.delete(playlistItems).where(inArray(playlistItems.playlistId, gone)).run();
