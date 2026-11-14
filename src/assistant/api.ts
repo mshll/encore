@@ -6,7 +6,10 @@ import { renderDigest, type DigestKind } from "../digest/service";
 import type { FeatureContext } from "../llm/context";
 import { generatePicks, PicksExistError, pickViews, weekOf, weekPicks } from "../picks/service";
 import { setPickState } from "../picks/state";
-import { createSet } from "../sets/service";
+import type { DjService } from "../dj/session";
+import { playSet } from "../sets/play";
+import { saveSetPlaylist } from "../sets/playlist";
+import { createSet, getSet, SetNotFoundError } from "../sets/service";
 
 /**
  * Plain entry points for chat integrations (for example a Discord bot). They take the same
@@ -54,6 +57,28 @@ export async function currentPicks(ctx: FeatureContext, options: { generate?: bo
 
 export function updatePickState(ctx: FeatureContext, pickId: number, state: PickState) {
   return pickViews(ctx.db, [setPickState(ctx.db, pickId, state, ctx.now())])[0]!;
+}
+
+/** Marks the pick saved and saves the song to the owner's Spotify library (the one library write the assistant makes, on request). */
+export async function savePick(ctx: FeatureContext, pickId: number) {
+  const view = updatePickState(ctx, pickId, "saved");
+  await ctx.spotify.request("PUT", `/me/library?uris=${encodeURIComponent(view.uri)}`);
+  return view;
+}
+
+/** A set with what a chat message needs: the summary, every item with artwork, and the dashboard link. */
+export function setForChat(ctx: FeatureContext, setId: number) {
+  const set = getSet(ctx.db, setId);
+  if (!set) throw new SetNotFoundError();
+  return { ...set, dashboardUrl: `${ctx.config.publicBaseUrl}/sets/${set.id}` };
+}
+
+export async function playSetNow(ctx: FeatureContext, dj: DjService, setId: number) {
+  return playSet(ctx.db, dj, setId);
+}
+
+export async function saveSetToSpotify(ctx: FeatureContext, setId: number) {
+  return saveSetPlaylist(ctx.db, ctx.spotify, setId, ctx.now());
 }
 
 export async function askText(ctx: FeatureContext, question: string, threadId: number | null = null): Promise<{ threadId: number; text: string }> {
