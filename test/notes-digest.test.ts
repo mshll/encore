@@ -3,7 +3,8 @@ import type Anthropic from "@anthropic-ai/sdk";
 import type { Db } from "../src/db/client";
 import { llmCalls, picks } from "../src/db/schema";
 import { digestFacts, monthlyWindows, weeklyWindows } from "../src/digest/facts";
-import { generateDigest, isDigestDue, listDigests, renderDigest } from "../src/digest/service";
+import { allowedNumbers, unsupportedNumbers } from "../src/digest/numbers";
+import { CODE_RENDERED, generateDigest, isDigestDue, listDigests, renderDigest } from "../src/digest/service";
 import { createAssistantJobs } from "../src/jobs/assistant";
 import { trackNote } from "../src/notes/service";
 import { songKey } from "../src/plays/song";
@@ -32,6 +33,7 @@ describe("notes", () => {
     expect(req.tools).toEqual([{ type: "web_search_20260209", name: "web_search", max_uses: 4 }]);
     expect(req.output_config).toEqual({ effort: "medium" });
     expect(JSON.stringify(req.messages[0])).toContain("This song: 20 plays");
+    expect(first).toMatchObject({ albumArtUrl: null, artistImageUrl: null });
   });
 
   test("without citations, the searched pages become the sources", async () => {
@@ -92,6 +94,26 @@ describe("digest", () => {
     expect(JSON.stringify(req.messages[0])).toContain('\\"listens\\":14');
     expect(renderDigest(db, first.id).rendered).toBe("Your week, 2026-01-04 to 2026-01-10\n\nA quieter week.");
     expect(listDigests(db, "weekly", 10)).toHaveLength(1);
+  });
+
+  test("a digest stating numbers outside the facts is rewritten once", async () => {
+    const fake = scripted(message([text("**You doubled** your listening: 14 listens, about 7.7 times more.")]), message([text("14 listens, up from 2.")]));
+    const { ctx, db } = featureCtx(fake.transport, [], {}, "2026-01-11T08:00:00Z");
+    seedLibrary(db);
+    const digest = await generateDigest(ctx, "weekly");
+    expect(digest).toMatchObject({ text: "14 listens, up from 2.", model: "claude-opus-5-5" });
+    expect(fake.requests[1]!.messages.at(-1)!.content).toBe("These numbers are not in the facts: 7.7. Rewrite the digest using only numbers that appear in the facts. Don't compute new ones.");
+  });
+
+  test("after a second failure the digest is written from the facts in code", async () => {
+    const fake = scripted(message([text("You listened 777 hours.")]), message([text("You listened 778 hours.")]));
+    const { ctx, db } = featureCtx(fake.transport, [], {}, "2026-01-11T08:00:00Z");
+    seedLibrary(db);
+    const digest = await generateDigest(ctx, "weekly");
+    expect(digest.model).toBe(CODE_RENDERED);
+    expect(digest.text.split("\n")[0]).toBe("0.8 hours of music this week, against 0.1 in a typical week before it.");
+    expect(unsupportedNumbers(digest.text, allowedNumbers(digest.facts))).toEqual([]);
+    expect(fake.requests).toHaveLength(2);
   });
 
   test("due on the configured weekday and hour (local), and on the 1st for the monthly recap", () => {

@@ -11,6 +11,8 @@ const DAY_MS = 86_400_000;
 const r1 = (n: number) => Math.round(n * 10) / 10;
 const r3 = (n: number) => Math.round(n * 1000) / 1000;
 
+const pctChange = (now: number, before: number) => (before > 0 ? Math.round(((now - before) / before) * 100) : null);
+
 export function shiftDay(day: string, days: number): string {
   return new Date(Date.parse(`${day}T00:00:00Z`) + days * DAY_MS).toISOString().slice(0, 10);
 }
@@ -96,8 +98,10 @@ export function digestFacts(db: Db, timezone: string, period: Window, baseline: 
     totals: {
       hours: r1(now.hours),
       baselineHours: r1(before.hours * scale),
+      hoursChangePct: pctChange(now.hours, before.hours * scale),
       listens: now.listens,
       baselineListens: Math.round(before.listens * scale),
+      listensChangePct: pctChange(now.listens, before.listens * scale),
       uniqueArtists: now.uniqueArtists,
       uniqueSongs: now.uniqueTracks,
       skipRate: now.skipRate,
