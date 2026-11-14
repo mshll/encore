@@ -1,26 +1,40 @@
 import { useState, type ReactNode } from "react";
+import { BudgetBar } from "../charts/BudgetBar";
 import { DitherMeter } from "../charts/DitherMeter";
 import { HeatLegend } from "../charts/DitherHeatmap";
 import { showToast } from "../lib/toast";
 import type { RunState } from "../lib/useRun";
 import { EncoreMark, Lockup } from "../ui/Brand";
 import { Button, IconButton } from "../ui/Button";
+import { Checkbox } from "../ui/Checkbox";
+import { Combobox } from "../ui/Combobox";
 import { Composer } from "../ui/Composer";
+import { CopyField } from "../ui/CopyField";
 import { Confirm, Dialog, DialogClose } from "../ui/Dialog";
+import { DropZone } from "../ui/DropZone";
 import { Field, Input } from "../ui/Field";
 import { Kbd, MOD_KEY } from "../ui/Kbd";
 import { DotsThreeIcon, MagnifyingGlassIcon, PlayIcon, PlusIcon, ShuffleIcon, SparkleIcon, XIcon } from "../ui/icons";
 import { MenuItem, MenuPopup, MenuRoot, MenuSeparator, MenuTrigger } from "../ui/Menu";
 import { Page, PageHeader, Section } from "../ui/Page";
+import { Notice } from "../ui/Notice";
 import { PopoverPopup, PopoverRoot, PopoverTrigger } from "../ui/Popover";
 import { RunProgress } from "../ui/RunProgress";
 import { Segmented } from "../ui/Segmented";
 import { Select } from "../ui/Select";
+import { SettingRow, SettingRows } from "../ui/SettingRow";
 import { Skeleton } from "../ui/Skeleton";
 import { StatStrip, type StatItem } from "../ui/Stat";
 import { EmptyState, ErrorState } from "../ui/States";
 import { Switch } from "../ui/Switch";
 import { Tooltip } from "../ui/Tooltip";
+import { WeekdayPicker } from "../ui/WeekdayPicker";
+
+const ZONES = [
+  { value: "Asia/Kuwait", label: "Kuwait", detail: "UTC+3" },
+  { value: "Europe/London", label: "London", detail: "UTC+0" },
+  { value: "America/Argentina/ComodRivadavia", label: "Argentina, ComodRivadavia", detail: "UTC−3" },
+];
 
 function Swatch({ name }: { name: string }) {
   return (
@@ -60,6 +74,10 @@ export function Kit() {
   const [dialog, setDialog] = useState(false);
   const [confirm, setConfirm] = useState(false);
   const [text, setText] = useState("");
+  const [zone, setZone] = useState<string | null>("Asia/Kuwait");
+  const [days, setDays] = useState<number[]>([5, 6]);
+  const [ticks, setTicks] = useState<Set<number>>(new Set([1]));
+  const tick = (n: number) => setTicks((t) => { const next = new Set(t); if (!next.delete(n)) next.add(n); return next; });
   const [metric, setMetric] = useState<"hours" | "plays">("hours");
   const figures: StatItem<"hours" | "plays">[] = [
     { id: "hours", label: "Time listened", value: "1,284", unit: "hours", delta: 0.12, compare: "from 1,146" },
@@ -153,6 +171,31 @@ export function Kit() {
             <Segmented label="View" value={seg} onChange={setSeg} options={[{ value: "a", label: "Hours" }, { value: "b", label: "Plays" }, { value: "c", label: "Listens" }]} />
           </Row>
         </Section>
+        <Section title="Settings">
+          <SettingRows>
+            <SettingRow label="Timezone" hint="Plays already stored keep the day they were counted in.">
+              {(p) => <Combobox {...p} value={zone} onChange={setZone} options={ZONES} />}
+            </SettingRow>
+            <SettingRow label="Weekend days">{(p) => <WeekdayPicker {...p} label="Weekend days" value={days} onChange={setDays} />}</SettingRow>
+            <SettingRow label="Home country" error="Use a two-letter country code, such as KW.">
+              {(p) => <Input {...p} defaultValue="kuwait" />}
+            </SettingRow>
+            <SettingRow label="Redirect URI" wide>
+              {() => <CopyField value="https://encore.example.com/api/spotify/callback" label="Copy redirect URI" />}
+            </SettingRow>
+          </SettingRows>
+          <Row label="Checkbox">
+            <Checkbox checked={ticks.size === 2} indeterminate={ticks.size === 1} onChange={() => setTicks(ticks.size === 2 ? new Set() : new Set([1, 2]))} label="Select all" />
+            <Checkbox checked={ticks.has(1)} onChange={() => tick(1)} label="First" />
+            <Checkbox checked={ticks.has(2)} onChange={() => tick(2)} label="Second" />
+          </Row>
+          <Notice>Secrets cannot be saved until SECRETS_KEY is set on the server.</Notice>
+          <Notice tone="warning" action={<Button size="sm">Connect again</Button>}>
+            Spotify paused logging after repeated errors.
+          </Notice>
+          <Notice tone="danger">That file is not a Spotify streaming history export. Nothing was imported.</Notice>
+          <DropZone onFiles={(f) => showToast(`${f.length} files picked`)} title="Drop your Streaming_History_Audio files here" description="Unzip the export first." />
+        </Section>
         <Section title="Overlays">
           <Row label="Menu">
             <MenuRoot>
@@ -203,6 +246,8 @@ export function Kit() {
           <StatStrip items={figures} value={metric} onChange={setMetric} label="Figures">
             <div className="flex flex-col gap-2 pt-4">
               <DitherMeter share={metric === "hours" ? 0.8 : 0.35} />
+              <BudgetBar spent={7.42} cap={20} label="Claude spend this month" />
+              <BudgetBar spent={21.1} cap={20} label="Claude spend, over the cap" />
               <HeatLegend />
             </div>
           </StatStrip>

@@ -50,10 +50,10 @@ The source of truth for paths, labels, icons and shortcuts is `web/src/app/nav.t
 | For you: Releases | What did artists I play release? | Mark seen, play | `radar`, `radar/seen` | Placeholder |
 | Sets `/sets` | Make me a playlist from a prompt | Make a set | `sets`, `sets/:id`, set run (stream), `dj/start`, `dj`, `dj/stop` | Placeholder |
 | Ask `/ask` | Answer a question about my listening | Ask | `ask/threads`, `ask/threads/:id`, ask run (stream) | Placeholder |
-| Recaps `/recaps` | What happened this week or month? | Open the latest recap | `digests`, `digests/:id` | Placeholder |
-| Library `/library` | What in my saved songs and playlists should go? | Review proposals | `cleanup`, `cleanup/dismiss`, `cleanup/apply`, `cleanup/batches`, `cleanup/batches/:id/undo`, `blocks` | Placeholder |
-| Setup `/setup` | Is encore connected and fed? | Do the next missing step | `onboarding`, `spotify/authorize`, `import`, `settings` | Placeholder |
-| Settings `/settings/*` | How does encore run? | Save a change | `settings`, `settings/claude/verify`, `settings/discord/register`, `spotify/disconnect`, `spotify/poll`, `llm/spend`, `auth/logout`, passkey routes | Placeholder |
+| Recaps `/recaps` | What happened this week or month? | Open the latest recap | `digests`, `digests/:id` | Built |
+| Library `/library` | What in my saved songs and playlists should go? | Review proposals | `cleanup`, `cleanup/dismiss`, `cleanup/apply`, `cleanup/batches`, `cleanup/batches/:id/undo`, `blocks` | Built |
+| Setup `/setup` | Is encore connected and fed? | Do the next missing step | `onboarding`, `spotify/authorize`, `import`, `settings` | Built |
+| Settings `/settings/*` | How does encore run? | Save a change | `settings`, `settings/claude/verify`, `settings/discord/register`, `spotify/disconnect`, `spotify/poll`, `llm/spend`, `auth/logout`, passkey routes | Built |
 
 Built surfaces are the reference implementations: Overview (home), Plays (list-led), Patterns: When (chart-led).
 
@@ -169,6 +169,13 @@ All in `web/src/ui/` unless noted. Props listed are the ones that matter.
 | `Input`, `Field` | `ui/Field` | Input: `icon`, `end`, `invalid`. Field: `label`, `hint`, `error`, render-prop child gets `id`, `aria-describedby`, `invalid` |
 | `Select` | `ui/Select` | `value`, `onChange`, `options`, `label` |
 | `Switch` | `ui/Switch` | `checked`, `onChange`, `label`, `disabled` |
+| `Checkbox` | `ui/Checkbox` | `checked`, `indeterminate`, `onChange`, `label`, `id`. 44px hit area on a phone |
+| `Combobox`, `ComboboxOption` | `ui/Combobox` | Search a long list (timezones): `value`, `onChange`, `options { value, label, detail? }`, `placeholder`, `emptyText`, `invalid` |
+| `WeekdayPicker` | `ui/WeekdayPicker` | Several days, ISO 1 (Mon) to 7 (Sun): `value`, `onChange`, `label` |
+| `SettingRow`, `SettingRows` | `ui/SettingRow` | Label and hint left, control right (stacked on a phone). `label`, `hint`, `error` (replaces the hint), `wide`; render-prop child gets `id`, `aria-describedby`, `invalid` |
+| `CopyField` | `ui/CopyField` | A read-only value to paste elsewhere (redirect URI, endpoint): `value`, `label` |
+| `Notice` | `ui/Notice` | One sentence that changes what the user does next: `tone` info, warning, danger; `action`. Full bleed on a phone |
+| `DropZone` | `ui/DropZone` | `onFiles`, `accept`, `multiple`, `title`, `description`, `button`. Unpainted until a drag is over it |
 | `Segmented` | `ui/Segmented` | Two to four views of the same data: `value`, `onChange`, `options`, `label` |
 | `TabsRoot`, `TabList`, `TabPanel` | `ui/Segmented` | In-page tabs with an underline |
 | `TabNav` | `ui/TabNav` | Route tabs under a page header: `items`, `label` |
@@ -209,6 +216,7 @@ One family: dithered halftone in Spotify green.
 | `DitherBars`, `DitherStack`, `DitherLine`, `DitherRadar` | `charts/Dither` | Bars, stacked series, lines, radar. All draw through the vendored kit in `components/dither-kit/` |
 | `StackedArea`, `TagTrends`, `SegmentedBar`, `SkipProfileChart` | `charts/*` | Eras, taste, skips |
 | `DitherMeter` | `charts/DitherMeter` | A share bar in a row, always next to a printed figure |
+| `BudgetBar` | `charts/BudgetBar` | Spend against a cap: `spent`, `cap`, `label`. Turns red with a cap mark once spent reaches the cap |
 | `DitherHeatmap`, `HeatLegend` | `charts/DitherHeatmap` | A grid of values (weekday by hour). One tab stop, arrow keys move the selection |
 | `ditherTile(level)`, `levelFor(share)` | `charts/ditherTile` | The halftone as a CSS background for anything that is not a canvas |
 | `DataTable` | `charts/DataTable` | "View data": the accessible table behind every chart |
