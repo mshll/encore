@@ -45,6 +45,8 @@ const schema = z.object({
   WATCHER_ACTIVE_SECONDS: z.coerce.number().min(5).default(15),
   WATCHER_IDLE_SECONDS: z.coerce.number().min(15).default(60),
   WATCHER_BACKOFF_MAX_SECONDS: z.coerce.number().min(60).default(900),
+  DJ_REPLANNER: z.enum(["deterministic", "llm"]).default("deterministic"),
+  DJ_REPLAN_TIMEOUT_SECONDS: z.coerce.number().min(1).max(120).default(20),
   DJ_SKIP_TRIGGER: z.coerce.number().int().min(1).max(20).default(2),
   RADAR_MIN_LISTENS: z.coerce.number().int().min(1).default(20),
   RADAR_INTERVAL_MINUTES: z.coerce.number().min(5).default(60),
@@ -98,6 +100,8 @@ export type Config = {
   watcherIdleMs: number;
   watcherBackoffMaxMs: number;
   djSkipTrigger: number;
+  djReplanner: "deterministic" | "llm";
+  djReplanTimeoutMs: number;
   radarMinListens: number;
   radarIntervalMs: number;
   radarArtistsPerRun: number;
@@ -206,6 +210,8 @@ export function loadConfig(env: Record<string, string | undefined> = process.env
     watcherIdleMs: e.WATCHER_IDLE_SECONDS * 1000,
     watcherBackoffMaxMs: e.WATCHER_BACKOFF_MAX_SECONDS * 1000,
     djSkipTrigger: e.DJ_SKIP_TRIGGER,
+    djReplanner: e.DJ_REPLANNER,
+    djReplanTimeoutMs: e.DJ_REPLAN_TIMEOUT_SECONDS * 1000,
     radarMinListens: e.RADAR_MIN_LISTENS,
     radarIntervalMs: e.RADAR_INTERVAL_MINUTES * 60_000,
     radarArtistsPerRun: e.RADAR_ARTISTS_PER_RUN,

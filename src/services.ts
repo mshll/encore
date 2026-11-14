@@ -1,6 +1,7 @@
 import type { Config } from "./config";
 import type { Db } from "./db/client";
 import { AppPlaylists } from "./dj/playlists";
+import { createLlmReplanner } from "./dj/llmReplan";
 import { createDefaultReplanner } from "./dj/replan";
 import { DjService } from "./dj/session";
 import { Watcher } from "./ingest/live/watcher";
@@ -16,7 +17,9 @@ export function createServices(db: Db, config: Config, spotify: SpotifyClient, n
   const player = new PlayerApi(spotify);
   const watcher = new Watcher(db, player, config, now);
   const playlists = new AppPlaylists(db, spotify, now);
-  const dj = new DjService(db, player, playlists, createDefaultReplanner(db, config.timezone), { skipTrigger: config.djSkipTrigger }, now);
+  const deterministic = createDefaultReplanner(db, config.timezone);
+  const replanner = config.djReplanner === "llm" ? createLlmReplanner(assistant, deterministic, { timeoutMs: config.djReplanTimeoutMs }) : deterministic;
+  const dj = new DjService(db, player, playlists, replanner, { skipTrigger: config.djSkipTrigger }, now);
   watcher.subscribe((event) => dj.onWatchEvent(event));
   return { player, watcher, playlists, dj, llm, assistant };
 }
