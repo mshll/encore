@@ -1,3 +1,4 @@
+import { Artwork } from "../ui/Artwork";
 import { Dialog } from "@base-ui/react/dialog";
 import { useDeferredValue, useEffect, useMemo, useState } from "react";
 import { useLocation } from "wouter";
@@ -6,7 +7,7 @@ import { fmtHours } from "../lib/format";
 import { albumPath, artistPath, songPath, useRangeHref } from "../ui/AppLink";
 import { NAV, SETTINGS } from "./nav";
 
-type Entry = { id: string; group: string; label: string; detail?: string; path: string };
+type Entry = { id: string; group: string; label: string; detail?: string; path: string; art?: { src: string | null; round?: boolean } };
 
 export function CommandPalette({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
   const [query, setQuery] = useState("");
@@ -35,9 +36,30 @@ export function CommandPalette({ open, onOpenChange }: { open: boolean; onOpenCh
     if (!q || !search.data) return pages;
     const { artists, songs, albums } = search.data;
     return [
-      ...artists.map((a) => ({ id: `artist:${a.artist}`, group: "Artists", label: a.artist, detail: fmtHours(a.hours), path: artistPath(a.artist) })),
-      ...songs.map((s) => ({ id: `song:${s.songKey}`, group: "Songs", label: s.name, detail: s.artist, path: songPath(s.songKey) })),
-      ...albums.map((a) => ({ id: `album:${a.artist}|${a.album}`, group: "Albums", label: a.album, detail: a.artist, path: albumPath(a.artist, a.album) })),
+      ...artists.map((a) => ({
+        id: `artist:${a.artist}`,
+        group: "Artists",
+        label: a.artist,
+        detail: fmtHours(a.hours),
+        path: artistPath(a.artist),
+        art: { src: a.imageUrl, round: true },
+      })),
+      ...songs.map((s) => ({
+        id: `song:${s.songKey}`,
+        group: "Songs",
+        label: s.name,
+        detail: s.artist,
+        path: songPath(s.songKey),
+        art: { src: s.albumArtUrl },
+      })),
+      ...albums.map((a) => ({
+        id: `album:${a.artist}|${a.album}`,
+        group: "Albums",
+        label: a.album,
+        detail: a.artist,
+        path: albumPath(a.artist, a.album),
+        art: { src: a.albumArtUrl },
+      })),
       ...pages,
     ];
   }, [deferred, search.data]);
@@ -91,8 +113,9 @@ export function CommandPalette({ open, onOpenChange }: { open: boolean; onOpenCh
                   aria-selected={i === active}
                   onPointerMove={() => setActive(i)}
                   onClick={() => go(entry)}
-                  className={`flex h-9 items-center gap-3 rounded-md px-2.5 text-body-sm ${i === active ? "bg-component" : ""}`}
+                  className={`flex min-h-9 items-center gap-3 rounded-md px-2.5 py-1 text-body-sm ${i === active ? "bg-component" : ""}`}
                 >
+                  {entry.art && <Artwork src={entry.art.src} name={entry.label} round={entry.art.round} className="size-8" />}
                   <span className="min-w-0 truncate font-medium">{entry.label}</span>
                   {entry.detail && <span className="ml-auto shrink-0 truncate text-secondary">{entry.detail}</span>}
                 </div>

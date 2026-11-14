@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { useDesktop } from "../lib/useMedia";
 import { Area, Line } from "../components/dither-kit/area";
 import { AreaChart, LineChart } from "../components/dither-kit/area-chart";
 import { Bar } from "../components/dither-kit/bar";
@@ -91,6 +92,7 @@ export function DitherBars({
   height?: number;
 }) {
   const config: ChartConfig = { [valueKey]: { label: valueLabel, color: "green" } };
+  const ticks = useDesktop() ? 7 : 4;
   return (
     <Frame
       label={label}
@@ -104,7 +106,7 @@ export function DitherBars({
     >
       <BarChart data={rows} config={config} margins={{ left: 44 }} className="size-full">
         <Grid />
-        <XAxis dataKey={xKey} tickFormatter={(v, i) => xFormat(String(v), i)} maxTicks={7} />
+        <XAxis dataKey={xKey} tickFormatter={(v, i) => xFormat(String(v), i)} maxTicks={ticks} />
         <YAxis tickFormatter={(v) => (v === 0 ? "0" : format(v))} />
         <Tooltip labelKey={tipLabel} valueFormatter={(v) => format(v)} />
         <Bar dataKey={valueKey} variant="gradient" />
@@ -133,6 +135,7 @@ export function DitherStack({
   height?: number;
 }) {
   const config: ChartConfig = Object.fromEntries(series.map((s) => [s.key, { label: s.label, color: s.color }]));
+  const ticks = useDesktop() ? 7 : 4;
   return (
     <Frame
       label={label}
@@ -143,7 +146,7 @@ export function DitherStack({
     >
       <AreaChart data={rows} config={config} stackType="stacked" margins={{ left: 44 }} className="size-full">
         <Grid />
-        <XAxis dataKey={xKey} tickFormatter={(v, i) => xFormat(String(v), i)} maxTicks={7} />
+        <XAxis dataKey={xKey} tickFormatter={(v, i) => xFormat(String(v), i)} maxTicks={ticks} />
         <YAxis tickFormatter={(v) => (v === 0 ? "0" : format(v))} />
         <Tooltip labelKey={tipLabel} valueFormatter={(v) => format(v)} />
         {series.map((s) => (
@@ -176,6 +179,7 @@ export function DitherLine({
   height?: number;
 }) {
   const config: ChartConfig = { [valueKey]: { label: valueLabel, color: "green" } };
+  const ticks = useDesktop() ? 8 : 4;
   return (
     <Frame
       label={label}
@@ -189,7 +193,7 @@ export function DitherLine({
     >
       <LineChart data={rows} config={config} margins={{ left: 44 }} className="size-full">
         <Grid />
-        <XAxis dataKey={xKey} tickFormatter={(v, i) => xFormat(String(v), i)} maxTicks={8} />
+        <XAxis dataKey={xKey} tickFormatter={(v, i) => xFormat(String(v), i)} maxTicks={ticks} />
         <YAxis tickFormatter={(v) => (v === 0 ? "0" : format(v))} />
         <Tooltip labelKey={tipLabel} valueFormatter={(v) => format(v)} />
         <Line dataKey={valueKey} />
