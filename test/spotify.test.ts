@@ -91,17 +91,19 @@ describe("token refresh", () => {
 });
 
 describe("rate limits", () => {
-  test("QUOTA_EXCEEDED pauses all calls for the long backoff without further requests", async () => {
-    const { db, client, calls, now, config } = setup(() =>
-      jsonResponse({ error: { status: 429, message: "quota", reason: "QUOTA_EXCEEDED" } }, 429, { "retry-after": "5" }),
+  test("QUOTA_EXCEEDED pauses only the refused endpoint, for the long backoff, without further requests to it", async () => {
+    const { db, client, calls, now, config } = setup((url) =>
+      url.includes("/tracks/") ? jsonResponse({ error: { status: 429, message: "quota", reason: "QUOTA_EXCEEDED" } }, 429, { "retry-after": "5" }) : jsonResponse({ id: "me" }),
     );
     connect(db, now() + 3_600_000);
-    const error = await client.me().catch((e) => e);
+    const error = await client.track("0fAehaneUJdlSlWXYe1KZp").catch((e) => e);
     expect(error).toBeInstanceOf(SpotifyBlockedError);
     expect(error.reason).toBe("quota_exceeded");
-    expect(client.gate()!.blockedUntil).toBe(now() + config.quotaBackoffMs);
-    await expect(client.recentlyPlayed()).rejects.toBeInstanceOf(SpotifyBlockedError);
+    expect(client.gates()).toEqual([{ reason: "quota_exceeded", route: "GET /tracks/:id", blockedUntil: now() + config.quotaBackoffMs, at: now(), clientId: "test-client" }]);
+    await expect(client.track("1WYEDcS7WGjv0rG7rmMX3o")).rejects.toBeInstanceOf(SpotifyBlockedError);
     expect(calls).toHaveLength(1);
+    expect(client.gate()).toBeNull();
+    expect(await client.me()).toMatchObject({ id: "me" });
   });
 
   test("an ordinary 429 pauses for Retry-After seconds", async () => {
@@ -236,7 +238,7 @@ describe("enrichment", () => {
       { uri: uri("t1"), album_art_url: "https://thumb/1", art_attempts: 0 },
       { uri: uri("t2"), album_art_url: null, art_attempts: 1 },
     ]);
-    setJobState(db, "spotify", { data: { reason: "rate_limited", blockedUntil: now() + 60_000, at: now() } });
+    setJobState(db, "spotify", { data: { gates: [{ reason: "rate_limited", route: "*", blockedUntil: now() + 60_000, at: now(), clientId: "test-client" }] } });
     expect(await fetchAlbumArt(db, client, 5)).toEqual({ attempted: 1, found: 0, failed: 1 });
     expect(calls).toHaveLength(3);
   });
@@ -251,9 +253,9 @@ describe("enrichment", () => {
   test("a pause recorded for another Spotify app does not block this one", async () => {
     const { db, client, now } = setup(() => jsonResponse({ id: "me" }));
     connect(db, now() + 3_600_000);
-    setJobState(db, "spotify", { data: { reason: "quota_exceeded", blockedUntil: now() + 60_000, at: now(), clientId: "other-app" } });
+    setJobState(db, "spotify", { data: { gates: [{ reason: "rate_limited", route: "*", blockedUntil: now() + 60_000, at: now(), clientId: "other-app" }] } });
     expect(client.gate()).toBeNull();
-    setJobState(db, "spotify", { data: { reason: "quota_exceeded", blockedUntil: now() + 60_000, at: now(), clientId: "test-client" } });
+    setJobState(db, "spotify", { data: { gates: [{ reason: "rate_limited", route: "*", blockedUntil: now() + 60_000, at: now(), clientId: "test-client" }] } });
     await expect(client.me()).rejects.toBeInstanceOf(SpotifyBlockedError);
   });
 

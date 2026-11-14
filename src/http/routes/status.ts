@@ -33,6 +33,7 @@ export const statusRoutes = new Hono<Env>().get("/", (c) => {
       scopes: auth.scopes,
       missingScopes: auth.connected ? SPOTIFY_SCOPES.filter((s) => !auth.scopes.includes(s)) : SPOTIFY_SCOPES,
       paused: gate && { reason: gate.reason, until: iso(gate.blockedUntil), since: iso(gate.at) },
+      pausedRoutes: spotify.gates().filter((g) => g.route !== "*").map((g) => ({ route: g.route, reason: g.reason, until: iso(g.blockedUntil) })),
       pacing: { minIntervalMs: config.spotifyIntervalMs, queued: spotify.pacer.pending(), calls: spotify.pacer.calls },
     },
     poll: job(getJobState(db, "poll")),

@@ -12,7 +12,16 @@ const defaultRetryAfterSeconds = 60;
 const CALLS_STATE = "spotify_calls";
 const utcDay = (ms: number) => new Date(ms).toISOString().slice(0, 10);
 
-export type SpotifyGate = { blockedUntil: number; reason: BlockReason; at: number; clientId?: string };
+/** A pause Spotify asked for. `route` is one endpoint (`GET /tracks/:id`) for a quota, which Spotify applies per endpoint, or `*` for a rate limit on the whole app. */
+export type SpotifyGate = { blockedUntil: number; reason: BlockReason; at: number; clientId: string; route: string };
+
+const ALL_ROUTES = "*";
+const routeOf = (method: string, path: string) =>
+  `${method} ${path
+    .split("?")[0]!
+    .split("/")
+    .map((segment) => (/^[0-9A-Za-z]{22}$/.test(segment) ? ":id" : segment))
+    .join("/")}`;
 
 export class SpotifyClient {
   constructor(
@@ -24,9 +33,15 @@ export class SpotifyClient {
     readonly pacer: SpotifyPacer = new SpotifyPacer(config.spotifyIntervalMs, now),
   ) {}
 
+  /** Every pause still in force for the configured app. */
+  gates(): SpotifyGate[] {
+    const data = getJobState(this.db, "spotify")?.data as { gates?: SpotifyGate[] } | null | undefined;
+    return (data?.gates ?? []).filter((g) => g.blockedUntil > this.now() && g.clientId === this.config.spotifyClientId);
+  }
+
+  /** The pause on the whole app, if any. A pause on one endpoint does not count. */
   gate(): SpotifyGate | null {
-    const data = getJobState(this.db, "spotify")?.data as SpotifyGate | null | undefined;
-    return data && data.blockedUntil > this.now() && data.clientId === this.config.spotifyClientId ? data : null;
+    return this.gates().find((g) => g.route === ALL_ROUTES) ?? null;
   }
 
   me() {
@@ -73,7 +88,7 @@ export class SpotifyClient {
   }
 
   request<T>(method: "GET" | "POST" | "PUT" | "DELETE", path: string, body?: unknown): Promise<T> {
-    return this.pacer.run(() => this.call<T>(async (refresh) => this.send(path, await this.auth.accessToken(refresh), method, body), true));
+    return this.pacer.run(() => this.call<T>(routeOf(method, path), async (refresh) => this.send(path, await this.auth.accessToken(refresh), method, body)));
   }
 
   /** Web API requests sent on the current UTC day. Spotify does not publish its quota, so this is the only measure of what a lockout cost. */
@@ -90,16 +105,16 @@ export class SpotifyClient {
     return this.request<T>("GET", path);
   }
 
-  private async call<T>(send: (refresh: boolean) => Promise<Response>, retryUnauthorized = false): Promise<T> {
-    const gate = this.gate();
+  private async call<T>(route: string, send: (refresh: boolean) => Promise<Response>): Promise<T> {
+    const gate = this.gates().find((g) => g.route === ALL_ROUTES || g.route === route);
     if (gate) throw new SpotifyBlockedError(gate.reason, gate.blockedUntil);
     this.countCall();
     let res = await send(false);
-    if (res.status === 401 && retryUnauthorized) {
+    if (res.status === 401) {
       this.countCall();
       res = await send(true);
     }
-    if (res.status === 429) throw await this.block(res);
+    if (res.status === 429) throw await this.block(res, route);
     if (!res.ok) {
       const body = (await res.json().catch(() => ({}))) as { error?: { message?: string; reason?: string } };
       throw new SpotifyApiError(res.status, body.error?.message ?? res.statusText, body.error?.reason);
@@ -115,15 +130,15 @@ export class SpotifyClient {
     return this.fetchFn(`${apiUrl}${path}`, { method, headers, body: JSON.stringify(body) });
   }
 
-  private async block(res: Response): Promise<SpotifyBlockedError> {
+  private async block(res: Response, route: string): Promise<SpotifyBlockedError> {
     const body = (await res.json().catch(() => ({}))) as { reason?: string; error?: { reason?: string } };
     const quota = (body.error?.reason ?? body.reason) === "QUOTA_EXCEEDED";
     const retryAfter = Number(res.headers.get("retry-after"));
     const retryAfterMs = (Number.isFinite(retryAfter) && retryAfter > 0 ? retryAfter : defaultRetryAfterSeconds) * 1000;
     const waitMs = quota ? Math.max(this.config.quotaBackoffMs, retryAfterMs) : retryAfterMs;
-    const gate: SpotifyGate = { reason: quota ? "quota_exceeded" : "rate_limited", blockedUntil: this.now() + waitMs, at: this.now(), clientId: this.config.spotifyClientId };
-    setJobState(this.db, "spotify", { lastError: `${gate.reason} until ${new Date(gate.blockedUntil).toISOString()}`, data: gate });
-    if (quota) console.error(`Spotify QUOTA_EXCEEDED after ${this.callsToday()} calls today (UTC): all Spotify calls paused until ${new Date(gate.blockedUntil).toISOString()}`);
+    const gate: SpotifyGate = { reason: quota ? "quota_exceeded" : "rate_limited", blockedUntil: this.now() + waitMs, at: this.now(), clientId: this.config.spotifyClientId, route: quota ? route : ALL_ROUTES };
+    setJobState(this.db, "spotify", { lastError: `${gate.reason} on ${gate.route} until ${new Date(gate.blockedUntil).toISOString()}`, data: { gates: [...this.gates().filter((g) => g.route !== gate.route), gate] } });
+    if (quota) console.error(`Spotify QUOTA_EXCEEDED on ${route} after ${this.callsToday()} calls today (UTC): paused until ${new Date(gate.blockedUntil).toISOString()}`);
     return new SpotifyBlockedError(gate.reason, gate.blockedUntil);
   }
 }
