@@ -17,7 +17,7 @@ import {
   useTopTracks,
 } from "../api/queries";
 import type { Overview as OverviewData, Status } from "../api/types";
-import { songPath } from "../app/paths";
+import { recapPath, songPath } from "../app/paths";
 import { DitherArea } from "../charts/Dither";
 import { periodTick, periodTitle } from "../charts/ticks";
 import { addDays, daysBetween, todayIn } from "../lib/dates";
@@ -334,9 +334,9 @@ function Lately() {
       )}
       {recap && (
         <Section title="Latest recap">
-          <AppLink to={`/recaps/${recap.id}`} className="-mx-2 flex flex-col rounded-md px-2 py-1.5 transition-colors duration-150 hover:bg-fill">
-            <span className="truncate text-primary">{recap.title}</span>
-            <span className="truncate text-caption text-secondary">{`${recap.kind === "weekly" ? "Weekly" : "Monthly"} recap, ${fmtAgo(recap.createdAt)}`}</span>
+          <AppLink to={recapPath(recap.kind, recap.periodKey)} className="-mx-2 flex flex-col rounded-md px-2 py-1.5 transition-colors duration-150 hover:bg-fill">
+            <span className="truncate text-primary">{recap.headline}</span>
+            <span className="truncate text-caption text-secondary">{`${recap.title} · ${fmtAgo(recap.createdAt)}`}</span>
           </AppLink>
         </Section>
       )}
