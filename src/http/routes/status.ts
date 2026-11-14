@@ -52,6 +52,7 @@ export const statusRoutes = new Hono<Env>().get("/", (c) => {
       exhausted: budget.exhausted,
       byFeature: spendByFeature(db, budget.month).map((f) => ({ feature: f.feature, calls: f.calls, usd: f.usd })),
       jobs: { picks: job(getJobState(db, "picks")), digest: job(getJobState(db, "digest")), outcomes: job(getJobState(db, "outcomes")) },
+      schedule: { enabled: config.jobsEnabled, picks: config.llm.picksSlot, digest: config.llm.digestSlot },
     },
   });
 });

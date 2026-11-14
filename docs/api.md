@@ -130,7 +130,8 @@ Artist rows (top artists, eras, skips, search, the artist page, the overview's `
     "spentUsd": 1.18, "capUsd": 100, "remainingUsd": 98.82, "exhausted": false,
     "byFeature": [{ "feature": "picks", "calls": 6, "usd": 0.64 }],
     "jobs": { "picks": { "lastRunAt": "...", "lastSuccessAt": "...", "lastError": null, "lastResult": { "week": "2026-11-09", "picks": 5 } },
-              "digest": { "...": "same shape" }, "outcomes": { "...": "same shape" } }
+              "digest": { "...": "same shape" }, "outcomes": { "...": "same shape" } },
+    "schedule": { "enabled": true, "picks": { "weekday": 5, "hour": 10 }, "digest": { "weekday": 5, "hour": 9 } }
   }
 }
 ```
@@ -147,7 +148,7 @@ Artist rows (top artists, eras, skips, search, the artist page, the overview's `
 - `tags`: `songs` known (distinct song keys in `tracks`), `tagged` songs with tags, `coverage` = tagged / songs (0..1, not rounded).
 - `plays`: stored rows: all kinds, music only, and rows by source `api` and `live` (the rest are `export`).
 - `live`: the `watch`, `radar` and `library` jobs, same shape as `poll`. `watch.lastResult` is `{ "current": Observation | null, "inserted", "replacedApi", "coveredByExport", "playing" }` for the last tick, or `{ "current", "skipped": "spotify_not_connected" | "spotify_paused", "until"? }`.
-- `llm`: Claude spend for the current local month against `MONTHLY_BUDGET_USD`. `exhausted: true` means every LLM endpoint returns `402` and scheduled LLM jobs skip until the next month. `configured: false` means no `ANTHROPIC_API_KEY`. `byFeature` features: `sets`, `picks`, `ask`, `notes`, `digest`, `dj`. Job `lastResult` may be `{ "skipped": "not_due" | "budget_exceeded" | "llm_not_configured" | "spotify_not_connected" | "attempts_exhausted" }`. When Discord posting is configured, `picks` and `digest` results also carry `publish: { "posted": ["picks:2026-11-09"] }` or `publish: { "error": "..." }` (see Discord). `outcomes.lastResult` has set and pick outcome refresh counts and, once a day, `library` (pick library state).
+- `llm`: Claude spend for the current local month against `MONTHLY_BUDGET_USD`. `exhausted: true` means every LLM endpoint returns `402` and scheduled LLM jobs skip until the next month. `configured: false` means no `ANTHROPIC_API_KEY`. `schedule`: when the weekly picks and digest jobs run (ISO weekday 1-7 and local hour, from `PICKS_WEEKDAY`/`PICKS_HOUR` and `DIGEST_WEEKDAY`/`DIGEST_HOUR`); `enabled` is `JOBS_ENABLED`. `byFeature` features: `sets`, `picks`, `ask`, `notes`, `digest`, `dj`. Job `lastResult` may be `{ "skipped": "not_due" | "budget_exceeded" | "llm_not_configured" | "spotify_not_connected" | "attempts_exhausted" }`. When Discord posting is configured, `picks` and `digest` results also carry `publish: { "posted": ["picks:2026-11-09"] }` or `publish: { "error": "..." }` (see Discord). `outcomes.lastResult` has set and pick outcome refresh counts and, once a day, `library` (pick library state).
 
 
 ## Auth (passkeys)
@@ -727,6 +728,7 @@ Set shape (`GET /api/sets/:id`, and `set` in create/refine):
     "albumArtUrl": "https://i.scdn.co/image/...", "artistImageUrl": "https://i.scdn.co/image/...",
     "reason": "Finished 41 of 44 night plays.",
     "pinned": false,
+    "history": { "listens": 44, "lastPlayed": "..." },
     "outcome": { "plays": 3, "finished": 2, "skipped": 1, "firstPlayedAt": "..." },
     "dj": { "finished": 1, "skipped": 0 }
   }],
@@ -742,6 +744,7 @@ Set shape (`GET /api/sets/:id`, and `set` in create/refine):
 - A refinement that changes mood or direction ("less sad") is applied to every track: familiar songs whose tags conflict with it are rejected unless the owner asked to keep them.
 - `playlist` is `null` until saved. `outdated: true` when the set changed after the last save; saving again updates the same playlist.
 - `outcome` counts plays of the song after the set was saved (or created, if never saved), from all sources: `finished` uses the skip flag and play time of export and live rows; API rows count as finished. Refreshed hourly.
+- `history`: for `library` tracks, the owner's all-time listens and last play of the song; `null` for `new` tracks.
 - `pinned`: the owner pinned the track. A refinement that leaves out a pinned track is rejected and Claude must keep it; Claude is told which tracks are pinned with every refinement.
 - `changes`: one entry per version after the first, oldest first. `source` is `claude` (a refinement; `message` is the owner's message) or `owner` (a track removed by hand; `message` is `null`). `moved` lists kept songs whose order relative to the other kept songs changed (songs only shifted by an insert or removal are not listed); `from` and `to` are 1-based positions.
 - `dj`: `{ finished, skipped }` for this track across the DJ sessions started from the set (`POST /api/sets/:id/play` or the Discord Play now button), from the watcher's live plays. `djSessions` on the set counts those sessions.
@@ -756,7 +759,7 @@ Set shape (`GET /api/sets/:id`, and `set` in create/refine):
 
 #### `GET /api/sets`
 
-Params `limit` (1-100, default 20), `offset`. `{ "items": [Set without items/conversation, plus "tracks": 16], "total": 3, "limit": 20, "offset": 0 }`, newest change first.
+Params `limit` (1-100, default 20), `offset`. `{ "items": [Set without items/conversation/changes, plus "tracks": 16 and "covers": [album art URL]], "total": 3, "limit": 20, "offset": 0 }`, newest change first. `covers` has the album art of the first 4 tracks that have one.
 
 #### `POST /api/sets/:id/playlist`
 

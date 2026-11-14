@@ -35,4 +35,9 @@ describe("status integrations", () => {
     const on = (await (await signedIn({ MCP_TOKEN: "mcp-token-mcp-token-mcp-token" }).get("/api/status")).json()) as { integrations: unknown };
     expect(on.integrations).toEqual({ discord: false, mcp: true });
   });
+
+  test("reports when picks and digests are scheduled", async () => {
+    const status = (await (await signedIn({ PICKS_WEEKDAY: "1", PICKS_HOUR: "8" }).get("/api/status")).json()) as { llm: { schedule: unknown } };
+    expect(status.llm.schedule).toEqual({ enabled: expect.any(Boolean), picks: { weekday: 1, hour: 8 }, digest: { weekday: 5, hour: 9 } });
+  });
 });

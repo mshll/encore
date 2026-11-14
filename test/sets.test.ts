@@ -214,6 +214,13 @@ describe("artwork", () => {
       ["Good News", "https://img.test/g1.jpg", "https://img.test/mac.jpg"],
     ]);
   });
+  test("library tracks carry the owner's listens and last play; the list carries up to 4 cover images", async () => {
+    const { result, db } = await builtSet();
+    db.run(sql`update tracks set album_art_url = 'https://img.test/woods.jpg' where uri = ${uri("w1")}`);
+    const items = getSet(db, result.set.id)!.items;
+    expect(items.map((i) => i.history)).toEqual([{ listens: 10, lastPlayed: "2026-01-10T20:00:00.000Z" }, null]);
+    expect(listSets(db, 10, 0).items[0]!.covers).toEqual(["https://img.test/woods.jpg", "https://img.test/g1.jpg"]);
+  });
 });
 
 describe("save to playlist", () => {

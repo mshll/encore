@@ -1,4 +1,4 @@
-import { asc, desc, eq, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, lte, sql } from "drizzle-orm";
 import { z } from "zod";
 import type { Db } from "../db/client";
 import { setChanges, setItems, sets, type SetChangeMove, type SetChangeTrack } from "../db/schema";
@@ -363,7 +363,11 @@ export function listSets(db: Db, limit: number, offset: number) {
       .map((r) => [r.setId, r.n]),
   );
   const total = db.select({ n: sql<number>`count(*)` }).from(sets).get()?.n ?? 0;
-  return { items: rows.map((r) => ({ ...summary(r), tracks: counts.get(r.id) ?? 0 })), total, limit, offset };
+  const ids = rows.map((r) => r.id);
+  const firsts = ids.length ? db.select().from(setItems).where(and(inArray(setItems.setId, ids), lte(setItems.position, 4))).orderBy(asc(setItems.position)).all() : [];
+  const covers = new Map<number, string[]>();
+  for (const item of withArtwork(db, firsts)) if (item.albumArtUrl) covers.set(item.setId, [...(covers.get(item.setId) ?? []), item.albumArtUrl]);
+  return { items: rows.map((r) => ({ ...summary(r), tracks: counts.get(r.id) ?? 0, covers: covers.get(r.id) ?? [] })), total, limit, offset };
 }
 
 export function getSet(db: Db, setId: number) {
@@ -371,6 +375,11 @@ export function getSet(db: Db, setId: number) {
   if (!row) return null;
   const items = db.select().from(setItems).where(eq(setItems.setId, setId)).orderBy(asc(setItems.position)).all();
   const dj = setDjOutcomes(db, setId);
+  const catalog = loadCatalog(db);
+  const history = (songKey: string) => {
+    const song = catalog.songs.get(songKey);
+    return song ? { listens: song.listens, lastPlayed: new Date(song.lastPlayed).toISOString() } : null;
+  };
   return {
     ...summary(row),
     djSessions: dj.sessions,
@@ -387,6 +396,7 @@ export function getSet(db: Db, setId: number) {
         albumArtUrl: i.albumArtUrl,
         reason: i.reason,
         pinned: i.pinned,
+        history: i.kind === "library" ? history(i.songKey) : null,
         outcome: { plays: i.playsAfter, finished: i.finished, skipped: i.skipped, firstPlayedAt: i.firstPlayedAt ? new Date(i.firstPlayedAt).toISOString() : null },
         dj: dj.byUri.get(i.uri) ?? { finished: 0, skipped: 0 },
       })),
