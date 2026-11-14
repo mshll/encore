@@ -1,6 +1,8 @@
 import type { Context } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { z } from "zod";
+import { NoActiveDeviceError, PremiumRequiredError } from "../player/api";
+import { SpotifyApiError, SpotifyBlockedError, SpotifyNotConnectedError } from "../spotify/errors";
 
 export class ApiError extends Error {
   constructor(
@@ -30,7 +32,17 @@ export async function jsonBody(c: Context): Promise<unknown> {
   }
 }
 
-export function errorResponse(c: Context, error: unknown) {
+function spotifyError(error: unknown): ApiError | null {
+  if (error instanceof NoActiveDeviceError) return new ApiError(409, "no_active_device", "No active Spotify device");
+  if (error instanceof PremiumRequiredError) return new ApiError(403, "premium_required", "Spotify Premium is required");
+  if (error instanceof SpotifyNotConnectedError) return new ApiError(409, "spotify_not_connected", "Connect Spotify first");
+  if (error instanceof SpotifyBlockedError) return new ApiError(503, "spotify_paused", error.message, { reason: error.reason, until: new Date(error.blockedUntil).toISOString() });
+  if (error instanceof SpotifyApiError) return new ApiError(502, "spotify_failed", error.message);
+  return null;
+}
+
+export function errorResponse(c: Context, raw: unknown) {
+  const error = spotifyError(raw) ?? raw;
   if (error instanceof ApiError) {
     return c.json({ error: { code: error.code, message: error.message, ...(error.details ? { details: error.details } : {}) } }, error.status);
   }
