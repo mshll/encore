@@ -8,7 +8,7 @@ export type Job = { name: string; intervalMs: () => number; run: () => Promise<R
 
 export type Scheduler = {
   stop: () => void;
-  /** Re-times every job that is waiting, from its last run and its current interval. A running job picks up the change when it finishes. */
+  /** Re-times every waiting job with its current delay (`nextDelayMs`, else its interval from the last run). A running job picks up the change when it finishes. */
   reschedule: () => void;
 };
 
@@ -53,7 +53,7 @@ export function startScheduler(db: Db, jobs: Job[], now: () => number = Date.now
         const timer = waiting.get(job.name);
         if (timer === undefined) continue;
         clearTimeout(timer);
-        schedule(job, fromLastRun(job));
+        schedule(job, job.nextDelayMs ? Math.max(1000, job.nextDelayMs()) : fromLastRun(job));
       }
     },
   };
