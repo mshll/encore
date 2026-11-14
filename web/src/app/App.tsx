@@ -2,9 +2,7 @@ import { lazy, Suspense } from "react";
 import { Redirect, Route, Switch } from "wouter";
 import { useSession } from "../api/queries";
 import { ErrorState } from "../ui/States";
-import { Placeholder } from "../surfaces/Placeholder";
-import { RangePicker } from "../ui/RangePicker";
-import { PATTERN_TABS } from "./nav";
+import { NotFound } from "../surfaces/NotFound";
 import { paramValue } from "./paths";
 import { Shell } from "./Shell";
 
@@ -31,8 +29,6 @@ const Recap = lazy(() => import("../surfaces/Recaps").then((m) => ({ default: m.
 const Library = lazy(() => import("../surfaces/Library").then((m) => ({ default: m.Library })));
 const SignIn = lazy(() => import("../surfaces/SignIn").then((m) => ({ default: m.SignIn })));
 const Kit = import.meta.env.DEV ? lazy(() => import("../dev/Kit").then((m) => ({ default: m.Kit }))) : null;
-
-const range = <RangePicker />;
 
 export function App() {
   const session = useSession();
@@ -77,9 +73,6 @@ export function App() {
           <Route path="/patterns/taste" component={Taste} />
           <Route path="/patterns/skips" component={Skips} />
           <Route path="/patterns/places" component={Places} />
-          <Route path="/patterns/:tab">
-            <Placeholder title="Patterns" description="How your listening is shaped: by hour, by era, by taste, by skips and by place." tabs={PATTERN_TABS} actions={range} />
-          </Route>
 
           <Route path="/for-you">
             <Redirect to="/for-you/picks" replace />
@@ -106,9 +99,7 @@ export function App() {
 
           {Kit && <Route path="/dev/kit" component={Kit} />}
 
-          <Route>
-            <Placeholder title="Page not found" description="This address does not match a page in encore." />
-          </Route>
+          <Route component={NotFound} />
         </Switch>
       </Suspense>
     </Shell>

@@ -294,7 +294,7 @@ export function Recap({ id }: { id: number }) {
         )}
       </div>
       {notFound ? (
-        <EmptyState size="page" icon={NewspaperIcon} title="This recap does not exist" description="It may have been written for another period." />
+        <EmptyState size="page" icon={NewspaperIcon} title="This recap does not exist" />
       ) : q.isError ? (
         <ErrorState error={q.error} onRetry={() => q.refetch()} />
       ) : !q.data ? (
