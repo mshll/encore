@@ -13,7 +13,7 @@ const tables = (c: Database) => (c.query("select name from sqlite_master where t
 describe("migrations", () => {
   test("a fresh database migrates from zero", () => {
     const names = tables(openDb(":memory:").$client);
-    for (const t of ["plays", "artists", "track_artists", "llm_calls", "sets", "set_items", "picks", "blocks", "track_notes", "digests", "llm_threads", "spotify_lookups"]) expect(names).toContain(t);
+    for (const t of ["plays", "artists", "track_artists", "llm_calls", "sets", "set_items", "picks", "blocks", "track_notes", "digests", "llm_threads", "spotify_lookups", "set_covers"]) expect(names).toContain(t);
   });
 
   test("a database at 0002 migrates forward and keeps its rows", () => {
@@ -35,7 +35,7 @@ describe("migrations", () => {
     const db = openDb(path);
     expect(tables(db.$client)).toContain("sets");
     expect(tables(db.$client)).toContain("settings");
-    expect(db.$client.query("select count(*) as n from __drizzle_migrations").get()).toEqual({ n: 8 });
+    expect(db.$client.query("select count(*) as n from __drizzle_migrations").get()).toEqual({ n: 9 });
     expect(db.$client.query("select name from artists").all()).toEqual([{ name: "Mac Miller" }]);
   });
 

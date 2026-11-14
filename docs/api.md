@@ -860,6 +860,7 @@ Set shape (`GET /api/sets/:id`, and `set` in create/refine):
   "id": 1, "title": "Late drive", "description": "Night roads.", "request": "late drive, like my Mac Miller era",
   "version": 2,
   "playlist": { "id": "3xYz...", "url": "https://open.spotify.com/playlist/3xYz...", "savedVersion": 1, "outdated": true },
+  "coverUrl": "/api/sets/1/cover?v=e3b78ab8bd4c3322",
   "createdAt": "...", "updatedAt": "...",
   "items": [{
     "position": 1, "kind": "library", "songKey": "woods|mac miller", "uri": "spotify:track:...",
@@ -882,6 +883,7 @@ Set shape (`GET /api/sets/:id`, and `set` in create/refine):
 - `albumArtUrl`, `artistImageUrl`: artwork for the row, or `null` when not known yet. Album art comes from any known version of the song (or the Spotify search result for new songs); the artist image is the primary artist's. Picks and notes carry the same two fields.
 - A refinement that changes mood or direction ("less sad") is applied to every track: familiar songs whose tags conflict with it are rejected unless the owner asked to keep them.
 - `playlist` is `null` until saved. `outdated: true` when the set changed after the last save; saving again updates the same playlist.
+- `coverUrl`: the set's generated cover (see `GET /api/sets/:id/cover`), `null` while the set has no tracks. `v` changes whenever the cover would change.
 - `outcome` counts plays of the song after the set was saved (or created, if never saved), from all sources: `finished` uses the skip flag and play time of export and live rows; API rows count as finished. Refreshed hourly.
 - `history`: for `library` tracks, the owner's all-time listens and last play of the song; `null` for `new` tracks.
 - `pinned`: the owner pinned the track. A refinement that leaves out a pinned track is rejected and Claude must keep it; Claude is told which tracks are pinned with every refinement.
@@ -900,9 +902,15 @@ Set shape (`GET /api/sets/:id`, and `set` in create/refine):
 
 Params `limit` (1-100, default 20), `offset`. `{ "items": [Set without items/conversation/changes, plus "tracks": 16 and "covers": [album art URL]], "total": 3, "limit": 20, "offset": 0 }`, newest change first. `covers` has the album art of the first 4 tracks that have one.
 
+#### `GET /api/sets/:id/cover`
+
+The set's cover as a 640 x 640 `image/jpeg`, drawn on the server from the title and the album art of up to 8 distinct albums in set order (fetched from Spotify's image CDN, outside the Web API quota). With fewer than 2 album covers that load, it is drawn as rings in the set's colours, without the network. A title with characters the bundled fonts cannot draw (Latin and Arabic are covered; CJK, Thai and others are not) is left off the image. The image is drawn on the first request after anything it depends on changes (title, album art) and stored. Requested with the current `v` from `coverUrl`, it is cached for good (`Cache-Control: private, max-age=31536000, immutable`); otherwise `no-cache` with an `ETag` (`304` on `If-None-Match`). A cover drawn while some album art failed to load is not cached for good and is redrawn after an hour. `404 not_found` for an unknown set or a set without tracks.
+
 #### `POST /api/sets/:id/playlist`
 
-Saves the set to a private Spotify playlist: created on the first save, then renamed and its items replaced in place. `200 { "playlistId": "...", "playlistUrl": "...", "tracks": 16 }`. Does not start playback.
+Saves the set to a private Spotify playlist: created on the first save, then renamed and its items replaced in place, and uploads the set's cover as the playlist image. `200 { "playlistId": "...", "playlistUrl": "...", "tracks": 16, "cover": { "status": "uploaded" } }`. Does not start playback.
+
+`cover.status`: `uploaded`; `unchanged` (the playlist already has this cover, so nothing was sent); `missing_scope` (the Spotify grant lacks `ugc-image-upload`; connect Spotify again); `failed` (drawing or uploading failed; the save itself stands and the next save tries again). The upload is `PUT /playlists/{id}/images` through the paced Web API queue, JPEG quality stepped down from 92 until the base64 body is at most 256 KB.
 
 #### `POST /api/sets/:id/play`
 

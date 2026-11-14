@@ -2,6 +2,7 @@ import { eq } from "drizzle-orm";
 import type { Db } from "../db/client";
 import { setItems, sets } from "../db/schema";
 import type { SpotifyClient } from "../spotify/client";
+import { uploadSetCover } from "./cover";
 import { SetNotFoundError } from "./service";
 
 const DESCRIPTION_LIMIT = 300;
@@ -10,8 +11,11 @@ export class EmptySetError extends Error {}
 
 export const playlistDescription = (text: string) => text.replace(/\s+/g, " ").trim().slice(0, DESCRIPTION_LIMIT);
 
-/** Creates the set's private playlist on first save, then updates the same playlist in place. */
-export async function saveSetPlaylist(db: Db, spotify: SpotifyClient, setId: number, now: number) {
+/**
+ * Creates the set's private playlist on first save, then updates the same playlist in place, and uploads the set's cover
+ * when it changed. A cover that fails is reported in `cover`; the save still stands.
+ */
+export async function saveSetPlaylist(db: Db, spotify: SpotifyClient, setId: number, now: number, fetchArt: typeof fetch = fetch) {
   const set = db.select().from(sets).where(eq(sets.id, setId)).get();
   if (!set) throw new SetNotFoundError();
   const uris = db
@@ -37,5 +41,6 @@ export async function saveSetPlaylist(db: Db, spotify: SpotifyClient, setId: num
     .set({ savedVersion: set.version, savedAt: set.savedAt ?? now })
     .where(eq(sets.id, setId))
     .run();
-  return { playlistId, playlistUrl, tracks: uris.length };
+  const cover = await uploadSetCover(db, spotify, setId, playlistId, { fetchFn: fetchArt, now });
+  return { playlistId, playlistUrl, tracks: uris.length, cover };
 }

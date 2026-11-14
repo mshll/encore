@@ -53,7 +53,7 @@ export function createApp(deps: Deps) {
   );
   app.use("/api/*", async (c, next) => {
     await next();
-    c.header("Cache-Control", "no-store");
+    if (!c.res.headers.has("Cache-Control")) c.header("Cache-Control", "no-store");
   });
 
   const authLimit = rateLimit(20, 60_000);
