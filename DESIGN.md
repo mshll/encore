@@ -170,7 +170,8 @@ Weights: 400, 500 (labels, titles), 600 (the display face; otherwise rare). Numb
 
 - Spacing is Tailwind's 4px scale. Page gutter `--gutter` 32 (phone 20). Section gap 40 (`gap-10`), header to content 24–32, row internal gap 12.
 - Controls: `--control-h` 32 / `-sm` 28 / `-lg` 40; phone 44 / 44 / 48 (44 is the touch floor). Rows: `--row-h` 44, compact 36; phone 60 / 48.
-- Shell: `--sidebar-w` 232, `--panel-w` 360, `--player-h` 72, `--page-max` 1200 (the page frame, gutter included), `--measure` 720 (the reading measure), `--inset` 8 (0 on phone).
+- Shell: `--sidebar-w` 232, `--panel-w` 360, `--player-h` 72, `--tabbar-h` 56, `--mini-player-h` 64, `--page-max` 1200 (the page frame, gutter included), `--measure` 720 (the reading measure), `--inset` 8 (0 on phone).
+- `--bottom-chrome` on `:root`: the height the shell pins to the foot of the screen, safe area included. Player bar on desktop; tab bar, plus the mini player while one shows, on a phone; the keyboard's height while the software keyboard is up. Anything fixed to the bottom (toasts, sheets) sits above it. It lives on the root because overlays render in a portal outside the shell.
 - Radius: `rounded-xs` 4, `sm` 6, `md` 8 (controls, rows), `lg` 10, `xl` 12 (page panel), `2xl` 16 (dialogs), `full`.
 - Shadows: `shadow-control`, `shadow-panel`, `shadow-overlay`, `shadow-modal`. Dark mode replaces drops with an inset hairline.
 - Motion: `--dur-hover` 150, `--dur-swap` 200, `--dur-modal` 240, `--dur-move` 300; eases `ease-out`, `ease-(--ease-move)`, `ease-(--ease-drawer)`. Every animation has a reduced-motion branch (the global rule in `app.css` makes them instant). No bounce, no spring overshoot.
@@ -197,6 +198,23 @@ Phosphor, regular weight; `fill` only for the active nav item and the playing st
 - **Covers** (For you, Home). The playlists encore makes as a grid of their generated covers (2 columns on a phone, 3 from `md`, 5 from `lg`; on Home a phone gets one sideways shelf instead, so the rest of Home stays in reach), each with its name and one freshness line under it; the line is `text-primary` when it says something is new, `text-danger` for a problem. The cover and lines are one link to the playlist; Play (accent, round) shows over the cover's corner on hover or focus on desktop and plays it in Spotify when kept there, otherwise its songs. A phone opens the page and plays from there.
 - **Start a session.** `StartSessionButton` (secondary, small) sits beside a list of songs worth a session (Home top songs, Forgotten, an era, keepers in Skips, a trip). It opens the queue panel, where the session runs.
 
+### Phone and touch
+
+The platform layer lives in `styles/app.css`, `styles/tokens.css`, `app/Shell.tsx` and `app/keyboard.ts`; a surface does not repeat it.
+
+- **Hover only with a mouse.** `hover:` and `group-hover:` apply under `(hover: hover) and (pointer: fine)`. On a touch screen `hover:` styles show while pressed (`:active`), so every control answers a press within `--dur-hover`. Hand-written hover CSS goes in the same query. Actions revealed on hover hide only under `can-hover:`; on a touch screen they always show, in the row.
+- **Press, not release.** `press` (scale 0.97) on buttons and tabs; no feedback that waits for `click`. No tap highlight (`-webkit-tap-highlight-color: transparent` on the root).
+- **Controls are not text.** Buttons, tabs, menu items, options, switches, checkboxes and nav links take `user-select: none` and `-webkit-touch-callout: none`. Content (names, figures, errors, links in text) stays selectable. Controls and fields take `touch-action: manipulation`.
+- **Fields are 16px on a touch screen** (an unlayered rule beats the `text-*` utilities), so iOS never zooms. Never `maximum-scale` or `user-scalable=no`. Set the keyboard: `enterKeyHint` (send, search, go), `autoCapitalize="none"` and `autoCorrect="off"` on search and name fields.
+- **Heights.** The shell is `100dvh`. While the software keyboard is up on a phone, the shell fits the visible area above it, the tab bar and mini player hide, and `--bottom-chrome` becomes the keyboard's height (`app/keyboard.ts`; iOS pans the page under the keyboard otherwise). A pinned composer stays on the keyboard; a thread at its end stays at its end.
+- **Scroll.** The root does not bounce or pull to refresh (`overscroll-behavior: none`); the page panel, sheets, popups, the palette list and tab strips contain their own scroll (`overscroll-contain`, `overscroll-x-contain`). Never a `touchmove` listener to stop scrolling.
+- **Safe areas.** `viewport-fit=cover`. The page pads the top and sides, the tab bar and the desktop grid pad the sides and bottom, sheets pad the bottom, toasts keep 16px from the side insets. Use `env(safe-area-inset-*, 0px)` inside `calc()`.
+- **Sheets.** A bottom sheet's max height is the visible area minus the top inset and 24px. Opened by touch, a sheet focuses itself, not its first control (`focusSheetOnTouch`).
+- **Horizontal strips** (`TabNav`, `TabList`, filter rows) scroll natively under the gutter with no scrollbar; `TabNav` brings the current tab into view. A chart that scrubs on hover takes `touch-pan-y`: a sideways drag scrubs, a vertical one scrolls the page.
+- **Status bar.** On a phone the root paints `bg-page`, the colour at the top of the screen; `theme-color` follows the chosen theme, set before paint by `public/theme.js` and on change by `lib/theme.ts`.
+- **Targets.** 44px on a phone (`--control-h`), `touch-target` round a smaller mark. A link inside a truncated line cannot grow past the line's box: give the line the padding, or make a neighbouring element (the artwork) a second way in.
+- Emulation does not show sticky hover, tap delay, rubber banding, safe areas or the keyboard. Check those on an iPhone, in Safari and from the home screen.
+
 ### State order
 
 Every data block resolves in this order, and builds each state with the shared components:
@@ -215,7 +233,7 @@ All in `web/src/ui/` unless noted. Props listed are the ones that matter.
 
 | Component | Import | Props |
 | --- | --- | --- |
-| `Button`, `buttonClass` | `ui/Button` | `variant` primary, accent, secondary, ghost, danger; `size` sm, md, lg; `icon`, `iconEnd`, `busy`, `busyLabel` |
+| `Button`, `buttonClass` | `ui/Button` | `variant` primary, accent, secondary, ghost, danger, standout (on a toast); `size` sm, md, lg; `icon`, `iconEnd`, `busy`, `busyLabel`. `cx` does not merge classes: pick a variant rather than overriding its colours |
 | `IconButton`, `iconButtonClass` | `ui/Button` | `icon`, `label` (required), `variant`, `size`, `fill` |
 | `Input`, `Field` | `ui/Field` | Input: `icon`, `end`, `invalid`. Field: `label`, `hint`, `error`, render-prop child gets `id`, `aria-describedby`, `invalid` |
 | `Select` | `ui/Select` | `value`, `onChange`, `options`, `label` |
@@ -234,7 +252,7 @@ All in `web/src/ui/` unless noted. Props listed are the ones that matter.
 | `Dialog`, `DialogClose`, `Confirm` | `ui/Dialog` | Dialog: `open`, `onOpenChange`, `title`, `description`, `footer`, `width` 440, 560, 720 (bottom sheet on phone). Confirm: `action`, `danger`, `busy`, `onConfirm`. Prefer undo over confirm |
 | `PopoverRoot`, `PopoverTrigger`, `PopoverPopup` | `ui/Popover` | `align` |
 | `Tooltip` | `ui/Tooltip` | `label`, `side`. Never the only place information lives |
-| `showToast`, `Toaster` | `lib/toast`, `ui/Toast` | `showToast(message, "info" | "problem", { label, onClick })`. An action (Undo) keeps it open |
+| `showToast`, `Toaster` | `lib/toast`, `ui/Toast` | `showToast(message, "info" | "problem", { label, onClick })`. One at a time: a new toast replaces the one showing. Info closes after 4 s, a toast with an action (Undo) after 8 s, a problem stays until dismissed. Hover, focus or a finger on it pauses the timer; a touch elsewhere resumes it. Close button, Escape, or a swipe down or sideways dismisses it. It sits 12px above `--bottom-chrome`, never over the tab bar, mini player or player bar |
 | `Skeleton`, `ChartSkeleton` | `ui/Skeleton` | Skeleton: `className` sets the shape. ChartSkeleton: `shape` bars or grid, in the chart's box |
 | `EmptyState`, `FirstUseState` | `ui/States` | EmptyState: `icon`, `title`, `description`, `action`, `size` page, section, inline. FirstUseState: before any play is imported, `icon`, `description`, `title` (default "No listening yet"), action Set up encore |
 | `ErrorState` | `ui/States` | `error`, `onRetry`, `title`, `size` |

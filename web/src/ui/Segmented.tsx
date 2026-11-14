@@ -39,7 +39,7 @@ export function Segmented<T extends string>({
 /** Underlined tabs over in-page panels. For tabs that change the URL, use TabNav. */
 export function TabList<T extends string>({ options, label, className }: { options: SegmentedOption<T>[]; label: string; className?: string }) {
   return (
-    <Tabs.List aria-label={label} className={cx("relative flex items-center gap-5 overflow-x-auto no-scrollbar", className)}>
+    <Tabs.List aria-label={label} className={cx("relative flex items-center gap-5 overflow-x-auto overscroll-x-contain no-scrollbar", className)}>
       {options.map((o) => (
         <Tabs.Tab
           key={o.value}

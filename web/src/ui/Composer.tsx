@@ -62,6 +62,7 @@ export function Composer({
         maxLength={maxLength}
         disabled={disabled}
         placeholder={placeholder}
+        enterKeyHint="send"
         onChange={(e) => onChange(e.target.value)}
         onKeyDown={(e) => {
           if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {

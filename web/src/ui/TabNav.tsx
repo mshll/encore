@@ -1,14 +1,24 @@
+import { useLayoutEffect, useRef } from "react";
 import { useLocation } from "wouter";
 import { AppLink } from "./AppLink";
 import { cx } from "./cx";
 
 export type TabNavItem = { path: string; label: string };
 
-/** Tabs that are links: each tab is its own URL, so it can be shared and opened in a new tab. */
+/** Tabs that are links: each tab is its own URL, so it can be shared and opened in a new tab. Scrolls sideways when they do not fit. */
 export function TabNav({ items, label }: { items: TabNavItem[]; label: string }) {
   const [location] = useLocation();
+  const strip = useRef<HTMLElement>(null);
+  useLayoutEffect(() => {
+    const nav = strip.current;
+    const tab = nav?.querySelector('[aria-current="page"]');
+    if (!nav || !tab) return;
+    const box = nav.getBoundingClientRect();
+    const at = tab.getBoundingClientRect();
+    if (at.left < box.left || at.right > box.right) nav.scrollLeft += at.left - box.left - (box.width - at.width) / 2;
+  }, [location]);
   return (
-    <nav aria-label={label} className="-mx-(--gutter) overflow-x-auto px-(--gutter) no-scrollbar hairline-b">
+    <nav ref={strip} aria-label={label} className="-mx-(--gutter) overflow-x-auto overscroll-x-contain px-(--gutter) no-scrollbar hairline-b">
       <ul className="flex items-center gap-5">
         {items.map((item) => {
           const active = location === item.path;

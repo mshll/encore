@@ -8,7 +8,20 @@
       @slot;
     }
   }
+  @media (pointer: coarse) {
+    &:active {
+      @slot;
+    }
+  }
 }
+@custom-variant group-hover {
+  @media (hover: hover) and (pointer: fine) {
+    &:is(:where(.group):hover *) {
+      @slot;
+    }
+  }
+}
+@custom-variant can-hover (@media (hover: hover) and (pointer: fine));
 @custom-variant phone (@media screen and (max-width: 47.99rem));
 
 @layer base {
@@ -16,6 +29,7 @@
     -webkit-text-size-adjust: 100%;
     -webkit-tap-highlight-color: transparent;
     background: var(--surface-shell);
+    overscroll-behavior: none;
   }
   body {
     background: var(--surface-shell);
@@ -26,6 +40,12 @@
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     overscroll-behavior: none;
+  }
+  @variant phone {
+    html,
+    body {
+      background: var(--surface-page);
+    }
   }
   :focus-visible {
     outline: 2px solid var(--focus-ring);
@@ -38,14 +58,36 @@
   [role="button"],
   a {
     cursor: default;
+  }
+  button,
+  [role="button"],
+  [role="tab"],
+  [role="menuitem"],
+  [role="menuitemradio"],
+  [role="menuitemcheckbox"],
+  [role="option"],
+  [role="switch"],
+  [role="checkbox"],
+  a,
+  label,
+  summary,
+  input,
+  select,
+  textarea {
     touch-action: manipulation;
   }
   button,
   [role="button"],
   [role="tab"],
   [role="menuitem"],
-  [role="option"] {
+  [role="menuitemradio"],
+  [role="menuitemcheckbox"],
+  [role="option"],
+  [role="switch"],
+  [role="checkbox"],
+  nav a {
     user-select: none;
+    -webkit-user-select: none;
     -webkit-touch-callout: none;
   }
   input,
@@ -53,12 +95,14 @@
   select {
     font: inherit;
   }
-  @media (pointer: coarse) {
-    input,
-    textarea,
-    select {
-      font-size: 16px;
-    }
+}
+
+/* Unlayered so it beats the text-* utilities on a field: iOS zooms into any field under 16px. */
+@media (pointer: coarse) {
+  input,
+  textarea,
+  select {
+    font-size: 16px;
   }
 }
 

@@ -150,7 +150,7 @@ export function CartesianRoot<TData extends Row>({
       <CommonChartContext value={ctx.common}>
         <div
           ref={ref}
-          className={cn("relative h-full w-full", className)}
+          className={cn("relative h-full w-full", interactive && "touch-pan-y", className)}
           onPointerEnter={() => ctx.setMouseInChart(true)}
           onPointerMove={interactive ? (e) => onMove(e.clientX) : undefined}
           onPointerLeave={() => {

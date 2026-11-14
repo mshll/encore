@@ -1,11 +1,11 @@
 import { Dialog } from "@base-ui/react/dialog";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { AppLink } from "../ui/AppLink";
 import { cx } from "../ui/cx";
 import { Icon } from "../ui/Icon";
 import { DotsThreeIcon, MagnifyingGlassIcon } from "../ui/icons";
-import { BACKDROP } from "../ui/surfaces";
+import { BACKDROP, focusSheetOnTouch } from "../ui/surfaces";
 import { PHONE_MORE, PHONE_TABS } from "./nav";
 
 const TAB = "press flex h-full flex-1 flex-col items-center justify-center gap-0.5 text-label font-medium";
@@ -14,10 +14,11 @@ const TAB = "press flex h-full flex-1 flex-col items-center justify-center gap-0
 export function PhoneNav({ onSearch }: { onSearch: () => void }) {
   const [location] = useLocation();
   const [open, setOpen] = useState(false);
+  const sheet = useRef<HTMLDivElement>(null);
   const moreActive = PHONE_MORE.some((s) => s.match(location));
   return (
     <>
-      <nav aria-label="Main" className="flex h-14 bg-shell px-[env(safe-area-inset-left)] hairline-t">
+      <nav aria-label="Main" className="flex h-(--tabbar-h) bg-shell pr-[env(safe-area-inset-right)] pl-[env(safe-area-inset-left)] hairline-t">
         {PHONE_TABS.map((s) => {
           const active = s.match(location);
           return (
@@ -35,7 +36,7 @@ export function PhoneNav({ onSearch }: { onSearch: () => void }) {
       <Dialog.Root open={open} onOpenChange={setOpen}>
         <Dialog.Portal>
           <Dialog.Backdrop className={BACKDROP} />
-          <Dialog.Popup className="fixed inset-x-0 bottom-0 z-50 rounded-t-[14px] bg-overlay pb-[max(16px,env(safe-area-inset-bottom))] shadow-modal outline-none transition-transform duration-300 ease-(--ease-drawer) data-[ending-style]:translate-y-full data-[ending-style]:duration-200 data-[starting-style]:translate-y-full motion-reduce:transition-opacity motion-reduce:data-[ending-style]:translate-y-0 motion-reduce:data-[ending-style]:opacity-0 motion-reduce:data-[starting-style]:translate-y-0 motion-reduce:data-[starting-style]:opacity-0">
+          <Dialog.Popup ref={sheet} initialFocus={focusSheetOnTouch(sheet)} className="fixed inset-x-0 bottom-0 z-50 max-h-[calc(100dvh-env(safe-area-inset-top)-24px)] overflow-y-auto overscroll-contain rounded-t-[14px] bg-overlay pb-[max(16px,env(safe-area-inset-bottom))] shadow-modal outline-none transition-transform duration-300 ease-(--ease-drawer) data-[ending-style]:translate-y-full data-[ending-style]:duration-200 data-[starting-style]:translate-y-full motion-reduce:transition-opacity motion-reduce:data-[ending-style]:translate-y-0 motion-reduce:data-[ending-style]:opacity-0 motion-reduce:data-[starting-style]:translate-y-0 motion-reduce:data-[starting-style]:opacity-0">
             <Dialog.Close aria-label="Close" className="mx-auto flex h-11 w-[88px] items-center justify-center">
               <span className="h-[5px] w-9 rounded-full bg-fill-active" />
             </Dialog.Close>

@@ -47,6 +47,9 @@ export function Combobox({
           aria-describedby={describedBy}
           aria-invalid={invalid || undefined}
           placeholder={placeholder}
+          autoCapitalize="none"
+          autoCorrect="off"
+          spellCheck={false}
           className="h-full min-w-0 flex-1 bg-transparent text-body-sm outline-none placeholder:text-tertiary"
         />
         <Base.Trigger aria-label="Show options" className="touch-target grid size-(--control-h-sm) shrink-0 place-items-center rounded-sm text-tertiary hover:text-primary">

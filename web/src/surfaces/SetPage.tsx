@@ -92,7 +92,7 @@ function TrackRow({ item, added, onPin, onRemove }: { item: SetTrack; added: boo
         <p className="mt-1 text-caption text-pretty text-secondary">{item.reason}</p>
         {played && <p className="mt-0.5 text-caption text-tertiary tabular">{played}</p>}
       </div>
-      <span className="flex shrink-0 items-start md:opacity-0 md:transition-opacity md:duration-150 md:group-hover:opacity-100 md:group-focus-within:opacity-100 md:has-[[data-popup-open]]:opacity-100">
+      <span className="flex shrink-0 items-start md:can-hover:opacity-0 md:transition-opacity md:duration-150 md:group-hover:opacity-100 md:group-focus-within:opacity-100 md:has-[[data-popup-open]]:opacity-100">
         <IconButton icon={PlayIcon} label={`Play ${item.name}`} size="sm" className="max-md:hidden" onClick={() => playback.play([item.uri])} />
         <MenuRoot>
           <MoreTrigger label={`More for ${item.name}`} />
