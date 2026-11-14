@@ -1,10 +1,10 @@
-const SPOTIFY_PATH =
-  "M12 0C5.4 0 0 5.4 0 12s5.4 12 12 12 12-5.4 12-12S18.66 0 12 0zm5.521 17.34c-.24.359-.66.48-1.021.24-2.82-1.74-6.36-2.101-10.561-1.141-.418.122-.779-.179-.899-.539-.12-.421.18-.78.54-.9 4.56-1.021 8.52-.6 11.64 1.32.42.18.479.659.301 1.02zm1.44-3.3c-.301.42-.841.6-1.262.3-3.239-1.98-8.159-2.58-11.939-1.38-.479.12-1.02-.12-1.14-.6-.12-.48.12-1.021.6-1.141C9.6 9.9 15 10.561 18.72 12.84c.361.181.54.78.241 1.2zm.12-3.36C15.24 8.4 8.82 8.16 5.16 9.301c-.6.179-1.2-.181-1.38-.721-.18-.601.18-1.2.72-1.381 4.26-1.26 11.28-1.02 15.721 1.621.539.3.719 1.02.419 1.56-.299.421-1.02.599-1.559.3z";
+const MARK_PATH =
+  "M7 0h2v1h-2zM4 1h2v1h-2zM7 1h5v1h-5zM3 2h2v1h-2zM6 2h1v1h-1zM8 2h1v1h-1zM10 2h3v1h-3zM2 3h2v1h-2zM5 3h1v1h-1zM11 3h1v1h-1zM13 3h1v1h-1zM1 4h2v1h-2zM4 4h1v1h-1zM6 4h1v1h-1zM8 4h1v1h-1zM10 4h1v1h-1zM12 4h3v1h-3zM1 5h1v1h-1zM3 5h1v1h-1zM13 5h2v1h-2zM1 6h2v1h-2zM6 6h4v1h-4zM12 6h1v1h-1zM14 6h1v1h-1zM0 7h2v1h-2zM6 7h1v1h-1zM9 7h1v1h-1zM13 7h1v1h-1zM15 7h1v1h-1zM0 8h3v1h-3zM4 8h1v1h-1zM6 8h1v1h-1zM9 8h1v1h-1zM12 8h4v1h-4zM1 9h1v1h-1zM3 9h1v1h-1zM6 9h4v1h-4zM13 9h1v1h-1zM1 10h2v1h-2zM4 10h1v1h-1zM10 10h1v1h-1zM12 10h1v1h-1zM14 10h1v1h-1zM1 11h3v1h-3zM11 11h1v1h-1zM13 11h2v1h-2zM2 12h3v1h-3zM6 12h1v1h-1zM8 12h1v1h-1zM10 12h1v1h-1zM12 12h2v1h-2zM3 13h3v1h-3zM7 13h1v1h-1zM9 13h1v1h-1zM11 13h2v1h-2zM4 14h8v1h-8zM7 15h2v1h-2z";
 
-export function SpotifyMark({ size = 20, className = "" }: { size?: number; className?: string }) {
+export function EncoreMark({ size = 24, className = "" }: { size?: number; className?: string }) {
   return (
-    <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden className={`shrink-0 ${className}`}>
-      <path d={SPOTIFY_PATH} fill="currentColor" />
+    <svg width={size} height={size} viewBox="0 0 16 16" shapeRendering="crispEdges" aria-hidden className={`shrink-0 ${className}`}>
+      <path d={MARK_PATH} fill="currentColor" />
     </svg>
   );
 }
@@ -12,7 +12,7 @@ export function SpotifyMark({ size = 20, className = "" }: { size?: number; clas
 export function Lockup({ large = false }: { large?: boolean }) {
   return (
     <span className={`flex items-center text-primary ${large ? "gap-2.5" : "gap-2"}`}>
-      <SpotifyMark size={large ? 28 : 22} className="text-accent" />
+      <EncoreMark size={large ? 32 : 24} />
       <span className={`font-semibold tracking-[-0.02em] ${large ? "text-heading-5" : "text-body-lg"}`}>encore</span>
     </span>
   );
