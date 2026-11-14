@@ -185,7 +185,6 @@ export function EntityMissing({ error, onRetry, title, what }: { error: unknown;
       <EmptyState
         size="page"
         title={allTime ? `No plays of this ${what}` : `No plays of this ${what} in this range`}
-        description={allTime ? "encore has no music plays under this name." : undefined}
         action={
           allTime ? (
             <AppLink to="/music/artists" className={buttonClass()}>
