@@ -1,4 +1,6 @@
 import { latestDigest } from "../assistant/api";
+import { makeCard } from "../covers/card";
+import { recapCardInput } from "../digest/card";
 import { humanDatesIn, RECAP_KINDS } from "../digest/periods";
 import type { DigestKind } from "../digest/service";
 import { getJobState, setJobState } from "../jobs/state";
@@ -7,7 +9,7 @@ import { newReleasesSince } from "../radar/radar";
 import { picksMessage } from "./commands/assistant";
 import { postToChannel, type Discord } from "./index";
 import type { DiscordContext } from "./registry";
-import { plain, type Embed, type Message } from "./types";
+import { plain, type Embed, type Message, type MessageFile } from "./types";
 
 const STATE = "discord_posts";
 const DAY_MS = 86_400_000;
@@ -16,7 +18,19 @@ const RELEASES_SHOWN = 10;
 
 type PostState = { picks?: string; weekly?: string; monthly?: string; yearly?: string };
 
-export function digestMessage(ctx: DiscordContext, kind: DigestKind): { key: string; message: Message } | null {
+const CARD_NAME = "recap.png";
+
+/** The recap's share card as an attachment; a card that cannot be drawn is logged and the post goes without it. */
+async function recapCard(page: Parameters<typeof recapCardInput>[0]): Promise<MessageFile | undefined> {
+  try {
+    return { name: CARD_NAME, bytes: await makeCard({ ...recapCardInput(page), format: "wide" }), contentType: "image/png" };
+  } catch (error) {
+    console.error(`Recap card was not drawn: ${error instanceof Error ? error.message : String(error)}`);
+    return undefined;
+  }
+}
+
+export function digestMessage(ctx: DiscordContext, kind: DigestKind): { key: string; message: Message; page: Parameters<typeof recapCardInput>[0] } | null {
   const digest = latestDigest(ctx.db, kind);
   if (!digest || digest.inProgress || Date.parse(digest.createdAt) < ctx.now() - FRESH_FOR_MS[kind]) return null;
   const embeds: Embed[] = [];
@@ -29,7 +43,7 @@ export function digestMessage(ctx: DiscordContext, kind: DigestKind): { key: str
         ...(releases[0]!.imageUrl ? { thumbnail: { url: releases[0]!.imageUrl } } : {}),
       });
   }
-  return { key: digest.periodKey, message: { content: plain(digest.rendered, 1900), embeds } };
+  return { key: digest.periodKey, message: { content: plain(digest.rendered, 1900), embeds }, page: digest.page };
 }
 
 /**
@@ -55,7 +69,9 @@ export async function publishAssistantPosts(discord: Discord, ctx: DiscordContex
   for (const kind of RECAP_KINDS) {
     const digest = digestMessage(ctx, kind);
     if (!digest || state[kind] === digest.key) continue;
-    await postToChannel(discord, digest.message);
+    const card = await recapCard(digest.page);
+    const message = card ? { ...digest.message, embeds: [{ image: { url: `attachment://${card.name}` } }, ...(digest.message.embeds ?? [])] } : digest.message;
+    await postToChannel(discord, message, card);
     mark({ [kind]: digest.key });
     posted.push(`${kind}:${digest.key}`);
   }

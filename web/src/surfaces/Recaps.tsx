@@ -17,6 +17,7 @@ import { Segmented } from "../ui/Segmented";
 import { Skeleton } from "../ui/Skeleton";
 import { EmptyState, ErrorState, FirstUseState } from "../ui/States";
 import { RecapPlaylistActions } from "./recaps/Playlist";
+import { ShareRecap } from "./recaps/Share";
 import { RecapSections } from "./recaps/Sections";
 
 const SLUGS = { weekly: "week", monthly: "month", yearly: "year" } as const satisfies Record<RecapKind, string>;
@@ -218,7 +219,10 @@ function Recap({ period, recap }: { period: RecapPeriod; recap: Digest }) {
             .join(" · ")}
         </p>
         {page.note && <p className="text-secondary text-pretty">{page.note}</p>}
-        {(action || writer.run.running) && <WriteButton writer={writer} size="sm" label={action ?? "Write the recap"} />}
+        <div className="flex flex-wrap items-center gap-2">
+          {(action || writer.run.running) && <WriteButton writer={writer} size="sm" label={action ?? "Write the recap"} />}
+          <ShareRecap recap={recap} />
+        </div>
         {writer.problem && <Notice tone="danger">{writer.problem}</Notice>}
       </header>
       {page.quiet && <p className="text-secondary">Almost no listening this {NOUN[page.kind]}, so there is little to show.</p>}

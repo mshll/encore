@@ -17,7 +17,9 @@ export type Embed = {
 export type Button = { type: 2; style: 1 | 2 | 5; label: string; custom_id?: string; url?: string };
 export type ActionRow = { type: 1; components: Button[] };
 
-export type Message = { content?: string; embeds?: Embed[]; components?: ActionRow[]; flags?: number; allowed_mentions?: { parse: string[] } };
+export type Message = { content?: string; embeds?: Embed[]; components?: ActionRow[]; flags?: number; allowed_mentions?: { parse: string[] }; attachments?: { id: number; filename: string }[] };
+/** A file sent with a message; an embed shows it with `attachment://<name>`. */
+export type MessageFile = { name: string; bytes: Uint8Array; contentType: string };
 
 export type CommandOption = { type: 3 | 4; name: string; description: string; required?: boolean; choices?: { name: string; value: string }[] };
 export type CommandDefinition = { name: string; description: string; options?: CommandOption[] };

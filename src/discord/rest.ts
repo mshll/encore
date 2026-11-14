@@ -1,4 +1,4 @@
-import type { CommandDefinition, Message } from "./types";
+import type { CommandDefinition, Message, MessageFile } from "./types";
 
 const apiUrl = "https://discord.com/api/v10";
 
@@ -22,6 +22,14 @@ export class DiscordRest {
     return this.send<{ id: string }>("POST", `/channels/${channelId}/messages`, safe(message), true);
   }
 
+  /** A message with one file attached, sent as multipart form data. */
+  postMessageWithFile(channelId: string, message: Message, file: MessageFile) {
+    const form = new FormData();
+    form.append("payload_json", JSON.stringify(safe({ ...message, attachments: [{ id: 0, filename: file.name }] })));
+    form.append("files[0]", new Blob([file.bytes], { type: file.contentType }), file.name);
+    return this.send<{ id: string }>("POST", `/channels/${channelId}/messages`, form, true);
+  }
+
   editMessage(channelId: string, messageId: string, message: Message) {
     return this.send<{ id: string }>("PATCH", `/channels/${channelId}/messages/${messageId}`, safe(message), true);
   }
@@ -42,8 +50,9 @@ export class DiscordRest {
     if (bot && !this.botToken) throw new DiscordApiError(0, "DISCORD_BOT_TOKEN is not set");
     const headers: Record<string, string> = { "user-agent": "DiscordBot (encore, 1)" };
     if (bot) headers.authorization = `Bot ${this.botToken}`;
-    if (body !== undefined) headers["content-type"] = "application/json";
-    const res = await this.fetchFn(`${apiUrl}${path}`, { method, headers, body: body === undefined ? undefined : JSON.stringify(body) });
+    const form = body instanceof FormData;
+    if (body !== undefined && !form) headers["content-type"] = "application/json";
+    const res = await this.fetchFn(`${apiUrl}${path}`, { method, headers, body: body === undefined ? undefined : form ? body : JSON.stringify(body) });
     const text = await res.text();
     if (!res.ok) throw new DiscordApiError(res.status, text.slice(0, 300));
     return (text ? JSON.parse(text) : null) as T;

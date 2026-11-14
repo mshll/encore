@@ -21,6 +21,7 @@ import type {
   DigestItem,
   RecapKind,
   RecapPeriod,
+  ShareLink,
   Note,
   PicksWeek,
   SetDetail,
@@ -245,6 +246,8 @@ export const useDigest = (id: number) => useQuery({ queryKey: ["digests", id], q
 
 export const useRecapPeriod = (kind: RecapKind, key: string) =>
   useQuery({ queryKey: ["digests", "period", kind, key], queryFn: () => get<RecapPeriod>(`/api/digests/periods/${kind}/${key}`), placeholderData: keepPreviousData });
+
+export const useShares = (ref: number) => useQuery({ queryKey: ["shares", ref], queryFn: () => get<{ items: ShareLink[] }>("/api/shares", { kind: "recap", ref }) });
 
 export const useLatestRecapKey = (kind: RecapKind) => useQuery({ queryKey: ["digests", "latest", kind], queryFn: () => get<{ kind: RecapKind; key: string }>(`/api/digests/latest/${kind}`) });
 

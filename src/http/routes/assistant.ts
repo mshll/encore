@@ -2,10 +2,12 @@ import { Hono } from "hono";
 import { z } from "zod";
 import { ask, deleteAskThread, getAskThread, listAskThreads } from "../../ask/service";
 import { PICK_STATES } from "../../db/schema";
+import { CARD_FORMATS, makeCard } from "../../covers/card";
+import { recapCardInput } from "../../digest/card";
 import { recapCover, recapCoverSource } from "../../digest/cover";
 import { RECAP_KINDS, latestKey } from "../../digest/periods";
 import { recapPlaylistSongs, saveRecapPlaylist } from "../../digest/playlist";
-import { generateDigest, listDigests, recapPeriod, renderDigest } from "../../digest/service";
+import { generateDigest, getDigest, listDigests, recapPeriod, renderDigest } from "../../digest/service";
 import { localTime } from "../../plays/localTime";
 import { budgetStatus, spendDetail } from "../../llm/ledger";
 import { listBlocks, removeBlock } from "../../library/blocks";
@@ -182,6 +184,13 @@ export const digestRoutes = new Hono<Env>()
     return c.json({ kind: p.kind, key: latestKey(p.kind, localTime(now(), timezone).day, llm.digestSlot.weekday) });
   })
   .get("/:id", async (c) => c.json(await mapped(() => renderDigest(c.var.deps.db, parse(id, c.req.param()).id))))
+  .get("/:id/card", async (c) => {
+    const digest = await mapped(() => getDigest(c.var.deps.db, parse(id, c.req.param()).id));
+    const { format } = parse(z.object({ format: z.enum(CARD_FORMATS).default("wide") }), c.req.query());
+    const png = await makeCard({ ...recapCardInput(digest.page), format });
+    const name = `encore-${digest.label.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "")}${format === "square" ? "-square" : ""}.png`;
+    return c.body(new Uint8Array(png), 200, { "content-type": "image/png", "content-disposition": `attachment; filename="${name}"`, "cache-control": "private, no-cache" });
+  })
   .post("/generate", async (c) => {
     const body = parse(z.object({ kind, key: z.string().max(10).optional() }), await jsonBody(c));
     return respond(c, (ctx) => generateDigest(ctx, body.kind, body.key));

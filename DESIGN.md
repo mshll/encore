@@ -51,7 +51,7 @@ The source of truth for paths, labels, icons and shortcuts is `web/src/app/nav.t
 | For you: Playlists | Which encore playlists live in my Spotify account, and what is in them? | Switch a playlist on | `living`, `living/:kind`, `living/:kind/refresh`, `living/:kind/refreshes/:id`, `living/:kind/cover` | Built |
 | Sets `/sets` | Make me a playlist from a prompt | Make a set | `sets`, `sets/:id`, set run (stream), `dj/start`, `dj`, `dj/stop` | Built |
 | Ask `/ask` | Answer a question about my listening | Ask | `ask/threads`, `ask/threads/:id`, ask run (stream) | Built |
-| Recaps `/recaps` | What changed in how I listen, and what was this week, month or year? | Write the recap of a period that has none | `digests`, `digests/periods/:kind/:key`, `digests/latest/:kind`, `digests/:id`, `digests/periods/:kind/:key/playlist`, `digests/periods/:kind/:key/cover`, `living` (This year so far), recap run (stream) | Built |
+| Recaps `/recaps` | What changed in how I listen, and what was this week, month or year? | Write the recap of a period that has none | `digests`, `digests/periods/:kind/:key`, `digests/latest/:kind`, `digests/:id`, `digests/periods/:kind/:key/playlist`, `digests/periods/:kind/:key/cover`, `living` (This year so far), `digests/:id/card`, `shares`, recap run (stream) | Built |
 | Library `/library` | What in my saved songs and playlists should go? | Review proposals | `cleanup`, `cleanup/dismiss`, `cleanup/apply`, `cleanup/batches`, `cleanup/batches/:id/undo`, `blocks` | Built |
 | Setup `/setup` | Is encore connected and fed? | Do the next missing step | `onboarding`, `spotify/authorize`, `import`, `settings` | Built |
 | Settings `/settings/*` | How does encore run? | Save a change | `settings`, `settings/claude/verify`, `settings/discord/register`, `spotify/disconnect`, `spotify/poll`, `llm/spend`, `auth/logout`, passkey routes | Built |
@@ -59,6 +59,8 @@ The source of truth for paths, labels, icons and shortcuts is `web/src/app/nav.t
 Built surfaces are the reference implementations: Overview (home), Plays (list-led), Patterns: When (chart-led). Music lists and the entity pages (`surfaces/Music.tsx`, `surfaces/entity/*`) follow Plays and Overview.
 
 Monthly charts that span a long quiet lead-in or a gap in the history start after the first 5% of the total when that cuts more than a year (`lib/leadIn.ts`), and say what they left out.
+
+Outside the app, one page needs no session: a shared recap at `/s/:token`. It is server-rendered HTML with no script and no app shell (`src/share/html.ts`): the encore mark, the period, the headline, then the recap's sections with the same inline charts drawn in CSS (the dither tile as an SVG data URI). System fonts, the app's light and dark colour roles, one 680 px column with a 16 px gutter. Nothing on it links into the app or names the owner. Security model: [docs/sharing.md](docs/sharing.md).
 
 ### Where every old screen went
 

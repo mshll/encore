@@ -29,7 +29,7 @@ One instance serves one person. Your data stays in a single SQLite file on your 
 
 **Upkeep**
 
-- **Recaps**: each week, month and year as a page of what changed: totals against the period before, artists up and down, genre and mood shifts, new songs that stuck, the busiest day and hour, with small inline charts. Claude adds a headline and one line per section; without Claude the page shows the numbers alone. Each recap has its playlist, the songs that defined the period, playable from the page and saved to Spotify with a cover titled with the period when you tap Save.
+- **Recaps**: each week, month and year as a page of what changed: totals against the period before, artists up and down, genre and mood shifts, new songs that stuck, the busiest day and hour, with small inline charts. Claude adds a headline and one line per section; without Claude the page shows the numbers alone. Each recap has its playlist, the songs that defined the period, playable from the page and saved to Spotify with a cover titled with the period when you tap Save. A share card (wide or square) downloads from the page and goes with recaps posted to Discord, and a public link shows a frozen, read-only copy of one recap to anyone you give it to: made only when you ask, revocable, optionally expiring (see [docs/sharing.md](docs/sharing.md)).
 - **Library**: proposals to tidy saved songs and playlists. Nothing is removed until you approve it, and every applied batch can be undone.
 
 | | |
@@ -151,9 +151,10 @@ src/analytics/           pure query functions
 src/llm/                 Claude client wrapper, cost ledger and budget, agent loop, threads
 src/taste/               cached taste profile given to Claude
 src/sets/ src/picks/     set building and weekly picks
-src/covers/              playlist cover drawing (Skia via @napi-rs/canvas); its fonts and their licences are in assets/fonts
+src/covers/              playlist cover and share card drawing (Skia via @napi-rs/canvas); its fonts and their licences are in assets/fonts
 src/ask/ src/notes/      questions over the history, liner notes
-src/digest/              recap periods, facts, pages and Claude lines
+src/digest/              recap periods, facts, pages, Claude lines, playlists and cards
+src/share/               public share links: frozen snapshots, hashed tokens, the public page
 src/assistant/           plain entry points for chat integrations
 src/jobs/                scheduler and persisted job state
 src/http/                Hono app and routes

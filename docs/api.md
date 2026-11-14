@@ -740,6 +740,36 @@ Body `{ "ids"?: [release id] }`; without `ids`, marks every unseen new release. 
 
 For the weekly digest: `newReleasesSince(db, sinceMs)` in `src/radar/radar.ts` returns releases flagged new and first seen at or after `sinceMs`, seen or not.
 
+## Shares
+
+Public, read-only links to a frozen copy of a recap. The security model is in [sharing.md](sharing.md). Kinds: `recap` (more later).
+
+### `POST /api/shares`
+
+Body `{ "kind": "recap", "ref": 12, "expiresInDays"?: 1-365 | null }` (`ref` is the recap id). Copies the recap page into a snapshot and makes a link. `201 { "share": Share, "url": "https://encore.example/s/<token>" }`. `url` is in this answer only: encore stores the token's SHA-256, not the token. `404` for an unknown recap.
+
+Share shape: `{ "id": 1, "kind": "recap", "ref": 12, "createdAt": "...", "expiresAt": "..." | null, "revokedAt": "..." | null, "views": 3, "lastViewedAt": "..." | null, "status": "active" | "expired" | "revoked" }`.
+
+### `GET /api/shares`
+
+Params `kind`, `ref` (both optional). `{ "items": [Share] }`, newest first.
+
+### `DELETE /api/shares/:id`
+
+Revokes the link for good: from then on it answers like an unknown one. `{ "share": Share }`. Revoking twice is a no-op. `404` for an unknown id.
+
+### `GET /s/:token` (public)
+
+The shared page: server-rendered HTML with no script, the same for every visitor (the session cookie is never read). Each `GET` counts a view. `og:` and `twitter:` tags point at `PUBLIC_BASE_URL/s/<token>/card.png`. Headers: `X-Robots-Tag: noindex, nofollow, noarchive`, `Referrer-Policy: no-referrer`, `Cache-Control: no-store`, the app's CSP. A malformed, unknown, revoked or expired token gets the same `404` page. `429` past 60 requests a minute per client or 1200 a minute in all, on every `/s/*` route.
+
+### `GET /s/:token/card.png` (public)
+
+The 1200 x 630 card, drawn from the snapshot once and kept in memory. `404` as above.
+
+### `GET /s/:token/snapshot.json` (public)
+
+The snapshot the page is drawn from (fields listed in [sharing.md](sharing.md#what-the-snapshot-holds)). `404` as above.
+
 ## Living playlists
 
 Six private playlists in the owner's Spotify account that encore keeps refilling. Each kind has one Spotify playlist for good: made the first time it is switched on, then always updated in place. Off by default. Switching off stops refreshes and leaves the playlist in Spotify; encore never deletes or unfollows it.
@@ -883,7 +913,7 @@ Button custom ids are `prefix:arg`:
 
 Claude errors are shown as messages: not configured, budget used up (with the amounts), declined, stopped early; unknown sets and picks say "That no longer exists."
 
-Channel posts: with `DISCORD_BOT_TOKEN` and `DISCORD_CHANNEL_ID` set, the `picks` and `digest` jobs post to the channel after every hourly run: this week's picks (same message as `/picks`, once per week, as soon as picks exist), the newest weekly recap (once per period, while under 8 days old) with an embed of up to 10 radar releases flagged new and first seen since the recap's first day, the newest monthly recap (once per month, while under 32 days old) and the newest finished yearly recap (once per year, while under 32 days old). Dates in posts are written out ("22 Oct 2026"). What was posted is stored in job state `discord_posts` (`{ picks: week, weekly: periodKey, monthly: periodKey, yearly: periodKey }`), so restarts and repeated runs do not post twice. A failed post is retried on the next run.
+Channel posts: with `DISCORD_BOT_TOKEN` and `DISCORD_CHANNEL_ID` set, the `picks` and `digest` jobs post to the channel after every hourly run: this week's picks (same message as `/picks`, once per week, as soon as picks exist), the newest weekly recap (once per period, while under 8 days old) with an embed of up to 10 radar releases flagged new and first seen since the recap's first day, the newest monthly recap (once per month, while under 32 days old) and the newest finished yearly recap (once per year, while under 32 days old). Each recap post carries its share card (`recap.png`, 1200 x 630) as an attachment shown in the first embed; a card that cannot be drawn is logged and the post goes without it. Dates in posts are written out ("22 Oct 2026"). What was posted is stored in job state `discord_posts` (`{ picks: week, weekly: periodKey, monthly: periodKey, yearly: periodKey }`), so restarts and repeated runs do not post twice. A failed post is retried on the next run.
 
 Seams for other modules (`src/discord/`): `DiscordRegistry.addCommand({ definition, defer, ephemeral?, handle })` and `addComponent({ prefix, defer, ephemeral?, handle })` on `discord.registry` (created in `src/main.ts` by `createDiscord`); handlers get `{ ctx: { db, config, services, now }, interaction, options | arg }` and return a message (`content`, `embeds`, `components`). Throw `UserFacingError` for a message the owner should see. Add commands before `registerCommands` runs. To post outside an interaction (a weekly digest), call `postToChannel(discord, message)` or `discord.rest.postMessage(channelId, message)`; `discord.rest.editMessage` edits it. All messages are sent with `allowed_mentions: { parse: [] }`; pass names through `plain()` (escapes markdown, breaks `@` mentions, truncates).
 
@@ -1148,6 +1178,10 @@ The list item plus `text` (plain text for a chat message, dates written out), `f
 #### `GET /api/digests/periods/:kind/:key`
 
 One period on the timeline. `{ "kind", "key", "label", "from", "to", "inProgress", "available", "reason": null | "before_history" | "not_ended", "previous": "2026-09" | null, "next": "2026-11" | null, "historyStart": "2024-11-24", "recap": <GET /api/digests/:id body without rendered> | null, "playlist": { "songs": 25, "canSave": true, "saved": { "url": "https://open.spotify.com/playlist/...", "savedAt": "...", "source": "recap" | "living" } | null, "coverUrl": "/api/digests/periods/monthly/2026-10/cover?v=..." | null } | null }`. `playlist` describes the period's songs as a Spotify playlist (the `songs` section rule); `null` before the history or before the period starts. `canSave` is false while the period is still going (the current year lives in Spotify as the This year so far living playlist instead) and when no song was listened to twice; `coverUrl` is null then too. `from`/`to` are what the period covers today. `previous` is null before the history starts, `next` once the next period has not started covering. `available: false` means `generate` would refuse this period. An invalid key is `404`.
+
+#### `GET /api/digests/:id/card`
+
+The recap's share card as a PNG download (`Content-Disposition: attachment; filename="encore-october-2026.png"`). Param `format`: `wide` (1200 x 630, default) or `square` (1080 x 1080, filename ends `-square`). The encore mark, the period, the headline and two or three figures (hours, the change against the compared period, songs) on ink, beside or above a dithered field drawn from the period's art. A headline with characters the bundled fonts cannot draw is replaced by "<hours> of music". Drawn on request; the art comes from Spotify's image CDN, no Web API call.
 
 #### `GET /api/digests/periods/:kind/:key/cover`
 

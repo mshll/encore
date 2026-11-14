@@ -18,7 +18,7 @@ export type CoverInput = {
   fetchFn?: typeof fetch;
 };
 
-const ABSTRACT_FIELDS: Record<AbstractStyle, () => Field> = { rings: ringsField, orb: orbField, waves: wavesField, rays: raysField, tiles: tilesField };
+export const ABSTRACT_FIELDS: Record<AbstractStyle, () => Field> = { rings: ringsField, orb: orbField, waves: wavesField, rays: raysField, tiles: tilesField };
 
 export type Cover = {
   jpeg: Uint8Array;
@@ -51,7 +51,7 @@ export async function encodeToFit(encode: (quality: number) => Promise<Uint8Arra
   throw new Error(`Cover does not fit ${limit} bytes of base64 at quality ${QUALITIES.at(-1)}`);
 }
 
-async function decode(source: string | Uint8Array, fetchFn: typeof fetch): Promise<Image | null> {
+export async function decode(source: string | Uint8Array, fetchFn: typeof fetch): Promise<Image | null> {
   const bytes = typeof source === "string" ? await fetchArt(source, fetchFn) : source;
   if (!bytes) return null;
   try {
@@ -70,12 +70,12 @@ function sample(image: Image, size: number): Uint8ClampedArray {
   return ctx.getImageData(0, 0, size, size).data;
 }
 
-function luminance(image: Image): Float32Array {
+export function luminance(image: Image): Float32Array {
   const px = sample(image, GRID);
   return Float32Array.from({ length: GRID * GRID }, (_, i) => px[i * 4]! * 0.299 + px[i * 4 + 1]! * 0.587 + px[i * 4 + 2]! * 0.114);
 }
 
-function pixels(image: Image): Rgb[] {
+export function pixels(image: Image): Rgb[] {
   const px = sample(image, 64);
   return Array.from({ length: 64 * 64 }, (_, i) => [px[i * 4]!, px[i * 4 + 1]!, px[i * 4 + 2]!] as const);
 }
