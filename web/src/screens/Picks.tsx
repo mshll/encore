@@ -83,7 +83,7 @@ function PickCard({ pick }: { pick: Pick }) {
             <Icon icon={PlayListIcon} size={16} />
           </button>
           {pick.state === "new" ? (
-            <>
+            <div className="flex items-center gap-2 max-sm:basis-full">
               <button type="button" className="btn btn-secondary" onClick={() => setState(pick, "saved")}>
                 Save
               </button>
@@ -93,7 +93,7 @@ function PickCard({ pick }: { pick: Pick }) {
               <button type="button" className="btn btn-transparent" onClick={() => setState(pick, "never")}>
                 Never
               </button>
-            </>
+            </div>
           ) : (
             <span className="flex items-center gap-1 text-body-sm">
               <span className="font-medium">{STATE_TEXT[pick.state]}</span>

@@ -6,7 +6,9 @@ Contract between the server and the web UI. All routes are JSON over HTTP on the
 
 - Base path `/api`. Only exception: `GET /callback` (Spotify OAuth redirect).
 - Auth: every `/api/*` route needs a session cookie, except `/api/health`, `/api/auth/*` and `/api/discord/interactions` (Discord signature instead). `/api/tags/*` and `POST /api/import` also accept `Authorization: Bearer <ADMIN_TOKEN>`. The admin token is rejected everywhere else. `/mcp` takes only `Authorization: Bearer <MCP_TOKEN>`.
-- Session cookie: `encore_session`, `HttpOnly`, `SameSite=Lax`, `Path=/`, 30 days, `Secure` when `PUBLIC_BASE_URL` is https. Send requests with `credentials: "same-origin"` (the default for same-origin `fetch`).
+- Session cookie: `__Host-encore_session` when `PUBLIC_BASE_URL` is https, `encore_session` otherwise; `HttpOnly`, `SameSite=Lax`, `Path=/`, 30 days, `Secure` when `PUBLIC_BASE_URL` is https. Send requests with `credentials: "same-origin"` (the default for same-origin `fetch`).
+- Writes to `/api/auth/*` are limited to 20 a minute per client address (`429 rate_limited`, with `Retry-After`).
+- Every response carries a Content-Security-Policy (scripts and connections from the same origin only, images from any https host) and `X-Frame-Options`; `/api/*` responses carry `Cache-Control: no-store`.
 - Errors: non-2xx responses have this body:
 
   ```json
