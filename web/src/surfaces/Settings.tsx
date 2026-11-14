@@ -90,7 +90,7 @@ function SpotifyConnection({ status }: { status: Status }) {
   const s = status.spotify;
   const [confirm, setConfirm] = useState(false);
   const [problem, setProblem] = useState<string | null>(null);
-  const connect = useMutation({ mutationFn: connectSpotify, onError: (e) => setProblem(describeError(e)) });
+  const connect = useMutation({ mutationFn: () => connectSpotify("settings"), onError: (e) => setProblem(describeError(e)) });
   const disconnect = useMutation({
     mutationFn: () => request("/api/spotify/disconnect", { method: "POST" }),
     onSuccess: async () => {
@@ -153,7 +153,7 @@ function SpotifyConnection({ status }: { status: Status }) {
 function SpotifyTab({ status }: { status: Status }) {
   const form = useSettingsForm(["spotifyClientId"]);
   const onboarding = useOnboarding();
-  const connect = useMutation({ mutationFn: connectSpotify });
+  const connect = useMutation({ mutationFn: () => connectSpotify("settings") });
   const changing = "spotifyClientId" in form.draft && status.spotify.connected;
   return (
     <>

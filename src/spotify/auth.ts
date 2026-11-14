@@ -49,9 +49,10 @@ export class SpotifyAuth {
     return clientId;
   }
 
-  createAuthorizeUrl(): string {
+  /** `tag` leads the state (`<tag>.<random>`) so the callback can read where the flow started. */
+  createAuthorizeUrl(tag?: string): string {
     const clientId = this.clientId();
-    const state = randomToken(24);
+    const state = tag ? `${tag}.${randomToken(24)}` : randomToken(24);
     const codeVerifier = randomToken(64);
     const challenge = new Bun.CryptoHasher("sha256").update(codeVerifier).digest("base64url");
     this.db.delete(oauthStates).where(lt(oauthStates.expiresAt, this.now())).run();

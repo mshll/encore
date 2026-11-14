@@ -309,11 +309,11 @@ State of each first-run step after sign-in. The steps before sign-in come from `
 
 ### `GET /api/spotify/authorize`
 
-`{ "url": "https://accounts.spotify.com/authorize?..." }`. Navigate the browser to `url` (full page, not fetch). PKCE, state valid 10 minutes. `409 spotify_not_configured` while no Spotify client id is set.
+Query: `return` (`setup` or `settings`, default `settings`): where the callback sends the browser back to. `{ "url": "https://accounts.spotify.com/authorize?..." }`. Navigate the browser to `url` (full page, not fetch). PKCE, state valid 10 minutes. `409 spotify_not_configured` while no Spotify client id is set.
 
 ### `GET /callback` (public, Spotify redirects here)
 
-Exchanges the code and redirects (302) to `PUBLIC_BASE_URL/?spotify=connected`, `?spotify=error` (bad state or token exchange failed), or `?spotify=denied` (owner declined).
+Exchanges the code and redirects (302) back to where the flow started: `PUBLIC_BASE_URL/setup?step=spotifyConnect&spotify=<result>` for `return=setup`, `PUBLIC_BASE_URL/settings/spotify?spotify=<result>` otherwise (also for an unknown or forged state). `<result>` is `connected`, `error` (bad state or token exchange failed) or `denied` (owner declined). The target comes from a fixed list, never from the request.
 
 ### `POST /api/spotify/disconnect`
 

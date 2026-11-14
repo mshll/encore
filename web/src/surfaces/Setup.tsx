@@ -253,7 +253,7 @@ function ConnectStep({ o, frame, onNext, onPick }: StepProps) {
     setBusy(true);
     setProblem(null);
     try {
-      await connectSpotify();
+      await connectSpotify("setup");
     } catch (error) {
       const needsApp = error instanceof ApiError && error.code === "spotify_not_configured";
       setProblem({ text: needsApp ? "Add the Spotify client ID first." : describeError(error), needsApp });

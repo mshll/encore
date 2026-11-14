@@ -24,7 +24,7 @@ export const useOpenQueue = () => useContext(QueueOpener);
 const SPOTIFY_NOTICES: Record<string, { message: string; tone: "info" | "problem" }> = {
   connected: { message: "Spotify connected.", tone: "info" },
   denied: { message: "Spotify was not connected: access was declined.", tone: "problem" },
-  error: { message: "Spotify could not be connected. Try again from Settings.", tone: "problem" },
+  error: { message: "Spotify could not be connected. Try again.", tone: "problem" },
 };
 
 function useSpotifyNotice() {
