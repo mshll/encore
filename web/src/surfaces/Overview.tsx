@@ -206,7 +206,7 @@ function Waiting() {
     <Section title="Waiting for you">
       <ul className="flex flex-col">
         {newPicks > 0 && <WaitingRow to="/for-you/picks" icon={SparkleIcon} title={plural(newPicks, "new pick", "new picks")} detail="This week, chosen by Claude" />}
-        {releases > 0 && <WaitingRow to="/for-you/releases" icon={VinylRecordIcon} title={plural(releases, "new release", "new releases")} detail="From artists you play" />}
+        {releases > 0 && <WaitingRow to="/for-you/new-releases" icon={VinylRecordIcon} title={plural(releases, "new release", "new releases")} detail="From artists you play" />}
         {recap && <WaitingRow to={`/recaps/${recap.id}`} icon={NewspaperIcon} title={recap.title} detail={`${recap.kind === "weekly" ? "Weekly" : "Monthly"} recap, ${fmtAgo(recap.createdAt)}`} />}
       </ul>
     </Section>

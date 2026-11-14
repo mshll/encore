@@ -11,12 +11,13 @@ encore answers three jobs: **what have I been listening to**, **what should I pl
 ```
 Listening                      Play                        Secondary            Foot
 ├── Overview          /        ├── For you    /for-you     ├── Recaps  /recaps  └── Settings /settings
-├── Plays             /plays   │   ├── Picks     /picks     │   └── /recaps/:id        ├── general
-├── Music             /music   │   ├── Releases  /releases  ├── Library /library        ├── spotify
-│   ├── Artists   /artists     │   └── Playlists /playlists └── Setup   /setup          ├── claude
-│   ├── Albums    /albums      │       └── /playlists/:kind                             ├── integrations
-│   ├── Songs     /songs       ├── Sets       /sets                                     ├── jobs
-│   ├── Forgotten /forgotten   │   └── /sets/:id                                        └── account
+├── Plays             /plays   │   ├── Weekly picks  /picks   │   └── /recaps/:id      ├── general
+├── Music             /music   │   ├── Forgotten favourites  ├── Library /library        ├── spotify
+│   ├── Artists   /artists     │   ├── Most played lately    └── Setup   /setup          ├── claude
+│   ├── Albums    /albums      │   ├── New from your artists                             ├── integrations
+│   ├── Songs     /songs       │   └── This month in past years  (/for-you/:kind)        ├── jobs
+│   ├── Forgotten /forgotten   ├── Sets       /sets                                     └── account
+│   │                          │   └── /sets/:id
 │   ├── /music/artist/:name    └── Ask        /ask
 │   ├── /music/album/:artist/:album  └── /ask/:id
 │   └── /music/song/:songKey
@@ -46,9 +47,10 @@ The source of truth for paths, labels, icons and shortcuts is `web/src/app/nav.t
 | Patterns: Taste | Which genres, moods and energy over time? | Switch genres and moods | tag stats (`stats/tags/*`), `stats/timeseries`, `tags/pending` | Built |
 | Patterns: Skips | Where do songs get skipped, and in what context? | Pick a moment class | `stats/skips` (with `positions` and `profile`), `stats/skips/split` | Built |
 | Patterns: Places | Where and on what do I listen (trips, devices)? | Pick a trip | `stats/trips`, `stats/devices` | Built |
-| For you: Picks | What did Claude pick for me this week? | Play the picks | `picks`, `picks/weeks`, picks run (stream), `blocks` | Built |
-| For you: Releases | What did artists I play release? | Mark seen, play | `radar`, `radar/seen` | Built |
-| For you: Playlists | Which encore playlists live in my Spotify account, and what is in them? | Switch a playlist on | `living`, `living/:kind`, `living/:kind/refresh`, `living/:kind/refreshes/:id`, `living/:kind/cover` | Built |
+| For you `/for-you` | What has encore made for me, and is it fresh? | Open a playlist (or play it from its cover) | `living`, `picks` (new this week), `radar` (unseen), `living/:kind` (play an off playlist) | Built |
+| For you: a playlist `/for-you/:kind` | What is in this playlist, and is it in my Spotify? | Play it | `living/:kind`, `living/:kind/refresh`, `living/:kind/refreshes/:id`, `living/:kind/cover`, `living` (Spotify gate) | Built |
+| Weekly picks `/for-you/picks` | What did Claude pick for me this week, and why? | Play | the playlist's routes, plus `picks`, `picks/weeks`, `picks/:id`, picks run (stream), `blocks` | Built |
+| New from your artists `/for-you/new-releases` | What did artists I play release? | Play | the playlist's routes, plus `radar`, `radar/seen` | Built |
 | Sets `/sets` | Make me a playlist from a prompt | Make a set | `sets`, `sets/:id`, set run (stream), `dj/start`, `dj`, `dj/stop` | Built |
 | Ask `/ask` | Answer a question about my listening | Ask | `ask/threads`, `ask/threads/:id`, ask run (stream) | Built |
 | Recaps `/recaps` | What happened this week or month? | Open the latest recap | `digests`, `digests/:id` | Built |
@@ -74,8 +76,8 @@ Monthly charts that span a long quiet lead-in or a gap in the history start afte
 | Skips | Patterns: Skips |
 | Trips | Patterns: Places (with devices) |
 | Tag trends and energy (Eras/Overview panels) | Patterns: Taste |
-| Picks | For you: Picks |
-| Releases | For you: Releases; artist pages show their releases |
+| Picks | For you: Weekly picks |
+| Releases | For you: New from your artists; artist pages show their releases |
 | Sets, SetPage | Sets, `/sets/:id` |
 | Session (DJ session) | Queue panel (desktop) and now-playing sheet (phone): the session shows next to the queue it drives, with Stop |
 | Ask | Ask |
@@ -85,6 +87,26 @@ Monthly charts that span a long quiet lead-in or a gap in the history start afte
 | SignIn | Sign-in screen outside the shell (`surfaces/SignIn.tsx`) |
 
 No capability was dropped. Old URLs are not redirected.
+
+### Where the For you tabs went (November 2026)
+
+For you was three tabs (Picks, Releases, Playlists) over the same things twice: Weekly picks is the picks, New from your artists is the releases. Now the playlists lead, by cover, and each tab's content lives in its playlist's page. Old URLs (`/for-you/releases`, `/for-you/playlists`, `/for-you/playlists/:kind`) are not redirected; `/for-you/picks` is Weekly picks' page.
+
+| Old (tab: capability) | Now |
+| --- | --- |
+| Picks: this week's picks with Claude's reason, source link, album, year, "further from what you play", how each did | Weekly picks page, This week |
+| Picks: Save, Not now, Never suggest again, Undo, Play, Add to queue, Go to artist, Open in Spotify (per pick) | Weekly picks page, each pick's row and its menu |
+| Picks: Play picks | Weekly picks page header: Play (this week's picks are the playlist); an earlier week has Play that week |
+| Picks: week picker (`?week=`) | Weekly picks page, This week's section actions |
+| Picks: Pick this week's songs, the run (running, Cancel, Stopped, failed, Claude not set up, cap spent, Spotify paused), the scheduled time | Weekly picks page, This week, when the week has no picks |
+| Picks: How picks did | Weekly picks page, under the picks |
+| Picks: Blocked songs and artists, Allow | Weekly picks page, last section (and Library) |
+| Releases: New and Last 30 days, Mark seen, Mark all seen, Play, Go to artist, Open in Spotify, Watching N artists, checked when, Nothing new, not run yet | New from your artists page, Releases, above the playlist's songs |
+| Playlists: the five playlists, cover, what each holds, status (deleted, failed, waiting, not in Spotify yet, songs and updated) | For you, the covers: name and one freshness line (a problem first, then new picks or releases, then updated when, or not in Spotify) |
+| Playlists: Keep in Spotify switch | The playlist's page header (the list no longer has switches) |
+| Playlists: none on, connect Spotify, no permission to change playlists | For you and every playlist page: the same notices |
+| Playlist page: songs or "would start with", Refresh now, Open in Spotify, failed, deferred, deleted, nothing new, Changes and each change's songs | The playlist's page, unchanged, plus Play (plays it in Spotify when kept there, otherwise its songs) |
+| "Waiting for you" on Overview: new picks, new releases | The For you covers' freshness line, and Home |
 
 ## 2. Tokens
 
@@ -154,6 +176,7 @@ Phosphor, regular weight; `fill` only for the active nav item and the playing st
 - **Main plus side column.** `SIDE_COLUMNS` (`lg:grid-cols-[minmax(0,1fr)_minmax(0,320px)]`): the main answer left, small related lists right.
 - **Setting rows.** `SettingRows` separates rows with spacing only, no hairlines; a section heading groups them. A hairline is kept for selection or a table, never to divide settings.
 - **Conversation panel** (`ConversationPanel` in `ui/Conversation`). Every conversation with Claude next to content (the set page, Ask, Library) is one docked panel, built once: its own surface (`bg-card`, `rounded-2xl`, the panel hairline from `shadow-panel`), a header row that names it ("Change the set", "Claude asks", a thread's title, "New question") with its actions (a thread's More), the thread scrolling inside the panel, and the composer pinned at the panel's foot with the notices tied to it (a failed run with Try again, Stopped, Claude not set up, the cap spent, Spotify paused) and the monthly spend in the composer's footer. Nothing else is boxed inside it: messages are text and the owner's bubbles, the composer is the one control. From `lg` (`useDocked`) it docks in a page column: `DOCKED` makes it sticky under the frame's top band (top 48, the title line) and one gutter above the foot of the page panel, its right edge on the frame's right edge (set page: `[content | --panel-w]`; Ask: `[280 thread list | panel]`, the Ask title heading the thread list). Narrower, the set page opens it as a bottom sheet from a "Change" button in the header actions ("Answer" while Claude's question waits; "Changing…" while a run goes): the sheet is full height less 24, so the composer sits at its foot above the keyboard (the viewport resizes for it) and the home indicator, and it covers the tab bar and mini player while open. It stays mounted while closed, so a run keeps reporting and the set refreshes when it ends. On Ask the conversation is the page, so on a phone it has no surface: the page scrolls, the composer sticks above the tab bar, and a thread's title row sits over it. Inside, `Conversation` keeps its behaviour: with no messages the composer sits at the top with the starters under it; from the first message, or a starting run, it is pinned to the foot and the view follows new messages and a streaming run while the reader is at the end; scrolled up, Jump to latest appears above the composer. During a run the send button is Stop, so `RunProgress` in a thread has no Cancel. The composer glides between the two places (`--dur-move`, `--ease-move`; instant with reduced motion).
+- **Covers** (For you, Home). The playlists encore makes as a grid of their generated covers (2 columns on a phone, 3 from `md`, 5 from `lg`), each with its name and one freshness line under it; the line is `text-primary` when it says something is new, `text-danger` for a problem. The cover and lines are one link to the playlist; Play (accent, round) shows over the cover's corner on hover or focus on desktop and plays it in Spotify when kept there, otherwise its songs. A phone opens the page and plays from there.
 - **Start a session.** `StartSessionButton` (secondary, small) sits beside a list of songs worth a session (Overview top songs, Forgotten, an era, keepers in Skips, a trip). It opens the queue panel, where the session runs.
 
 ### State order
@@ -221,7 +244,7 @@ All in `web/src/ui/` unless noted. Props listed are the ones that matter.
 | `AppLink`, `useRangeHref` | `ui/AppLink` | A link that keeps the current range |
 | Paths | `app/paths` | `artistPath(name)`, `songPath(key)`, `albumPath(artist, album)` |
 
-`/dev/kit` (dev builds only) shows every primitive in its states. Fixtures: add `?fixture=loading|error|empty|new|worst|untagged|off`, `?player=playing`, `?dj=active` or `?run=running|starting|done|failed|budget|unconfigured|paused` (Claude runs answered by the fixture, never the server), `?history=before|none|slow|failed|env` (Settings, Ignore plays before; answered by the fixture, nothing deleted), `?living=connected|first|fresh|deferred|failed|empty|removed|scope|refreshing` (For you: Playlists; switches and refreshes answered by the fixture, nothing sent to Spotify) to any dev URL (`web/src/dev/fixtures.ts`); the choice sticks for the tab until `off`.
+`/dev/kit` (dev builds only) shows every primitive in its states. Fixtures: add `?fixture=loading|error|empty|new|worst|untagged|off`, `?player=playing`, `?dj=active` or `?run=running|starting|done|failed|budget|unconfigured|paused` (Claude runs answered by the fixture, never the server), `?history=before|none|slow|failed|env` (Settings, Ignore plays before; answered by the fixture, nothing deleted), `?living=connected|first|fresh|deferred|failed|empty|removed|scope|refreshing` (For you and its playlists; switches and refreshes answered by the fixture, nothing sent to Spotify) to any dev URL (`web/src/dev/fixtures.ts`); the choice sticks for the tab until `off`.
 
 ## 6. Charts
 

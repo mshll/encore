@@ -1,44 +1,45 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
-import { ApiError, request } from "../api/client";
-import { useLiving, useLivingPlaylist, useLivingRefresh, useTimezone } from "../api/queries";
+import { ApiError, get, request } from "../api/client";
+import { useLifetime, useLiving, useLivingPlaylist, useLivingRefresh, usePicks, useRadar, useTimezone } from "../api/queries";
 import type { LivingChange, LivingDetail, LivingKind, LivingList, LivingOutcome, LivingPlaylist, LivingSong, LivingUpdate } from "../api/types";
-import { FOR_YOU_TABS } from "../app/nav";
 import { songPath } from "../app/paths";
 import { fmtAgo, fmtDate, fmtDayShort, fmtInt } from "../lib/format";
 import { showToast } from "../lib/toast";
 import { AppLink } from "../ui/AppLink";
 import { Artwork } from "../ui/Artwork";
-import { Button, buttonClass } from "../ui/Button";
+import { Button, buttonClass, IconButton } from "../ui/Button";
 import { Dialog, DialogClose } from "../ui/Dialog";
 import { EntityHeader, EntityHeaderSkeleton } from "../ui/EntityHeader";
 import { Icon } from "../ui/Icon";
-import { ArrowUpRightIcon, PlaylistIcon } from "../ui/icons";
+import { ArrowUpRightIcon, PlayIcon, PlaylistIcon, WaveformIcon } from "../ui/icons";
 import { Notice } from "../ui/Notice";
 import { Page, PageHeader, SIDE_COLUMNS, Section, dimWhile, useDocumentTitle } from "../ui/Page";
 import { Row, RowList, RowSkeleton } from "../ui/Rows";
 import { Skeleton } from "../ui/Skeleton";
-import { EmptyState, ErrorState } from "../ui/States";
+import { EmptyState, ErrorState, FirstUseState } from "../ui/States";
 import { Switch } from "../ui/Switch";
-import { TabNav } from "../ui/TabNav";
 import { cx } from "../ui/cx";
+import { usePlayback } from "../player/playback";
+import { WeeklyPicks } from "./Picks";
+import { ReleasesSection } from "./Releases";
 
 const KINDS: LivingKind[] = ["picks", "forgotten", "most-played", "new-releases", "this-month"];
 const isKind = (value: string): value is LivingKind => (KINDS as string[]).includes(value);
-const playlistPath = (kind: LivingKind) => `/for-you/playlists/${kind}`;
+export const playlistPath = (kind: LivingKind) => `/for-you/${kind}`;
 const songs = (n: number) => `${fmtInt(n)} ${n === 1 ? "song" : "songs"}`;
 
 const NOTHING_YET: Record<LivingKind, string> = {
   picks: "Picks appear after the next weekly run.",
   forgotten: "Songs you played 10 times or more, then left for 90 days, appear here.",
   "most-played": "Songs you play at least twice in four weeks appear here.",
-  "new-releases": "Songs appear here when Releases finds something new from artists you play.",
+  "new-releases": "Songs appear here when an artist you play releases something new.",
   "this-month": "Songs you played this month in an earlier year appear here.",
 };
 
 const EVENT_REFRESH: Partial<Record<LivingKind, string>> = {
   picks: "refreshes after each picks run",
-  "new-releases": "refreshes when Releases finds something",
+  "new-releases": "refreshes when an artist you play releases something",
 };
 
 type Gate = LivingList["spotify"];
@@ -89,18 +90,6 @@ function gateNotice(gate: Gate) {
       </Notice>
     );
   return null;
-}
-
-/** One line on what the playlist holds now and how fresh it is. */
-function statusLine(p: LivingPlaylist): string {
-  if (p.removedAt) return "Deleted in Spotify";
-  if (!p.enabled) return p.available ? `Would start with ${songs(p.available)}` : "Nothing to put in it yet";
-  if (p.status === "deferred") return "Waiting until it stops playing";
-  if (p.status === "failed") return p.playlist ? "The last refresh failed" : "Could not be added to Spotify";
-  if (!p.playlist) return "Not in Spotify yet";
-  if (p.count === 0) return "Nothing to put in it yet";
-  const updated = p.changedAt ? `updated ${fmtAgo(p.changedAt)}` : null;
-  return [songs(p.count), updated].filter(Boolean).join(" · ");
 }
 
 function nextLine(p: LivingPlaylist): string | null {
@@ -160,74 +149,128 @@ function useLivingAction(kind: LivingKind, name: string) {
   };
 }
 
-function PlaylistRow({ playlist, gate }: { playlist: LivingPlaylist; gate: Gate }) {
-  const action = useLivingAction(playlist.kind, playlist.name);
-  const blocked = !gate.connected || !gate.canWrite;
+/** The line under a cover: a problem first, then what is new, then how fresh it is. */
+function freshLine(p: LivingPlaylist, news: string | null): { text: string; problem: boolean } {
+  if (p.removedAt) return { text: "Deleted in Spotify", problem: true };
+  if (p.enabled && p.status === "failed") return { text: p.playlist ? "The last refresh failed" : "Could not be added to Spotify", problem: true };
+  if (news) return { text: news, problem: false };
+  if (!p.enabled) return { text: p.available ? `${songs(p.available)}, not in Spotify` : "Nothing in it yet", problem: false };
+  if (!p.playlist) return { text: "Not in Spotify yet", problem: false };
+  if (p.status === "deferred") return { text: "Waits until it stops playing", problem: false };
+  return { text: p.changedAt ? `Updated ${fmtAgo(p.changedAt)}` : songs(p.count), problem: false };
+}
+
+const playable = (p: LivingPlaylist) => (p.enabled && p.playlist ? p.count : p.available) > 0;
+
+/** Plays the playlist in Spotify when it is there, otherwise the songs encore would put in it. */
+function usePlayPlaylist() {
+  const playback = usePlayback();
+  const queryClient = useQueryClient();
+  return async (p: LivingPlaylist) => {
+    if (p.enabled && p.playlist) return void (await playback.playContext(`spotify:playlist:${p.playlist.id}`));
+    try {
+      const detail = await queryClient.fetchQuery({ queryKey: ["living", p.kind], queryFn: () => get<LivingDetail>(`/api/living/${p.kind}`) });
+      const uris = (detail.items.length ? detail.items : detail.preview).map((s) => s.uri);
+      if (uris.length) await playback.play(uris);
+    } catch (error) {
+      showToast(requestProblem(error), "problem");
+    }
+  };
+}
+
+function Cover({ playlist, news }: { playlist: LivingPlaylist; news: string | null }) {
+  const play = usePlayPlaylist();
+  const line = freshLine(playlist, news);
   return (
-    <li className="group relative -mx-2 flex items-center gap-4 rounded-md px-2 py-3 transition-colors duration-150 hover:bg-fill">
-      <AppLink to={playlistPath(playlist.kind)} className="absolute inset-0 rounded-md" aria-label={playlist.name} />
-      <Artwork src={playlist.coverUrl} kind="playlist" box={64} className="pointer-events-none" />
-      <div className="pointer-events-none flex min-w-0 flex-1 flex-col gap-0.5">
-        <span className="truncate font-medium text-primary">{playlist.name}</span>
-        <span className="text-caption text-pretty text-secondary">{playlist.about}</span>
-        <span className={cx("text-caption text-pretty", playlist.status === "failed" || playlist.removedAt ? "text-danger" : "text-secondary")}>
-          {statusLine(playlist)}
+    <li className="group relative flex min-w-0 flex-col">
+      <AppLink to={playlistPath(playlist.kind)} className="flex min-w-0 flex-col gap-3 rounded-md">
+        <Artwork src={playlist.coverUrl} kind="playlist" box="fill" />
+        <span className="flex min-w-0 flex-col gap-0.5">
+          <span className="truncate font-medium text-primary">{playlist.name}</span>
+          <span className={cx("text-caption text-pretty", line.problem ? "text-danger" : news ? "text-primary" : "text-secondary")}>{line.text}</span>
         </span>
-      </div>
-      <span className="relative flex shrink-0">
-        <Switch
-          checked={playlist.enabled}
-          onChange={action.toggle}
-          label={`Keep ${playlist.name} in Spotify`}
-          disabled={action.busy !== null || (blocked && !playlist.enabled)}
+      </AppLink>
+      {playable(playlist) && (
+        <IconButton
+          icon={PlayIcon}
+          fill
+          label={`Play ${playlist.name}`}
+          variant="accent"
+          size="lg"
+          onClick={() => void play(playlist)}
+          className="absolute top-[calc(100%-theme(spacing.3))] right-3 rounded-full opacity-0 shadow-overlay transition-opacity duration-150 group-hover:opacity-100 focus-visible:opacity-100 phone:hidden"
         />
-      </span>
+      )}
     </li>
   );
 }
 
-function ListSkeleton() {
+function CoversSkeleton() {
   return (
-    <div aria-hidden className="flex flex-col">
+    <div aria-hidden className={COVERS}>
       {KINDS.map((k) => (
-        <div key={k} className="flex items-center gap-4 py-3">
-          <Skeleton className="size-16 rounded-md" />
-          <div className="flex flex-1 flex-col gap-2">
-            <Skeleton className="h-3.5 w-40" />
-            <Skeleton className="h-3 w-3/5" />
-            <Skeleton className="h-3 w-2/5" />
-          </div>
-          <Skeleton className="h-5 w-8 rounded-full" />
+        <div key={k} className="flex flex-col gap-3">
+          <Skeleton className="aspect-square w-full rounded-md" />
+          <Skeleton className="h-3.5 w-3/4" />
+          <Skeleton className="h-3 w-1/2" />
         </div>
       ))}
     </div>
   );
 }
 
-/** For you: Playlists. The playlists encore keeps refilling in the owner's Spotify account: which are on, and how fresh. */
-export function Playlists() {
+const COVERS = "grid grid-cols-2 gap-x-4 gap-y-8 md:grid-cols-3 md:gap-x-6 lg:grid-cols-5";
+
+/** What is new in a playlist that has its own source of news: this week's unopened picks, unseen releases. */
+function useNews(): Partial<Record<LivingKind, string>> {
+  const picks = usePicks();
+  const radar = useRadar("new");
+  const newPicks = picks.data?.picks.filter((p) => p.state === "new").length ?? 0;
+  const releases = radar.data?.unseenNew ?? 0;
+  return {
+    ...(newPicks > 0 && { picks: `${fmtInt(newPicks)} new ${newPicks === 1 ? "pick" : "picks"} this week` }),
+    ...(releases > 0 && { "new-releases": `${fmtInt(releases)} new ${releases === 1 ? "release" : "releases"}` }),
+  };
+}
+
+/** The playlists encore makes, by cover: what is in each and how fresh. `limit` shows fewer (Home). */
+export function PlaylistCovers({ list }: { list: LivingList }) {
+  const news = useNews();
+  return (
+    <ul className={COVERS}>
+      {list.items.map((p) => (
+        <Cover key={p.kind} playlist={p} news={news[p.kind] ?? null} />
+      ))}
+    </ul>
+  );
+}
+
+/** For you: what encore made for the owner, by cover. Each opens its playlist; Keep in Spotify is the switch there. */
+export function ForYou() {
   const q = useLiving();
+  const lifetime = useLifetime();
   const d = q.data;
+  const firstUse = lifetime.data !== undefined && !lifetime.data.firstPlayed;
   const noneOn = d ? d.items.every((p) => !p.enabled) : false;
   return (
     <Page>
-      <PageHeader title="For you">
-        <TabNav items={FOR_YOU_TABS} label="For you" />
-      </PageHeader>
-      {q.isError ? (
+      <PageHeader title="For you" />
+      {firstUse ? (
+        <FirstUseState icon={WaveformIcon} description="encore makes these playlists from what you play. Import your history or connect Spotify first." />
+      ) : q.isError ? (
         <ErrorState error={q.error} onRetry={() => q.refetch()} />
       ) : !d ? (
-        <ListSkeleton />
+        <CoversSkeleton />
       ) : (
-        <section aria-label="Playlists" className="flex flex-col gap-4">
+        <>
           {gateNotice(d.spotify)}
-          {noneOn && <p className="text-secondary text-pretty">Switch one on and it appears in your Spotify account. encore refills it from then on.</p>}
-          <ul className={cx("flex flex-col", dimWhile(q.isFetching && !q.isLoading))}>
-            {d.items.map((p) => (
-              <PlaylistRow key={p.kind} playlist={p} gate={d.spotify} />
-            ))}
-          </ul>
-        </section>
+          {noneOn && d.spotify.connected && d.spotify.canWrite && (
+            <p className="text-secondary text-pretty">Open one and switch on Keep in Spotify to add it to your Spotify account. encore refills it from then on.</p>
+          )}
+          <div className={dimWhile(q.isFetching && !q.isLoading)}>
+            <PlaylistCovers list={d} />
+          </div>
+        </>
       )}
     </Page>
   );
@@ -342,8 +385,14 @@ type LivingAction = ReturnType<typeof useLivingAction>;
 function PlaylistActions({ playlist, gate, action }: { playlist: LivingDetail; gate: Gate | undefined; action: LivingAction }) {
   const blocked = gate ? !gate.connected || !gate.canWrite : false;
   const switchId = `living-${playlist.kind}`;
+  const play = usePlayPlaylist();
   return (
-    <div className="flex items-center gap-2 phone:grid phone:w-full phone:grid-cols-2">
+    <div className="flex flex-wrap items-center gap-2 phone:grid phone:w-full phone:grid-cols-2">
+      {playable(playlist) && (
+        <Button variant="accent" icon={PlayIcon} onClick={() => void play(playlist)} className="phone:col-span-2">
+          Play
+        </Button>
+      )}
       <span className="flex min-h-(--control-h) items-center gap-2 pr-2 phone:col-span-2">
         <Switch id={switchId} checked={playlist.enabled} onChange={action.toggle} label="Keep in Spotify" disabled={action.busy !== null || (blocked && !playlist.enabled)} />
         <label htmlFor={switchId} className="text-primary">
@@ -411,17 +460,24 @@ function PlaylistDetail({ kind }: { kind: LivingKind }) {
           />
           {gate && gateNotice(gate)}
           <StateNotice playlist={p} onRetry={action.refresh} />
-          <Section title={p.items.length || p.playlist ? "In the playlist" : p.enabled ? "It will start with" : "It would start with"} description={!p.items.length && shown.length ? songs(shown.length) : undefined}>
-            {shown.length === 0 ? (
-              <EmptyState icon={PlaylistIcon} title="Nothing to put in it yet" description={NOTHING_YET[kind]} />
-            ) : (
-              <RowList label={p.name} className={dimWhile(q.isFetching)}>
-                {shown.map((s, i) => (
-                  <SongRow key={s.uri} song={s} rank={i + 1} kind={kind} />
-                ))}
-              </RowList>
-            )}
-          </Section>
+          {kind === "picks" ? (
+            <WeeklyPicks />
+          ) : (
+            <>
+              {kind === "new-releases" && <ReleasesSection />}
+              <Section title={p.items.length || p.playlist ? "In the playlist" : p.enabled ? "It will start with" : "It would start with"} description={!p.items.length && shown.length ? songs(shown.length) : undefined}>
+                {shown.length === 0 ? (
+                  <EmptyState icon={PlaylistIcon} title="Nothing to put in it yet" description={NOTHING_YET[kind]} />
+                ) : (
+                  <RowList label={p.name} className={dimWhile(q.isFetching)}>
+                    {shown.map((s, i) => (
+                      <SongRow key={s.uri} song={s} rank={i + 1} kind={kind} />
+                    ))}
+                  </RowList>
+                )}
+              </Section>
+            </>
+          )}
         </div>
         <Changes playlist={p} />
       </div>
@@ -429,7 +485,10 @@ function PlaylistDetail({ kind }: { kind: LivingKind }) {
   );
 }
 
-/** One living playlist: its cover, on or off, what is in it now (or what it would start with), and every change. */
+/**
+ * One playlist encore makes: its cover, Play, Keep in Spotify, what is in it now (or what it would start with), and every
+ * change. Weekly picks holds the picks with Claude's reasons; New from your artists holds the releases above its songs.
+ */
 export function PlaylistPage({ kind }: { kind: string }) {
   if (!isKind(kind))
     return (
@@ -440,8 +499,8 @@ export function PlaylistPage({ kind }: { kind: string }) {
           icon={PlaylistIcon}
           title="This playlist does not exist"
           action={
-            <AppLink to="/for-you/playlists" className={buttonClass()}>
-              Back to playlists
+            <AppLink to="/for-you" className={buttonClass()}>
+              Open For you
             </AppLink>
           }
         />

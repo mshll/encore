@@ -69,12 +69,6 @@ export const PATTERN_TABS: SurfaceTab[] = [
   { path: "/patterns/places", label: "Places" },
 ];
 
-export const FOR_YOU_TABS: SurfaceTab[] = [
-  { path: "/for-you/picks", label: "Picks" },
-  { path: "/for-you/releases", label: "Releases" },
-  { path: "/for-you/playlists", label: "Playlists", owns: "/for-you/playlists/" },
-];
-
 export const SETTINGS_TABS: SurfaceTab[] = [
   { path: "/settings/general", label: "General" },
   { path: "/settings/spotify", label: "Spotify" },
@@ -84,7 +78,7 @@ export const SETTINGS_TABS: SurfaceTab[] = [
   { path: "/settings/account", label: "Account" },
 ];
 
-const TABS: Record<string, SurfaceTab[]> = { music: MUSIC_TABS, patterns: PATTERN_TABS, "for-you": FOR_YOU_TABS, settings: SETTINGS_TABS };
+const TABS: Record<string, SurfaceTab[]> = { music: MUSIC_TABS, patterns: PATTERN_TABS, settings: SETTINGS_TABS };
 
 export type Crumb = { label: string; path: string };
 
