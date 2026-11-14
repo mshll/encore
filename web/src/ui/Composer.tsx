@@ -65,7 +65,7 @@ export function Composer({
         }}
         className="w-full resize-none bg-transparent px-3 pt-3 text-body outline-none placeholder:text-tertiary disabled:opacity-60"
       />
-      <div className="flex items-center justify-between gap-3 px-2 pb-2">
+      <div className="flex items-center justify-between gap-3 px-2 pt-2 pb-2">
         <div className="min-w-0 pl-1 text-caption text-secondary">{footer}</div>
         {running && onStop ? (
           <button type="button" onClick={onStop} aria-label="Stop" className="touch-target flex size-8 items-center justify-center rounded-full bg-fill-inverted">

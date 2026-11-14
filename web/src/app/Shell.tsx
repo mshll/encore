@@ -16,6 +16,11 @@ const ScrollContext = createContext<RefObject<HTMLElement | null>>({ current: nu
 /** The page panel is the scroll container on every width. Virtualised lists measure against it. */
 export const useScrollElement = () => useContext(ScrollContext);
 
+const QueueOpener = createContext<() => void>(() => {});
+
+/** Shows the queue, where a running DJ session lives: the side panel on desktop, the now-playing sheet on a phone. */
+export const useOpenQueue = () => useContext(QueueOpener);
+
 const SPOTIFY_NOTICES: Record<string, { message: string; tone: "info" | "problem" }> = {
   connected: { message: "Spotify connected.", tone: "info" },
   denied: { message: "Spotify was not connected: access was declined.", tone: "problem" },
@@ -84,7 +89,7 @@ export function Shell({ children }: { children: ReactNode }) {
             >
               <Sidebar onSearch={() => setPaletteOpen(true)} />
               <main ref={main} id="main" tabIndex={-1} data-crop className="mt-(--inset) overflow-y-auto rounded-xl bg-page shadow-panel outline-none">
-                {children}
+                <QueueOpener.Provider value={desktop ? () => setQueueOpen(true) : () => setSheetOpen(true)}>{children}</QueueOpener.Provider>
               </main>
               <div className={queueOpen ? "mt-(--inset) mr-(--inset) ml-(--inset) min-h-0" : "w-(--inset)"}>
                 {queueOpen && <QueuePanel onClose={() => setQueueOpen(false)} />}
@@ -96,7 +101,7 @@ export function Shell({ children }: { children: ReactNode }) {
           ) : (
             <div className="flex h-dvh flex-col bg-page" style={{ ["--bottom-chrome" as string]: "calc(56px + 64px + env(safe-area-inset-bottom))" }}>
               <main ref={main} id="main" tabIndex={-1} data-crop className="min-h-0 flex-1 overflow-y-auto pt-[env(safe-area-inset-top)] outline-none">
-                {children}
+                <QueueOpener.Provider value={desktop ? () => setQueueOpen(true) : () => setSheetOpen(true)}>{children}</QueueOpener.Provider>
               </main>
               <div className="shrink-0 bg-shell pb-[env(safe-area-inset-bottom)]">
                 <div className="bg-page">
