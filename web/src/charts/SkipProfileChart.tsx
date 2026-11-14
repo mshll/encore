@@ -1,3 +1,4 @@
+import { useStatus } from "../api/queries";
 import type { ContextDimension, SkipProfile } from "../api/types";
 import { contextLabel, DIMENSION_LABELS, fmtInt, fmtPct } from "../lib/format";
 
@@ -6,6 +7,7 @@ const WORKS = 1 / 3;
 const FAILS = 2 / 3;
 
 export function SkipProfileChart({ profile, overall, minPlays = 3 }: { profile: SkipProfile; overall: number | null; minPlays?: number }) {
+  const weekendDays = useStatus().data?.weekendDays;
   const groups = ORDER.map((d) => ({ d, values: profile[d].filter((v) => v.plays >= minPlays && v.skipRate !== null) })).filter((g) => g.values.length > 0);
   if (groups.length === 0) return <p className="text-secondary">Not enough plays with skip data to compare contexts.</p>;
   return (
@@ -36,7 +38,7 @@ export function SkipProfileChart({ profile, overall, minPlays = 3 }: { profile: 
                 const fill = rate <= WORKS ? "var(--chart-key)" : rate >= FAILS ? "var(--text-primary)" : "var(--text-tertiary)";
                 return (
                   <li key={v.value} className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1">
-                    <span className="truncate text-body-sm">{contextLabel(d, v.value)}</span>
+                    <span className="truncate text-body-sm">{contextLabel(d, v.value, weekendDays)}</span>
                     <span className="text-body-sm tabular">
                       <span className="font-semibold">{fmtPct(rate)}</span> <span className="text-secondary">of {fmtInt(v.plays)} plays</span>
                     </span>
