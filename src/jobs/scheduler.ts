@@ -1,4 +1,5 @@
 import type { Db } from "../db/client";
+import { SpotifyBlockedError } from "../spotify/errors";
 import { inBackground } from "../spotify/pacer";
 import { getJobState, setJobState } from "./state";
 
@@ -13,7 +14,7 @@ export async function runJob(db: Db, job: Job, now = Date.now) {
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     setJobState(db, job.name, { lastError: message });
-    console.error(`[job ${job.name}] ${message}`);
+    if (!(error instanceof SpotifyBlockedError)) console.error(`[job ${job.name}] ${message}`);
   }
 }
 

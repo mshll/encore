@@ -9,6 +9,8 @@ import type { RecentlyPlayed, SpotifyArtist, SpotifyMe, SpotifyPlaylist, Spotify
 const apiUrl = "https://api.spotify.com/v1";
 const oembedUrl = "https://open.spotify.com/oembed";
 const defaultRetryAfterSeconds = 60;
+const CALLS_STATE = "spotify_calls";
+const utcDay = (ms: number) => new Date(ms).toISOString().slice(0, 10);
 
 export type SpotifyGate = { blockedUntil: number; reason: BlockReason; at: number };
 
@@ -45,8 +47,9 @@ export class SpotifyClient {
 
   async trackThumbnail(id: string): Promise<string | null> {
     const url = `${oembedUrl}?url=${encodeURIComponent(`spotify:track:${id}`)}`;
-    const body = await this.call<{ thumbnail_url?: string }>(() => this.fetchFn(url));
-    return body.thumbnail_url ?? null;
+    const res = await this.fetchFn(url);
+    if (!res.ok) throw res.status === 429 ? new Error("Spotify oEmbed is rate limited") : new SpotifyApiError(res.status, res.statusText);
+    return ((await res.json()) as { thumbnail_url?: string }).thumbnail_url ?? null;
   }
 
   searchTracks(query: string, limit: number) {
@@ -73,6 +76,16 @@ export class SpotifyClient {
     return this.pacer.run(() => this.call<T>(async (refresh) => this.send(path, await this.auth.accessToken(refresh), method, body), true));
   }
 
+  /** Web API requests sent on the current UTC day. Spotify does not publish its quota, so this is the only measure of what a lockout cost. */
+  callsToday(): number {
+    const data = getJobState(this.db, CALLS_STATE)?.data as { day: string; calls: number } | null | undefined;
+    return data?.day === utcDay(this.now()) ? data.calls : 0;
+  }
+
+  private countCall() {
+    setJobState(this.db, CALLS_STATE, { data: { day: utcDay(this.now()), calls: this.callsToday() + 1 } });
+  }
+
   private get<T>(path: string): Promise<T> {
     return this.request<T>("GET", path);
   }
@@ -80,8 +93,12 @@ export class SpotifyClient {
   private async call<T>(send: (refresh: boolean) => Promise<Response>, retryUnauthorized = false): Promise<T> {
     const gate = this.gate();
     if (gate) throw new SpotifyBlockedError(gate.reason, gate.blockedUntil);
+    this.countCall();
     let res = await send(false);
-    if (res.status === 401 && retryUnauthorized) res = await send(true);
+    if (res.status === 401 && retryUnauthorized) {
+      this.countCall();
+      res = await send(true);
+    }
     if (res.status === 429) throw await this.block(res);
     if (!res.ok) {
       const body = (await res.json().catch(() => ({}))) as { error?: { message?: string; reason?: string } };
@@ -106,7 +123,7 @@ export class SpotifyClient {
     const waitMs = quota ? Math.max(this.config.quotaBackoffMs, retryAfterMs) : retryAfterMs;
     const gate: SpotifyGate = { reason: quota ? "quota_exceeded" : "rate_limited", blockedUntil: this.now() + waitMs, at: this.now() };
     setJobState(this.db, "spotify", { lastError: `${gate.reason} until ${new Date(gate.blockedUntil).toISOString()}`, data: gate });
-    if (quota) console.error(`Spotify QUOTA_EXCEEDED: all Spotify calls paused until ${new Date(gate.blockedUntil).toISOString()}`);
+    if (quota) console.error(`Spotify QUOTA_EXCEEDED after ${this.callsToday()} calls today (UTC): all Spotify calls paused until ${new Date(gate.blockedUntil).toISOString()}`);
     return new SpotifyBlockedError(gate.reason, gate.blockedUntil);
   }
 }

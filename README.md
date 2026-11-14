@@ -48,7 +48,7 @@ All config is env vars, validated at boot (the process exits on invalid values).
 | `HOME_COUNTRY` | `KW` | For trips |
 | `JOBS_ENABLED` | `true` | Poller and enrichment |
 | `POLL_INTERVAL_SECONDS` | `300` | Min 60 |
-| `ENRICH_INTERVAL_SECONDS`, `ENRICH_BATCH_SIZE` | `10`, `1` | Seconds between enrichment runs, Web API calls per run (track or artist, most listened first) |
+| `ENRICH_INTERVAL_SECONDS`, `ENRICH_BATCH_SIZE` | `120`, `1` | Seconds between enrichment runs, Web API calls per run (track or artist, most listened first) |
 | `ART_INTERVAL_SECONDS` | `4` | Seconds between album-art lookups through Spotify's public oEmbed endpoint |
 | `SPOTIFY_MIN_INTERVAL_MS` | `2000` | Minimum spacing between Spotify Web API calls. All calls share one queue; calls made for a request go before calls made by jobs |
 | `QUOTA_BACKOFF_HOURS` | `12` | Pause after a Spotify `QUOTA_EXCEEDED` 429 |

@@ -7,8 +7,8 @@ describe("config", () => {
     expect(config).toMatchObject({ spotifyRedirectUri: "https://spotify.mshl.me/callback", rpId: "spotify.mshl.me", secureCookies: true, setupToken: undefined });
   });
 
-  test("paces Web API calls 2 s apart, enrichment every 10 s and album art every 4 s by default", () => {
-    expect(loadConfig({ SPOTIFY_CLIENT_ID: "id" })).toMatchObject({ spotifyIntervalMs: 2000, enrichIntervalMs: 10_000, enrichBatchSize: 1, artIntervalMs: 4000 });
+  test("paces Web API calls 2 s apart, enrichment every 120 s and album art every 4 s by default", () => {
+    expect(loadConfig({ SPOTIFY_CLIENT_ID: "id" })).toMatchObject({ spotifyIntervalMs: 2000, enrichIntervalMs: 120_000, enrichBatchSize: 1, artIntervalMs: 4000 });
   });
 
   test("fails fast on invalid values", () => {

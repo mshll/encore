@@ -226,7 +226,7 @@ describe("enrichment", () => {
     expect(calls.filter((c) => c.url.includes("api.spotify.com"))).toHaveLength(6);
   });
 
-  test("album art comes from oEmbed without a token and stops at the gate", async () => {
+  test("album art comes from oEmbed without a token and continues while the Web API is paused", async () => {
     const { db, client, now, calls } = setup((url) => (url.includes("t2") ? jsonResponse({}, 404) : jsonResponse({ thumbnail_url: "https://thumb/1" })));
     seed(db, [track("t1", "One", "A", "Album"), track("t2", "Two", "A", "Album")], [play("2026-01-01T10:00:00Z", uri("t1"), 200000)]);
     expect(await fetchAlbumArt(db, client, 5)).toEqual({ attempted: 2, found: 1, failed: 1 });
@@ -237,8 +237,18 @@ describe("enrichment", () => {
       { uri: uri("t2"), album_art_url: null, art_attempts: 1 },
     ]);
     setJobState(db, "spotify", { data: { reason: "rate_limited", blockedUntil: now() + 60_000, at: now() } });
-    await expect(fetchAlbumArt(db, client, 5)).rejects.toBeInstanceOf(SpotifyBlockedError);
-    expect(calls).toHaveLength(2);
+    expect(await fetchAlbumArt(db, client, 5)).toEqual({ attempted: 1, found: 0, failed: 1 });
+    expect(calls).toHaveLength(3);
+  });
+
+  test("Web API calls are counted per UTC day; oEmbed calls are not", async () => {
+    const { db, client, now } = setup((url) => jsonResponse(url.includes("oembed") ? { thumbnail_url: "https://thumb/1" } : { id: "me" }));
+    connect(db, now() + 3_600_000);
+    seed(db, [track("t1", "One", "A", "Album")], []);
+    await client.me();
+    await client.me();
+    await fetchAlbumArt(db, client, 5);
+    expect(client.callsToday()).toBe(2);
   });
 
   test("polled rows keep the playlist or album they were played from", async () => {

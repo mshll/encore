@@ -24,7 +24,7 @@ const schema = z.object({
   HOME_COUNTRY: z.string().regex(/^[A-Z]{2}$/).default("KW"),
   JOBS_ENABLED: z.enum(["true", "false"]).default("true").transform((v) => v === "true"),
   POLL_INTERVAL_SECONDS: z.coerce.number().int().min(60).default(300),
-  ENRICH_INTERVAL_SECONDS: z.coerce.number().min(1).default(10),
+  ENRICH_INTERVAL_SECONDS: z.coerce.number().min(1).default(120),
   ENRICH_BATCH_SIZE: z.coerce.number().int().min(1).max(20).default(1),
   SPOTIFY_MIN_INTERVAL_MS: z.coerce.number().int().min(0).default(2000),
   ART_INTERVAL_SECONDS: z.coerce.number().min(1).default(4),
