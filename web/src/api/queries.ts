@@ -78,6 +78,20 @@ export const useTopAlbums = (range: Range, limit: number) => useQuery(ranged<{ i
 export const useTopTracks = (range: Range, limit: number, at: { weekday?: number; hour?: number } = {}, enabled = true) =>
   useQuery({ ...ranged<{ items: Song[] }>("/api/stats/top/tracks", range, { limit, ...at }), enabled });
 
+export type TopKind = "artists" | "albums" | "tracks";
+export type TopSort = "hours" | "listens" | "plays";
+export type TopItem = { artists: ArtistStats; albums: AlbumStats; tracks: Song };
+export const TOP_PAGE = 200;
+
+export const useTopPages = <K extends TopKind>(kind: K, range: Range, sort: TopSort, q: string | undefined) =>
+  useInfiniteQuery({
+    queryKey: [`/api/stats/top/${kind}`, "pages", range.from ?? null, range.to ?? null, sort, q ?? null],
+    queryFn: ({ pageParam }) => get<{ items: TopItem[K][] }>(`/api/stats/top/${kind}`, { ...range, sort, q, limit: TOP_PAGE, offset: pageParam }),
+    initialPageParam: 0,
+    getNextPageParam: (last, pages) => (last.items.length === TOP_PAGE ? pages.length * TOP_PAGE : undefined),
+    placeholderData: keepPreviousData,
+  });
+
 export const useEras = (range: Range, limit: number) => useQuery(ranged<Eras>("/api/stats/eras", range, { limit }));
 
 export const useClock = (range: Range) => useQuery(ranged<Clock>("/api/stats/clock", range));

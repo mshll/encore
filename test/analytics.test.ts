@@ -106,6 +106,31 @@ describe("top lists", () => {
     ]);
     expect(topArtists(db, { range: {}, limit: 1, offset: 1 })[0]!.artist).toBe("Artist Y");
   });
+
+  test("a search narrows tracks by song or artist name and keeps merged stats", () => {
+    const db = baseFixture();
+
+    const tracks = topTracks(db, { range: {}, limit: 10, q: "artist x" });
+
+    expect(tracks.map((t) => [t.songKey, t.plays])).toEqual([[KEY_A, 3]]);
+  });
+
+  test("a search narrows artists and albums", () => {
+    const db = baseFixture();
+
+    const artists = topArtists(db, { range: {}, limit: 10, q: "y" }).map((a) => a.artist);
+    const albums = topAlbums(db, { range: {}, limit: 10, q: "deluxe" }).map((a) => a.album);
+
+    expect([artists, albums]).toEqual([["Artist Y"], ["Album 1 Deluxe"]]);
+  });
+
+  test("a search treats % as text, not a wildcard", () => {
+    const db = baseFixture();
+
+    const albums = topAlbums(db, { range: {}, limit: 10, q: "%" });
+
+    expect(albums).toEqual([]);
+  });
 });
 
 describe("eras", () => {

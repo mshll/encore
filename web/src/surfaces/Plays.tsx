@@ -12,12 +12,12 @@ import { AppLink } from "../ui/AppLink";
 import { Artwork } from "../ui/Artwork";
 import { Button, buttonClass, IconButton } from "../ui/Button";
 import { cx } from "../ui/cx";
-import { Input } from "../ui/Field";
 import { Icon } from "../ui/Icon";
-import { ListBulletsIcon, MagnifyingGlassIcon, PlayIcon, XIcon } from "../ui/icons";
+import { ListBulletsIcon, PlayIcon, XIcon } from "../ui/icons";
 import { Page, PageHeader } from "../ui/Page";
 import { RangePicker } from "../ui/RangePicker";
 import { RowSkeleton } from "../ui/Rows";
+import { SearchField } from "../ui/SearchField";
 import { Select } from "../ui/Select";
 import { SongContext, SongMenu } from "../ui/SongMenu";
 import { EmptyState, ErrorState } from "../ui/States";
@@ -65,29 +65,6 @@ function useFilters() {
       { replace: true },
     );
   return [filters, set] as const;
-}
-
-function SearchField({ value, onChange }: { value: string; onChange: (v: string) => void }) {
-  const [text, setText] = useState(value);
-  useEffect(() => setText(value), [value]);
-  useEffect(() => {
-    const t = setTimeout(() => text !== value && onChange(text), 250);
-    return () => clearTimeout(t);
-  }, [text, value, onChange]);
-  return (
-    <Input
-      type="search"
-      icon={MagnifyingGlassIcon}
-      aria-label="Search plays"
-      value={text}
-      onChange={(e) => setText(e.target.value)}
-      placeholder="Song, artist or album…"
-      enterKeyHint="search"
-      spellCheck={false}
-      className="w-full md:w-72"
-      end={text ? <IconButton icon={XIcon} label="Clear search" size="sm" onClick={() => setText("")} /> : undefined}
-    />
-  );
 }
 
 function where(item: HistoryItem, home: string | null | undefined) {
@@ -187,7 +164,7 @@ const SOURCE_OPTIONS = [{ value: "all", label: "All sources" }, ...Object.entrie
 function Toolbar({ filters, setFilters }: { filters: HistoryFilters; setFilters: (p: Partial<HistoryFilters>) => void }) {
   return (
     <div className="flex flex-col gap-2 md:flex-row md:items-center">
-      <SearchField value={filters.q ?? ""} onChange={(v) => setFilters({ q: v.trim() || undefined })} />
+      <SearchField label="Search plays" placeholder="Song, artist or album…" value={filters.q ?? ""} onChange={(v) => setFilters({ q: v.trim() || undefined })} />
       <div className="-mx-(--gutter) flex gap-2 overflow-x-auto px-(--gutter) no-scrollbar md:mx-0 md:px-0">
         <Select label="Skipped" value={filters.skipped ?? "all"} options={SKIPPED_OPTIONS} onChange={(v) => setFilters({ skipped: v === "all" ? undefined : (v as "true" | "false") })} />
         <Select label="Device" value={filters.device ?? "all"} options={DEVICE_OPTIONS} onChange={(v) => setFilters({ device: v === "all" ? undefined : v })} />

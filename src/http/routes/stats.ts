@@ -24,7 +24,7 @@ function range(q: { from?: string; to?: string }) {
   return { from: q.from, to: q.to };
 }
 const period = z.enum(["day", "week", "month", "year"]).default("month");
-const top = ranged({ limit: int(1, 200, 50), offset: int(0, 1_000_000, 0), sort: z.enum(["hours", "listens", "plays"]).default("hours") });
+const top = ranged({ limit: int(1, 200, 50), offset: int(0, 1_000_000, 0), sort: z.enum(["hours", "listens", "plays"]).default("hours"), q: z.string().trim().min(1).max(200).optional() });
 const topAt = top.extend({ weekday: z.coerce.number().int().min(1).max(7).optional(), hour: z.coerce.number().int().min(0).max(23).optional() });
 
 function found<T>(value: T | null): T {

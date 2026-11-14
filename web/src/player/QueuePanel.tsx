@@ -13,6 +13,7 @@ import { RowSkeleton } from "../ui/Rows";
 import { SongMenu } from "../ui/SongMenu";
 import { EmptyState, ErrorState } from "../ui/States";
 import { showToast } from "../lib/toast";
+import { useTrackLinks } from "./links";
 
 function QueueRow({ track }: { track: TrackRef }) {
   return (
@@ -24,6 +25,16 @@ function QueueRow({ track }: { track: TrackRef }) {
       </span>
       <SongMenu song={{ uri: track.uri, name: track.name, artist: track.artist }} className="md:opacity-0 md:group-hover:opacity-100 md:focus-visible:opacity-100 md:data-[popup-open]:opacity-100" />
     </li>
+  );
+}
+
+function NowArtist({ uri, artist }: { uri: string; artist: string }) {
+  const links = useTrackLinks(uri);
+  if (!links) return <span className="truncate text-caption text-secondary">{artist}</span>;
+  return (
+    <AppLink to={links.artist} className="-my-1 truncate py-1 text-caption text-secondary hover:text-primary hover:underline">
+      {artist}
+    </AppLink>
   );
 }
 
@@ -88,7 +99,7 @@ export function QueueContent({ open }: { open: boolean }) {
                   {now.data?.playing && <Icon icon={WaveformIcon} fill className="text-accent-text" />}
                   <span className="truncate font-medium">{track.name}</span>
                 </span>
-                <span className="truncate text-caption text-secondary">{track.artist}</span>
+                <NowArtist uri={track.uri} artist={track.artist} />
               </div>
             </div>
             <SongFacts uri={track.uri} />

@@ -8,6 +8,8 @@ import { Icon } from "../ui/Icon";
 import { PauseIcon, PlayIcon, ShuffleIcon, SkipForwardIcon } from "../ui/icons";
 import { BACKDROP } from "../ui/surfaces";
 import { ProgressLine } from "./PlayerBar";
+import { AppLink } from "../ui/AppLink";
+import { useTrackLinks } from "./links";
 import { usePlayback } from "./playback";
 import { useProgress } from "./progress";
 import { QueueContent } from "./QueuePanel";
@@ -18,6 +20,7 @@ export function NowPlayingSheet({ open, onOpenChange }: { open: boolean; onOpenC
   const playback = usePlayback();
   const progress = useProgress(now.data);
   const track = now.data?.track;
+  const links = useTrackLinks(track?.uri);
   useEffect(() => {
     if (open && !track) onOpenChange(false);
   }, [open, track, onOpenChange]);
@@ -35,8 +38,24 @@ export function NowPlayingSheet({ open, onOpenChange }: { open: boolean; onOpenC
             <div className="flex flex-col gap-5">
               <Artwork src={track.albumArtUrl} name={track.name} box="fill" className="mx-auto max-w-[320px] rounded-lg" />
               <div className="flex flex-col">
-                <Dialog.Title className="text-heading font-medium text-balance">{track.name}</Dialog.Title>
-                <Dialog.Description className="text-secondary">{track.artist}</Dialog.Description>
+                <Dialog.Title className="text-heading font-medium text-balance">
+                  {links ? (
+                    <AppLink to={links.song} onClick={() => onOpenChange(false)}>
+                      {track.name}
+                    </AppLink>
+                  ) : (
+                    track.name
+                  )}
+                </Dialog.Title>
+                <Dialog.Description className="text-secondary">
+                  {links ? (
+                    <AppLink to={links.artist} onClick={() => onOpenChange(false)}>
+                      {track.artist}
+                    </AppLink>
+                  ) : (
+                    track.artist
+                  )}
+                </Dialog.Description>
               </div>
               <div className="flex flex-col gap-1.5">
                 <ProgressLine share={progress.share} />
