@@ -5,7 +5,7 @@ Contract between the server and the web UI. All routes are JSON over HTTP on the
 ## Conventions
 
 - Base path `/api`. Only exception: `GET /callback` (Spotify OAuth redirect).
-- Auth: every `/api/*` route needs a session cookie, except `/api/health` and `/api/auth/*`. `/api/tags/*` also accepts `Authorization: Bearer <ADMIN_TOKEN>`. The admin token is rejected everywhere else.
+- Auth: every `/api/*` route needs a session cookie, except `/api/health` and `/api/auth/*`. `/api/tags/*` and `POST /api/import` also accept `Authorization: Bearer <ADMIN_TOKEN>`. The admin token is rejected everywhere else.
 - Session cookie: `encore_session`, `HttpOnly`, `SameSite=Lax`, `Path=/`, 30 days, `Secure` when `PUBLIC_BASE_URL` is https. Send requests with `credentials: "same-origin"` (the default for same-origin `fetch`).
 - Errors: non-2xx responses have this body:
 
@@ -13,7 +13,7 @@ Contract between the server and the web UI. All routes are JSON over HTTP on the
   { "error": { "code": "invalid_request", "message": "Request validation failed", "details": [{ "path": "from", "message": "expected YYYY-MM-DD" }] } }
   ```
 
-  `details` is present only on some errors. Status codes: `400` validation, `401` not signed in, `403` setup token wrong, `404` not found, `409` precondition (Spotify not connected), `413` file too large, `415` wrong content type, `500` server error, `502` Spotify call failed.
+  `details` is present only on some errors. Status codes: `400` validation, `401` not signed in, `402` monthly LLM budget spent, `403` setup token wrong, `404` not found, `409` precondition (Spotify not connected), `413` file too large, `415` wrong content type, `422` Claude declined, `500` server error, `502` Spotify or Claude call failed, `503` LLM not configured or Spotify paused. Assistant error codes are listed under [Assistant](#assistant-claude).
 - Timestamps (`ts`, `firstPlayed`, `lastPlayed`, `start`, `end`, ...) are ISO 8601 UTC strings.
 - Days, hours, weekdays, weeks, months are local time in `TIMEZONE` (default Asia/Kuwait). `day` is `YYYY-MM-DD`. `weekday` is ISO: 1 = Monday ... 7 = Sunday.
 - `hours` values are rounded to 2 decimals. Rates (`skipRate`, `shuffleRate`, `share`) are 0..1 rounded to 3 decimals, or `null` when the denominator is 0.
@@ -113,7 +113,14 @@ Contract between the server and the web UI. All routes are JSON over HTTP on the
                   "lastResult": { "attempted": 3, "enriched": 3, "failed": 0 } },
   "import": { "lastImportAt": "...", "result": { "...": "ImportResult, see POST /api/import" } },
   "tags": { "songs": 5055, "tagged": 0, "coverage": 0 },
-  "plays": { "plays": 39821, "music": 39338, "api": 10 }
+  "plays": { "plays": 39821, "music": 39338, "api": 10 },
+  "llm": {
+    "configured": true, "model": "claude-opus-5-5", "month": "2026-11",
+    "spentUsd": 1.18, "capUsd": 100, "remainingUsd": 98.82, "exhausted": false,
+    "byFeature": [{ "feature": "picks", "calls": 6, "usd": 0.64 }],
+    "jobs": { "picks": { "lastRunAt": "...", "lastSuccessAt": "...", "lastError": null, "lastResult": { "week": "2026-11-09", "picks": 5 } },
+              "digest": { "...": "same shape" }, "outcomes": { "...": "same shape" } }
+  }
 }
 ```
 
@@ -122,6 +129,7 @@ Contract between the server and the web UI. All routes are JSON over HTTP on the
 - `missingScopes`: scopes the server asks for that the stored grant lacks. Reconnect to grant them.
 - `poll.lastResult` may be `{ "skipped": "spotify_not_connected" }`. `lastRunAt`/`lastSuccessAt` are `null` before the first run. `import` is `null` before the first import.
 - `enrichment.failed`: tracks given up on after 3 failed lookups.
+- `llm`: Claude spend for the current local month against `MONTHLY_BUDGET_USD`. `exhausted: true` means every LLM endpoint returns `402` and scheduled LLM jobs skip until the next month. `configured: false` means no `ANTHROPIC_API_KEY`. Job `lastResult` may be `{ "skipped": "not_due" | "budget_exceeded" | "llm_not_configured" | "spotify_not_connected" | "attempts_exhausted" }`.
 
 ## Auth (passkeys)
 
@@ -174,6 +182,8 @@ Runs the recently-played poll now. `200 { "received": 50, "inserted": 3, "skippe
 ## Import
 
 ### `POST /api/import`
+
+Session or `Authorization: Bearer <ADMIN_TOKEN>`.
 
 `multipart/form-data`, field `files` repeated once per file. Accepts `Streaming_History_Audio_*.json` and `Streaming_History_Video_*.json`; other files are listed in `ignoredFiles`. Max 30 files, 50 MB each. Runs synchronously (about 1-2 s for the full export).
 
@@ -442,3 +452,204 @@ Bulk upsert, 1-500 items, all or nothing.
 ```
 
 Rules: `genres` and `moods` 1-3 distinct values from the vocabulary; `subgenre` optional free text up to 60 chars; `energy`, `valence` integers 1-5; `language` a valid ISO 639-1 code or `instrumental`; `model` 1-100 chars; `confidence` `low`/`med`/`high`; `taggedAt` optional ISO datetime (default now). Unknown keys are rejected. `200 { "upserted": 1 }`. `400 invalid_request` with `details[].path` like `tags.0.genres.0`; `400 unknown_tracks` with `details.uris` when a URI is not in the library.
+
+## Assistant (Claude)
+
+Claude-backed features: sets, weekly picks, ask, liner notes, digests. Session only (the admin token is rejected). Every call is recorded in a ledger and priced; see `GET /api/llm/spend`.
+
+### Errors
+
+| Status | `code` | When |
+| --- | --- | --- |
+| 503 | `llm_not_configured` | No `ANTHROPIC_API_KEY` |
+| 402 | `llm_budget_exceeded` | This month's spend reached `MONTHLY_BUDGET_USD`. `details: { month, spentUsd, capUsd }` |
+| 422 | `llm_refused` | Claude declined the request. `details: { category }` |
+| 502 | `llm_incomplete` | Claude stopped without a result (no set or picks submitted, output cut off) |
+| 502 | `llm_failed` | Claude API error after retries |
+| 409 | `spotify_not_connected` | A Spotify lookup or playlist write was needed |
+| 503 | `spotify_paused` | Spotify rate limit or quota pause. `details: { reason, until }` |
+| 502 | `spotify_failed` | Spotify call failed |
+| 409 | `picks_exist` | Picks for this week already exist. `details: { week }` |
+| 409 | `set_empty` | Saving a set with no tracks |
+| 404 | `not_found` | Unknown set, pick, thread, digest, block or note |
+
+### Streaming
+
+`POST /api/sets`, `POST /api/sets/:id/messages`, `POST /api/picks/generate` and `POST /api/ask` return JSON by default. Send `Accept: text/event-stream` to get Server-Sent Events instead:
+
+| Event | `data` |
+| --- | --- |
+| `text` | `{ "delta": "..." }`: Claude's text as it is written |
+| `tool` | `{ "name": "find_songs", "input": { ... } }`: a tool Claude called |
+| `done` | The same body the JSON response would have. Last event. |
+| `error` | `{ "error": { "code", "message", "details"? } }`. Last event. |
+
+Budget and configuration errors (`402`, `503`) are returned as normal JSON errors before the stream opens. Runs take 10 s to 2+ min (measured: ask 10-14 s, set 63 s, refine 27 s, picks 135 s), so stream or show progress.
+
+### Sets
+
+A set is a playlist built from a free-text request: songs from the owner's history plus verified songs the owner has never played, each with a reason. Refine it by conversation; each accepted change bumps `version`.
+
+Set shape (`GET /api/sets/:id`, and `set` in create/refine):
+
+```json
+{
+  "id": 1, "title": "Late drive", "description": "Night roads.", "request": "late drive, like my Mac Miller era",
+  "version": 2,
+  "playlist": { "id": "3xYz...", "url": "https://open.spotify.com/playlist/3xYz...", "savedVersion": 1, "outdated": true },
+  "createdAt": "...", "updatedAt": "...",
+  "items": [{
+    "position": 1, "kind": "library", "songKey": "woods|mac miller", "uri": "spotify:track:...",
+    "name": "Woods", "artist": "Mac Miller", "album": "Circles",
+    "reason": "Finished 41 of 44 night plays.",
+    "outcome": { "plays": 3, "finished": 2, "skipped": 1, "firstPlayedAt": "..." }
+  }],
+  "conversation": [{ "role": "owner", "text": "late drive, ..." }, { "role": "assistant", "text": "..." }]
+}
+```
+
+- `kind`: `library` (in the history) or `new` (never played, verified on Spotify).
+- `playlist` is `null` until saved. `outdated: true` when the set changed after the last save; saving again updates the same playlist.
+- `outcome` counts plays of the song after the set was saved (or created, if never saved). Refreshed hourly.
+
+#### `POST /api/sets`
+
+`{ "request": "late drive, like my Mac Miller era, half songs I've never heard" }` (1-2000 chars). `201 { "set": Set, "reply": null }`. `reply` is text when Claude asks a question instead of building; the set then has `version: 0` and no items, and the owner answers via `POST /api/sets/:id/messages`.
+
+#### `POST /api/sets/:id/messages`
+
+`{ "message": "less sad, and swap track 3 for something more upbeat" }`. `200 { "set": Set, "changed": true, "reply": null }`. `changed: false` with a `reply` when Claude answered without changing the set.
+
+#### `GET /api/sets`
+
+Params `limit` (1-100, default 20), `offset`. `{ "items": [Set without items/conversation, plus "tracks": 16], "total": 3, "limit": 20, "offset": 0 }`, newest change first.
+
+#### `POST /api/sets/:id/playlist`
+
+Saves the set to a private Spotify playlist: created on the first save, then renamed and its items replaced in place. `200 { "playlistId": "...", "playlistUrl": "...", "tracks": 16 }`. Does not start playback.
+
+#### `DELETE /api/sets/:id`
+
+`{ "deleted": true }`. The Spotify playlist, if any, is left in the owner's account.
+
+### Weekly picks
+
+Each week (Monday-based, local time) Claude picks `PICKS_PER_WEEK` songs the owner has never played, `PICKS_FAR_OUT` of them further from their taste. Generated automatically at `PICKS_WEEKDAY`/`PICKS_HOUR` local time, or on demand.
+
+Pick shape:
+
+```json
+{
+  "id": 7, "week": "2026-11-09", "position": 1, "uri": "spotify:track:...", "songKey": "no love|lyves",
+  "name": "No Love", "artist": "Lyves", "album": "...", "releaseDate": "2016-05-20",
+  "reason": "Sampled on WHEN SPARKS FLY, which you finished 38 times.",
+  "distance": "near", "state": "new", "stateAt": "...",
+  "outcome": { "plays": 2, "finished": 2, "playDays": 2, "inLibrary": true, "firstPlayedAt": "...", "hit": true }
+}
+```
+
+- `distance`: `near` or `far`.
+- `state`: `new`, `saved`, `not_now`, `never`. `never` blocks the song from all future suggestions (sets and picks); a second `never` for the same artist blocks the artist. Moving a pick out of `never` lifts those blocks. `not_now` songs may be picked again after 28 days.
+- `outcome.hit`: finished at least once and (played on 2+ days, or in the Spotify library, or state `saved`). Plays are refreshed hourly, library state daily.
+
+#### `GET /api/picks`
+
+Param `week` (`YYYY-MM-DD`, the Monday; default this week). `{ "week": "2026-11-09", "picks": [Pick], "stats": { "settled": 10, "played": 6, "hits": 3, "hitRate": 0.3 }, "playlist": { "playlistId": "...", "url": "..." } | null }`. `stats` covers picks older than 7 days. `playlist` is set when `PICKS_PLAYLIST=true` and the mirror exists.
+
+#### `GET /api/picks/weeks`
+
+Param `limit` (1-104, default 12). `{ "items": [{ "week": "2026-11-09", "picks": 5, "played": 2 }] }`.
+
+#### `POST /api/picks/generate`
+
+Generates this week's picks now. `201 { "week", "picks": [Pick], "stats" }`. `409 picks_exist` if this week already has picks.
+
+#### `PATCH /api/picks/:id`
+
+`{ "state": "saved" | "not_now" | "never" | "new" }`. `200 Pick`.
+
+### Blocks
+
+#### `GET /api/blocks`
+
+`{ "items": [{ "id": 1, "kind": "song" | "artist", "key": "no love|lyves", "label": "No Love - Lyves", "reason": "never on weekly pick 2026-11-09", "createdAt": "..." }] }`
+
+#### `DELETE /api/blocks/:id`
+
+`{ "deleted": true }`.
+
+### Ask
+
+Natural-language questions about the listening history. Claude answers from read-only analytics tools and cites the numbers it used. Answers are plain text, may contain light markdown, and end with a "Based on:" line.
+
+#### `POST /api/ask`
+
+`{ "question": "Why did I stop playing Joji?", "threadId": 3 }` (`threadId` optional, continues a thread). `200 { "threadId": 3, "answer": "...", "toolCalls": [{ "name": "artist_history", "input": { "artist": "Joji" } }] }`.
+
+#### `GET /api/ask/threads`
+
+Param `limit` (1-100, default 20). `{ "items": [{ "id": 3, "title": "Why did I stop playing Joji?", "createdAt": "...", "updatedAt": "..." }] }`.
+
+#### `GET /api/ask/threads/:id`
+
+`{ "id": 3, "createdAt": "...", "updatedAt": "...", "turns": [{ "role": "owner" | "assistant", "text": "..." }] }`.
+
+#### `DELETE /api/ask/threads/:id`
+
+`{ "deleted": true }`.
+
+### Liner notes
+
+A short note per song (samples, place in the artist's career, how it fits the owner's listening). Written once and cached forever.
+
+#### `GET /api/notes?songKey=...`
+
+The cached note, or `404` if none yet. Never calls Claude.
+
+#### `POST /api/notes`
+
+`{ "songKey": "woods|mac miller" }` or `{ "uri": "spotify:track:..." }`. Returns the cached note or writes one (about 18 s, measured).
+
+```json
+{ "songKey": "woods|mac miller", "uri": "spotify:track:...", "name": "Woods", "artist": "Mac Miller",
+  "text": "...", "sources": [{ "url": "https://...", "title": "..." }], "model": "claude-opus-5-5",
+  "createdAt": "...", "cached": false }
+```
+
+### Digests
+
+Weekly digest (the 7 local days before the run, against the 28 before those) and monthly recap (previous calendar month, against the 3 before it). Numbers are computed in code; Claude only phrases them. Generated at `DIGEST_WEEKDAY`/`DIGEST_HOUR` local time (weekly) and on the 1st at `DIGEST_HOUR` (monthly), or on demand. One digest per kind and period.
+
+#### `GET /api/digests`
+
+Params `kind` (`weekly` | `monthly`, optional), `limit` (1-100, default 20). `{ "items": [{ "id": 1, "kind": "weekly", "periodKey": "2026-11-13", "from": "2026-11-07", "to": "2026-11-13", "title": "Your week, 2026-11-07 to 2026-11-13", "createdAt": "..." }] }`. `periodKey` is the last day for weekly, `YYYY-MM` for monthly.
+
+#### `GET /api/digests/:id`
+
+The list item plus `text`, `facts` (the numbers given to Claude), `model`, and `rendered` (`title`, a blank line, then `text`: ready to post as one message).
+
+#### `POST /api/digests/generate`
+
+`{ "kind": "weekly" | "monthly" }`. Returns the digest for the period that just ended (same shape as `GET /api/digests/:id` without `rendered`, plus `created`). `created: false` when it already existed; no Claude call is made then.
+
+### Spend
+
+#### `GET /api/llm/spend`
+
+Params `month` (`YYYY-MM`, default current local month), `limit` (1-500, default 50).
+
+```json
+{
+  "month": "2026-11",
+  "byFeature": [{ "feature": "picks", "calls": 6, "usd": 0.6399, "inputTokens": 21000, "outputTokens": 9000, "cacheReadTokens": 160000, "cacheWriteTokens": 30000, "webSearches": 12 }],
+  "recent": [{ "id": 12, "ts": "...", "feature": "picks", "ref": "week:2026-11-09", "requestedModel": "claude-opus-5-5", "model": "claude-opus-5-5",
+               "inputTokens": 3000, "outputTokens": 1500, "cacheReadTokens": 30000, "cacheWriteTokens": 0, "webSearches": 3,
+               "usd": 0.072, "stopReason": "tool_use", "durationMs": 21000 }],
+  "budget": { "month": "2026-11", "spentUsd": 1.18, "capUsd": 100, "remainingUsd": 98.82, "exhausted": false },
+  "model": "claude-opus-5-5",
+  "pricesPerMTok": { "claude-opus-5-5": { "input": 4, "output": 20, "cacheWrite5m": 5, "cacheWrite1h": 8, "cacheRead": 0.2 } },
+  "webSearchPerRequest": 0.01
+}
+```
+
+`model` in `recent` differs from `requestedModel` when the API fell back to another model.

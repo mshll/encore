@@ -29,7 +29,7 @@ All config is env vars, validated at boot (the process exits on invalid values).
 | `PUBLIC_BASE_URL` | `http://localhost:8888` | Browser origin. Sets passkey RP ID, cookie `Secure` (https), and post-OAuth redirect |
 | `SPOTIFY_REDIRECT_URI` | `PUBLIC_BASE_URL/callback` | Must be registered in the Spotify app |
 | `SETUP_TOKEN` | unset | Min 24 chars. Needed to register the first passkey |
-| `ADMIN_TOKEN` | unset | Min 24 chars. Bearer token for `/api/tags/*` only |
+| `ADMIN_TOKEN` | unset | Min 24 chars. Bearer token for `/api/tags/*` and `POST /api/import` only |
 | `HOST`, `PORT` | `127.0.0.1`, `8888` | Docker image uses `0.0.0.0`, `3000` |
 | `DATABASE_PATH` | `./data/encore.db` | Docker image uses `/data/encore.db` |
 | `WEB_DIST` | `./web/dist` | Served with SPA fallback when `index.html` exists |
@@ -39,6 +39,14 @@ All config is env vars, validated at boot (the process exits on invalid values).
 | `POLL_INTERVAL_SECONDS` | `300` | Min 60 |
 | `ENRICH_INTERVAL_SECONDS`, `ENRICH_BATCH_SIZE` | `60`, `3` | Track lookups per run |
 | `QUOTA_BACKOFF_HOURS` | `12` | Pause after a Spotify `QUOTA_EXCEEDED` 429 |
+| `ANTHROPIC_API_KEY` | unset | Enables the Claude features; without it they return `503 llm_not_configured` |
+| `LLM_MODEL` | `claude-opus-5-5` | |
+| `LLM_PRICES` | built in | JSON overrides, USD per million tokens, keyed by model |
+| `MONTHLY_BUDGET_USD` | `100` | Claude spend cap per local month. At the cap, LLM endpoints return `402` and LLM jobs skip |
+| `PICKS_PER_WEEK`, `PICKS_FAR_OUT` | `5`, `1` | Weekly picks, and how many of them are far from the owner's taste |
+| `PICKS_WEEKDAY`, `PICKS_HOUR` | `5`, `10` | When weekly picks run (ISO weekday, local hour) |
+| `PICKS_PLAYLIST` | `false` | Mirror the week's picks into one private playlist |
+| `DIGEST_WEEKDAY`, `DIGEST_HOUR` | `5`, `9` | Weekly digest slot; the monthly recap runs on the 1st at `DIGEST_HOUR` |
 
 ## Import
 
@@ -67,6 +75,12 @@ src/spotify/             OAuth (PKCE, rotating refresh), API client, rate-limit 
 src/auth/                passkeys, sessions
 src/tags/                tag vocabulary, validation, storage
 src/analytics/           pure query functions
+src/llm/                 Claude client wrapper, cost ledger and budget, agent loop, threads
+src/library/             song catalog, candidate verification, blocks, play outcomes, library tools
+src/taste/               cached taste profile given to Claude
+src/sets/ src/picks/     set building and weekly picks
+src/ask/ src/notes/      questions over the history, liner notes
+src/digest/              weekly and monthly digest facts and text
 src/jobs/                scheduler and persisted job state
 src/http/                Hono app and routes
 web/                     reserved for the UI (Vite + React), built into web/dist
