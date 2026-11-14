@@ -7,6 +7,7 @@ Self-hosted, single-user Spotify dashboard. Read [README.md](README.md) for setu
 - `bun run dev`: API, jobs and the built UI on 8888. For UI work: `PORT=8889 bun run dev` plus `cd web && bun run dev`.
 - Checks before every commit: `bun test`, `bun run typecheck`, `cd web && bun run typecheck && bun run build`.
 - Schema change: edit `src/db/schema.ts` (or `assistantSchema.ts`), then `bun run db:generate`. Never edit a migration that has shipped.
+- Merge a branch into `main` with a squash merge (`git merge --squash`), one commit per branch.
 
 ## Product rules
 
