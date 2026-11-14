@@ -30,7 +30,7 @@ export function EntityHeader({
       </div>
       <div className="flex min-w-0 flex-1 flex-col gap-4">
         <div className="flex min-w-0 flex-col gap-1">
-          <h1 title={title} className="line-clamp-3 font-serif text-title text-balance break-words text-primary">
+          <h1 title={title} className="line-clamp-3 font-display text-title text-balance break-words text-primary">
             {title}
           </h1>
           {(credits || detail) && (

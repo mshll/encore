@@ -71,7 +71,7 @@ function Latest({ item }: { item: DigestItem }) {
   return (
     <AppLink to={`/recaps/${item.id}`} className="group -mx-3 flex flex-col gap-2 rounded-lg px-3 py-3 transition-colors duration-150 hover:bg-fill">
       <span className="text-caption text-secondary">{KIND_LABEL[item.kind]}, the latest</span>
-      <span className="font-serif text-figure text-balance text-primary">{recapPeriod(item)}</span>
+      <span className="font-display text-figure text-balance text-primary">{recapPeriod(item)}</span>
       {q.isError ? null : lead === null ? (
         <span aria-hidden className="flex flex-col gap-2">
           <Skeleton className="h-4 w-full" />
@@ -286,7 +286,7 @@ export function Recap({ id }: { id: number }) {
             <p className="text-caption text-secondary">
               {KIND_LABEL[q.data.kind]}, written {fmtDate(q.data.createdAt, timezone)}
             </p>
-            <h1 className="font-serif text-display text-balance text-primary">{recapPeriod(q.data)}</h1>
+            <h1 className="font-display text-display text-balance text-primary">{recapPeriod(q.data)}</h1>
           </header>
         ) : (
           !q.isError && (

@@ -19,7 +19,7 @@ export function Lockup({ size = 16 }: { size?: 16 | 32 }) {
   return (
     <span className={cx("flex items-center text-primary", size === 32 ? "gap-3" : "gap-2")}>
       <EncoreMark size={size} />
-      <span className={cx("font-serif", size === 32 ? "text-title" : "text-wordmark")}>encore</span>
+      <span className={cx("font-display", size === 32 ? "text-title" : "text-wordmark")}>encore</span>
     </span>
   );
 }

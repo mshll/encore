@@ -276,7 +276,7 @@ function Spend() {
     <Section title={`Spend in ${fmtMonthLong(b.month)}`}>
       <div className="flex flex-col gap-3">
         <p className="flex flex-wrap items-baseline gap-x-2">
-          <span className="font-serif text-figure text-primary tabular">{usd(b.spentUsd)}</span>
+          <span className="font-display text-figure text-primary tabular">{usd(b.spentUsd)}</span>
           <span className="text-secondary">
             of {usd(b.capUsd)}. Resets on {resetDay(b.month)}.
           </span>

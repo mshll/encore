@@ -164,20 +164,24 @@
   --font-*: initial;
 
   --font-sans: "Geist Variable", ui-sans-serif, system-ui, sans-serif;
-  --font-serif: "Instrument Serif", ui-serif, Georgia, serif;
+  --font-display: "Bricolage Grotesque Variable", "Geist Variable", ui-sans-serif, system-ui, sans-serif;
   --font-weight-normal: 400;
   --font-weight-medium: 500;
   --font-weight-semibold: 600;
 
   /* Coupled type styles: size / line height / tracking. Phone overrides below. */
-  --text-display: 44px;
-  --text-display--line-height: 48px;
-  --text-display--letter-spacing: -0.01em;
-  --text-title: 34px;
-  --text-title--line-height: 40px;
-  --text-title--letter-spacing: -0.005em;
-  --text-figure: 32px;
-  --text-figure--line-height: 40px;
+  --text-display: 40px;
+  --text-display--line-height: 44px;
+  --text-display--letter-spacing: -0.025em;
+  --text-display--font-weight: 600;
+  --text-title: 30px;
+  --text-title--line-height: 36px;
+  --text-title--letter-spacing: -0.02em;
+  --text-title--font-weight: 600;
+  --text-figure: 28px;
+  --text-figure--line-height: 36px;
+  --text-figure--letter-spacing: -0.02em;
+  --text-figure--font-weight: 600;
   --text-heading: 15px;
   --text-heading--line-height: 20px;
   --text-heading--letter-spacing: -0.01em;
@@ -189,8 +193,10 @@
   --text-caption--line-height: 16px;
   --text-label: 11px;
   --text-label--line-height: 14px;
-  --text-wordmark: 20px;
+  --text-wordmark: 18px;
   --text-wordmark--line-height: 20px;
+  --text-wordmark--letter-spacing: -0.02em;
+  --text-wordmark--font-weight: 600;
 
   --radius-xs: 4px;
   --radius-sm: 6px;
@@ -276,12 +282,12 @@
 
 @media screen and (max-width: 47.99rem) {
   :root {
-    --text-display: 36px;
-    --text-display--line-height: 40px;
-    --text-title: 30px;
-    --text-title--line-height: 36px;
-    --text-figure: 28px;
-    --text-figure--line-height: 36px;
+    --text-display: 32px;
+    --text-display--line-height: 36px;
+    --text-title: 28px;
+    --text-title--line-height: 32px;
+    --text-figure: 24px;
+    --text-figure--line-height: 30px;
     --text-heading: 17px;
     --text-heading--line-height: 24px;
     --text-body: 16px;

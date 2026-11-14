@@ -33,7 +33,7 @@ function Figure({ item }: { item: StatItem<string> }) {
     <>
       <span className="text-caption font-medium text-secondary">{item.label}</span>
       <span className="flex items-baseline gap-1.5">
-        <AnimatedNumber value={item.value} className="font-serif text-figure text-primary" />
+        <AnimatedNumber value={item.value} className="font-display text-figure text-primary" />
         {item.unit && <span className="text-body-sm leading-none text-secondary">{item.unit}</span>}
       </span>
       {(item.delta != null || item.compare) && (

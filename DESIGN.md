@@ -111,20 +111,20 @@ Positive change uses neutral text (see Delta), not a green: the accent is reserv
 
 ### Type
 
-Geist Variable (`font-sans`) for everything; Instrument Serif roman (`font-serif`) for page titles, figures and the wordmark only. Never italic.
+Geist Variable (`font-sans`) for everything; Bricolage Grotesque Variable at 600 (`font-display`) for page titles, figures and the wordmark only, with tight tracking (the type styles below carry weight and tracking). Never italic. Scripts the display face lacks (Arabic) fall back to the system face.
 
 | Style | Desktop | Phone | Use |
 | --- | --- | --- | --- |
-| `text-display` | 44/48 | 36/40 | Reserved (a recap headline) |
-| `text-title` | 34/40 serif | 30/36 | Page title (`PageHeader`) |
-| `text-figure` | 32/40 serif | 28/36 | Stat figures |
+| `text-display` | 40/44 display | 32/36 | Reserved (a recap headline) |
+| `text-title` | 30/36 display | 28/32 | Page title (`PageHeader`) |
+| `text-figure` | 28/36 display | 24/30 | Stat figures, always `tabular` |
 | `text-heading` | 15/20 medium | 17/24 | Section titles |
 | `text-body` | 14/20 | 16/24 | Reading text, sentences |
 | `text-body-sm` | 13/18 | 15/20 | Default UI text (body) |
 | `text-caption` | 12/16 | 14/20 | Secondary lines, axes, metadata |
 | `text-label` | 11/14 | 12/16 | Key caps, tab bar labels |
 
-Weights: 400, 500 (labels, titles), 600 (rare). Numbers that line up use `tabular`.
+Weights: 400, 500 (labels, titles), 600 (the display face; otherwise rare). Numbers that line up use `tabular` (tabular, lining figures).
 
 ### Space, size, radius, shadow, motion
 
@@ -254,7 +254,7 @@ Apply the owner's ladder to every string: does it need to surface, does the labe
 | Hierarchy from type size, weight and spacing | Borders or boxes to fix weak hierarchy; cards inside cards |
 | One stat strip driving one chart | Rows of identical metric boxes |
 | Accent only for play, selection and chart emphasis | Green for "positive"; gradients, glows, glass |
-| Serif for titles and figures, roman | Italic accent words, all-caps tracked eyebrows, monospace labels, numbered section labels |
+| Display face for titles and figures, roman | Italic accent words, all-caps tracked eyebrows, monospace labels, numbered section labels |
 | Plain metadata in secondary text | Pills or badges for ordinary metadata |
 | Spacing between setting rows | Hairlines between setting rows |
 | One primary button per surface | A primary Continue beside an accent Connect again |

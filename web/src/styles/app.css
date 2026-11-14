@@ -63,7 +63,7 @@
 }
 
 @utility tabular {
-  font-variant-numeric: tabular-nums;
+  font-variant-numeric: tabular-nums lining-nums;
 }
 
 @utility press {
