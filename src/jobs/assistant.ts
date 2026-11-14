@@ -44,14 +44,26 @@ async function guarded(run: () => Promise<Record<string, unknown>>): Promise<Rec
   }
 }
 
-export function createAssistantJobs(ctx: FeatureContext, spotifyAuth: SpotifyAuth): AssistantJobs {
+/**
+ * `publish` (for example posting to a chat channel) runs after every picks and digest run, generated or not,
+ * so a failed post is retried next hour; it must be idempotent per period.
+ */
+export function createAssistantJobs(ctx: FeatureContext, spotifyAuth: SpotifyAuth, publish?: () => Promise<Record<string, unknown>>): AssistantJobs {
+  const withPublish = (run: () => Promise<Record<string, unknown>>) => async () => {
+    const result = await guarded(run);
+    if (!publish) return result;
+    try {
+      return { ...result, publish: await publish() };
+    } catch (error) {
+      return { ...result, publish: { error: error instanceof Error ? error.message : String(error) } };
+    }
+  };
   const { db, config, llm, spotify } = ctx;
   return {
     picks: {
       name: "picks",
       intervalMs: HOUR_MS,
-      run: () =>
-        guarded(async () => {
+      run: withPublish(async () => {
           if (!llm.configured) return { skipped: "llm_not_configured" };
           if (!spotifyAuth.status().connected) return { skipped: "spotify_not_connected" };
           const now = ctx.now();
@@ -65,8 +77,7 @@ export function createAssistantJobs(ctx: FeatureContext, spotifyAuth: SpotifyAut
     digest: {
       name: "digest",
       intervalMs: HOUR_MS,
-      run: () =>
-        guarded(async () => {
+      run: withPublish(async () => {
           if (!llm.configured) return { skipped: "llm_not_configured" };
           const now = ctx.now();
           const today = localTime(now, config.timezone).day;
