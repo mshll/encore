@@ -37,5 +37,6 @@ export const statusRoutes = new Hono<Env>().get("/", (c) => {
     tags: tagCoverage(db),
     live: { watch: job(getJobState(db, "watch")), radar: job(getJobState(db, "radar")), library: job(getJobState(db, "library")) },
     plays: counts,
+    integrations: { discord: config.discord !== null, mcp: config.mcpToken !== undefined },
   });
 });

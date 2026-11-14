@@ -17,6 +17,7 @@ import { callbackRoute, spotifyRoutes } from "./routes/spotify";
 import { entityRoutes, historyRoutes, searchRoutes, statsRoutes } from "./routes/stats";
 import { statusRoutes } from "./routes/status";
 import { tagRoutes } from "./routes/tags";
+import { trackRoutes } from "./routes/tracks";
 
 export function createApp(deps: Deps) {
   const app = new Hono<Env>();
@@ -44,6 +45,7 @@ export function createApp(deps: Deps) {
   app.route("/api/history", historyRoutes);
   app.route("/api/search", searchRoutes);
   app.route("/api/player", playerRoutes);
+  app.route("/api/tracks", trackRoutes);
   app.route("/api/dj", djRoutes);
   app.route("/api/radar", radarRoutes);
   app.route("/api/cleanup", cleanupRoutes);
