@@ -1,14 +1,15 @@
 import { describe, expect, test } from "bun:test";
 import { sql } from "drizzle-orm";
 import { spotifyAuth as spotifyAuthTable } from "../src/db/schema";
-import { enrichTracks } from "../src/ingest/live/enrich";
+import { enrich, enrichmentProgress, fetchAlbumArt } from "../src/ingest/live/enrich";
+import { setJobState } from "../src/jobs/state";
 import { pollRecentlyPlayed } from "../src/ingest/live/poller";
 import { importExport } from "../src/ingest/export/import";
 import { SpotifyAuth } from "../src/spotify/auth";
 import { SpotifyClient } from "../src/spotify/client";
 import { SpotifyBlockedError } from "../src/spotify/errors";
 import type { SpotifyTrack } from "../src/spotify/types";
-import { jsonResponse, seed, testConfig, testDb, track, TZ, uri } from "./helpers";
+import { jsonResponse, play, seed, testConfig, testDb, track, TZ, uri } from "./helpers";
 
 type Handler = (url: string, init?: RequestInit) => Response | Promise<Response>;
 
@@ -193,18 +194,57 @@ describe("poller", () => {
 });
 
 describe("enrichment", () => {
-  test("fills missing metadata a few tracks at a time and records failures", async () => {
-    const { db, client, now } = setup((url) => (url.endsWith(encodeURIComponent("0".repeat(20) + "t2")) ? jsonResponse({ error: { message: "nope" } }, 404) : jsonResponse(spotifyTrack("t1", "Other name", "Other artist", 222000))));
+  const artistBody = (id: string) => ({ id, name: `Name ${id}`, images: [{ url: `https://img/${id}`, width: 640, height: 640 }] });
+
+  test("works through tracks and artists by listens, one call per step, and records failures", async () => {
+    const { db, client, now, calls } = setup((url) => {
+      if (url.includes("/artists/")) return jsonResponse(artistBody(url.split("/artists/")[1]!));
+      if (url.endsWith("t2")) return jsonResponse({ error: { message: "nope" } }, 404);
+      return jsonResponse({ ...spotifyTrack("t1", "Other name", "Other artist", 222000), artists: [{ id: "ar1", name: "Lead", uri: "spotify:artist:ar1" }, { id: "ar2", name: "Feature", uri: "spotify:artist:ar2" }] });
+    });
     connect(db, now() + 3_600_000);
-    seed(db, [track("t1", "One", "Artist", "Album"), track("t2", "Two", "Artist", "Album"), track("t3", "Three", "Artist", "Album")], []);
-    const result = await enrichTracks(db, client, 2);
-    expect(result).toEqual({ attempted: 2, enriched: 1, failed: 1 });
-    const t1 = db.all<{ name: string; duration_ms: number; enriched_at: number | null }>(sql`select name, duration_ms, enriched_at from tracks where uri = ${uri("t1")}`)[0]!;
-    expect(t1.name).toBe("One");
-    expect(t1.duration_ms).toBe(222000);
+    seed(db, [track("t1", "One", "Lead", "Album"), track("t2", "Two", "Lead", "Album")], [play("2026-01-01T10:00:00Z", uri("t1"), 200000), play("2026-01-02T10:00:00Z", uri("t1"), 200000)]);
+
+    expect(await enrich(db, client, 1)).toEqual({ tracks: 1, artists: 0, failed: 0 });
+    const t1 = db.all<{ name: string; duration_ms: number; enriched_at: number | null; album_art_url: string }>(sql`select name, duration_ms, enriched_at, album_art_url from tracks where uri = ${uri("t1")}`)[0]!;
+    expect(t1).toMatchObject({ name: "One", duration_ms: 222000, album_art_url: "https://img/1" });
     expect(t1.enriched_at).not.toBeNull();
-    const next = await enrichTracks(db, client, 1);
-    expect(next.attempted).toBe(1);
-    expect(db.all<{ n: number }>(sql`select count(*) as n from tracks where enriched_at is null`)[0]!.n).toBe(1);
+    expect(db.all(sql`select artist_id, position from track_artists order by position`)).toEqual([
+      { artist_id: "ar1", position: 0 },
+      { artist_id: "ar2", position: 1 },
+    ]);
+
+    expect(await enrich(db, client, 2)).toEqual({ tracks: 0, artists: 2, failed: 0 });
+    expect(db.all(sql`select id, image_url from artists order by id`)).toEqual([
+      { id: "ar1", image_url: "https://img/ar1" },
+      { id: "ar2", image_url: "https://img/ar2" },
+    ]);
+
+    expect(await enrich(db, client, 5)).toEqual({ tracks: 3, artists: 0, failed: 3 });
+    expect(await enrich(db, client, 5)).toEqual({ tracks: 0, artists: 0, failed: 0 });
+    expect(enrichmentProgress(db)).toEqual({ total: 2, enriched: 1, failed: 1, withArt: 1, artists: { total: 2, fetched: 2, withImage: 2 } });
+    expect(calls.filter((c) => c.url.includes("api.spotify.com"))).toHaveLength(6);
+  });
+
+  test("album art comes from oEmbed without a token and stops at the gate", async () => {
+    const { db, client, now, calls } = setup((url) => (url.includes("t2") ? jsonResponse({}, 404) : jsonResponse({ thumbnail_url: "https://thumb/1" })));
+    seed(db, [track("t1", "One", "A", "Album"), track("t2", "Two", "A", "Album")], [play("2026-01-01T10:00:00Z", uri("t1"), 200000)]);
+    expect(await fetchAlbumArt(db, client, 5)).toEqual({ attempted: 2, found: 1, failed: 1 });
+    expect(calls[0]!.url).toBe(`https://open.spotify.com/oembed?url=${encodeURIComponent(`spotify:track:${uri("t1").split(":")[2]}`)}`);
+    expect(calls[0]!.init?.headers).toBeUndefined();
+    expect(db.all(sql`select uri, album_art_url, art_attempts from tracks order by uri`)).toEqual([
+      { uri: uri("t1"), album_art_url: "https://thumb/1", art_attempts: 0 },
+      { uri: uri("t2"), album_art_url: null, art_attempts: 1 },
+    ]);
+    setJobState(db, "spotify", { data: { reason: "rate_limited", blockedUntil: now() + 60_000, at: now() } });
+    await expect(fetchAlbumArt(db, client, 5)).rejects.toBeInstanceOf(SpotifyBlockedError);
+    expect(calls).toHaveLength(2);
+  });
+
+  test("polled tracks link their artists", async () => {
+    const { db, client, config, now } = setup(() => jsonResponse({ items: [{ played_at: "2026-11-01T10:00:00Z", track: spotifyTrack("t9", "Nine", "Lead"), context: null }] }));
+    connect(db, now() + 3_600_000);
+    await pollRecentlyPlayed(db, client, config);
+    expect(db.all(sql`select ta.track_uri, a.name from track_artists ta join artists a on a.id = ta.artist_id`)).toEqual([{ track_uri: uri("t9"), name: "Lead" }]);
   });
 });

@@ -7,6 +7,10 @@ describe("config", () => {
     expect(config).toMatchObject({ spotifyRedirectUri: "https://spotify.mshl.me/callback", rpId: "spotify.mshl.me", secureCookies: true, setupToken: undefined });
   });
 
+  test("paces enrichment and album art at one call every 4 seconds by default", () => {
+    expect(loadConfig({ SPOTIFY_CLIENT_ID: "id" })).toMatchObject({ enrichIntervalMs: 4000, enrichBatchSize: 1, artIntervalMs: 4000 });
+  });
+
   test("fails fast on invalid values", () => {
     expect(() => loadConfig({})).toThrow("SPOTIFY_CLIENT_ID");
     expect(() => loadConfig({ SPOTIFY_CLIENT_ID: "id", ADMIN_TOKEN: "short" })).toThrow("ADMIN_TOKEN");

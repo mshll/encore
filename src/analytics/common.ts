@@ -1,4 +1,5 @@
 import { sql, type SQL } from "drizzle-orm";
+import type { Db } from "../db/client";
 
 export type Range = { from?: string; to?: string };
 export type Period = "day" | "week" | "month" | "year";
@@ -61,7 +62,8 @@ export function periodExpr(period: Period): SQL {
 export function songStatsSql(where: SQL): SQL {
   return sql`
     select song_key, uri, name, artist, album, album_art_url, plays, listens, ms, skips, skip_known, quick_skips, first_ts, last_ts from (
-      select t.song_key, t.uri, t.name, t.artist, t.album, t.album_art_url,
+      select t.song_key, t.uri, t.name, t.artist, t.album,
+        max(max(t.album_art_url)) over w as album_art_url,
         row_number() over w_rank as rn,
         sum(count(*)) over w as plays,
         sum(coalesce(sum(p.source = 'api' or p.ms_played >= 30000), 0)) over w as listens,
@@ -113,6 +115,22 @@ export function song(row: SongRow) {
     album: row.album,
     albumArtUrl: row.album_art_url,
   };
+}
+
+export function withArtistImages<T extends { artist: string }>(db: Db, rows: T[]): (T & { imageUrl: string | null })[] {
+  const names = [...new Set(rows.map((r) => r.artist))];
+  if (names.length === 0) return [];
+  const images = db.all<{ artist: string; image_url: string }>(sql`
+    select t.artist, max(a.image_url) as image_url from tracks t
+    join track_artists ta on ta.track_uri = t.uri and ta.position = 0
+    join artists a on a.id = ta.artist_id
+    where a.image_url is not null and t.artist in (${sql.join(
+      names.map((n) => sql`${n}`),
+      sql`, `,
+    )})
+    group by t.artist`);
+  const byName = new Map(images.map((i) => [i.artist, i.image_url]));
+  return rows.map((r) => ({ ...r, imageUrl: byName.get(r.artist) ?? null }));
 }
 
 export const songWithStats = (row: SongRow) => ({ ...song(row), ...stats(row) });

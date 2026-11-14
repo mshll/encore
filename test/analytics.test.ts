@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { eq } from "drizzle-orm";
 import { albumPage, artistPage, trackPage } from "../src/analytics/entities";
 import { history } from "../src/analytics/history";
 import { clock, devices, overview, timeSeries } from "../src/analytics/overview";
@@ -8,7 +9,9 @@ import { classify, momentSplit, skips } from "../src/analytics/skips";
 import { energyByHour, genreSeries, moodSeries } from "../src/analytics/tags";
 import { eras, topAlbums, topArtists, topTracks } from "../src/analytics/top";
 import { trips } from "../src/analytics/trips";
+import { artists, tracks } from "../src/db/schema";
 import { songKey } from "../src/plays/song";
+import { linkArtists } from "../src/plays/store";
 import { upsertTags } from "../src/tags/service";
 import { play, seed, testDb, track, uri } from "./helpers";
 
@@ -51,8 +54,8 @@ describe("overview", () => {
       shuffleRate: 0.25,
       firstPlayed: "2026-01-05T10:00:00.000Z",
       lastPlayed: "2026-03-01T10:00:00.000Z",
-      topArtist: { artist: "Artist X", hours: 0.11, listens: 2 },
-      topTrack: { songKey: KEY_A, uri: A1, name: "Song A", artist: "Artist X", hours: 0.11, listens: 2 },
+      topArtist: { artist: "Artist X", imageUrl: null, hours: 0.11, listens: 2 },
+      topTrack: { songKey: KEY_A, uri: A1, name: "Song A", artist: "Artist X", albumArtUrl: null, hours: 0.11, listens: 2 },
     });
   });
 
@@ -115,6 +118,7 @@ describe("eras", () => {
     ]);
     expect(result.artists[0]).toEqual({
       artist: "Artist X",
+      imageUrl: null,
       hours: 0.11,
       firstPlayed: "2026-01-05T10:00:00.000Z",
       lastPlayed: "2026-02-01T10:00:00.000Z",
@@ -232,7 +236,7 @@ describe("trips", () => {
     const db = testDb();
     seed(
       db,
-      [track("a1", "Song A", "Artist X", "Album 1")],
+      [track("a1", "Song A", "Artist X", "Album 1", { albumArtUrl: "https://img/a1" })],
       [
         play("2026-01-01T10:00:00Z", A1, 200000),
         play("2026-01-02T10:00:00Z", A1, 200000, { connCountry: "GB" }),
@@ -258,7 +262,7 @@ describe("trips", () => {
       ],
       plays: 3,
       hours: 0.11,
-      topTracks: [{ songKey: KEY_A, uri: A1, name: "Song A", artist: "Artist X", plays: 3, listens: 2, hours: 0.11 }],
+      topTracks: [{ songKey: KEY_A, uri: A1, name: "Song A", artist: "Artist X", albumArtUrl: "https://img/a1", plays: 3, listens: 2, hours: 0.11 }],
     });
     expect(trips(db, { range: {}, homeCountry: "KW", minPlays: 1, topTracks: 0 }).trips.map((t) => t.startDay)).toEqual(["2026-02-01", "2026-01-02"]);
   });
@@ -355,5 +359,26 @@ describe("tag analytics", () => {
     expect(moodSeries(db, { range: {}, period: "year" }).series).toContainEqual({ period: "2026", value: "chill", hours: 0.11, plays: 3 });
     const at13 = energyByHour(db, { range: {} }).hours[13]!;
     expect(at13).toEqual({ hour: 13, energy: 3.33, valence: 2, listens: 3 });
+  });
+});
+
+describe("images", () => {
+  test("artist rows carry the primary artist's image and songs fall back to art from any version", () => {
+    const db = baseFixture();
+    linkArtists(db, A1, [
+      { id: "x", name: "Artist X" },
+      { id: "y", name: "Artist Y" },
+    ]);
+    db.update(artists).set({ imageUrl: "https://img/x" }).where(eq(artists.id, "x")).run();
+    db.update(artists).set({ imageUrl: "https://img/y" }).where(eq(artists.id, "y")).run();
+    db.update(tracks).set({ albumArtUrl: "https://img/a2" }).where(eq(tracks.uri, A2)).run();
+
+    expect(topArtists(db, { range: {}, limit: 5 }).map((a) => [a.artist, a.imageUrl])).toEqual([
+      ["Artist X", "https://img/x"],
+      ["Artist Y", null],
+    ]);
+    expect(artistPage(db, { artist: "Artist X", range: {}, period: "month" })!.imageUrl).toBe("https://img/x");
+    expect(search(db, { q: "artist", limit: 5 }).artists.map((a) => a.imageUrl)).toEqual(["https://img/x", null]);
+    expect(topTracks(db, { range: {}, limit: 1 })[0]).toMatchObject({ uri: A1, albumArtUrl: "https://img/a2" });
   });
 });

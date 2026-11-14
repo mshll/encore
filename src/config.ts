@@ -24,8 +24,9 @@ const schema = z.object({
   HOME_COUNTRY: z.string().regex(/^[A-Z]{2}$/).default("KW"),
   JOBS_ENABLED: z.enum(["true", "false"]).default("true").transform((v) => v === "true"),
   POLL_INTERVAL_SECONDS: z.coerce.number().int().min(60).default(300),
-  ENRICH_INTERVAL_SECONDS: z.coerce.number().int().min(10).default(60),
-  ENRICH_BATCH_SIZE: z.coerce.number().int().min(1).max(20).default(3),
+  ENRICH_INTERVAL_SECONDS: z.coerce.number().min(1).default(4),
+  ENRICH_BATCH_SIZE: z.coerce.number().int().min(1).max(20).default(1),
+  ART_INTERVAL_SECONDS: z.coerce.number().min(1).default(4),
   QUOTA_BACKOFF_HOURS: z.coerce.number().min(1).default(12),
   WEB_DIST: z.string().default("./web/dist"),
   ANTHROPIC_API_KEY: z.string().min(1).optional(),
@@ -58,6 +59,7 @@ export type Config = {
   pollIntervalMs: number;
   enrichIntervalMs: number;
   enrichBatchSize: number;
+  artIntervalMs: number;
   quotaBackoffMs: number;
   webDist: string;
   llm: LlmConfig;
@@ -139,6 +141,7 @@ export function loadConfig(env: Record<string, string | undefined> = process.env
     pollIntervalMs: e.POLL_INTERVAL_SECONDS * 1000,
     enrichIntervalMs: e.ENRICH_INTERVAL_SECONDS * 1000,
     enrichBatchSize: e.ENRICH_BATCH_SIZE,
+    artIntervalMs: e.ART_INTERVAL_SECONDS * 1000,
     quotaBackoffMs: e.QUOTA_BACKOFF_HOURS * 3_600_000,
     webDist: e.WEB_DIST,
     llm: {

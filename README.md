@@ -15,9 +15,20 @@ bun run dev                   # http://localhost:8888
 
 Open the app on `http://localhost:8888`, not `127.0.0.1`: passkeys need a domain name, and `localhost` is one. Spotify only allows a loopback IP for local redirect URIs, so the OAuth callback goes to `http://127.0.0.1:8888/callback`. The callback does not need the session cookie; it redirects back to `PUBLIC_BASE_URL` when done.
 
-First login: register a passkey with `SETUP_TOKEN` (`POST /api/auth/register/options` and `/verify`, see the API doc). After that, only a signed-in session can add passkeys.
+First login: open the app and enter `SETUP_TOKEN` to create a passkey. After that, only a signed-in session can add passkeys.
 
-Checks: `bun test`, `bun run typecheck`.
+Checks: `bun test`, `bun run typecheck`, and `cd web && bun run typecheck`.
+
+### Web UI
+
+The UI lives in `web/` (Vite, React, TypeScript, Tailwind, Base UI). For UI work run the API on another port and let Vite own 8888, so the URLs above stay the same:
+
+```sh
+PORT=8889 bun run dev                       # API, jobs included
+cd web && bun install && bun run dev        # http://localhost:8888, proxies /api and /callback to 8889
+```
+
+`cd web && bun run build` writes `web/dist`; `bun run start` then serves it on 8888 with the API. The Docker image builds it the same way.
 
 ## Environment
 
@@ -37,7 +48,8 @@ All config is env vars, validated at boot (the process exits on invalid values).
 | `HOME_COUNTRY` | `KW` | For trips |
 | `JOBS_ENABLED` | `true` | Poller and enrichment |
 | `POLL_INTERVAL_SECONDS` | `300` | Min 60 |
-| `ENRICH_INTERVAL_SECONDS`, `ENRICH_BATCH_SIZE` | `60`, `3` | Track lookups per run |
+| `ENRICH_INTERVAL_SECONDS`, `ENRICH_BATCH_SIZE` | `4`, `1` | Seconds between enrichment runs, Web API calls per run (track or artist, most listened first) |
+| `ART_INTERVAL_SECONDS` | `4` | Seconds between album-art lookups through Spotify's public oEmbed endpoint |
 | `QUOTA_BACKOFF_HOURS` | `12` | Pause after a Spotify `QUOTA_EXCEEDED` 429 |
 | `ANTHROPIC_API_KEY` | unset | Enables the Claude features; without it they return `503 llm_not_configured` |
 | `LLM_MODEL` | `claude-opus-5-5` | |
@@ -70,7 +82,7 @@ src/config.ts            env validation
 src/db/                  Drizzle schema, migrations runner (SQL in drizzle/)
 src/plays/               shared play model: song key, device enum, local time, inserts
 src/ingest/export/       export parsing, import, CLI
-src/ingest/live/         recently-played poller, track enrichment
+src/ingest/live/         recently-played poller, track and artist enrichment, album art
 src/spotify/             OAuth (PKCE, rotating refresh), API client, rate-limit gate
 src/auth/                passkeys, sessions
 src/tags/                tag vocabulary, validation, storage
@@ -83,5 +95,5 @@ src/ask/ src/notes/      questions over the history, liner notes
 src/digest/              weekly and monthly digest facts and text
 src/jobs/                scheduler and persisted job state
 src/http/                Hono app and routes
-web/                     reserved for the UI (Vite + React), built into web/dist
+web/                     UI (Vite + React), built into web/dist; dither-kit charts vendored in web/src/components/dither-kit
 ```

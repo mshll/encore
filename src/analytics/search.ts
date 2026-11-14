@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import type { Db } from "../db/client";
-import { containsPattern, MUSIC, musicWhere, songStatsSql, songWithStats, STATS, stats, type SongRow, type StatsRow } from "./common";
+import { containsPattern, MUSIC, musicWhere, songStatsSql, songWithStats, STATS, stats, type SongRow, type StatsRow, withArtistImages } from "./common";
 
 export function search(db: Db, { q, limit }: { q: string; limit: number }) {
   const like = containsPattern(q);
@@ -15,7 +15,10 @@ export function search(db: Db, { q, limit }: { q: string; limit: number }) {
     where ${musicWhere({}, sql`t.album like ${like} escape '\\'`)}
     group by t.artist, t.album order by listens desc, t.artist, t.album limit ${limit}`);
   return {
-    artists: artists.map((a) => ({ artist: a.artist, ...stats(a) })),
+    artists: withArtistImages(
+      db,
+      artists.map((a) => ({ artist: a.artist, ...stats(a) })),
+    ),
     songs: songs.map(songWithStats),
     albums: albums.map((a) => ({ album: a.album, artist: a.artist, albumArtUrl: a.album_art_url, ...stats(a) })),
   };

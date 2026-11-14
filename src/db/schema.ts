@@ -1,4 +1,4 @@
-import { index, integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
+import { index, integer, primaryKey, sqliteTable, text } from "drizzle-orm/sqlite-core";
 
 export const PLAY_KINDS = ["track", "episode", "audiobook", "video"] as const;
 export const PLAY_SOURCES = ["export", "api"] as const;
@@ -21,6 +21,7 @@ export const tracks = sqliteTable(
     albumArtUrl: text("album_art_url"),
     enrichedAt: integer("enriched_at"),
     enrichAttempts: integer("enrich_attempts").notNull().default(0),
+    artAttempts: integer("art_attempts").notNull().default(0),
   },
   (t) => [index("tracks_song_key").on(t.songKey), index("tracks_artist").on(t.artist), index("tracks_album").on(t.artist, t.album)],
 );
@@ -57,6 +58,32 @@ export const plays = sqliteTable(
     index("plays_ts").on(t.ts),
     index("plays_source_ts").on(t.source, t.ts),
   ],
+);
+
+export const artists = sqliteTable(
+  "artists",
+  {
+    id: text("id").primaryKey(),
+    name: text("name").notNull(),
+    imageUrl: text("image_url"),
+    fetchedAt: integer("fetched_at"),
+    fetchAttempts: integer("fetch_attempts").notNull().default(0),
+  },
+  (t) => [index("artists_name").on(t.name)],
+);
+
+export const trackArtists = sqliteTable(
+  "track_artists",
+  {
+    trackUri: text("track_uri")
+      .notNull()
+      .references(() => tracks.uri),
+    artistId: text("artist_id")
+      .notNull()
+      .references(() => artists.id),
+    position: integer("position").notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.trackUri, t.position] }), index("track_artists_artist").on(t.artistId)],
 );
 
 export const trackTags = sqliteTable("track_tags", {

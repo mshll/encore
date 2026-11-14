@@ -1,6 +1,6 @@
 import { sql, type SQL } from "drizzle-orm";
 import type { Db } from "../db/client";
-import { DAY_TYPE, HOUR_BUCKET, MUSIC, musicWhere, rate, type Range, SHUFFLE, songStatsSql, songWithStats, START_MODE, STATS, stats, type SongRow, type StatsRow } from "./common";
+import { DAY_TYPE, HOUR_BUCKET, MUSIC, musicWhere, rate, type Range, SHUFFLE, songStatsSql, songWithStats, START_MODE, STATS, stats, type SongRow, type StatsRow, withArtistImages } from "./common";
 
 export const CONTEXT_DIMENSIONS = {
   hourBucket: HOUR_BUCKET,
@@ -51,7 +51,10 @@ export function skips(db: Db, { range, minPlays, limit }: { range: Range; minPla
     minPlays,
     summary: { plays: summary.plays, skips: summary.skips, skipRate: rate(summary.skips, summary.skip_known), quickSkips: summary.quick_skips },
     mostSkippedTracks: list("1.0 * skips / skip_known desc, skip_known desc"),
-    mostSkippedArtists: artists.map((a) => ({ artist: a.artist, ...stats(a) })),
+    mostSkippedArtists: withArtistImages(
+      db,
+      artists.map((a) => ({ artist: a.artist, ...stats(a) })),
+    ),
     quickSkips: list("quick_skips desc, skip_known desc", "quick_skips > 0"),
     neverSkipped: list("skip_known desc", "skips = 0"),
   };

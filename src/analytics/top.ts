@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import type { Db } from "../db/client";
-import { hours, iso, MUSIC, musicWhere, type Range, songStatsSql, songWithStats, STATS, stats, type SongRow, type StatsRow } from "./common";
+import { hours, iso, MUSIC, musicWhere, type Range, songStatsSql, songWithStats, STATS, stats, type SongRow, type StatsRow, withArtistImages } from "./common";
 
 export type TopSort = "hours" | "listens" | "plays";
 export type TopParams = { range: Range; limit: number; offset?: number; sort?: TopSort };
@@ -23,7 +23,10 @@ export function topArtists(db: Db, params: TopAtParams) {
     select t.artist, count(distinct t.song_key) as songs, ${STATS}
     from ${MUSIC} where ${where(params)}
     group by t.artist order by ${orderBy(sort)}, t.artist limit ${limit} offset ${offset}`);
-  return rows.map((r) => ({ artist: r.artist, songs: r.songs, ...stats(r) }));
+  return withArtistImages(
+    db,
+    rows.map((r) => ({ artist: r.artist, songs: r.songs, ...stats(r) })),
+  );
 }
 
 export function topAlbums(db: Db, { range, limit, offset = 0, sort }: TopParams) {
@@ -57,19 +60,22 @@ export function eras(db: Db, { range, limit }: { range: Range; limit: number }) 
       for (const m of monthly) if (m.artist === artist) values[index.get(m.month)!] = hours(m.ms);
       return { artist, hours: values };
     }),
-    artists: artists.map((artist) => {
-      const own = monthly.filter((m) => m.artist === artist);
-      const peak = own.reduce((best, m) => (m.ms > best.ms ? m : best), own[0]!);
-      const life = lifetime.find((l) => l.artist === artist)!;
-      return {
-        artist,
-        hours: hours(own.reduce((sum, m) => sum + m.ms, 0)),
-        firstPlayed: iso(life.first_ts),
-        lastPlayed: iso(life.last_ts),
-        peakMonth: peak.month,
-        peakMonthHours: hours(peak.ms),
-      };
-    }),
+    artists: withArtistImages(
+      db,
+      artists.map((artist) => {
+        const own = monthly.filter((m) => m.artist === artist);
+        const peak = own.reduce((best, m) => (m.ms > best.ms ? m : best), own[0]!);
+        const life = lifetime.find((l) => l.artist === artist)!;
+        return {
+          artist,
+          hours: hours(own.reduce((sum, m) => sum + m.ms, 0)),
+          firstPlayed: iso(life.first_ts),
+          lastPlayed: iso(life.last_ts),
+          peakMonth: peak.month,
+          peakMonthHours: hours(peak.ms),
+        };
+      }),
+    ),
   };
 }
 

@@ -34,7 +34,7 @@ export const statusRoutes = new Hono<Env>().get("/", (c) => {
       paused: gate && { reason: gate.reason, until: iso(gate.blockedUntil), since: iso(gate.at) },
     },
     poll: job(getJobState(db, "poll")),
-    enrichment: { ...enrichmentProgress(db), ...job(getJobState(db, "enrich")) },
+    enrichment: { ...enrichmentProgress(db), ...job(getJobState(db, "enrich")), art: job(getJobState(db, "art")) },
     import: importState ? { lastImportAt: iso(importState.lastSuccessAt), result: importState.data } : null,
     tags: tagCoverage(db),
     plays: counts,

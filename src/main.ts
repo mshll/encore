@@ -19,7 +19,7 @@ const assistantJobs = createAssistantJobs({ db, config, llm, spotify, now: Date.
 const app = createApp({ db, config, passkeys: new Passkeys(db, config), spotifyAuth, spotify, jobs, llm, now: Date.now });
 
 const server = Bun.serve({ hostname: config.host, port: config.port, fetch: app.fetch, maxRequestBodySize: 512 * 1024 * 1024 });
-const stopJobs = config.jobsEnabled ? startScheduler(db, [jobs.poll, jobs.enrich, assistantJobs.picks, assistantJobs.digest, assistantJobs.outcomes]) : () => {};
+const stopJobs = config.jobsEnabled ? startScheduler(db, [jobs.poll, jobs.enrich, jobs.art, assistantJobs.picks, assistantJobs.digest, assistantJobs.outcomes]) : () => {};
 console.log(`encore listening on http://${server.hostname}:${server.port} (public ${config.publicBaseUrl})`);
 
 for (const signal of ["SIGINT", "SIGTERM"] as const) {

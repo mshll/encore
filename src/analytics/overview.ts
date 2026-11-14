@@ -36,9 +36,9 @@ export function overview(db: Db, { range }: { range: Range }) {
     shuffleRate: rate(row.shuffles ?? 0, row.shuffle_known ?? 0),
     firstPlayed: iso(row.first_ts),
     lastPlayed: iso(row.last_ts),
-    topArtist: topArtist ? { artist: topArtist.artist, hours: topArtist.hours, listens: topArtist.listens } : null,
+    topArtist: topArtist ? { artist: topArtist.artist, imageUrl: topArtist.imageUrl, hours: topArtist.hours, listens: topArtist.listens } : null,
     topTrack: topTrack
-      ? { songKey: topTrack.songKey, uri: topTrack.uri, name: topTrack.name, artist: topTrack.artist, hours: topTrack.hours, listens: topTrack.listens }
+      ? { songKey: topTrack.songKey, uri: topTrack.uri, name: topTrack.name, artist: topTrack.artist, albumArtUrl: topTrack.albumArtUrl, hours: topTrack.hours, listens: topTrack.listens }
       : null,
   };
 }

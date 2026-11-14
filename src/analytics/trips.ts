@@ -2,14 +2,14 @@ import { sql } from "drizzle-orm";
 import type { Db } from "../db/client";
 import { hours, type Range } from "./common";
 
-type Row = { ts: number; day: string; country: string; ms: number; music: number; song_key: string | null; uri: string | null; name: string | null; artist: string | null; listen: number };
+type Row = { ts: number; day: string; country: string; ms: number; music: number; song_key: string | null; uri: string | null; name: string | null; artist: string | null; album_art_url: string | null; listen: number };
 
 type Trip = { rows: Row[] };
 
 export function trips(db: Db, { range, homeCountry, minPlays, topTracks }: { range: Range; homeCountry: string; minPlays: number; topTracks: number }) {
   const rows = db.all<Row>(sql`
     select p.ts, p.day, p.conn_country as country, coalesce(p.ms_played, t.duration_ms, 0) as ms, p.kind = 'track' as music,
-      t.song_key, t.uri, t.name, t.artist, (p.source = 'api' or p.ms_played >= 30000) as listen
+      t.song_key, t.uri, t.name, t.artist, t.album_art_url, (p.source = 'api' or p.ms_played >= 30000) as listen
     from plays p left join tracks t on t.uri = p.track_uri
     where p.conn_country is not null
       ${range.from ? sql`and p.day >= ${range.from}` : sql``}
@@ -41,13 +41,14 @@ function summarize({ rows }: Trip, topTracks: number) {
   const first = rows[0]!;
   const last = rows[rows.length - 1]!;
   const countries = new Map<string, number>();
-  const songs = new Map<string, { songKey: string; uri: string; name: string; artist: string; plays: number; listens: number; ms: number }>();
+  const songs = new Map<string, { songKey: string; uri: string; name: string; artist: string; albumArtUrl: string | null; plays: number; listens: number; ms: number }>();
   let ms = 0;
   for (const r of rows) {
     countries.set(r.country, (countries.get(r.country) ?? 0) + 1);
     if (!r.music || !r.song_key) continue;
     ms += r.ms;
-    const s = songs.get(r.song_key) ?? { songKey: r.song_key, uri: r.uri!, name: r.name!, artist: r.artist!, plays: 0, listens: 0, ms: 0 };
+    const s = songs.get(r.song_key) ?? { songKey: r.song_key, uri: r.uri!, name: r.name!, artist: r.artist!, albumArtUrl: null, plays: 0, listens: 0, ms: 0 };
+    s.albumArtUrl ??= r.album_art_url;
     s.plays++;
     s.listens += r.listen;
     s.ms += r.ms;
