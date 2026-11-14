@@ -99,6 +99,7 @@ Contract between the server and the web UI. All routes are JSON over HTTP on the
 
 ```json
 {
+  "timezone": "Asia/Kuwait",
   "spotify": {
     "connected": true,
     "userId": "abc123",
@@ -116,6 +117,7 @@ Contract between the server and the web UI. All routes are JSON over HTTP on the
 }
 ```
 
+- `timezone`: the `TIMEZONE` used for every local day, hour and weekday. Format `ts` values in it to match the buckets.
 - `spotify.paused` is `null` or `{ "reason": "rate_limited" | "quota_exceeded", "until": "...", "since": "..." }`. While paused, the server makes no Spotify calls. `quota_exceeded` means the developer-account quota was hit; the pause lasts `QUOTA_BACKOFF_HOURS` (default 12) and the UI should show it.
 - `missingScopes`: scopes the server asks for that the stored grant lacks. Reconnect to grant them.
 - `poll.lastResult` may be `{ "skipped": "spotify_not_connected" }`. `lastRunAt`/`lastSuccessAt` are `null` before the first run. `import` is `null` before the first import.

@@ -15,7 +15,7 @@ const job = (state: JobState | undefined) => ({
 });
 
 export const statusRoutes = new Hono<Env>().get("/", (c) => {
-  const { db, spotifyAuth, spotify } = c.var.deps;
+  const { db, spotifyAuth, spotify, config } = c.var.deps;
   const auth = spotifyAuth.status();
   const gate = spotify.gate();
   const importState = getJobState(db, "import");
@@ -23,6 +23,7 @@ export const statusRoutes = new Hono<Env>().get("/", (c) => {
     sql`select count(*) as plays, coalesce(sum(kind = 'track'), 0) as music, coalesce(sum(source = 'api'), 0) as api from plays`,
   )[0]!;
   return c.json({
+    timezone: config.timezone,
     spotify: {
       connected: auth.connected,
       userId: auth.userId,

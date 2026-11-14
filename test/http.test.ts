@@ -37,7 +37,7 @@ describe("http", () => {
     expect(res.status).toBe(200);
     expect(await res.json()).toMatchObject({ inserted: 1, ignoredFiles: ["ReadMeFirst_ExtendedStreamingHistory.pdf"] });
     expect(await (await get("/api/stats/overview")).json()).toMatchObject({ plays: 1, listens: 1 });
-    expect((await (await get("/api/status")).json()) as object).toMatchObject({ import: { result: { inserted: 1 } }, spotify: { connected: false } });
+    expect((await (await get("/api/status")).json()) as object).toMatchObject({ timezone: "Asia/Kuwait", import: { result: { inserted: 1 } }, spotify: { connected: false } });
   });
 
   test("bad uploads are rejected", async () => {
