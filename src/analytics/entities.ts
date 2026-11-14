@@ -1,7 +1,7 @@
 import { eq, sql, type SQL } from "drizzle-orm";
 import type { Db } from "../db/client";
 import { tracks } from "../db/schema";
-import { hours, MS, MUSIC, musicWhere, periodExpr, type Period, type Range, songStatsSql, songWithStats, STATS, stats, type SongRow, type StatsRow } from "./common";
+import { hours, MS, MUSIC, musicWhere, periodExpr, type Period, type Range, songStatsSql, songWithStats, STATS, stats, type SongRow, type StatsRow, withArtistImages } from "./common";
 import { classify, skipProfile, type ContextDimension, type ContextStat } from "./skips";
 
 type EntityParams = { range: Range; period: Period };
@@ -32,6 +32,7 @@ export function artistPage(db: Db, { artist, range, period }: EntityParams & { a
     where ${where} and t.album is not null group by t.album order by ms desc`);
   return {
     artist,
+    imageUrl: withArtistImages(db, [{ artist }])[0]!.imageUrl,
     ...page,
     tracks: songs(db, where),
     albums: albums.map((a) => ({ album: a.album, albumArtUrl: a.album_art_url, ...stats(a) })),

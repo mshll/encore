@@ -80,7 +80,9 @@ Contract between the server and the web UI. All routes are JSON over HTTP on the
   "skips": 64, "skipRate": 0.386, "quickSkips": 40, "firstPlayed": "...", "lastPlayed": "..." }
 ```
 
-`albumArtUrl` is `null` until art is found. The `art` job fills it from Spotify's public oEmbed endpoint (300 px); track enrichment replaces it with the Web API's largest album image (640 px).
+`albumArtUrl` is `null` until art is found. The `art` job fills it from Spotify's public oEmbed endpoint (300 px); track enrichment replaces it with the Web API's largest album image (640 px). A song's art falls back to any version of it that has art.
+
+Artist rows (top artists, eras, skips, search, the artist page, the overview's `topArtist`) carry `imageUrl`: the Spotify image of the artist credited first on the artist's tracks, or `null` until enrichment fetched it.
 
 `SkipProfile`: an object keyed by context dimension; each value is a list sorted by plays, descending.
 
@@ -209,8 +211,8 @@ All under `/api/stats`. All accept `from`/`to` unless noted.
   "hours": 1444.74, "plays": 39338, "listens": 25093, "uniqueTracks": 5055, "uniqueArtists": 1589,
   "skipRate": 0.504, "shuffleRate": 0.716,
   "firstPlayed": "2021-05-16T06:56:32.000Z", "lastPlayed": "2026-11-13T21:07:27.573Z",
-  "topArtist": { "artist": "Mac Miller", "hours": 118.48, "listens": 1889 },
-  "topTrack": { "songKey": "glimpse of us|joji", "uri": "spotify:track:3aBGKDiAAvH2H7HLOyQ4US", "name": "Glimpse of Us", "artist": "Joji", "hours": 9.6, "listens": 137 }
+  "topArtist": { "artist": "Mac Miller", "imageUrl": "https://i.scdn.co/image/...", "hours": 118.48, "listens": 1889 },
+  "topTrack": { "songKey": "glimpse of us|joji", "uri": "spotify:track:3aBGKDiAAvH2H7HLOyQ4US", "name": "Glimpse of Us", "artist": "Joji", "albumArtUrl": "...", "hours": 9.6, "listens": 137 }
 }
 ```
 
@@ -226,7 +228,7 @@ Params: `period`. Only buckets with plays are returned (fill gaps on the client)
 
 Params: `limit` (1-200, default 50), `offset` (default 0), `sort` = `hours` (default) | `listens` | `plays`. `top/artists` and `top/tracks` also take `weekday` (1-7) and `hour` (0-23) to count only plays in that local weekday and/or hour (one `clock` cell).
 
-- artists: `{ "items": [{ "artist": "Mac Miller", "songs": 120, ...Stats }] }`
+- artists: `{ "items": [{ "artist": "Mac Miller", "imageUrl": "...", "songs": 120, ...Stats }] }`
 - tracks: `{ "items": [Song] }`
 - albums: `{ "items": [{ "album": "Circles", "artist": "Mac Miller", "albumArtUrl": "...", "songs": 14, ...Stats }] }`
 
@@ -238,7 +240,7 @@ Params: `limit` (1-30, default 10) top artists by hours. Stacked-chart ready: `s
 {
   "months": ["2026-10", "2026-11"],
   "series": [{ "artist": "Mac Miller", "hours": [5.68, 0.61] }],
-  "artists": [{ "artist": "Mac Miller", "hours": 6.29, "firstPlayed": "...", "lastPlayed": "...", "peakMonth": "2026-10", "peakMonthHours": 5.68 }]
+  "artists": [{ "artist": "Mac Miller", "imageUrl": "...", "hours": 6.29, "firstPlayed": "...", "lastPlayed": "...", "peakMonth": "2026-10", "peakMonthHours": 5.68 }]
 }
 ```
 
@@ -271,7 +273,7 @@ Params: `minPlays` (default 10, plays with a known skip flag needed to appear in
   "minPlays": 10,
   "summary": { "plays": 39338, "skips": 19820, "skipRate": 0.504, "quickSkips": 10466 },
   "mostSkippedTracks": [Song],
-  "mostSkippedArtists": [{ "artist": "CeeLo Green", ...Stats }],
+  "mostSkippedArtists": [{ "artist": "CeeLo Green", "imageUrl": null, ...Stats }],
   "quickSkips": [Song],
   "neverSkipped": [Song]
 }
@@ -323,7 +325,7 @@ Params: `minPlays` (default 5), `topTracks` (0-50, default 5). Newest first.
     "start": "2026-02-05T23:06:55.000Z", "end": "2026-02-09T10:54:42.000Z", "startDay": "2026-02-06", "endDay": "2026-02-09", "days": 4,
     "countries": [{ "country": "GB", "plays": 39 }, { "country": "TR", "plays": 15 }],
     "plays": 54, "hours": 2.96,
-    "topTracks": [{ "songKey": "piano man|billy joel", "uri": "spotify:track:...", "name": "Piano Man", "artist": "Billy Joel", "plays": 2, "listens": 2, "hours": 0.19 }]
+    "topTracks": [{ "songKey": "piano man|billy joel", "uri": "spotify:track:...", "name": "Piano Man", "artist": "Billy Joel", "albumArtUrl": "...", "plays": 2, "listens": 2, "hours": 0.19 }]
   }] }
 ```
 
@@ -355,7 +357,7 @@ All accept `from`/`to` and `period` (timeline bucket, default `month`). `404 not
 ### `GET /api/entities/artist?name=Mac%20Miller`
 
 ```json
-{ "artist": "Mac Miller", "totals": Stats,
+{ "artist": "Mac Miller", "imageUrl": "...", "totals": Stats,
   "timeline": [{ "period": "2025-01", "hours": 10.2, "plays": 300, "listens": 200 }],
   "skipProfile": SkipProfile,
   "tracks": [Song],
@@ -387,7 +389,7 @@ Merged across URIs: any URI of the song gives the same page.
 Case-insensitive substring match over all music plays (no range). Params: `q` (1-200 chars, required), `limit` per group (1-50, default 8). Each group is sorted by listens. Artists match on artist name, songs on track name (merged by `songKey`), albums on album name. Stats are all-time.
 
 ```json
-{ "artists": [{ "artist": "Mac Miller", ...Stats }],
+{ "artists": [{ "artist": "Mac Miller", "imageUrl": "...", ...Stats }],
   "songs": [Song],
   "albums": [{ "album": "Circles", "artist": "Mac Miller", "albumArtUrl": null, ...Stats }] }
 ```
