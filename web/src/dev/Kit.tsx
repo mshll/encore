@@ -1,6 +1,7 @@
 import { useState, type ReactNode } from "react";
 import { DitherMeter } from "../charts/DitherMeter";
 import { HeatLegend } from "../charts/DitherHeatmap";
+import { RateMeter } from "../charts/RateMeter";
 import { showToast } from "../lib/toast";
 import type { RunState } from "../lib/useRun";
 import { EncoreMark, Lockup } from "../ui/Brand";
@@ -206,6 +207,15 @@ export function Kit() {
               <HeatLegend />
             </div>
           </StatStrip>
+        </Section>
+        <Section title="Rate meter">
+          <Row label="Rate with mark">
+            <RateMeter rate={0.6} mark={0.5} className="w-40" />
+          </Row>
+          <Row label="Zero and full">
+            <RateMeter rate={0} mark={0.5} className="w-40" />
+            <RateMeter rate={1} className="w-40" />
+          </Row>
         </Section>
         <Section title="States">
           <Skeleton className="h-10 w-full" />

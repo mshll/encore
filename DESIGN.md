@@ -42,10 +42,10 @@ The source of truth for paths, labels, icons and shortcuts is `web/src/app/nav.t
 | Music `/music/*` | Who and what do I play most, and which favourites did I drop? | Open an artist, album or song | `stats/top/*`, `stats/forgotten`, `search` | Placeholder |
 | Artist, album, song pages | Everything about one artist, album or song | Play it | `entities/artist`, `entities/album`, `entities/track`, `notes` (liner notes), `radar` (artist releases) | Placeholder |
 | Patterns: When | When in the week do I listen? | Pick a weekday and hour to see what fills it | `stats/clock`, `stats/top/tracks` and `top/artists` with `weekday` and `hour` | Built |
-| Patterns: Eras | Which artists defined which months? | Pick an era | `stats/eras` | Placeholder |
-| Patterns: Taste | Which genres, moods and energy over time? | Switch genres and moods | tag stats (`stats/tags/*`), `tags/pending`, `tags` | Placeholder |
-| Patterns: Skips | Where do songs get skipped, and in what context? | Pick a moment class | `stats/skips`, `stats/skips/split` | Placeholder |
-| Patterns: Places | Where and on what do I listen (trips, devices)? | Pick a trip | `stats/trips`, `stats/devices` | Placeholder |
+| Patterns: Eras | Which artists defined which months? | Pick an era | `stats/eras`, `entities/artist` and `stats/top/artists` for the picked month | Built |
+| Patterns: Taste | Which genres, moods and energy over time? | Switch genres and moods | tag stats (`stats/tags/*`), `stats/timeseries`, `tags/pending` | Built |
+| Patterns: Skips | Where do songs get skipped, and in what context? | Pick a moment class | `stats/skips` (with `positions` and `profile`), `stats/skips/split` | Built |
+| Patterns: Places | Where and on what do I listen (trips, devices)? | Pick a trip | `stats/trips`, `stats/devices` | Built |
 | For you: Picks | What did Claude pick for me this week? | Play the picks | `picks`, `picks/weeks`, picks run (stream), `blocks` | Placeholder |
 | For you: Releases | What did artists I play release? | Mark seen, play | `radar`, `radar/seen` | Placeholder |
 | Sets `/sets` | Make me a playlist from a prompt | Make a set | `sets`, `sets/:id`, set run (stream), `dj/start`, `dj`, `dj/stop` | Placeholder |
@@ -56,6 +56,8 @@ The source of truth for paths, labels, icons and shortcuts is `web/src/app/nav.t
 | Settings `/settings/*` | How does encore run? | Save a change | `settings`, `settings/claude/verify`, `settings/discord/register`, `spotify/disconnect`, `spotify/poll`, `llm/spend`, `auth/logout`, passkey routes | Placeholder |
 
 Built surfaces are the reference implementations: Overview (home), Plays (list-led), Patterns: When (chart-led).
+
+Monthly charts that span a long quiet lead-in or a gap in the history start after the first 5% of the total when that cuts more than a year (`lib/leadIn.ts`), and say what they left out.
 
 ### Where every old screen went
 
@@ -197,7 +199,7 @@ All in `web/src/ui/` unless noted. Props listed are the ones that matter.
 | Paths | `app/paths` | `artistPath(name)`, `songPath(key)`, `albumPath(artist, album)` |
 | `Placeholder` | `surfaces/Placeholder` | For a surface not yet built: header, tabs and an honest "Not built yet" state |
 
-`/dev/kit` (dev builds only) shows every primitive in its states. Fixtures: add `?fixture=loading|error|empty|new|worst|off` or `?player=playing` to any dev URL (`web/src/dev/fixtures.ts`); the choice sticks for the tab until `off`.
+`/dev/kit` (dev builds only) shows every primitive in its states. Fixtures: add `?fixture=loading|error|empty|new|worst|untagged|off` or `?player=playing` to any dev URL (`web/src/dev/fixtures.ts`); the choice sticks for the tab until `off`.
 
 ## 6. Charts
 
@@ -207,9 +209,10 @@ One family: dithered halftone in Spotify green.
 | --- | --- | --- |
 | `DitherArea` | `charts/Dither` | One series over time (the stat strip chart) |
 | `DitherBars`, `DitherStack`, `DitherLine`, `DitherRadar` | `charts/Dither` | Bars, stacked series, lines, radar. All draw through the vendored kit in `components/dither-kit/` |
-| `StackedArea`, `TagTrends`, `SegmentedBar`, `SkipProfileChart` | `charts/*` | Eras, taste, skips |
+| `StackedArea`, `TagTrends`, `SegmentedBar`, `SkipProfileChart` | `charts/*` | Not used by any surface: Eras, Taste and Skips draw with `DitherHeatmap`, `DitherArea`, `DitherBars` and `RateMeter` |
 | `DitherMeter` | `charts/DitherMeter` | A share bar in a row, always next to a printed figure |
-| `DitherHeatmap`, `HeatLegend` | `charts/DitherHeatmap` | A grid of values (weekday by hour). One tab stop, arrow keys move the selection |
+| `RateMeter` | `charts/RateMeter` | A rate on a fixed 0 to 100% track, with an optional tick for a reference rate (skip rate by context, share by device). Next to a printed figure |
+| `DitherHeatmap`, `HeatLegend` | `charts/DitherHeatmap` | A grid of values (weekday by hour, artist by month). One tab stop, arrow keys move the selection. Column labels can be elements (artist avatars on phone) |
 | `ditherTile(level)`, `levelFor(share)` | `charts/ditherTile` | The halftone as a CSS background for anything that is not a canvas |
 | `DataTable` | `charts/DataTable` | "View data": the accessible table behind every chart |
 
