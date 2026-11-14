@@ -7,7 +7,7 @@ import { createAssistantJobs } from "../src/jobs/assistant";
 import { runJob } from "../src/jobs/scheduler";
 import { getPlan, updateItems } from "../src/library/plans";
 import { leaksInternals } from "../src/llm/plainText";
-import { continuePlanConversation, startPlanConversation } from "../src/library/planner";
+import { continuePlanConversation, planConversation, startPlanConversation } from "../src/library/planner";
 import { createStanding } from "../src/library/standing";
 import { SpotifyAuth } from "../src/spotify/auth";
 import { featureCtx, message, scripted, seedLibrary, text, toolCall, toolResults } from "./llmFakes";
@@ -112,6 +112,17 @@ describe("Claude plans", () => {
     await startPlanConversation(ctx, "sort my liked songs");
 
     expect(toolResults(fake.requests[1]!)[0]!.value.errors).toEqual(["Group 1: add needs target, the name of one of the owner's playlists."]);
+  });
+
+  test("a turn that ends in a plan reads as Claude's summary of it in the conversation", async () => {
+    const { ctx, db } = setup(toolCall("submit_plan", dormantGroup()));
+
+    const { threadId } = await startPlanConversation(ctx, "clean up");
+
+    expect(planConversation(db, threadId)).toEqual([
+      { role: "owner", text: "clean up" },
+      { role: "assistant", text: "Archives liked songs not played in over 6 months." },
+    ]);
   });
 
   test("every Claude call is recorded in the ledger under the library feature", async () => {

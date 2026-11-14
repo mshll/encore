@@ -409,7 +409,24 @@ export async function continuePlanConversation(ctx: FeatureContext, threadId: nu
   return { planId: turn.planId, threadId, reply: turn.reply, songs: turn.submitted };
 }
 
+/**
+ * The conversation as the owner reads it. A turn that ends in a plan has no text of its own, so an accepted
+ * `submit_plan` shows as Claude's turn with the plan's summary (plain words, checked when submitted).
+ */
 export function planConversation(db: Db, threadId: number | null) {
   if (threadId === null) return [];
-  return transcript(getThread(db, threadId)?.messages ?? []);
+  const messages = getThread(db, threadId)?.messages ?? [];
+  return messages.flatMap((m, i) => {
+    const turns = transcript([m]);
+    if (m.role !== "assistant" || typeof m.content === "string") return turns;
+    for (const block of m.content) {
+      if (block.type !== "tool_use" || block.name !== "submit_plan") continue;
+      const next = messages[i + 1];
+      const result = next && Array.isArray(next.content) ? next.content.find((b) => b.type === "tool_result" && b.tool_use_id === block.id) : undefined;
+      const accepted = !result || JSON.stringify(result).includes('\\"accepted\\":true');
+      const summary = (block.input as { summary?: string; title?: string }).summary || (block.input as { title?: string }).title;
+      if (accepted && summary) turns.push({ role: "assistant", text: summary });
+    }
+    return turns;
+  });
 }
