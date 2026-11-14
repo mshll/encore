@@ -190,7 +190,7 @@ function worsen(path: string, body: Json): unknown {
     return {
       ...body,
       artists: 123456,
-      items: items.concat(items.map((r) => ({ ...r, id: "x2", name: "สวัสดี", artist: "Ado", albumType: "album", imageUrl: null, seen: true }))),
+      items: items.concat(items.map((r) => ({ ...r, id: `${String(r.id)}-x2`, name: "สวัสดี", artist: "Ado", albumType: "album", imageUrl: null, seen: true }))),
     };
   }
   if (path === "/api/sets") {
