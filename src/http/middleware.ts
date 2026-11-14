@@ -5,11 +5,11 @@ import { isValidSession } from "../auth/sessions";
 import type { Env } from "./context";
 import { ApiError } from "./errors";
 
-export const SESSION_COOKIE = "encore_session";
+export const sessionCookie = (c: Context<Env>) => (c.var.deps.config.secureCookies ? "__Host-encore_session" : "encore_session");
 
 export function hasSession(c: Context<Env>): boolean {
   const { db, now } = c.var.deps;
-  return isValidSession(db, getCookie(c, SESSION_COOKIE), now());
+  return isValidSession(db, getCookie(c, sessionCookie(c)), now());
 }
 
 function hasAdminToken(c: Context<Env>): boolean {

@@ -7,7 +7,7 @@ import { safeEqual } from "../../auth/secrets";
 import { createSession, deleteSession, SESSION_TTL_MS } from "../../auth/sessions";
 import type { Env } from "../context";
 import { ApiError, jsonBody, parse } from "../errors";
-import { hasSession, SESSION_COOKIE } from "../middleware";
+import { hasSession, sessionCookie } from "../middleware";
 
 const credential = z.object({ id: z.string().min(1), rawId: z.string().min(1), type: z.literal("public-key"), response: z.record(z.string(), z.unknown()) }).loose();
 const optionsBody = z.object({ setupToken: z.string().optional() });
@@ -35,7 +35,7 @@ async function ceremony<T>(run: () => Promise<T>): Promise<T> {
 
 function startSession(c: Context<Env>) {
   const { db, config, now } = c.var.deps;
-  setCookie(c, SESSION_COOKIE, createSession(db, now()), {
+  setCookie(c, sessionCookie(c), createSession(db, now()), {
     httpOnly: true,
     secure: config.secureCookies,
     sameSite: "Lax",
@@ -67,8 +67,8 @@ export const authRoutes = new Hono<Env>()
     return c.json({ authenticated: true });
   })
   .post("/logout", (c) => {
-    const id = getCookie(c, SESSION_COOKIE);
+    const id = getCookie(c, sessionCookie(c));
     if (id) deleteSession(c.var.deps.db, id);
-    deleteCookie(c, SESSION_COOKIE, { path: "/" });
+    deleteCookie(c, sessionCookie(c), { path: "/", secure: c.var.deps.config.secureCookies });
     return c.json({ authenticated: false });
   });
