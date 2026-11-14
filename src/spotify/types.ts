@@ -14,3 +14,7 @@ export type RecentlyPlayed = {
 };
 
 export type SpotifyMe = { id: string; display_name: string | null };
+
+export type SpotifySearch = { tracks: { items: SpotifyTrack[] } };
+
+export type SpotifyPlaylist = { id: string; external_urls: { spotify: string } };

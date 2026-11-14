@@ -3,7 +3,7 @@ import type { Db } from "../db/client";
 import { getJobState, setJobState } from "../jobs/state";
 import type { SpotifyAuth } from "./auth";
 import { SpotifyApiError, SpotifyBlockedError, type BlockReason } from "./errors";
-import type { RecentlyPlayed, SpotifyMe, SpotifyTrack } from "./types";
+import type { RecentlyPlayed, SpotifyMe, SpotifyPlaylist, SpotifySearch, SpotifyTrack } from "./types";
 
 const apiUrl = "https://api.spotify.com/v1";
 const defaultRetryAfterSeconds = 60;
@@ -36,21 +36,48 @@ export class SpotifyClient {
     return this.get<SpotifyTrack>(`/tracks/${encodeURIComponent(id)}`);
   }
 
-  private async get<T>(path: string): Promise<T> {
-    const gate = this.gate();
-    if (gate) throw new SpotifyBlockedError(gate.reason, gate.blockedUntil);
-    let res = await this.send(path, await this.auth.accessToken());
-    if (res.status === 401) res = await this.send(path, await this.auth.accessToken(true));
-    if (res.status === 429) throw await this.block(res);
-    if (!res.ok) {
-      const body = (await res.json().catch(() => ({}))) as { error?: { message?: string } };
-      throw new SpotifyApiError(res.status, body.error?.message ?? res.statusText);
-    }
-    return (await res.json()) as T;
+  searchTracks(query: string, limit: number) {
+    return this.get<SpotifySearch>(`/search?${new URLSearchParams({ q: query, type: "track", limit: String(limit) })}`);
   }
 
-  private send(path: string, token: string) {
-    return this.fetchFn(`${apiUrl}${path}`, { headers: { authorization: `Bearer ${token}` } });
+  createPlaylist(input: { name: string; description: string; public: boolean }) {
+    return this.request<SpotifyPlaylist>("POST", "/me/playlists", input);
+  }
+
+  updatePlaylistDetails(id: string, input: { name: string; description: string }) {
+    return this.request<void>("PUT", `/playlists/${encodeURIComponent(id)}`, input);
+  }
+
+  replacePlaylistItems(id: string, uris: string[]) {
+    return this.request<{ snapshot_id: string }>("PUT", `/playlists/${encodeURIComponent(id)}/items`, { uris });
+  }
+
+  libraryContains(uris: string[]) {
+    return this.get<boolean[]>(`/me/library/contains?${new URLSearchParams({ uris: uris.join(",") })}`);
+  }
+
+  private get<T>(path: string): Promise<T> {
+    return this.request<T>("GET", path);
+  }
+
+  private async request<T>(method: string, path: string, body?: unknown): Promise<T> {
+    const gate = this.gate();
+    if (gate) throw new SpotifyBlockedError(gate.reason, gate.blockedUntil);
+    let res = await this.send(method, path, await this.auth.accessToken(), body);
+    if (res.status === 401) res = await this.send(method, path, await this.auth.accessToken(true), body);
+    if (res.status === 429) throw await this.block(res);
+    if (!res.ok) {
+      const error = (await res.json().catch(() => ({}))) as { error?: { message?: string } };
+      throw new SpotifyApiError(res.status, error.error?.message ?? res.statusText);
+    }
+    const text = await res.text();
+    return (text ? JSON.parse(text) : undefined) as T;
+  }
+
+  private send(method: string, path: string, token: string, body?: unknown) {
+    const headers: Record<string, string> = { authorization: `Bearer ${token}` };
+    if (body !== undefined) headers["content-type"] = "application/json";
+    return this.fetchFn(`${apiUrl}${path}`, { method, headers, body: body === undefined ? undefined : JSON.stringify(body) });
   }
 
   private async block(res: Response): Promise<SpotifyBlockedError> {
