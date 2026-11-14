@@ -10,7 +10,7 @@ encore answers three jobs: **what have I been listening to**, **what should I pl
 
 ```
 Listening                      Play                        Secondary            Foot
-├── Overview          /        ├── For you    /for-you     ├── Recaps  /recaps  └── Settings /settings
+├── Home              /        ├── For you    /for-you     ├── Recaps  /recaps  └── Settings /settings
 ├── Plays             /plays   │   ├── Weekly picks  /picks   │   └── /recaps/:id      ├── general
 ├── Music             /music   │   ├── Forgotten favourites  ├── Library /library        ├── spotify
 │   ├── Artists   /artists     │   ├── Most played lately    └── Setup   /setup          ├── claude
@@ -38,7 +38,7 @@ The source of truth for paths, labels, icons and shortcuts is `web/src/app/nav.t
 
 | Surface | Answers | Primary action | API | Status |
 | --- | --- | --- | --- | --- |
-| Overview `/` | How much did I listen in this range, to what, and what is waiting for me? | Change the range | `stats/overview` (range and the range before), `stats/timeseries`, `stats/top/*`, `stats/on-this-day`, `picks`, `radar`, `digests`, `status` | Built |
+| Home `/` | What should I listen to now, and what is new for me? Then: how have I been listening? | Play what encore made (a cover, a pick) | `living`, `picks`, `radar`, `sets`, `digests`, `status`; then `stats/overview` (range and the range before), `stats/timeseries`, `stats/top/*`, `stats/on-this-day` | Built |
 | Plays `/plays` | What exactly did I play, when, where? | Search and filter the log | `history` (paged, `q`, `skipped`, `device`, `source`, `artist`, `songKey`), `status`, `stats/overview` (first use) | Built |
 | Music `/music/*` | Who and what do I play most, and which favourites did I drop? | Open an artist, album or song | `stats/top/*` (paged, `sort`, `q`), `stats/forgotten`, `stats/overview` (counts) | Built |
 | Artist, album, song pages | Everything about one artist, album or song | Play it | `entities/artist`, `entities/album`, `entities/track`, `notes` (liner notes), `radar` (artist releases) | Built |
@@ -58,7 +58,7 @@ The source of truth for paths, labels, icons and shortcuts is `web/src/app/nav.t
 | Setup `/setup` | Is encore connected and fed? | Do the next missing step | `onboarding`, `spotify/authorize`, `import`, `settings` | Built |
 | Settings `/settings/*` | How does encore run? | Save a change | `settings`, `settings/claude/verify`, `settings/discord/register`, `spotify/disconnect`, `spotify/poll`, `llm/spend`, `auth/logout`, passkey routes | Built |
 
-Built surfaces are the reference implementations: Overview (home), Plays (list-led), Patterns: When (chart-led). Music lists and the entity pages (`surfaces/Music.tsx`, `surfaces/entity/*`) follow Plays and Overview.
+Built surfaces are the reference implementations: Home (`surfaces/Home.tsx`), Plays (list-led), Patterns: When (chart-led). Music lists and the entity pages (`surfaces/Music.tsx`, `surfaces/entity/*`) follow Plays and Home's listening section.
 
 Monthly charts that span a long quiet lead-in or a gap in the history start after the first 5% of the total when that cuts more than a year (`lib/leadIn.ts`), and say what they left out.
 
@@ -66,7 +66,7 @@ Monthly charts that span a long quiet lead-in or a gap in the history start afte
 
 | Old screen (`git show main:web/src/screens/<File>.tsx`) | New home |
 | --- | --- |
-| Overview | Overview (figures and chart), Music (full rankings), Recaps/For you (the "waiting for you" column) |
+| Overview | Home (figures and chart under Your listening), Music (full rankings), Recaps/For you (the "waiting for you" column) |
 | History | Plays |
 | Explore (search, browse top lists) | Command palette (search), Music tabs (browse) |
 | Entity (artist, album, song pages) | Music detail pages `/music/artist`, `/music/album`, `/music/song` |
@@ -87,6 +87,23 @@ Monthly charts that span a long quiet lead-in or a gap in the history start afte
 | SignIn | Sign-in screen outside the shell (`surfaces/SignIn.tsx`) |
 
 No capability was dropped. Old URLs are not redirected.
+
+### Where Overview went (November 2026)
+
+Overview became Home: it answers "what should I listen to now, and what is new for me" first and "how have I been listening" second. The nav item is Home (`G` then `H`): the owner calls it the home, and the page no longer only overviews listening.
+
+| Overview (part) | Home |
+| --- | --- |
+| Range picker in the header | Your listening section's actions (it only scopes that section) |
+| Time listened, Plays, Listens with the change from the range before, driving the halftone chart | Your listening, chart 180 tall (140 on a phone; was 260 and 180) |
+| Top artists, songs, albums (10 each), counts, Show all, Start a session | Your listening, 5 each; Show all to Music for the rest |
+| On this day | Your listening, side column |
+| Waiting for you: new picks | This week's picks (three with Claude's reason, Play, Show all to Weekly picks) and the Weekly picks cover's line |
+| Waiting for you: new releases | New releases (three unseen, Show all to New from your artists) and that cover's line |
+| Waiting for you: the latest recap | Latest recap |
+| Spotify not connected, paused, last check failed | The same notice, under the title |
+| First use (no plays) | The same first-use state, pointing to Setup, saying what Home will hold |
+| (new) | Made for you: the playlists by cover, a sideways shelf on a phone; one composer that sends the text to Ask or to Sets (`?q=`), where the run starts and is followed; the latest set |
 
 ### Where the For you tabs went (November 2026)
 
@@ -176,8 +193,9 @@ Phosphor, regular weight; `fill` only for the active nav item and the playing st
 - **Main plus side column.** `SIDE_COLUMNS` (`lg:grid-cols-[minmax(0,1fr)_minmax(0,320px)]`): the main answer left, small related lists right.
 - **Setting rows.** `SettingRows` separates rows with spacing only, no hairlines; a section heading groups them. A hairline is kept for selection or a table, never to divide settings.
 - **Conversation panel** (`ConversationPanel` in `ui/Conversation`). Every conversation with Claude next to content (the set page, Ask, Library) is one docked panel, built once: its own surface (`bg-card`, `rounded-2xl`, the panel hairline from `shadow-panel`), a header row that names it ("Change the set", "Claude asks", a thread's title, "New question") with its actions (a thread's More), the thread scrolling inside the panel, and the composer pinned at the panel's foot with the notices tied to it (a failed run with Try again, Stopped, Claude not set up, the cap spent, Spotify paused) and the monthly spend in the composer's footer. Nothing else is boxed inside it: messages are text and the owner's bubbles, the composer is the one control. From `lg` (`useDocked`) it docks in a page column: `DOCKED` makes it sticky under the frame's top band (top 48, the title line) and one gutter above the foot of the page panel, its right edge on the frame's right edge (set page: `[content | --panel-w]`; Ask: `[280 thread list | panel]`, the Ask title heading the thread list). Narrower, the set page opens it as a bottom sheet from a "Change" button in the header actions ("Answer" while Claude's question waits; "Changing…" while a run goes): the sheet is full height less 24, so the composer sits at its foot above the keyboard (the viewport resizes for it) and the home indicator, and it covers the tab bar and mini player while open. It stays mounted while closed, so a run keeps reporting and the set refreshes when it ends. On Ask the conversation is the page, so on a phone it has no surface: the page scrolls, the composer sticks above the tab bar, and a thread's title row sits over it. Inside, `Conversation` keeps its behaviour: with no messages the composer sits at the top with the starters under it; from the first message, or a starting run, it is pinned to the foot and the view follows new messages and a streaming run while the reader is at the end; scrolled up, Jump to latest appears above the composer. During a run the send button is Stop, so `RunProgress` in a thread has no Cancel. The composer glides between the two places (`--dur-move`, `--ease-move`; instant with reduced motion).
-- **Covers** (For you, Home). The playlists encore makes as a grid of their generated covers (2 columns on a phone, 3 from `md`, 5 from `lg`), each with its name and one freshness line under it; the line is `text-primary` when it says something is new, `text-danger` for a problem. The cover and lines are one link to the playlist; Play (accent, round) shows over the cover's corner on hover or focus on desktop and plays it in Spotify when kept there, otherwise its songs. A phone opens the page and plays from there.
-- **Start a session.** `StartSessionButton` (secondary, small) sits beside a list of songs worth a session (Overview top songs, Forgotten, an era, keepers in Skips, a trip). It opens the queue panel, where the session runs.
+- **Home** (`surfaces/Home.tsx`). Made for you (covers) > `SIDE_COLUMNS`: the composer (Ask or Make a set, a two-way toggle in its footer; Claude not set up or the cap spent shows as its notice) over This week's picks | New releases, Latest set, Latest recap, each only when there is one > Your listening (range picker in its actions, stat strip and chart, top lists | on this day). Nothing on Home starts a run or playback by itself: sending the composer opens Ask or Sets with `?q=`, which start the run there (deferred a tick, so a StrictMode double mount never starts or abandons one).
+- **Covers** (For you, Home). The playlists encore makes as a grid of their generated covers (2 columns on a phone, 3 from `md`, 5 from `lg`; on Home a phone gets one sideways shelf instead, so the rest of Home stays in reach), each with its name and one freshness line under it; the line is `text-primary` when it says something is new, `text-danger` for a problem. The cover and lines are one link to the playlist; Play (accent, round) shows over the cover's corner on hover or focus on desktop and plays it in Spotify when kept there, otherwise its songs. A phone opens the page and plays from there.
+- **Start a session.** `StartSessionButton` (secondary, small) sits beside a list of songs worth a session (Home top songs, Forgotten, an era, keepers in Skips, a trip). It opens the queue panel, where the session runs.
 
 ### State order
 
@@ -189,7 +207,7 @@ Every data block resolves in this order, and builds each state with the shared c
 4. **Empty for this range or filter** (`EmptyState size="section"` with the control that widens it).
 5. **Content**, including worst case: long names truncate with the full value in the link label; 0, 1 and huge counts format with `fmtCompact`/`fmtInt`; missing or broken art falls back to the kind's placeholder glyph.
 
-Refetches keep the old data dimmed (`dimWhile(refetching)`, `opacity-60`) instead of flashing a skeleton. An unknown address renders `NotFound` ("This page does not exist", Open Overview); a missing recap, set, thread or entity says the same in its own page.
+Refetches keep the old data dimmed (`dimWhile(refetching)`, `opacity-60`) instead of flashing a skeleton. An unknown address renders `NotFound` ("This page does not exist", Open Home); a missing recap, set, thread or entity says the same in its own page.
 
 ## 5. Components
 

@@ -32,7 +32,7 @@ const under = (path: string) => (location: string) => location === path || locat
 
 /** The new information architecture. DESIGN.md, section 1, describes what each surface answers. */
 export const SURFACES: Surface[] = [
-  { id: "overview", path: "/", label: "Overview", icon: HouseIcon, place: "listening", key: "o", match: exact("/") },
+  { id: "home", path: "/", label: "Home", icon: HouseIcon, place: "listening", key: "h", match: exact("/") },
   { id: "plays", path: "/plays", label: "Plays", icon: ListBulletsIcon, place: "listening", key: "p", match: under("/plays") },
   { id: "music", path: "/music", label: "Music", icon: VinylRecordIcon, place: "listening", key: "m", match: under("/music") },
   { id: "patterns", path: "/patterns", label: "Patterns", icon: ChartBarIcon, place: "listening", key: "t", match: under("/patterns") },

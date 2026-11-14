@@ -6,7 +6,7 @@ import { NotFound } from "../surfaces/NotFound";
 import { paramValue } from "./paths";
 import { Shell } from "./Shell";
 
-const Overview = lazy(() => import("../surfaces/Overview").then((m) => ({ default: m.Overview })));
+const Home = lazy(() => import("../surfaces/Home").then((m) => ({ default: m.Home })));
 const Plays = lazy(() => import("../surfaces/Plays").then((m) => ({ default: m.Plays })));
 const When = lazy(() => import("../surfaces/When").then((m) => ({ default: m.When })));
 const Music = lazy(() => import("../surfaces/Music").then((m) => ({ default: m.Music })));
@@ -49,7 +49,7 @@ export function App() {
     <Shell>
       <Suspense fallback={null}>
         <Switch>
-          <Route path="/" component={Overview} />
+          <Route path="/" component={Home} />
           <Route path="/plays" component={Plays} />
 
           <Route path="/music">

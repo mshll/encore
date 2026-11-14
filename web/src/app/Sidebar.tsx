@@ -63,7 +63,7 @@ export function Sidebar({ onSearch }: { onSearch: () => void }) {
   return (
     <aside className="flex h-full w-(--sidebar-w) flex-col gap-4 px-3 pt-3 pb-2">
       <div className="flex h-8 items-center px-2">
-        <AppLink to="/" aria-label="encore, overview" className="rounded-sm">
+        <AppLink to="/" aria-label="encore, home" className="rounded-sm">
           <Lockup />
         </AppLink>
       </div>

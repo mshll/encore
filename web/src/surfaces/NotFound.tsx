@@ -15,7 +15,7 @@ export function NotFound(): ReactNode {
         title="This page does not exist"
         action={
           <AppLink to="/" className={buttonClass()}>
-            Open Overview
+            Open Home
           </AppLink>
         }
       />

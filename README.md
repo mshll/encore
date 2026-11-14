@@ -12,7 +12,7 @@ One instance serves one person. Your data stays in a single SQLite file on your 
 
 **Listening**
 
-- **Overview**: time listened, plays and listens for any range, with top artists, songs and albums.
+- **Home**: what encore made for you (its playlists, this week's picks, new releases, your latest set) and one box to ask Claude or make a set; then time listened, plays and listens for any range, with top artists, songs and albums.
 - **Plays**: the full log, searchable and filterable by device and source.
 - **Music**: every artist, album and song you have played, each with its own page, plus favourites you stopped playing.
 - **Patterns**: when in the week you listen, which artists defined which months, genres and moods over time, where songs get skipped, and trips and devices.
@@ -20,12 +20,12 @@ One instance serves one person. Your data stays in a single SQLite file on your 
 **Play** (needs an Anthropic API key)
 
 - **Sets**: describe a playlist; Claude builds it from your history plus songs you have never played, with a reason for each. Refine it by chat, save it to Spotify, or play it as a session that adapts as you skip.
-- **For you**: a few new songs picked each week, and new releases from artists you play.
+- **For you**: the playlists encore makes, by cover. Weekly picks holds a few new songs picked each week with Claude's reason for each; New from your artists holds the new releases.
 - **Ask**: questions about your listening, answered from your history.
 
 **Playlists in Spotify** (in For you)
 
-- Five private playlists encore keeps refilling: Weekly picks, Forgotten favourites, Most played lately, New from your artists, and This month in past years. Each is off until you switch it on; only Weekly picks needs the Anthropic key.
+- Five private playlists encore keeps refilling: Weekly picks, Forgotten favourites, Most played lately, New from your artists, and This month in past years. Each can be seen and played in encore; Keep in Spotify adds it to your account. Only Weekly picks needs the Anthropic key.
 
 **Upkeep**
 

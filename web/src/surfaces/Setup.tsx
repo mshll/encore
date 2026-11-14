@@ -505,7 +505,7 @@ function SetupBody({ o }: { o: Onboarding }) {
         actions={
           o.complete && (
             <AppLink to="/" className={buttonClass({ variant: "secondary" })}>
-              Open Overview
+              Open Home
             </AppLink>
           )
         }

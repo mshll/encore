@@ -178,11 +178,11 @@ function usePlayPlaylist() {
   };
 }
 
-function Cover({ playlist, news }: { playlist: LivingPlaylist; news: string | null }) {
+function Cover({ playlist, news, shelf }: { playlist: LivingPlaylist; news: string | null; shelf: boolean }) {
   const play = usePlayPlaylist();
   const line = freshLine(playlist, news);
   return (
-    <li className="group relative flex min-w-0 flex-col">
+    <li className={cx("group relative flex min-w-0 flex-col", shelf && "phone:shrink-0 phone:basis-2/5 phone:snap-start")}>
       <AppLink to={playlistPath(playlist.kind)} className="flex min-w-0 flex-col gap-3 rounded-md">
         <Artwork src={playlist.coverUrl} kind="playlist" box="fill" />
         <span className="flex min-w-0 flex-col gap-0.5">
@@ -205,7 +205,7 @@ function Cover({ playlist, news }: { playlist: LivingPlaylist; news: string | nu
   );
 }
 
-function CoversSkeleton() {
+export function CoversSkeleton() {
   return (
     <div aria-hidden className={COVERS}>
       {KINDS.map((k) => (
@@ -233,13 +233,16 @@ function useNews(): Partial<Record<LivingKind, string>> {
   };
 }
 
-/** The playlists encore makes, by cover: what is in each and how fresh. `limit` shows fewer (Home). */
-export function PlaylistCovers({ list }: { list: LivingList }) {
+/** One row a phone scrolls sideways (Home), where a grid would push everything else down. */
+const SHELF = "phone:-mx-(--gutter) phone:flex phone:snap-x phone:snap-mandatory phone:scroll-px-(--gutter) phone:overflow-x-auto phone:px-(--gutter) phone:no-scrollbar";
+
+/** The playlists encore makes, by cover: what is in each and how fresh. `shelf`: one sideways row on a phone (Home). */
+export function PlaylistCovers({ list, shelf = false }: { list: LivingList; shelf?: boolean }) {
   const news = useNews();
   return (
-    <ul className={COVERS}>
+    <ul className={cx(COVERS, shelf && SHELF)}>
       {list.items.map((p) => (
-        <Cover key={p.kind} playlist={p} news={news[p.kind] ?? null} />
+        <Cover key={p.kind} playlist={p} news={news[p.kind] ?? null} shelf={shelf} />
       ))}
     </ul>
   );
