@@ -68,7 +68,7 @@ describe("dj session", () => {
       ["DELETE", { items: set.slice(3).map((u) => ({ uri: u })) }],
       ["POST", { uris: [set[5], uri("9"), set[4]] }],
     ]);
-    expect(dj.active()).toMatchObject({ uris: [...set.slice(0, 3), set[5], uri("9"), set[4]], position: 2, replans: 1, skipStreak: 0 });
+    expect(dj.active()).toMatchObject({ uris: [...set.slice(0, 3), set[5], uri("9"), set[4]], position: 2, replans: 1, skipStreak: 0, replanSkips: 2, replannedAt: expect.any(Number) });
   });
 
   test("a re-plan keeps the track that became current while it was computing", async () => {

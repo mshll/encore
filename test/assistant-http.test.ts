@@ -142,3 +142,18 @@ describe("picks and blocks over HTTP", () => {
     for (const path of ["/api/sets/9", "/api/ask/threads/9", "/api/digests/9", "/api/notes?songKey=nope"]) expect((await get(path)).status).toBe(404);
   });
 });
+
+describe("set items", () => {
+  test("pin and remove one track by position; unknown positions are 404", async () => {
+    const { db, request, cookie } = signedIn();
+    db.$client.run("insert into llm_threads (id, feature, system, messages, created_at, updated_at) values (1, 'sets', '[]', '[]', 0, 0)");
+    db.$client.run("insert into sets (id, thread_id, request, title, description, version, created_at, updated_at) values (1, 1, 'r', 'Late drive', '', 1, 0, 0)");
+    for (const [n, name] of [[1, "Woods"], [2, "Surf"]] as const)
+      db.$client.run(`insert into set_items (set_id, position, kind, song_key, uri, name, artist, reason) values (1, ${n}, 'library', '${name.toLowerCase()}|mac miller', '${uri(name)}', '${name}', 'Mac Miller', 'r')`);
+    const pin = await request("/api/sets/1/items/2", { method: "PATCH", json: { pinned: true }, headers: { cookie } });
+    expect(((await pin.json()) as { items: { pinned: boolean }[] }).items.map((i) => i.pinned)).toEqual([false, true]);
+    const removed = await request("/api/sets/1/items/1", { method: "DELETE", headers: { cookie } });
+    expect(await removed.json()).toMatchObject({ version: 2, items: [{ position: 1, name: "Surf", pinned: true }], changes: [{ version: 2, source: "owner" }] });
+    expect((await request("/api/sets/1/items/9", { method: "DELETE", headers: { cookie } })).status).toBe(404);
+  });
+});

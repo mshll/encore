@@ -4,7 +4,7 @@ import { outcomeOf } from "../src/library/outcomes";
 import { songKey } from "../src/plays/song";
 import { refreshSetOutcomes } from "../src/sets/outcomes";
 import { saveSetPlaylist } from "../src/sets/playlist";
-import { createSet, directionConflict, getSet, listSets, refineSet, SetNotBuiltError } from "../src/sets/service";
+import { createSet, diffSets, directionConflict, getSet, listSets, pinSetItem, refineSet, removeSetItem, SetItemNotFoundError, SetNotBuiltError } from "../src/sets/service";
 import { upsertTags } from "../src/tags/service";
 import { sql } from "drizzle-orm";
 import { play, seed, track, uri } from "./helpers";
@@ -276,5 +276,76 @@ describe("outcome tracking", () => {
     const items = getSet(env.db, env.result.set.id)!.items;
     expect(items[1]!.outcome).toMatchObject({ plays: 2, finished: 1, skipped: 1, firstPlayedAt: "2026-02-05T10:00:00.000Z" });
     expect(items[0]!.outcome.plays).toBe(0);
+  });
+});
+
+describe("versions, pins and removal", () => {
+  const t = (key: string) => ({ songKey: key, name: key.toUpperCase(), artist: "X" });
+
+  test("a diff lists added, removed and moved songs, not songs shifted by an insert", () => {
+    expect(diffSets([t("a"), t("b"), t("c"), t("d")], [t("b"), t("a"), t("c"), t("e")])).toEqual({
+      added: [t("e")],
+      removed: [t("d")],
+      moved: [{ ...t("b"), from: 2, to: 1 }],
+    });
+    expect(diffSets([t("a"), t("b")], [t("n"), t("a"), t("b")])).toEqual({ added: [t("n")], removed: [], moved: [] });
+  });
+
+  test("a refinement records what it changed and the message that asked for it; the first build records nothing", async () => {
+    const env = await builtSet();
+    expect(env.result.set.changes).toEqual([]);
+    const refine = scripted(
+      toolCall("submit_set", {
+        title: "Late drive",
+        description: "Less sad.",
+        items: [
+          { source: "new", uri: uri("g1"), reason: "Kept." },
+          { source: "library", songKey: SURF, reason: "Brighter." },
+        ],
+      }),
+    );
+    env.ctx.llm = new Llm(env.db, env.ctx.config, refine.transport, env.ctx.now);
+    const { set } = await refineSet(env.ctx, env.result.set.id, "less sad");
+    expect(set.changes).toEqual([
+      {
+        version: 2,
+        source: "claude",
+        message: "less sad",
+        added: [{ songKey: SURF, name: "Surf", artist: "Mac Miller" }],
+        removed: [{ songKey: WOODS, name: "Woods", artist: "Mac Miller" }],
+        moved: [],
+        at: expect.any(String),
+      },
+    ]);
+  });
+
+  test("a pinned song left out of a refinement is rejected, and stays pinned in the accepted set", async () => {
+    const env = await builtSet();
+    const setId = env.result.set.id;
+    expect(pinSetItem(env.db, setId, 1, true).items[0]).toMatchObject({ name: "Woods", pinned: true });
+    const items = (keys: string[]) => keys.map((k) => ({ source: "library", songKey: k, reason: "r" }));
+    const refine = scripted(
+      toolCall("submit_set", { title: "Late drive", description: "d", items: items([SURF]) }),
+      toolCall("submit_set", { title: "Late drive", description: "d", items: items([SURF, WOODS]) }),
+    );
+    env.ctx.llm = new Llm(env.db, env.ctx.config, refine.transport, env.ctx.now);
+    const { set } = await refineSet(env.ctx, setId, "more upbeat");
+    expect(JSON.stringify(refine.requests[0]!.messages.at(-1))).toContain(`Pinned by the owner, keep in the set: Woods - Mac Miller (songKey ${WOODS})`);
+    expect(toolResults(refine.requests[1]!)[0]!.value).toMatchObject({ accepted: false, errors: [expect.stringContaining("Woods (songKey woods|mac miller) is pinned by the owner")] });
+    expect(set.items.map((i) => [i.name, i.pinned])).toEqual([
+      ["Surf", false],
+      ["Woods", true],
+    ]);
+  });
+
+  test("removing a track renumbers the rest, bumps the version and records the owner's change", async () => {
+    const env = await builtSet();
+    const set = removeSetItem(env.db, env.result.set.id, 1, Date.parse("2026-11-14T10:00:00Z"));
+    expect(set.version).toBe(2);
+    expect(set.items.map((i) => [i.position, i.name])).toEqual([[1, "Good News"]]);
+    expect(set.changes).toEqual([
+      { version: 2, source: "owner", message: null, added: [], removed: [{ songKey: WOODS, name: "Woods", artist: "Mac Miller" }], moved: [], at: "2026-11-14T10:00:00.000Z" },
+    ]);
+    expect(() => removeSetItem(env.db, env.result.set.id, 5, Date.now())).toThrow(SetItemNotFoundError);
   });
 });

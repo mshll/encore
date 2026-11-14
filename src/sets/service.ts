@@ -1,7 +1,7 @@
 import { asc, desc, eq, sql } from "drizzle-orm";
 import { z } from "zod";
 import type { Db } from "../db/client";
-import { setItems, sets } from "../db/schema";
+import { setChanges, setItems, sets, type SetChangeMove, type SetChangeTrack } from "../db/schema";
 import { runAgent, tool, type AgentEvent } from "../llm/agent";
 import type { MessageParam } from "../llm/client";
 import { localNow, tagged, type FeatureContext } from "../llm/context";
@@ -96,18 +96,119 @@ export function validateSubmission(db: Db, blocked: Blocked, verifier: Candidate
   return { errors, rows };
 }
 
-function persistSet(db: Db, setId: number, input: SubmitInput, rows: ItemRow[], now: number) {
+type Change = { source: "claude" | "owner"; message: string | null };
+type Listed = { songKey: string; name: string; artist: string };
+
+/** Longest increasing subsequence of `xs`, as the set of indexes into `xs` that belong to it. */
+function increasingRun(xs: number[]): Set<number> {
+  const tails: number[] = [];
+  const prev = new Array<number>(xs.length).fill(-1);
+  xs.forEach((x, i) => {
+    let lo = 0;
+    let hi = tails.length;
+    while (lo < hi) {
+      const mid = (lo + hi) >> 1;
+      if (xs[tails[mid]!]! < x) lo = mid + 1;
+      else hi = mid;
+    }
+    if (lo > 0) prev[i] = tails[lo - 1]!;
+    tails[lo] = i;
+  });
+  const keep = new Set<number>();
+  for (let i = tails.length ? tails[tails.length - 1]! : -1; i >= 0; i = prev[i]!) keep.add(i);
+  return keep;
+}
+
+/** Songs added, removed and moved between two orderings. Moved: kept songs outside the longest run whose relative order did not change. */
+export function diffSets(before: Listed[], after: Listed[]): { added: SetChangeTrack[]; removed: SetChangeTrack[]; moved: SetChangeMove[] } {
+  const pick = (t: Listed): SetChangeTrack => ({ songKey: t.songKey, name: t.name, artist: t.artist });
+  const oldIndex = new Map(before.map((t, i) => [t.songKey, i]));
+  const newKeys = new Set(after.map((t) => t.songKey));
+  const kept = after.map((t, i) => ({ t, to: i + 1, from: (oldIndex.get(t.songKey) ?? -1) + 1 })).filter((k) => k.from > 0);
+  const run = increasingRun(kept.map((k) => k.from));
+  return {
+    added: after.filter((t) => !oldIndex.has(t.songKey)).map(pick),
+    removed: before.filter((t) => !newKeys.has(t.songKey)).map(pick),
+    moved: kept.filter((_, i) => !run.has(i)).map((k) => ({ ...pick(k.t), from: k.from, to: k.to })),
+  };
+}
+
+function persistSet(db: Db, setId: number, input: SubmitInput, rows: ItemRow[], now: number, change: Change) {
   db.transaction((tx) => {
     const current = tx.select({ version: sets.version }).from(sets).where(eq(sets.id, setId)).get()!;
-    tx.update(sets)
-      .set({ title: input.title, description: input.description, version: current.version + 1, updatedAt: now })
-      .where(eq(sets.id, setId))
-      .run();
+    const before = tx.select().from(setItems).where(eq(setItems.setId, setId)).orderBy(asc(setItems.position)).all();
+    const pinned = new Set(before.filter((i) => i.pinned).map((i) => i.songKey));
+    const version = current.version + 1;
+    tx.update(sets).set({ title: input.title, description: input.description, version, updatedAt: now }).where(eq(sets.id, setId)).run();
     tx.delete(setItems).where(eq(setItems.setId, setId)).run();
     tx.insert(setItems)
-      .values(rows.map((r) => ({ ...r, setId })))
+      .values(rows.map((r) => ({ ...r, setId, pinned: pinned.has(r.songKey) })))
+      .run();
+    if (current.version > 0)
+      tx.insert(setChanges)
+        .values({ setId, version, ...change, ...diffSets(before, rows), createdAt: now })
+        .run();
+  });
+}
+
+/** Songs the owner pinned that a submission left out. */
+function missingPinned(db: Db, setId: number, rows: ItemRow[]): string[] {
+  const keys = new Set(rows.map((r) => r.songKey));
+  return pinnedItems(db, setId)
+    .filter((i) => !keys.has(i.songKey))
+    .map((i) => `${i.name} (songKey ${i.songKey}) is pinned by the owner and must stay in the set.`);
+}
+
+const pinnedItems = (db: Db, setId: number) =>
+  db
+    .select()
+    .from(setItems)
+    .where(eq(setItems.setId, setId))
+    .all()
+    .filter((i) => i.pinned);
+
+export class SetItemNotFoundError extends Error {}
+
+/** Removes one track by its position; the set gets a new version, so a saved playlist becomes outdated. */
+export function removeSetItem(db: Db, setId: number, position: number, now: number) {
+  const row = getSetRow(db, setId);
+  if (!row) throw new SetNotFoundError();
+  const before = db.select().from(setItems).where(eq(setItems.setId, setId)).orderBy(asc(setItems.position)).all();
+  const target = before.find((i) => i.position === position);
+  if (!target) throw new SetItemNotFoundError();
+  const after = before.filter((i) => i !== target);
+  db.transaction((tx) => {
+    tx.delete(setItems).where(eq(setItems.id, target.id)).run();
+    after.forEach((item, i) =>
+      tx
+        .update(setItems)
+        .set({ position: i + 1 })
+        .where(eq(setItems.id, item.id))
+        .run(),
+    );
+    tx.update(sets)
+      .set({ version: row.version + 1, updatedAt: now })
+      .where(eq(sets.id, setId))
+      .run();
+    tx.insert(setChanges)
+      .values({ setId, version: row.version + 1, source: "owner", message: null, ...diffSets(before, after), createdAt: now })
       .run();
   });
+  return getSet(db, setId)!;
+}
+
+/** Pins or unpins one track. A pinned track stays through later refinements. Does not change the version. */
+export function pinSetItem(db: Db, setId: number, position: number, pinned: boolean) {
+  if (!getSetRow(db, setId)) throw new SetNotFoundError();
+  const item = db
+    .select()
+    .from(setItems)
+    .where(eq(setItems.setId, setId))
+    .all()
+    .find((i) => i.position === position);
+  if (!item) throw new SetItemNotFoundError();
+  db.update(setItems).set({ pinned }).where(eq(setItems.id, item.id)).run();
+  return getSet(db, setId)!;
 }
 
 function seedVerifier(db: Db, verifier: CandidateVerifier, setId: number) {
@@ -128,7 +229,7 @@ function seedVerifier(db: Db, verifier: CandidateVerifier, setId: number) {
   }
 }
 
-async function converse(ctx: FeatureContext, setId: number, threadId: number, system: string[], messages: MessageParam[], onEvent?: (e: AgentEvent) => void) {
+async function converse(ctx: FeatureContext, setId: number, threadId: number, system: string[], messages: MessageParam[], change: Change, onEvent?: (e: AgentEvent) => void) {
   const { db, spotify, llm } = ctx;
   const blocked = blockedSets(db);
   const verifier = new CandidateVerifier(db, spotify, blocked, MAX_SEARCHES_PER_RUN, ctx.now);
@@ -141,8 +242,9 @@ async function converse(ctx: FeatureContext, setId: number, threadId: number, sy
     terminal: true,
     run: (input) => {
       const { errors, rows } = validateSubmission(db, blocked, verifier, input);
+      errors.push(...missingPinned(db, setId, rows));
       if (errors.length) return { accepted: false, errors };
-      persistSet(db, setId, input, rows, ctx.now());
+      persistSet(db, setId, input, rows, ctx.now(), change);
       return { accepted: true, tracks: rows.length };
     },
   });
@@ -176,7 +278,7 @@ export async function createSet(ctx: FeatureContext, request: string, onEvent?: 
   });
   let result;
   try {
-    result = await converse(ctx, setId, threadId, system, messages, onEvent);
+    result = await converse(ctx, setId, threadId, system, messages, { source: "claude", message: request }, onEvent);
   } catch (error) {
     deleteSetRows(db, setId);
     throw error;
@@ -202,9 +304,11 @@ export async function refineSet(ctx: FeatureContext, setId: number, message: str
   llm.assertAvailable();
   const thread = getThread(db, row.threadId)!;
   const messages = thread.messages;
-  messages.push({ role: "user", content: `${ownerMessage(message)}\nOwner's local time: ${localNow(config.timezone, ctx.now())}.` });
+  const pinned = pinnedItems(db, setId);
+  const pins = pinned.length ? `\nPinned by the owner, keep in the set: ${pinned.map((i) => `${i.name} - ${i.artist} (songKey ${i.songKey})`).join("; ")}.` : "";
+  messages.push({ role: "user", content: `${ownerMessage(message)}\nOwner's local time: ${localNow(config.timezone, ctx.now())}.${pins}` });
   const before = row.version;
-  const result = await converse(ctx, setId, row.threadId, thread.system, messages, onEvent);
+  const result = await converse(ctx, setId, row.threadId, thread.system, messages, { source: "claude", message }, onEvent);
   return { set: getSet(db, setId)!, changed: getSetRow(db, setId)!.version !== before, reply: result.terminal ? null : textReply(result.final.content) };
 }
 
@@ -224,6 +328,7 @@ function deleteSetRows(db: Db, setId: number) {
   if (!row) return;
   db.transaction((tx) => {
     tx.delete(setItems).where(eq(setItems.setId, setId)).run();
+    tx.delete(setChanges).where(eq(setChanges.setId, setId)).run();
     tx.delete(sets).where(eq(sets.id, setId)).run();
     deleteThread(tx, row.threadId);
   });
@@ -281,10 +386,18 @@ export function getSet(db: Db, setId: number) {
         album: i.album,
         albumArtUrl: i.albumArtUrl,
         reason: i.reason,
+        pinned: i.pinned,
         outcome: { plays: i.playsAfter, finished: i.finished, skipped: i.skipped, firstPlayedAt: i.firstPlayedAt ? new Date(i.firstPlayedAt).toISOString() : null },
         dj: dj.byUri.get(i.uri) ?? { finished: 0, skipped: 0 },
       })),
     ),
     conversation: transcript(getThread(db, row.threadId)?.messages ?? []),
+    changes: db
+      .select()
+      .from(setChanges)
+      .where(eq(setChanges.setId, setId))
+      .orderBy(asc(setChanges.version))
+      .all()
+      .map((c) => ({ version: c.version, source: c.source, message: c.message, added: c.added, removed: c.removed, moved: c.moved, at: new Date(c.createdAt).toISOString() })),
   };
 }

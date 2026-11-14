@@ -10,7 +10,7 @@ import { NoteSubjectNotFoundError } from "../notes/service";
 import { PicksExistError, PicksNotSubmittedError } from "../picks/service";
 import { PickNotFoundError } from "../picks/state";
 import { EmptySetError } from "../sets/playlist";
-import { SetNotBuiltError, SetNotFoundError } from "../sets/service";
+import { SetItemNotFoundError, SetNotBuiltError, SetNotFoundError } from "../sets/service";
 import { SpotifyApiError, SpotifyBlockedError, SpotifyNotConnectedError } from "../spotify/errors";
 import type { Env } from "./context";
 import { ApiError } from "./errors";
@@ -27,7 +27,7 @@ export function toApiError(error: unknown): unknown {
   if (error instanceof SpotifyNotConnectedError) return new ApiError(409, "spotify_not_connected", error.message);
   if (error instanceof SpotifyBlockedError) return new ApiError(503, "spotify_paused", error.message, { reason: error.reason, until: new Date(error.blockedUntil).toISOString() });
   if (error instanceof SpotifyApiError) return new ApiError(502, "spotify_failed", error.message);
-  if (error instanceof SetNotFoundError || error instanceof ThreadNotFoundError || error instanceof PickNotFoundError || error instanceof DigestNotFoundError)
+  if (error instanceof SetNotFoundError || error instanceof SetItemNotFoundError || error instanceof ThreadNotFoundError || error instanceof PickNotFoundError || error instanceof DigestNotFoundError)
     return new ApiError(404, "not_found", "Not found");
   if (error instanceof NoteSubjectNotFoundError) return new ApiError(404, "not_found", error.message);
   if (error instanceof PicksExistError) return new ApiError(409, "picks_exist", error.message, { week: error.week });

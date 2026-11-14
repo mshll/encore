@@ -119,7 +119,7 @@ export class DjService {
       await this.playlists.remove(session.playlistId, tail);
       this.update(id, { uris: played });
       await this.playlists.append(session.playlistId, next);
-      this.update(id, { uris: [...played, ...next], replans: fresh.replans + 1, skipStreak: 0 });
+      this.update(id, { uris: [...played, ...next], replans: fresh.replans + 1, replannedAt: this.now(), replanSkips: fresh.skipStreak, skipStreak: 0 });
     } catch (error) {
       console.error(`[dj] re-plan failed: ${error instanceof Error ? error.message : error}`);
     }

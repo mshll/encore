@@ -158,6 +158,8 @@ export const djSessions = sqliteTable("dj_sessions", {
   outcomes: text("outcomes", { mode: "json" }).$type<DjOutcome[]>().notNull(),
   skipStreak: integer("skip_streak").notNull().default(0),
   replans: integer("replans").notNull().default(0),
+  replannedAt: integer("replanned_at"),
+  replanSkips: integer("replan_skips"),
   startedAt: integer("started_at").notNull(),
   updatedAt: integer("updated_at").notNull(),
   endedAt: integer("ended_at"),

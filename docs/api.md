@@ -537,12 +537,12 @@ Body `{ "uris": [track URI] (1-500), "deviceId"? }`. Replaces any active session
 ```json
 { "session": { "id": 3, "status": "active", "playlistUri": "spotify:playlist:...", "position": 0, "current": "spotify:track:...",
   "upcoming": ["spotify:track:..."], "played": [{ "uri": "spotify:track:...", "outcome": "skipped" }],
-  "skipStreak": 0, "replans": 0, "startedAt": "...", "endedAt": null, "endReason": null } }
+  "skipStreak": 0, "replans": 0, "replannedAt": null, "replanSkips": null, "set": null, "startedAt": "...", "endedAt": null, "endReason": null } }
 ```
 
 ### `GET /api/dj`
 
-`{ "session": Session | null }`: the active session, else the latest one. `status` is `active`, `stopped` or `ended`; `endReason` is `stopped`, `replaced` or `left_playlist`. `played[].outcome` is `finished` or `skipped`, from the watcher's live plays (inferred skip, see Live plays). `skipStreak` counts consecutive skips; `replans` counts re-plans this session.
+`{ "session": Session | null }`: the active session, else the latest one. `status` is `active`, `stopped` or `ended`; `endReason` is `stopped`, `replaced` or `left_playlist`. `played[].outcome` is `finished` or `skipped`, from the watcher's live plays (inferred skip, see Live plays). `skipStreak` counts consecutive skips; `replans` counts re-plans this session; `replannedAt` is the time of the last re-plan and `replanSkips` the skips in a row that triggered it (both `null` before the first). `set` is `{ id, title }` when the session was started from a set.
 
 Start latency: starting a session makes about 4 Web API calls (playlist items, shuffle off, play), so with the default pacing it takes about 6 s (computed from `SPOTIFY_MIN_INTERVAL_MS`, not measured).
 
@@ -726,11 +726,14 @@ Set shape (`GET /api/sets/:id`, and `set` in create/refine):
     "name": "Woods", "artist": "Mac Miller", "album": "Circles",
     "albumArtUrl": "https://i.scdn.co/image/...", "artistImageUrl": "https://i.scdn.co/image/...",
     "reason": "Finished 41 of 44 night plays.",
+    "pinned": false,
     "outcome": { "plays": 3, "finished": 2, "skipped": 1, "firstPlayedAt": "..." },
     "dj": { "finished": 1, "skipped": 0 }
   }],
   "djSessions": 1,
-  "conversation": [{ "role": "owner", "text": "late drive, ..." }, { "role": "assistant", "text": "..." }]
+  "conversation": [{ "role": "owner", "text": "late drive, ..." }, { "role": "assistant", "text": "..." }],
+  "changes": [{ "version": 2, "source": "claude", "message": "less sad", "at": "...",
+                "added": [{ "songKey": "...", "name": "...", "artist": "..." }], "removed": [], "moved": [{ "songKey": "...", "name": "...", "artist": "...", "from": 5, "to": 2 }] }]
 }
 ```
 
@@ -739,6 +742,8 @@ Set shape (`GET /api/sets/:id`, and `set` in create/refine):
 - A refinement that changes mood or direction ("less sad") is applied to every track: familiar songs whose tags conflict with it are rejected unless the owner asked to keep them.
 - `playlist` is `null` until saved. `outdated: true` when the set changed after the last save; saving again updates the same playlist.
 - `outcome` counts plays of the song after the set was saved (or created, if never saved), from all sources: `finished` uses the skip flag and play time of export and live rows; API rows count as finished. Refreshed hourly.
+- `pinned`: the owner pinned the track. A refinement that leaves out a pinned track is rejected and Claude must keep it; Claude is told which tracks are pinned with every refinement.
+- `changes`: one entry per version after the first, oldest first. `source` is `claude` (a refinement; `message` is the owner's message) or `owner` (a track removed by hand; `message` is `null`). `moved` lists kept songs whose order relative to the other kept songs changed (songs only shifted by an insert or removal are not listed); `from` and `to` are 1-based positions.
 - `dj`: `{ finished, skipped }` for this track across the DJ sessions started from the set (`POST /api/sets/:id/play` or the Discord Play now button), from the watcher's live plays. `djSessions` on the set counts those sessions.
 
 #### `POST /api/sets`
@@ -760,6 +765,14 @@ Saves the set to a private Spotify playlist: created on the first save, then ren
 #### `POST /api/sets/:id/play`
 
 Body `{ "deviceId"? }` or no body. Starts a DJ session with the set's tracks in order (replacing any active session) and links it to the set. `200 { "session": Session }` (see DJ session). `409 set_empty`, `409 no_active_device`, `403 premium_required`.
+
+#### `PATCH /api/sets/:id/items/:position`
+
+`{ "pinned": true }`. Pins or unpins one track. `200 Set`. Does not change `version`. `404 not_found` for an unknown set or position.
+
+#### `DELETE /api/sets/:id/items/:position`
+
+Removes one track and renumbers the rest. `200 Set` with `version` + 1 and a `changes` entry with `source: "owner"`, so a saved playlist becomes `outdated`. `404 not_found` for an unknown set or position.
 
 #### `DELETE /api/sets/:id`
 

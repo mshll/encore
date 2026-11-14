@@ -11,12 +11,13 @@ import { setPickState } from "../../picks/state";
 import { playSet } from "../../sets/play";
 import { saveSetPlaylist } from "../../sets/playlist";
 import { djSessionView } from "./dj";
-import { createSet, deleteSet, getSet, listSets, refineSet } from "../../sets/service";
+import { createSet, deleteSet, getSet, listSets, pinSetItem, refineSet, removeSetItem } from "../../sets/service";
 import { featureContext, mapped, respond } from "../assistant";
 import type { Env } from "../context";
 import { ApiError, jsonBody, parse } from "../errors";
 
 const id = z.object({ id: z.coerce.number().int().min(1) });
+const item = id.extend({ position: z.coerce.number().int().min(1) });
 const paging = (max: number, fallback: number) => z.object({ limit: z.coerce.number().int().min(1).max(max).default(fallback), offset: z.coerce.number().int().min(0).default(0) });
 const text = (max: number) => z.string().trim().min(1).max(max);
 
@@ -49,7 +50,16 @@ export const setRoutes = new Hono<Env>()
     const { db, services } = c.var.deps;
     const setId = parse(id, c.req.param()).id;
     const body = parse(z.object({ deviceId: z.string().min(1).max(100).optional() }).strict(), await jsonBody(c).catch(() => ({})));
-    return c.json({ session: djSessionView(await mapped(() => playSet(db, services.dj, setId, body.deviceId))) });
+    return c.json({ session: djSessionView(db, await mapped(() => playSet(db, services.dj, setId, body.deviceId))) });
+  })
+  .patch("/:id/items/:position", async (c) => {
+    const p = parse(item, c.req.param());
+    const body = parse(z.object({ pinned: z.boolean() }).strict(), await jsonBody(c));
+    return c.json(await mapped(() => pinSetItem(c.var.deps.db, p.id, p.position, body.pinned)));
+  })
+  .delete("/:id/items/:position", async (c) => {
+    const p = parse(item, c.req.param());
+    return c.json(await mapped(() => removeSetItem(c.var.deps.db, p.id, p.position, c.var.deps.now())));
   })
   .delete("/:id", async (c) => {
     await mapped(() => deleteSet(c.var.deps.db, parse(id, c.req.param()).id));

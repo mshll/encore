@@ -74,8 +74,31 @@ export const setItems = sqliteTable(
     finished: integer("finished").notNull().default(0),
     skipped: integer("skipped").notNull().default(0),
     firstPlayedAt: integer("first_played_at"),
+    pinned: integer("pinned", { mode: "boolean" }).notNull().default(false),
   },
   (t) => [index("set_items_set").on(t.setId, t.position), index("set_items_song").on(t.songKey)],
+);
+
+export type SetChangeTrack = { songKey: string; name: string; artist: string };
+export type SetChangeMove = SetChangeTrack & { from: number; to: number };
+
+/** What each new version of a set added, removed and moved, and what asked for it. */
+export const setChanges = sqliteTable(
+  "set_changes",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    setId: integer("set_id")
+      .notNull()
+      .references(() => sets.id, { onDelete: "cascade" }),
+    version: integer("version").notNull(),
+    source: text("source", { enum: ["claude", "owner"] }).notNull(),
+    message: text("message"),
+    added: text("added", { mode: "json" }).$type<SetChangeTrack[]>().notNull(),
+    removed: text("removed", { mode: "json" }).$type<SetChangeTrack[]>().notNull(),
+    moved: text("moved", { mode: "json" }).$type<SetChangeMove[]>().notNull(),
+    createdAt: integer("created_at").notNull(),
+  },
+  (t) => [index("set_changes_set").on(t.setId, t.version)],
 );
 
 /** DJ sessions started from a set, so the set can show what was finished and skipped when played through. */
