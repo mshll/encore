@@ -1,4 +1,4 @@
-import { and, between, eq, max } from "drizzle-orm";
+import { and, between, eq, inArray, max } from "drizzle-orm";
 import type { Db } from "../../db/client";
 import { plays } from "../../db/schema";
 import { setJobState } from "../../jobs/state";
@@ -58,7 +58,7 @@ export function importExport(db: Db, input: ExportFile[], timezone: string, now 
     const removed = range
       ? tx
           .delete(plays)
-          .where(and(eq(plays.source, "api"), between(plays.ts, range.from, range.to + EXPORT_TS_PRECISION_MS)))
+          .where(and(inArray(plays.source, ["api", "live"]), between(plays.ts, range.from, range.to + EXPORT_TS_PRECISION_MS)))
           .returning({ id: plays.id })
           .all().length
       : 0;

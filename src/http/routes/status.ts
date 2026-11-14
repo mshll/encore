@@ -16,7 +16,8 @@ const job = (state: JobState | undefined) => ({
 });
 
 export const statusRoutes = new Hono<Env>().get("/", (c) => {
-  const { db, spotifyAuth, spotify, config, llm, now } = c.var.deps;
+  const { db, spotifyAuth, spotify, config, services, now } = c.var.deps;
+  const { llm } = services;
   const budget = budgetStatus(db, config.timezone, config.llm.monthlyBudgetUsd, now());
   const auth = spotifyAuth.status();
   const gate = spotify.gate();
@@ -37,6 +38,7 @@ export const statusRoutes = new Hono<Env>().get("/", (c) => {
     enrichment: { ...enrichmentProgress(db), ...job(getJobState(db, "enrich")), art: job(getJobState(db, "art")) },
     import: importState ? { lastImportAt: iso(importState.lastSuccessAt), result: importState.data } : null,
     tags: tagCoverage(db),
+    live: { watch: job(getJobState(db, "watch")), radar: job(getJobState(db, "radar")), library: job(getJobState(db, "library")) },
     plays: counts,
     llm: {
       configured: llm.configured,

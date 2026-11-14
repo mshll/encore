@@ -1,8 +1,9 @@
 import type { Config } from "../config";
 import type { Db } from "../db/client";
 import type { Passkeys } from "../auth/passkeys";
+import type { Discord } from "../discord";
 import type { Jobs } from "../jobs/definitions";
-import type { Llm } from "../llm/client";
+import type { Services } from "../services";
 import type { SpotifyAuth } from "../spotify/auth";
 import type { SpotifyClient } from "../spotify/client";
 
@@ -13,7 +14,8 @@ export type Deps = {
   spotifyAuth: SpotifyAuth;
   spotify: SpotifyClient;
   jobs: Jobs;
-  llm: Llm;
+  services: Services;
+  discord: Discord | null;
   now: () => number;
 };
 

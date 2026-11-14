@@ -6,12 +6,14 @@
     "dev": "bun --watch src/main.ts",
     "start": "bun src/main.ts",
     "import": "bun src/ingest/export/cli.ts",
+    "discord:register": "bun src/discord/register.ts",
     "db:generate": "drizzle-kit generate",
     "typecheck": "tsc --noEmit",
     "test": "bun test"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^1.8.0",
+    "@modelcontextprotocol/server": "^2.4.0",
     "@simplewebauthn/server": "^14.1.0",
     "drizzle-orm": "^0.45.4",
     "hono": "^4.13.18",

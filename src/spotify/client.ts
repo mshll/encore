@@ -67,12 +67,12 @@ export class SpotifyClient {
     return this.get<boolean[]>(`/me/library/contains?${new URLSearchParams({ uris: uris.join(",") })}`);
   }
 
-  private get<T>(path: string): Promise<T> {
-    return this.request<T>("GET", path);
+  request<T>(method: "GET" | "POST" | "PUT" | "DELETE", path: string, body?: unknown): Promise<T> {
+    return this.call<T>(async (refresh) => this.send(path, await this.auth.accessToken(refresh), method, body), true);
   }
 
-  private request<T>(method: string, path: string, body?: unknown): Promise<T> {
-    return this.call<T>(async (refresh) => this.send(method, path, await this.auth.accessToken(refresh), body), true);
+  private get<T>(path: string): Promise<T> {
+    return this.request<T>("GET", path);
   }
 
   private async call<T>(send: (refresh: boolean) => Promise<Response>, retryUnauthorized = false): Promise<T> {
@@ -82,17 +82,18 @@ export class SpotifyClient {
     if (res.status === 401 && retryUnauthorized) res = await send(true);
     if (res.status === 429) throw await this.block(res);
     if (!res.ok) {
-      const error = (await res.json().catch(() => ({}))) as { error?: { message?: string } };
-      throw new SpotifyApiError(res.status, error.error?.message ?? res.statusText);
+      const body = (await res.json().catch(() => ({}))) as { error?: { message?: string; reason?: string } };
+      throw new SpotifyApiError(res.status, body.error?.message ?? res.statusText, body.error?.reason);
     }
     const text = await res.text();
-    return (text ? JSON.parse(text) : undefined) as T;
+    return (text ? JSON.parse(text) : null) as T;
   }
 
-  private send(method: string, path: string, token: string, body?: unknown) {
+  private send(path: string, token: string, method: string, body: unknown) {
     const headers: Record<string, string> = { authorization: `Bearer ${token}` };
-    if (body !== undefined) headers["content-type"] = "application/json";
-    return this.fetchFn(`${apiUrl}${path}`, { method, headers, body: body === undefined ? undefined : JSON.stringify(body) });
+    if (body === undefined) return this.fetchFn(`${apiUrl}${path}`, method === "GET" ? { headers } : { method, headers });
+    headers["content-type"] = "application/json";
+    return this.fetchFn(`${apiUrl}${path}`, { method, headers, body: JSON.stringify(body) });
   }
 
   private async block(res: Response): Promise<SpotifyBlockedError> {

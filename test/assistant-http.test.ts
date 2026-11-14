@@ -9,7 +9,7 @@ import { message, scripted, seedLibrary, text } from "./llmFakes";
 const ADMIN = { authorization: "Bearer admin-token-admin-token-123" };
 
 function signedIn(transport: LlmTransport | null = null, env: Record<string, string> = {}) {
-  const app = testApp(env, transport);
+  const app = testApp(env, fetch, transport);
   const cookie = `encore_session=${createSession(app.db)}`;
   const get = (path: string) => app.request(path, { headers: { cookie } });
   const post = (path: string, json: unknown, headers: Record<string, string> = {}) => app.request(path, { json, headers: { cookie, ...headers } });

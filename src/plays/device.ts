@@ -17,3 +17,23 @@ export function deviceFromPlatform(platform: string | null | undefined): Device 
   if (!platform || platform.trim().toLowerCase() === "unknown") return "unknown";
   return rules.find(([pattern]) => pattern.test(platform))?.[1] ?? "other";
 }
+
+const spotifyTypes: Record<string, Device> = {
+  speaker: "speaker",
+  avr: "speaker",
+  castaudio: "speaker",
+  tv: "tv",
+  stb: "tv",
+  castvideo: "tv",
+  gameconsole: "console",
+  automobile: "car",
+};
+
+export function deviceFromSpotify(type: string, name: string): Device {
+  const byType = spotifyTypes[type.toLowerCase()];
+  if (byType) return byType;
+  const byName = deviceFromPlatform(name);
+  if (byName !== "unknown" && byName !== "other") return byName;
+  if (type.toLowerCase() === "computer") return /\bmac/i.test(name) ? "mac" : "other";
+  return type.toLowerCase() === "smartphone" ? "other" : "unknown";
+}

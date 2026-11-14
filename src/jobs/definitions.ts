@@ -1,19 +1,53 @@
 import type { Config } from "../config";
 import type { Db } from "../db/client";
+import { refreshProposals } from "../cleanup/proposals";
 import { enrich, fetchAlbumArt } from "../ingest/live/enrich";
 import { pollRecentlyPlayed } from "../ingest/live/poller";
+import { WATCH_JOB } from "../ingest/live/watcher";
+import { syncDue, syncStep, type SyncCursor } from "../library/sync";
+import { runRadar } from "../radar/radar";
+import type { Services } from "../services";
 import type { SpotifyAuth } from "../spotify/auth";
 import type { SpotifyClient } from "../spotify/client";
 import type { Job } from "./scheduler";
+import { getJobState } from "./state";
 
-export type Jobs = { poll: Job; enrich: Job; art: Job };
+export type Jobs = { poll: Job; enrich: Job; art: Job; watch: Job; radar: Job; library: Job };
 
-export function createJobs(db: Db, config: Config, spotifyAuth: SpotifyAuth, spotify: SpotifyClient): Jobs {
+export const LIBRARY_JOB = "library";
+
+export function libraryCursor(db: Db): SyncCursor {
+  return (getJobState(db, LIBRARY_JOB)?.data?.cursor as SyncCursor | undefined) ?? { phase: "idle", completedAt: null };
+}
+
+export function createJobs(db: Db, config: Config, spotifyAuth: SpotifyAuth, spotify: SpotifyClient, services: Services, now: () => number = Date.now): Jobs {
   const whenConnected = (run: () => Promise<Record<string, unknown>>) => async () =>
     spotifyAuth.status().connected ? run() : { skipped: "spotify_not_connected" };
   return {
     poll: { name: "poll", intervalMs: config.pollIntervalMs, run: whenConnected(() => pollRecentlyPlayed(db, spotify, config)) },
     enrich: { name: "enrich", intervalMs: config.enrichIntervalMs, run: whenConnected(() => enrich(db, spotify, config.enrichBatchSize)) },
     art: { name: "art", intervalMs: config.artIntervalMs, run: () => fetchAlbumArt(db, spotify, config.enrichBatchSize) },
+    watch: { name: WATCH_JOB, intervalMs: config.watcherIdleMs, run: () => services.watcher.tick(), nextDelayMs: () => services.watcher.nextDelayMs() },
+    radar: { name: "radar", intervalMs: config.radarIntervalMs, run: whenConnected(() => runRadar(db, spotify, config, now())) },
+    library: {
+      name: LIBRARY_JOB,
+      intervalMs: config.libraryPageMs,
+      run: async () => {
+        const cursor = libraryCursor(db);
+        if (!spotifyAuth.status().connected) return { cursor, skipped: "spotify_not_connected" };
+        if (!syncDue(cursor, now(), config.librarySyncMs)) return { cursor };
+        const step = await syncStep({ db, spotify, spotifyAuth, appPlaylistIds: () => services.playlists.ids() }, cursor, now());
+        return { cursor: step.cursor, calls: step.calls, ...(step.passCompleted ? { proposals: refreshProposals(db, now()) } : {}) };
+      },
+      nextDelayMs: () => {
+        const cursor = libraryCursor(db);
+        if (cursor.phase !== "idle" || cursor.completedAt === null) return config.libraryPageMs;
+        return Math.max(config.libraryPageMs, cursor.completedAt + config.librarySyncMs - now());
+      },
+    },
   };
+}
+
+export function enabledJobs(jobs: Jobs, config: Pick<Config, "disabledJobs">): Job[] {
+  return Object.values(jobs).filter((job) => !config.disabledJobs.includes(job.name));
 }

@@ -7,7 +7,13 @@ import { ApiError, errorResponse } from "./errors";
 import { requireSession, requireSessionOrAdmin } from "./middleware";
 import { authRoutes } from "./routes/auth";
 import { askRoutes, blockRoutes, digestRoutes, llmRoutes, noteRoutes, pickRoutes, setRoutes } from "./routes/assistant";
+import { cleanupRoutes } from "./routes/cleanup";
+import { discordRoutes } from "./routes/discord";
+import { djRoutes } from "./routes/dj";
 import { importRoutes } from "./routes/imports";
+import { mcpRoutes } from "./routes/mcp";
+import { playerRoutes } from "./routes/player";
+import { radarRoutes } from "./routes/radar";
 import { callbackRoute, spotifyRoutes } from "./routes/spotify";
 import { entityRoutes, historyRoutes, searchRoutes, statsRoutes } from "./routes/stats";
 import { statusRoutes } from "./routes/status";
@@ -24,6 +30,8 @@ export function createApp(deps: Deps) {
   app.get("/api/health", (c) => c.json({ ok: true }));
   app.route("/api/auth", authRoutes);
   app.route("/", callbackRoute);
+  app.route("/api/discord", discordRoutes);
+  app.route("/mcp", mcpRoutes(deps));
 
   app.use("/api/tags/*", requireSessionOrAdmin);
   app.route("/api/tags", tagRoutes);
@@ -44,6 +52,10 @@ export function createApp(deps: Deps) {
   app.route("/api/notes", noteRoutes);
   app.route("/api/digests", digestRoutes);
   app.route("/api/llm", llmRoutes);
+  app.route("/api/player", playerRoutes);
+  app.route("/api/dj", djRoutes);
+  app.route("/api/radar", radarRoutes);
+  app.route("/api/cleanup", cleanupRoutes);
   app.all("/api/*", () => {
     throw new ApiError(404, "not_found", "Unknown API route");
   });

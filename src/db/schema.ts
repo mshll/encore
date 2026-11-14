@@ -1,7 +1,7 @@
 import { index, integer, primaryKey, sqliteTable, text } from "drizzle-orm/sqlite-core";
 
 export const PLAY_KINDS = ["track", "episode", "audiobook", "video"] as const;
-export const PLAY_SOURCES = ["export", "api"] as const;
+export const PLAY_SOURCES = ["export", "api", "live"] as const;
 export const DEVICES = ["ios", "android", "mac", "windows", "linux", "web", "console", "tv", "speaker", "car", "unknown", "other"] as const;
 
 export type PlayKind = (typeof PLAY_KINDS)[number];
@@ -51,6 +51,7 @@ export const plays = sqliteTable(
     platformRaw: text("platform_raw"),
     connCountry: text("conn_country"),
     source: text("source", { enum: PLAY_SOURCES }).notNull(),
+    contextUri: text("context_uri"),
   },
   (t) => [
     index("plays_kind_day").on(t.kind, t.day),
@@ -138,4 +139,110 @@ export const jobState = sqliteTable("job_state", {
   lastError: text("last_error"),
   data: text("data", { mode: "json" }).$type<Record<string, unknown>>(),
 });
+
+export const appPlaylists = sqliteTable("app_playlists", {
+  purpose: text("purpose").primaryKey(),
+  playlistId: text("playlist_id").notNull(),
+  createdAt: integer("created_at").notNull(),
+});
+
+export const DJ_STATUSES = ["active", "stopped", "ended"] as const;
+export type DjOutcome = { uri: string; outcome: "finished" | "skipped" };
+
+export const djSessions = sqliteTable("dj_sessions", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  playlistId: text("playlist_id").notNull(),
+  status: text("status", { enum: DJ_STATUSES }).notNull(),
+  uris: text("uris", { mode: "json" }).$type<string[]>().notNull(),
+  position: integer("position").notNull(),
+  outcomes: text("outcomes", { mode: "json" }).$type<DjOutcome[]>().notNull(),
+  skipStreak: integer("skip_streak").notNull().default(0),
+  replans: integer("replans").notNull().default(0),
+  startedAt: integer("started_at").notNull(),
+  updatedAt: integer("updated_at").notNull(),
+  endedAt: integer("ended_at"),
+  endReason: text("end_reason"),
+});
+
+export const radarArtists = sqliteTable("radar_artists", {
+  artistId: text("artist_id").primaryKey(),
+  lastCheckedAt: integer("last_checked_at").notNull(),
+});
+
+export const releases = sqliteTable(
+  "releases",
+  {
+    id: text("id").primaryKey(),
+    uri: text("uri").notNull(),
+    artistId: text("artist_id").notNull(),
+    artistName: text("artist_name").notNull(),
+    name: text("name").notNull(),
+    albumType: text("album_type").notNull(),
+    releaseDate: text("release_date").notNull(),
+    totalTracks: integer("total_tracks"),
+    imageUrl: text("image_url"),
+    firstSeenAt: integer("first_seen_at").notNull(),
+    isNew: integer("is_new", { mode: "boolean" }).notNull(),
+    seenAt: integer("seen_at"),
+  },
+  (t) => [index("releases_date").on(t.releaseDate), index("releases_artist").on(t.artistId)],
+);
+
+export const savedTracks = sqliteTable("saved_tracks", {
+  uri: text("uri").primaryKey(),
+  addedAt: integer("added_at").notNull(),
+  syncedAt: integer("synced_at").notNull(),
+});
+
+export const ownedPlaylists = sqliteTable("owned_playlists", {
+  id: text("id").primaryKey(),
+  name: text("name").notNull(),
+  snapshotId: text("snapshot_id"),
+  itemCount: integer("item_count").notNull(),
+  syncedAt: integer("synced_at"),
+});
+
+export const playlistItems = sqliteTable(
+  "playlist_items",
+  {
+    playlistId: text("playlist_id").notNull(),
+    position: integer("position").notNull(),
+    uri: text("uri").notNull(),
+    addedAt: integer("added_at"),
+  },
+  (t) => [primaryKey({ columns: [t.playlistId, t.position] }), index("playlist_items_uri").on(t.uri)],
+);
+
+export const CLEANUP_KINDS = ["saved_never_played", "saved_dislike", "playlist_skipped", "playlist_duplicate"] as const;
+export const CLEANUP_STATUSES = ["open", "dismissed", "applied"] as const;
+export type CleanupKind = (typeof CLEANUP_KINDS)[number];
+
+export const cleanupProposals = sqliteTable(
+  "cleanup_proposals",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    key: text("key").notNull().unique(),
+    kind: text("kind", { enum: CLEANUP_KINDS }).notNull(),
+    playlistId: text("playlist_id"),
+    uri: text("uri").notNull(),
+    evidence: text("evidence", { mode: "json" }).$type<Record<string, unknown>>().notNull(),
+    status: text("status", { enum: CLEANUP_STATUSES }).notNull(),
+    createdAt: integer("created_at").notNull(),
+    updatedAt: integer("updated_at").notNull(),
+  },
+  (t) => [index("cleanup_proposals_status").on(t.status, t.kind)],
+);
+
+export type UndoAction =
+  | { type: "library_save"; uris: string[] }
+  | { type: "playlist_insert"; playlistId: string; uri: string; positions: number[] };
+
+export const cleanupBatches = sqliteTable("cleanup_batches", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  proposalIds: text("proposal_ids", { mode: "json" }).$type<number[]>().notNull(),
+  undo: text("undo", { mode: "json" }).$type<UndoAction[]>().notNull(),
+  appliedAt: integer("applied_at").notNull(),
+  undoneAt: integer("undone_at"),
+});
+
 export * from "./assistantSchema";

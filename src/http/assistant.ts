@@ -44,8 +44,7 @@ export async function mapped<T>(run: () => Promise<T> | T): Promise<T> {
 }
 
 export function featureContext(c: Context<Env>): FeatureContext {
-  const { db, config, llm, spotify, now } = c.var.deps;
-  return { db, config, llm, spotify, now };
+  return c.var.deps.services.assistant;
 }
 
 const wantsStream = (c: Context) => c.req.header("accept")?.includes("text/event-stream") ?? false;
@@ -56,7 +55,7 @@ const wantsStream = (c: Context) => c.req.header("accept")?.includes("text/event
  */
 export async function respond<T>(c: Context<Env>, run: (onEvent?: (e: AgentEvent) => void) => Promise<T>, status: 200 | 201 = 200) {
   if (!wantsStream(c)) return c.json((await mapped(() => run())) as object, status);
-  await mapped(() => c.var.deps.llm.assertAvailable());
+  await mapped(() => c.var.deps.services.llm.assertAvailable());
   return streamSSE(c, async (stream) => {
     let chain = Promise.resolve();
     const send = (event: string, data: unknown) => {

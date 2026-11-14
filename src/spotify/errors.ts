@@ -10,6 +10,7 @@ export class SpotifyApiError extends Error {
   constructor(
     readonly status: number,
     message: string,
+    readonly reason?: string,
   ) {
     super(`Spotify API ${status}: ${message}`);
   }

@@ -5,6 +5,7 @@ Contract between the server and the web UI. All routes are JSON over HTTP on the
 ## Conventions
 
 - Base path `/api`. Only exception: `GET /callback` (Spotify OAuth redirect).
+- Auth: every `/api/*` route needs a session cookie, except `/api/health`, `/api/auth/*` and `/api/discord/interactions` (Discord signature instead). `/api/tags/*` also accepts `Authorization: Bearer <ADMIN_TOKEN>`. The admin token is rejected everywhere else. `/mcp` takes only `Authorization: Bearer <MCP_TOKEN>`.
 - Auth: every `/api/*` route needs a session cookie, except `/api/health` and `/api/auth/*`. `/api/tags/*` and `POST /api/import` also accept `Authorization: Bearer <ADMIN_TOKEN>`. The admin token is rejected everywhere else.
 - Session cookie: `encore_session`, `HttpOnly`, `SameSite=Lax`, `Path=/`, 30 days, `Secure` when `PUBLIC_BASE_URL` is https. Send requests with `credentials: "same-origin"` (the default for same-origin `fetch`).
 - Errors: non-2xx responses have this body:
@@ -13,6 +14,7 @@ Contract between the server and the web UI. All routes are JSON over HTTP on the
   { "error": { "code": "invalid_request", "message": "Request validation failed", "details": [{ "path": "from", "message": "expected YYYY-MM-DD" }] } }
   ```
 
+  `details` is present only on some errors. Status codes: `400` validation, `401` not signed in, `403` setup token wrong or `premium_required`, `404` not found, `409` precondition (`spotify_not_connected`, `no_active_device`), `413` file too large, `415` wrong content type, `500` server error, `502` Spotify call failed (`spotify_failed`), `503` Spotify calls paused (`spotify_paused`, `details: { reason, until }`).
   `details` is present only on some errors. Status codes: `400` validation, `401` not signed in, `402` monthly LLM budget spent, `403` setup token wrong, `404` not found, `409` precondition (Spotify not connected), `413` file too large, `415` wrong content type, `422` Claude declined, `500` server error, `502` Spotify or Claude call failed, `503` LLM not configured or Spotify paused. Assistant error codes are listed under [Assistant](#assistant-claude).
 - Timestamps (`ts`, `firstPlayed`, `lastPlayed`, `start`, `end`, ...) are ISO 8601 UTC strings.
 - Days, hours, weekdays, weeks, months are local time in `TIMEZONE` (default Asia/Kuwait). `day` is `YYYY-MM-DD`. `weekday` is ISO: 1 = Monday ... 7 = Sunday.
@@ -30,14 +32,14 @@ Contract between the server and the web UI. All routes are JSON over HTTP on the
 
 - **Music play**: a row with `kind = "track"` from the audio export or the API. Podcast episodes, audiobooks, and every row from `Streaming_History_Video_*.json` (music videos included) are stored but excluded from all `/api/stats/*` and `/api/entities/*` numbers. `/api/history` can show them with `kind`.
 - **Play**: one row. Includes very short plays.
-- **Listen**: a music play with `ms_played >= 30000` (export rows) or any API row. The Spotify recently-played API only reports plays it counted, and it does not give `ms_played`.
+- **Listen**: a music play with `ms_played >= 30000` (export and live rows) or any API row. The Spotify recently-played API only reports plays it counted, and it does not give `ms_played`.
 - **Hours**: sum of `ms_played`. API rows have no `ms_played`, so they count the track's full `duration_ms` once known (from the poll itself or enrichment), else 0.
-- **Skip**: Spotify's own `skipped` flag on export rows. API rows have no skip data (`skipped: null`) and are left out of every skip rate denominator. `skipRate = skips / plays with known skip flag`.
+- **Skip**: Spotify's own `skipped` flag on export rows. Live rows carry the watcher's flag: the track changed before 90% of its duration (see Live plays). API rows have no skip data (`skipped: null`) and are left out of every skip rate denominator, as are live rows whose end the watcher did not see. `skipRate = skips / plays with known skip flag`.
 - **Quick skip**: a skip with `ms_played < 5000`.
 - **Shuffle rate**: plays with `shuffle = true` / plays with a known shuffle flag.
 - **Song (merged track)**: plays are grouped by `songKey`, not URI. `songKey = normalizedTitle + "|" + normalizedArtist`, where normalization lowercases, strips accents, removes `(feat. ...)`, `(with ...)`, `[ft. ...]`, trailing `feat. ...`, and remaster markers (`- Remastered 2011`, `(Remastered)`), then collapses all punctuation to single spaces. Live versions and other edits stay separate. Artist is the export's `master_metadata_album_artist_name` (Spotify's primary artist for the track) or, for API-only tracks, the first listed artist. Song rows show the name, album, and URI of the song's most-played URI.
 - **Artist**: grouped by artist name string. **Album**: grouped by (artist, album name).
-- **Context dimensions** (used by the skip split and skip profiles). Only export rows with a known skip flag:
+- **Context dimensions** (used by the skip split and skip profiles). Only rows with a known skip flag (export and live):
   - `hourBucket`: `night` 00-05, `morning` 06-11, `afternoon` 12-17, `evening` 18-23 (local hour).
   - `dayType`: `weekend` = Friday or Saturday (Kuwait weekend), else `weekday`.
   - `shuffle`: `on` / `off`.
@@ -55,13 +57,15 @@ Contract between the server and the web UI. All routes are JSON over HTTP on the
 - **Era** (`/api/stats/eras`): top N artists by hours in the range; for each, hours per local month across a continuous month axis, the month with the most hours (`peakMonth`), and first/last play of all time (not limited to the range).
 - **Trip**: plays ordered by time, ignoring rows without `conn_country` (all API rows). A trip is a maximal run of consecutive plays whose country is not `HOME_COUNTRY` (default `KW`); a single home-country play ends it. A trip can span several countries. Trips with fewer than `minPlays` plays (default 5) are dropped. `days` counts local days from first to last play inclusive. Trip plays count all kinds (country is about location); `hours` and `topTracks` count music only.
 - **Forgotten**: songs with at least `minListens` listens (all time) and no play of any kind in the last `days` days.
-- **Export vs API**: export rows are the source of truth. Importing an export deletes API rows from the export's first to last timestamp (plus 999 ms, since export timestamps have second precision), and the poller ignores API plays at or before the newest export row (+999 ms).
+- **Export vs API and live**: export rows are the source of truth. Importing an export deletes API and live rows from the export's first to last timestamp (plus 999 ms, since export timestamps have second precision), and the poller and the watcher ignore plays at or before the newest export row (+999 ms). `apiPlaysRemoved` counts both.
+- **Live plays** (`source: "live"`): the `watch` job polls `GET /me/player` and turns state changes into plays. `ms_played` is the progress it observed (pauses excluded, forward seeks capped at wall time). `skipped` is true when the track changed before 90% of its duration; stopping playback is not a skip. `reason_end` is `trackdone` (reached the last 5 s), `fwdbtn` (changed earlier) or `endplay` (playback stopped); `reason_start` is the previous play's `trackdone`/`fwdbtn`, else `null`. All three are inferred, not Spotify's values. A gap between polls over `2 x WATCHER_IDLE_SECONDS + 30 s` leaves the end unknown (`skipped`, `reason_end` null). `device` comes from the Spotify device name and type; `contextUri` is the playlist or album played from. A watcher that starts mid-track counts the part before its first poll as played.
+- **One play, two sources**: recently-played reports the same play the watcher saw. An API play matches a live row of the same track when its `played_at` falls between the live row's `ts - ms_played - 15 s` and `ts + 60 s`. The live row wins: the poller skips a matched API play (`skippedCoveredByLive`), and a live row recorded after the API row replaces the nearest matching one.
 
 ### Enums
 
-- `device`: `ios`, `android`, `mac`, `windows`, `linux`, `web`, `console`, `tv`, `speaker`, `car`, `unknown`, `other`. Derived from the export `platform` string (raw value kept server-side). API rows are always `unknown`: recently-played has no device field.
+- `device`: `ios`, `android`, `mac`, `windows`, `linux`, `web`, `console`, `tv`, `speaker`, `car`, `unknown`, `other`. Derived from the export `platform` string, or for live rows from the Spotify device name and type (raw value kept server-side). API rows are always `unknown`: recently-played has no device field.
 - `kind`: `track`, `episode`, `audiobook`, `video`.
-- `source`: `export`, `api`.
+- `source`: `export`, `api`, `live`.
 
 ### Shared shapes
 
@@ -120,6 +124,7 @@ Artist rows (top artists, eras, skips, search, the artist page, the overview's `
   "import": { "lastImportAt": "...", "result": { "...": "ImportResult, see POST /api/import" } },
   "tags": { "songs": 5055, "tagged": 0, "coverage": 0 },
   "plays": { "plays": 39821, "music": 39338, "api": 10 },
+  "live": { "watch": { "lastRunAt": "...", "...": "same shape as poll" }, "radar": { "...": "..." }, "library": { "...": "..." } }
   "llm": {
     "configured": true, "model": "claude-opus-5-5", "month": "2026-11",
     "spentUsd": 1.18, "capUsd": 100, "remainingUsd": 98.82, "exhausted": false,
@@ -133,7 +138,7 @@ Artist rows (top artists, eras, skips, search, the artist page, the overview's `
 - `timezone`: the `TIMEZONE` used for every local day, hour and weekday. Format `ts` values in it to match the buckets.
 - `spotify.paused` is `null` or `{ "reason": "rate_limited" | "quota_exceeded", "until": "...", "since": "..." }`. While paused, the server makes no Spotify calls. `quota_exceeded` means the developer-account quota was hit; the pause lasts `QUOTA_BACKOFF_HOURS` (default 12) and the UI should show it.
 - `missingScopes`: scopes the server asks for that the stored grant lacks. Reconnect to grant them.
-- `poll.lastResult` may be `{ "skipped": "spotify_not_connected" }`. `lastRunAt`/`lastSuccessAt` are `null` before the first run. `import` is `null` before the first import.
+- `poll.lastResult` also has `skippedCoveredByLive` (API plays the watcher already stored). It may be `{ "skipped": "spotify_not_connected" }`. `lastRunAt`/`lastSuccessAt` are `null` before the first run. `import` is `null` before the first import.
 - `enrichment.failed`: tracks given up on after 3 failed lookups. `withArt`: tracks with an `albumArtUrl`.
 - Enrichment makes one Web API call per run (`ENRICH_INTERVAL_SECONDS`, default 4): `GET /tracks/{id}` (metadata, 640 px art, artist ids) or `GET /artists/{id}` (image), whichever pending item has more listens. `enrichment.art` is the oEmbed job (`ART_INTERVAL_SECONDS`, default 4). Both stop while `spotify.paused` is set.
 - `enrichment.artists`: artists learned from enriched or polled tracks; `fetched` had their `GET /artists/{id}` lookup.
@@ -309,7 +314,7 @@ Wrong moment vs dislike, see the definition above. Params: `minPlays` (2-1000, d
 }
 ```
 
-`songs` is sorted by plays. `bestContext`/`worstContext` are `null` when no context reaches `minContextPlays`. The split uses export rows only, so `plays` here counts plays with a known skip flag. `params` are the exact thresholds used (unrounded in the response).
+`songs` is sorted by plays. `bestContext`/`worstContext` are `null` when no context reaches `minContextPlays`. The split uses rows with a known skip flag (export and live), so `plays` here counts only those. `params` are the exact thresholds used (unrounded in the response).
 
 ### `GET /api/stats/forgotten`
 
@@ -461,6 +466,179 @@ Bulk upsert, 1-500 items, all or nothing.
 
 Rules: `genres` and `moods` 1-3 distinct values from the vocabulary; `subgenre` optional free text up to 60 chars; `energy`, `valence` integers 1-5; `language` a valid ISO 639-1 code or `instrumental`; `model` 1-100 chars; `confidence` `low`/`med`/`high`; `taggedAt` optional ISO datetime (default now). Unknown keys are rejected. `200 { "upserted": 1 }`. `400 invalid_request` with `details[].path` like `tags.0.genres.0`; `400 unknown_tracks` with `details.uris` when a URI is not in the library.
 
+## Player
+
+Playback goes through the owner's Spotify account (Premium) on its active device. Controls return `409 no_active_device` when no device is active and accept an optional `deviceId` (from `/devices`) to target one.
+
+### `GET /api/player/now`
+
+From the watcher's cache: no Spotify call while the `watch` job runs. With the job disabled, a cache older than `WATCHER_IDLE_SECONDS + 5` refreshes it once.
+
+```json
+{ "playing": true,
+  "track": { "uri": "spotify:track:...", "name": "Glimpse of Us", "artist": "Joji", "album": "SMITHEREENS", "albumArtUrl": "https://i.scdn.co/image/...", "durationMs": 233000 },
+  "progressMs": 61000, "shuffle": false, "device": { "name": "iPhone", "type": "Smartphone" },
+  "contextUri": "spotify:playlist:...", "fetchedAt": "..." }
+```
+
+`progressMs` is extrapolated from `fetchedAt` while playing. Nothing playing: `playing: false`, `track: null`.
+
+### `GET /api/player/devices`
+
+`{ "devices": [{ "id": "...", "name": "iPhone", "type": "Smartphone", "active": true, "restricted": false, "volume": 60 }] }`
+
+### `GET /api/player/queue`
+
+`{ "current": { "uri": "...", "name": "...", "artist": "...", "albumArtUrl": "..." } | null, "queue": [same shape] }`
+
+### Controls
+
+All `POST`, all answer `200 { "ok": true }`.
+
+| Route | Body |
+| --- | --- |
+| `/api/player/play` | `{ "contextUri"?: album/playlist/artist URI, "uris"?: [track URI] (1-100), "offset"?: { "position": n } \| { "uri": track URI }, "deviceId"? }`. Not both `contextUri` and `uris`. Empty body resumes. |
+| `/api/player/pause` | `{ "deviceId"? }` or no body |
+| `/api/player/next` | `{ "deviceId"? }` or no body |
+| `/api/player/queue` | `{ "uri": track URI, "deviceId"? }` |
+| `/api/player/shuffle` | `{ "state": boolean, "deviceId"? }` |
+| `/api/player/transfer` | `{ "deviceId": string, "play"?: boolean }` |
+
+## DJ session
+
+Plays an ordered list of songs through the app-owned playlist "encore session" with shuffle off. Spotify cannot reorder or clear the user queue, so the session rewrites the playlist's not-yet-played tail instead. The watcher tracks the position. After `DJ_SKIP_TRIGGER` (default 2) consecutive skips inside the playlist, the re-planner returns a new tail; the session deletes the old tail items and appends the new ones. Played songs and the current song are never touched. Songs appear once per session (duplicates are dropped at start). Playing anything outside the playlist ends the session.
+
+Default re-planner (deterministic): keeps the remaining tail minus songs classed `dislike` and songs already skipped in the session, scores each by context fit for the current local hour bucket and day type (1 - skip rate, from plays with a known skip flag, needs 3 plays, else 0.5) plus tag similarity to finished songs minus tag similarity to skipped ones (genres, moods, energy, valence), and orders by score. Dropped songs are replaced from the owner's 300 most listened tagged songs that score above neutral.
+
+Seam: `DjService.setReplanner(fn)` with `fn(input: { finished, skipped, current, upcoming, exclude, now }) => Promise<string[]>` (track URIs). Returned URIs that are played, current or invalid are dropped.
+
+### `POST /api/dj/start`
+
+Body `{ "uris": [track URI] (1-500), "deviceId"? }`. Replaces any active session. `400 invalid_set`, `409 no_active_device`.
+
+```json
+{ "session": { "id": 3, "status": "active", "playlistUri": "spotify:playlist:...", "position": 0, "current": "spotify:track:...",
+  "upcoming": ["spotify:track:..."], "played": [{ "uri": "spotify:track:...", "outcome": "skipped" }],
+  "skipStreak": 0, "replans": 0, "startedAt": "...", "endedAt": null, "endReason": null } }
+```
+
+### `GET /api/dj`
+
+`{ "session": Session | null }`: the active session, else the latest one. `status` is `active`, `stopped` or `ended`; `endReason` is `stopped`, `replaced` or `left_playlist`.
+
+### `POST /api/dj/stop`
+
+Ends the session (playback continues). `404` when none is active.
+
+## Release radar
+
+The `radar` job checks artists with at least `RADAR_MIN_LISTENS` (20) listens in the last 12 months, `RADAR_ARTISTS_PER_RUN` (2) Web API calls per run every `RADAR_INTERVAL_MINUTES` (60), each artist at most every `RADAR_RECHECK_DAYS` (7). Never-checked artists go first, then the longest unchecked, most listened first. An artist without a known Spotify id costs one `GET /tracks/{id}` on their most played track to learn it. A check is `GET /artists/{id}/albums?include_groups=album,single&limit=10`, plus one `include_groups=single` call when albums fill that page.
+
+A release is **new** when it was not stored before and its release date is on or after the day before the artist's previous check; on an artist's first check, within `RADAR_BASELINE_DAYS` (30). Year- and month-precision dates count as the first day of the period.
+
+### `GET /api/radar`
+
+Params: `status` = `new` (default: new and not marked seen) | `recent` (released in the last `days`), `days` (1-365, default 30), `limit` (1-200, default 50). Sorted by release date, newest first.
+
+```json
+{ "artists": 66, "withId": 47, "checkedRecently": 12, "unseenNew": 3, "lastRunAt": "...", "lastResult": { "due": 54, "checked": 2, "resolved": 0, "unresolved": 0, "found": 18, "newReleases": 1, "calls": 2 },
+  "items": [{ "id": "...", "uri": "spotify:album:...", "url": "https://open.spotify.com/album/...", "name": "...", "artist": "...", "artistId": "...",
+              "albumType": "single", "releaseDate": "2026-11-07", "totalTracks": 1, "imageUrl": "https://i.scdn.co/image/...", "isNew": true, "seen": false, "firstSeenAt": "..." }] }
+```
+
+### `POST /api/radar/seen`
+
+Body `{ "ids"?: [release id] }`; without `ids`, marks every unseen new release. `{ "marked": 3 }`.
+
+For the weekly digest: `newReleasesSince(db, sinceMs)` in `src/radar/radar.ts` returns releases flagged new and first seen at or after `sinceMs`, seen or not.
+
+## Cleanup
+
+Proposals only; nothing is removed until the owner applies a selected batch here. The `library` job syncs saved songs (`GET /me/tracks`) and the items of playlists the owner owns (`GET /me/playlists`, then `GET /playlists/{id}/items` for playlists whose snapshot changed), one page call every `LIBRARY_PAGE_SECONDS` (20), a full pass every `LIBRARY_SYNC_HOURS` (24). The cursor is stored, so a restart resumes the pass. App-owned playlists are skipped. Proposals are rebuilt after each pass; dismissed and applied ones keep their status.
+
+Kinds (stats are all-time over the song, merged by `songKey`):
+
+- `saved_never_played`: saved more than 30 days ago, no play of the song.
+- `saved_dislike`: saved song classed `dislike` by the skip split (8+ plays with a known skip flag).
+- `playlist_skipped`: song in an own playlist with 8+ plays with a known skip flag and a skip rate of 0.9 or more.
+- `playlist_duplicate`: the same song more than once in one playlist; applying keeps the first.
+
+### `GET /api/cleanup`
+
+Params: `kind`, `status` = `open` (default) | `dismissed` | `applied`, `limit` (1-500, default 100), `offset`.
+
+```json
+{ "counts": { "saved_never_played": 210, "saved_dislike": 31, "playlist_skipped": 12, "playlist_duplicate": 4 },
+  "library": { "savedTracks": 1979, "playlists": 23, "syncing": false, "lastSyncAt": "..." },
+  "total": 210, "limit": 100, "offset": 0,
+  "items": [{ "id": 17, "kind": "saved_dislike", "playlistId": null, "uri": "spotify:track:...", "status": "open", "updatedAt": "...",
+              "evidence": { "name": "...", "artist": "...", "albumArtUrl": "...", "songKey": "...", "plays": 14, "listens": 2, "skips": 12, "skipRate": 0.857,
+                            "lastPlayed": "...", "savedAt": "...", "class": "dislike" } }] }
+```
+
+`counts` are open proposals. Playlist kinds add `playlistId`, `playlistName` to `evidence`; `playlist_skipped` adds `positions` and `uris`; `playlist_duplicate` adds `keep: { position, uri }` and `duplicates: [{ position, uri }]`.
+
+### `POST /api/cleanup/dismiss`
+
+Body `{ "ids": [proposal id] }`. `{ "dismissed": 2 }`.
+
+### `POST /api/cleanup/apply`
+
+Body `{ "ids": [proposal id] }` (1-500, all must be open, else `400 invalid_selection` with `details.ids`). The only code path that removes from the library (`DELETE /me/library`) or an owned playlist (`DELETE /playlists/{id}/items`, which removes every occurrence of a URI; duplicates re-add the kept one at its position). Proposals run in order; the undo log records what each removed. `200 { "batchId": 4, "applied": 3 }`. A Spotify failure part way returns `502 cleanup_partial` with `details.batchId`: the batch holds what was applied before it.
+
+### `GET /api/cleanup/batches`
+
+`{ "items": [{ "id": 4, "proposalIds": [17, 18], "actions": 2, "appliedAt": "...", "undoneAt": null }] }`
+
+### `POST /api/cleanup/batches/:id/undo`
+
+Saves removed songs back to the library and re-inserts removed playlist items at their original positions (ascending). Proposals return to `open`. `{ "batchId": 4, "restored": 2 }`. Re-saved songs get a new "added" date. Undo assumes the playlist did not change since; undoing an older batch after a newer one on the same playlist can misplace items.
+
+## Discord
+
+No gateway connection. Set `DISCORD_APPLICATION_ID`, `DISCORD_PUBLIC_KEY` and `DISCORD_OWNER_ID` to enable the endpoint; point the Discord application's Interactions Endpoint URL at `PUBLIC_BASE_URL/api/discord/interactions`.
+
+### `POST /api/discord/interactions` (public)
+
+Every request must carry a valid Ed25519 signature (`X-Signature-Ed25519` over `X-Signature-Timestamp` + raw body, application public key), else `401 invalid_signature`. Answers `PING`. Only `DISCORD_OWNER_ID` may run commands or press buttons; anyone else gets an ephemeral refusal. Commands that may call Spotify answer with a deferred response (type 5) and edit the original message when done, inside Discord's 3 s limit. `404` when Discord is not configured.
+
+Guild commands (registered with a bulk overwrite at startup when `DISCORD_BOT_TOKEN` and `DISCORD_GUILD_ID` are set, or `bun run discord:register`):
+
+| Command | Does |
+| --- | --- |
+| `/now` | What is playing, with album art (watcher cache) |
+| `/play query` | Plays the best match: the owner's history first (most listened song whose name contains `query`), then Spotify search |
+| `/queue query` | Same match, added to the queue |
+| `/skip` | Next track |
+| `/stats [range]` | Hours, listens, skip rate, songs, artists, top artist and song. `range`: `week`, `month` (default, last 30 days), `year`, `all` |
+| `/top [kind] [range]` | Top 10 `artists` (default) or `songs` by hours |
+| `/onthisday` | Same month-day in earlier years, top 3 songs per year |
+| `/forgotten` | 5 forgotten favourites (90 days, 10+ listens), each with a Queue button |
+| `/releases` | Unseen new releases from the radar |
+| `/cleanup` | Open proposal counts and a link to the dashboard; never applies |
+
+Button custom ids are `prefix:arg`; built in: `queue:<track URI>`.
+
+Seams for other modules (`src/discord/`): `DiscordRegistry.addCommand({ definition, defer, ephemeral?, handle })` and `addComponent({ prefix, defer, ephemeral?, handle })` on `discord.registry` (created in `src/main.ts` by `createDiscord`); handlers get `{ ctx: { db, config, services, now }, interaction, options | arg }` and return a message (`content`, `embeds`, `components`). Throw `UserFacingError` for a message the owner should see. Add commands before `registerCommands` runs. To post outside an interaction (a weekly digest), call `postToChannel(discord, message)` or `discord.rest.postMessage(channelId, message)`; `discord.rest.editMessage` edits it. All messages are sent with `allowed_mentions: { parse: [] }`; pass names through `plain()` (escapes markdown, breaks `@` mentions, truncates).
+
+## MCP
+
+`/mcp` (streamable HTTP, `@modelcontextprotocol/server`, stateless) when `MCP_TOKEN` is set; `404` otherwise. Needs `Authorization: Bearer <MCP_TOKEN>` (`401` without). Tools return JSON text with the same shapes as the HTTP endpoints:
+
+| Tool | Input |
+| --- | --- |
+| `overview` | `from?`, `to?` |
+| `top` | `kind` (`artists`, `songs`, `albums`), `sort?`, `limit?`, `from?`, `to?` |
+| `history` | `from?`, `to?`, `artist?`, `songKey?`, `uri?`, `skipped?`, `q?`, `limit?`, `offset?` |
+| `lookup` | `query?` (name search) or `artist` (+ `album`) or `songKey`/`uri` (entity page) |
+| `on_this_day` | `date?`, `limit?` |
+| `forgotten` | `days?`, `minListens?`, `limit?` |
+| `now_playing` | none |
+| `releases` | `status?` (`new`, `recent`), `days?` |
+| `play` | `uris` (1-50 track URIs) |
+| `add_to_queue` | `uri` |
+
+There are no library or playlist removal tools.
 ## Assistant (Claude)
 
 Claude-backed features: sets, weekly picks, ask, liner notes, digests. Session only (the admin token is rejected). Every call is recorded in a ledger and priced; see `GET /api/llm/spend`.
