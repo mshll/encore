@@ -18,7 +18,7 @@ describe("auth gating", () => {
     const { request } = testApp();
     expect((await request("/api/health")).status).toBe(200);
     expect(await (await request("/api/auth/session")).json()).toEqual({ authenticated: false, setupRequired: true });
-    for (const path of ["/api/status", "/api/stats/overview", "/api/history", "/api/spotify/authorize", "/api/entities/artist?name=x", "/api/nope"]) {
+    for (const path of ["/api/status", "/api/stats/overview", "/api/history", "/api/spotify/authorize", "/api/entities/artist?name=x", "/api/search?q=x", "/api/nope"]) {
       const res = await request(path);
       expect(res.status).toBe(401);
       expect(((await res.json()) as { error: { code: string } }).error.code).toBe("unauthenticated");

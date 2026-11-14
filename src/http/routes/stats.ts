@@ -5,6 +5,7 @@ import { history } from "../../analytics/history";
 import { clock, devices, overview, timeSeries } from "../../analytics/overview";
 import { forgotten, onThisDay } from "../../analytics/recall";
 import { momentSplit, skips } from "../../analytics/skips";
+import { search } from "../../analytics/search";
 import { energyByHour, genreSeries, moodSeries } from "../../analytics/tags";
 import { eras, topAlbums, topArtists, topTracks } from "../../analytics/top";
 import { trips } from "../../analytics/trips";
@@ -133,4 +134,9 @@ const historyQuery = ranged({
 export const historyRoutes = new Hono<Env>().get("/", (c) => {
   const q = parse(historyQuery, c.req.query());
   return c.json(history(c.var.deps.db, { ...q, range: range(q) }));
+});
+
+export const searchRoutes = new Hono<Env>().get("/", (c) => {
+  const q = parse(z.object({ q: z.string().trim().min(1).max(200), limit: int(1, 50, 8) }), c.req.query());
+  return c.json(search(c.var.deps.db, q));
 });

@@ -3,6 +3,7 @@ import { albumPage, artistPage, trackPage } from "../src/analytics/entities";
 import { history } from "../src/analytics/history";
 import { clock, devices, overview, timeSeries } from "../src/analytics/overview";
 import { forgotten, onThisDay } from "../src/analytics/recall";
+import { search } from "../src/analytics/search";
 import { classify, momentSplit, skips } from "../src/analytics/skips";
 import { energyByHour, genreSeries, moodSeries } from "../src/analytics/tags";
 import { eras, topAlbums, topArtists, topTracks } from "../src/analytics/top";
@@ -298,6 +299,23 @@ describe("history", () => {
     expect(history(db, { range: {}, songKey: KEY_A, limit: 10, offset: 0 }).total).toBe(3);
     expect(history(db, { range: {}, source: "api", limit: 10, offset: 0 }).items[0]).toMatchObject({ uri: C, msPlayed: null, skipped: null });
     expect(history(db, { range: {}, kind: "episode", limit: 10, offset: 0 }).items[0]).toMatchObject({ name: "Ep", kind: "episode" });
+  });
+});
+
+describe("search", () => {
+  test("finds artists, merged songs and albums by substring, most listened first", () => {
+    const db = baseFixture();
+    const byArtist = search(db, { q: "artist", limit: 10 });
+    expect(byArtist.artists.map((a) => [a.artist, a.listens])).toEqual([
+      ["Artist X", 2],
+      ["Artist Y", 1],
+    ]);
+    expect(byArtist.songs).toEqual([]);
+    const bySong = search(db, { q: "song a", limit: 10 });
+    expect(bySong.songs.map((s) => [s.songKey, s.plays])).toEqual([[KEY_A, 3]]);
+    expect(search(db, { q: "album 1", limit: 10 }).albums.map((a) => a.album)).toEqual(["Album 1", "Album 1 Deluxe"]);
+    expect(search(db, { q: "_", limit: 10 }).artists).toEqual([]);
+    expect(search(db, { q: "ep", limit: 10 }).songs).toEqual([]);
   });
 });
 

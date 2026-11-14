@@ -8,7 +8,7 @@ import { requireSession, requireSessionOrAdmin } from "./middleware";
 import { authRoutes } from "./routes/auth";
 import { importRoutes } from "./routes/imports";
 import { callbackRoute, spotifyRoutes } from "./routes/spotify";
-import { entityRoutes, historyRoutes, statsRoutes } from "./routes/stats";
+import { entityRoutes, historyRoutes, searchRoutes, statsRoutes } from "./routes/stats";
 import { statusRoutes } from "./routes/status";
 import { tagRoutes } from "./routes/tags";
 
@@ -34,6 +34,7 @@ export function createApp(deps: Deps) {
   app.route("/api/stats", statsRoutes);
   app.route("/api/entities", entityRoutes);
   app.route("/api/history", historyRoutes);
+  app.route("/api/search", searchRoutes);
   app.all("/api/*", () => {
     throw new ApiError(404, "not_found", "Unknown API route");
   });

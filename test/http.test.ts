@@ -59,6 +59,8 @@ describe("http", () => {
     expect((await get("/api/entities/track")).status).toBe(400);
     expect((await get(`/api/entities/track?uri=${uri("zz")}`)).status).toBe(404);
     expect((await get("/api/stats/skips/split?class=meh")).status).toBe(400);
+    expect((await get("/api/search")).status).toBe(400);
+    expect(await (await get("/api/search?q=x")).json()).toEqual({ artists: [], songs: [], albums: [] });
     for (const path of ["/api/stats/clock", "/api/stats/eras", "/api/stats/trips", "/api/stats/on-this-day", "/api/stats/forgotten", "/api/stats/devices", "/api/stats/tags/genres", "/api/history?skipped=true"]) {
       expect((await get(path)).status).toBe(200);
     }

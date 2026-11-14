@@ -372,6 +372,18 @@ Merged across URIs: any URI of the song gives the same page.
 
 `class` uses the split rules with `minContextPlays = 3`, or is `null` with fewer than 8 plays with a known skip flag.
 
+## Search
+
+### `GET /api/search?q=...`
+
+Case-insensitive substring match over all music plays (no range). Params: `q` (1-200 chars, required), `limit` per group (1-50, default 8). Each group is sorted by listens. Artists match on artist name, songs on track name (merged by `songKey`), albums on album name. Stats are all-time.
+
+```json
+{ "artists": [{ "artist": "Mac Miller", ...Stats }],
+  "songs": [Song],
+  "albums": [{ "album": "Circles", "artist": "Mac Miller", "albumArtUrl": null, ...Stats }] }
+```
+
 ## History
 
 ### `GET /api/history`

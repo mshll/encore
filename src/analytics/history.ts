@@ -1,7 +1,7 @@
 import { sql, type SQL } from "drizzle-orm";
 import type { Db } from "../db/client";
 import type { Device, PlayKind, PlaySource } from "../db/schema";
-import type { Range } from "./common";
+import { containsPattern, type Range } from "./common";
 
 export type HistoryFilters = {
   range: Range;
@@ -54,7 +54,7 @@ export function history(db: Db, f: HistoryFilters) {
   if (f.country) parts.push(sql`p.conn_country = ${f.country}`);
   if (f.source) parts.push(sql`p.source = ${f.source}`);
   if (f.q) {
-    const like = `%${f.q.replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
+    const like = containsPattern(f.q);
     parts.push(sql`(t.name like ${like} escape '\\' or t.artist like ${like} escape '\\' or t.album like ${like} escape '\\' or p.episode_name like ${like} escape '\\' or p.show_name like ${like} escape '\\')`);
   }
   const where = sql.join(parts, sql` and `);

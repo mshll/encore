@@ -43,6 +43,8 @@ export function musicWhere(range: Range, ...extra: (SQL | undefined)[]): SQL {
   return sql.join(parts, sql` and `);
 }
 
+export const containsPattern = (q: string) => `%${q.replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
+
 export function periodExpr(period: Period): SQL {
   switch (period) {
     case "day":
