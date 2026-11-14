@@ -313,12 +313,3 @@ export function markRemovedPlaylists(db: Db, listed: Set<string>, listingStarted
   }
   return gone;
 }
-
-/** Spotify playlist ids encore manages as living playlists, so library cleanup leaves them alone. */
-export function livingPlaylistIds(db: Db): string[] {
-  return db
-    .select({ id: livingPlaylists.playlistId })
-    .from(livingPlaylists)
-    .all()
-    .flatMap((r) => (r.id ? [r.id] : []));
-}

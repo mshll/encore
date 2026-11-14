@@ -239,35 +239,100 @@ export const playlistItems = sqliteTable(
   (t) => [primaryKey({ columns: [t.playlistId, t.position] }), index("playlist_items_uri").on(t.uri)],
 );
 
-export const CLEANUP_KINDS = ["saved_never_played", "saved_dislike", "playlist_skipped", "playlist_duplicate"] as const;
-export const CLEANUP_STATUSES = ["open", "dismissed", "applied"] as const;
+export const RULE_KINDS = ["saved_never_played", "saved_dislike", "playlist_skipped", "playlist_duplicate"] as const;
+export const CLEANUP_KINDS = [...RULE_KINDS, "plan"] as const;
+export const CLEANUP_STATUSES = ["open", "dismissed", "applied", "skipped"] as const;
+export const PLAN_ACTIONS = ["archive", "remove", "save", "add", "dedupe"] as const;
+export type RuleKind = (typeof RULE_KINDS)[number];
 export type CleanupKind = (typeof CLEANUP_KINDS)[number];
+export type PlanAction = (typeof PLAN_ACTIONS)[number];
 
+export const PLAN_SOURCES = ["rule", "analysis", "claude", "standing"] as const;
+export const PLAN_STATUSES = ["open", "applied", "dismissed"] as const;
+export type PlanSource = (typeof PLAN_SOURCES)[number];
+
+/** A named batch of proposed library actions. Rule plans (one per rule kind) stay open and are refreshed after each library sync. */
+export const libraryPlans = sqliteTable("library_plans", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  source: text("source", { enum: PLAN_SOURCES }).notNull(),
+  ruleKind: text("rule_kind", { enum: RULE_KINDS }).unique(),
+  title: text("title").notNull(),
+  summary: text("summary").notNull().default(""),
+  /** The owner's instruction, for plans Claude made. */
+  request: text("request"),
+  threadId: integer("thread_id"),
+  standingId: integer("standing_id"),
+  status: text("status", { enum: PLAN_STATUSES }).notNull(),
+  createdAt: integer("created_at").notNull(),
+  updatedAt: integer("updated_at").notNull(),
+});
+
+export const STANDING_CADENCES = ["weekly", "monthly"] as const;
+
+/** A saved instruction a job hands to Claude on a schedule. The plan it makes waits for the owner; nothing applies by itself. */
+export const libraryStanding = sqliteTable("library_standing", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  instruction: text("instruction").notNull(),
+  cadence: text("cadence", { enum: STANDING_CADENCES }).notNull(),
+  enabled: integer("enabled", { mode: "boolean" }).notNull().default(false),
+  lastRunAt: integer("last_run_at"),
+  lastPlanId: integer("last_plan_id"),
+  lastError: text("last_error"),
+  createdAt: integer("created_at").notNull(),
+  updatedAt: integer("updated_at").notNull(),
+});
+
+/** The items of every plan. Named for the rule proposals they began as; `plan_id` is null only on rows from before plans, until `ensureRulePlans` assigns them. */
 export const cleanupProposals = sqliteTable(
   "cleanup_proposals",
   {
     id: integer("id").primaryKey({ autoIncrement: true }),
     key: text("key").notNull().unique(),
     kind: text("kind", { enum: CLEANUP_KINDS }).notNull(),
+    planId: integer("plan_id"),
+    /** Null on rows from before plans: the rule kind's default action applies. */
+    action: text("action", { enum: PLAN_ACTIONS }),
+    /** Where the action applies: a playlist id, or null for the liked songs. */
     playlistId: text("playlist_id"),
     uri: text("uri").notNull(),
+    included: integer("included", { mode: "boolean" }).notNull().default(true),
+    reason: text("reason"),
     evidence: text("evidence", { mode: "json" }).$type<Record<string, unknown>>().notNull(),
     status: text("status", { enum: CLEANUP_STATUSES }).notNull(),
     createdAt: integer("created_at").notNull(),
     updatedAt: integer("updated_at").notNull(),
   },
-  (t) => [index("cleanup_proposals_status").on(t.status, t.kind)],
+  (t) => [index("cleanup_proposals_status").on(t.status, t.kind), index("cleanup_proposals_plan").on(t.planId, t.status)],
 );
 
 export type UndoAction =
   | { type: "library_save"; uris: string[] }
-  | { type: "playlist_insert"; playlistId: string; uri: string; positions: number[] };
+  | { type: "library_remove"; uris: string[] }
+  | { type: "playlist_insert"; playlistId: string; uri: string; positions: number[] }
+  | { type: "playlist_remove"; playlistId: string; uris: string[] }
+  | { type: "archive_remove"; playlistId: string; uris: string[] };
+
+export const BATCH_STATUSES = ["running", "done", "partial", "failed"] as const;
+export type BatchStatus = (typeof BATCH_STATUSES)[number];
+export type SkippedItem = { id: number; reason: string };
 
 export const cleanupBatches = sqliteTable("cleanup_batches", {
   id: integer("id").primaryKey({ autoIncrement: true }),
+  planId: integer("plan_id"),
+  /** Items that were applied. */
   proposalIds: text("proposal_ids", { mode: "json" }).$type<number[]>().notNull(),
+  /** Items chosen when the apply started. */
+  selectedIds: text("selected_ids", { mode: "json" }).$type<number[]>().notNull().default([]),
+  skipped: text("skipped", { mode: "json" }).$type<SkippedItem[]>().notNull().default([]),
+  /** What undo sends, in order. Written after each Spotify write that succeeded, so it matches what was applied even when the apply stops part way. */
   undo: text("undo", { mode: "json" }).$type<UndoAction[]>().notNull(),
+  status: text("status", { enum: BATCH_STATUSES }).notNull().default("done"),
+  error: text("error"),
+  calls: integer("calls").notNull().default(0),
   appliedAt: integer("applied_at").notNull(),
+  finishedAt: integer("finished_at"),
+  undoStatus: text("undo_status", { enum: ["running", "done", "failed"] }),
+  undoError: text("undo_error"),
   undoneAt: integer("undone_at"),
 });
 

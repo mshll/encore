@@ -4,6 +4,7 @@ import { isDigestDue, generateDigest, digestPeriod, type DigestKind } from "../d
 import type { FeatureContext } from "../llm/context";
 import { LlmBudgetExceededError } from "../llm/errors";
 import { refreshPickLibraryState, refreshPickOutcomes } from "../picks/outcomes";
+import { runDueStanding } from "../library/standing";
 import { generatePicks, weekOf } from "../picks/service";
 import { localTime } from "../plays/localTime";
 import { refreshSetOutcomes } from "../sets/outcomes";
@@ -16,7 +17,7 @@ const HOUR_MS = 3_600_000;
 const MAX_ATTEMPTS_PER_PERIOD = 2;
 const LIBRARY_CHECK_EVERY_MS = 24 * HOUR_MS;
 
-export type AssistantJobs = { picks: Job; digest: Job; outcomes: Job };
+export type AssistantJobs = { picks: Job; digest: Job; outcomes: Job; library: Job };
 
 export function isPicksDue(ctx: FeatureContext, now: number): boolean {
   const { timezone, llm } = ctx.settings.get();
@@ -93,6 +94,11 @@ export function createAssistantJobs(ctx: FeatureContext, spotifyAuth: SpotifyAut
           }
           return generated.length ? { generated } : { skipped: "not_due" };
         }),
+    },
+    library: {
+      name: "library_plans",
+      intervalMs: () => HOUR_MS,
+      run: () => guarded(async () => (llm.configured ? runDueStanding(ctx) : { skipped: "llm_not_configured" })),
     },
     outcomes: {
       name: "outcomes",

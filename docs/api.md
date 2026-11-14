@@ -30,7 +30,7 @@ Contract between the server and the web UI. All routes are JSON over HTTP on the
 
 ## Assistant runs
 
-A request sent with `Accept: text/event-stream` to `POST /api/sets`, `POST /api/sets/:id/messages`, `POST /api/picks/generate` or `POST /api/ask` starts a run on the server. Closing the stream does not stop it. The stream starts with `event: run` (`{ "id", "startedAt" }`), then `text` and `tool` events, then one `done` or `error`.
+A request sent with `Accept: text/event-stream` to `POST /api/sets`, `POST /api/sets/:id/messages`, `POST /api/picks/generate`, `POST /api/ask` or `POST /api/library/conversations` starts a run on the server. Closing the stream does not stop it. The stream starts with `event: run` (`{ "id", "startedAt" }`), then `text` and `tool` events, then one `done` or `error`.
 
 - `GET /api/runs?key=<request path>`: `{ "run": { "id", "startedAt" } | null }`, the run still working for that path.
 - `GET /api/runs/:id/events`: the same stream again from its first event. Finished runs stay readable for 10 minutes.
@@ -165,7 +165,7 @@ Artist rows (top artists, eras, skips, search, the artist page, the overview's `
 - `tags`: `songs` known (distinct song keys in `tracks`), `tagged` songs with tags, `coverage` = tagged / songs (0..1, not rounded).
 - `plays`: stored rows: all kinds, music only, and rows by source `api` and `live` (the rest are `export`).
 - `live`: the `watch`, `radar`, `library` and `living` jobs, same shape as `poll`. `watch.lastResult` is `{ "current": Observation | null, "inserted", "replacedApi", "coveredByExport", "playing" }` for the last tick, or `{ "current", "skipped": "spotify_not_connected" | "spotify_paused", "until"? }`.
-- `llm`: Claude spend for the current local month against `MONTHLY_BUDGET_USD`. `exhausted: true` means every LLM endpoint returns `402` and scheduled LLM jobs skip until the next month. `configured: false` means no Claude key (`claudeApiKey` setting or `ANTHROPIC_API_KEY`). `schedule`: when the weekly picks and digest jobs run (ISO weekday 1-7 and local hour, from `PICKS_WEEKDAY`/`PICKS_HOUR` and `DIGEST_WEEKDAY`/`DIGEST_HOUR`); `enabled` is `JOBS_ENABLED`. `byFeature` features: `sets`, `picks`, `ask`, `notes`, `digest`, `dj`. Job `lastResult` may be `{ "skipped": "not_due" | "budget_exceeded" | "llm_not_configured" | "spotify_not_connected" | "attempts_exhausted" }`. When Discord posting is configured, `picks` and `digest` results also carry `publish: { "posted": ["picks:2026-11-09"] }` or `publish: { "error": "..." }` (see Discord). `outcomes.lastResult` has set and pick outcome refresh counts and, once a day, `library` (pick library state).
+- `llm`: Claude spend for the current local month against `MONTHLY_BUDGET_USD`. `exhausted: true` means every LLM endpoint returns `402` and scheduled LLM jobs skip until the next month. `configured: false` means no Claude key (`claudeApiKey` setting or `ANTHROPIC_API_KEY`). `schedule`: when the weekly picks and digest jobs run (ISO weekday 1-7 and local hour, from `PICKS_WEEKDAY`/`PICKS_HOUR` and `DIGEST_WEEKDAY`/`DIGEST_HOUR`); `enabled` is `JOBS_ENABLED`. `byFeature` features: `sets`, `picks`, `ask`, `notes`, `digest`, `dj`, `library`. Job `lastResult` may be `{ "skipped": "not_due" | "budget_exceeded" | "llm_not_configured" | "spotify_not_connected" | "attempts_exhausted" }`. When Discord posting is configured, `picks` and `digest` results also carry `publish: { "posted": ["picks:2026-11-09"] }` or `publish: { "error": "..." }` (see Discord). `outcomes.lastResult` has set and pick outcome refresh counts and, once a day, `library` (pick library state).
 
 
 ## Auth (passkeys)
@@ -303,7 +303,7 @@ Body `{ "historyStart": "2024-01-01" }`. In this order:
 
 `200`: the `GET /api/settings` shape plus `removed` (the `GET /api/settings/history-start` shape, counted inside the delete) and `snapshot` (the file name, or `null` when nothing was deleted). Running it again with the same date deletes nothing and writes no snapshot.
 
-Open cleanup proposals keep the play counts in their `evidence` until the next library pass refreshes them. Stored recaps (`/api/digests`) keep their text.
+Open plan items keep the play counts in their `evidence` until the next library pass refreshes them. Stored recaps (`/api/digests`) keep their text.
 
 ### `POST /api/settings/claude/verify`
 
@@ -800,47 +800,161 @@ Body `{ "enabled": boolean }`. Switching on makes the playlist when there is non
 
 Refresh now, with the same rules and response as switching on. `outcome.status` is `off` when the kind is off.
 
-## Cleanup
+## Library
 
-Proposals only; nothing is removed until the owner applies a selected batch here. The `library` job syncs saved songs (`GET /me/tracks`) and the items of playlists the owner owns (`GET /me/playlists`, then `GET /playlists/{id}/items` for playlists whose snapshot changed), one page call every `LIBRARY_PAGE_SECONDS` (20), a full pass every `LIBRARY_SYNC_HOURS` (24). The cursor is stored, so a restart resumes the pass. App-owned playlists are skipped. Proposals are rebuilt after each pass; dismissed and applied ones keep their status.
+What state the liked songs and own playlists are in. Read only; changes go through [plans](#plans).
 
-Kinds (stats are all-time over the song, merged by `songKey`):
+**Play class** of a song, from its last listen (a play of 30 s or more; see Metric definitions) and nothing else, so a skip neither condemns a song nor keeps it in rotation: `active` (last listen under 90 days ago), `fading` (90 to 179 days), `dormant` (180 days or more), `never` (no listen since history starts: the `historyStart` setting, else the first stored play). Playlists encore owns (the DJ session playlist, the archive, saved sets, self-updating playlists: `app_playlists`, `sets.playlist_id` and `living_playlists.playlist_id` once that table exists) are never part of the library; the `library` job does not sync them.
 
-- `saved_never_played`: saved more than 30 days ago, no play of the song.
-- `saved_dislike`: saved song classed `dislike` by the skip split (8+ plays with a known skip flag) AND a listen ratio of 0.2 or less. Listen ratio = listens / plays over all sources (a listen is 30 s or more, or any API row; see Metric definitions). The ratio rule keeps songs that are often skipped but still often listened through (for example 5 listens of 8 plays).
-- `playlist_skipped`: song in an own playlist with 8+ plays with a known skip flag and a skip rate of 0.9 or more.
-- `playlist_duplicate`: the same song more than once in one playlist; applying keeps the first.
-
-### `GET /api/cleanup`
-
-Params: `kind`, `status` = `open` (default) | `dismissed` | `applied`, `limit` (1-500, default 100), `offset`.
+### `GET /api/library/analysis`
 
 ```json
-{ "counts": { "saved_never_played": 210, "saved_dislike": 31, "playlist_skipped": 12, "playlist_duplicate": 4 },
-  "library": { "savedTracks": 1979, "playlists": 23, "syncing": false, "lastSyncAt": "..." },
-  "total": 210, "limit": 100, "offset": 0,
-  "items": [{ "id": 17, "kind": "saved_dislike", "playlistId": null, "uri": "spotify:track:...", "status": "open", "updatedAt": "...",
-              "evidence": { "name": "...", "artist": "...", "albumArtUrl": "...", "songKey": "...", "plays": 14, "listens": 2, "skips": 12, "skipRate": 0.857,
-                            "listenRatio": 0.143, "lastPlayed": "...", "savedAt": "...", "class": "dislike" } }] }
+{ "library": { "savedTracks": 1979, "playlists": 23, "syncing": false, "lastSyncAt": "..." },
+  "historyStart": "2024-11-01",
+  "rules": { "fadingAfterDays": 90, "dormantAfterDays": 180, "unsavedMinListens": 10 },
+  "liked": { "total": 1979, "classes": { "active": 536, "fading": 210, "dormant": 1098, "never": 135 } },
+  "savedMonths": [{ "month": "2024-12", "active": 12, "fading": 4, "dormant": 80, "never": 9 }],
+  "artists": [{ "artist": "Kendrick Lamar", "total": 60, "active": 10, "fading": 6, "dormant": 40, "never": 4 }],
+  "playlists": [{ "id": "...", "name": "AMF", "items": 181, "songs": 173, "duplicates": 8,
+                  "classes": { "active": 51, "fading": 24, "dormant": 83, "never": 15 }, "lastPlayed": "...",
+                  "overlap": { "id": "...", "name": "2k24 h-h", "shared": 109 } }],
+  "overlaps": [{ "a": { "id": "...", "name": "AMF" }, "b": { "id": "...", "name": "2k24 h-h" }, "shared": 109 }],
+  "unsaved": { "total": 35, "songs": [{ "songKey": "...", "uri": "...", "name": "Wonderwall", "artist": "Oasis", "albumArtUrl": "...", "listens": 46, "lastPlayed": "..." }] } }
 ```
 
-`counts` are open proposals. Playlist kinds add `playlistId`, `playlistName` to `evidence`; `playlist_skipped` adds `positions` and `uris`; `playlist_duplicate` adds `keep: { position, uri }` and `duplicates: [{ position, uri }]`.
+`savedMonths` counts liked songs by local month saved. `artists`: the 12 with the most dormant plus never-played liked songs. Playlist `classes` count songs (merged by `songKey`); `items` counts entries, `duplicates` the extra copies; `lastPlayed` is the last listen of any song in it (Spotify does not report which plays came from a playlist). `overlaps`: the 10 playlist pairs sharing the most songs. `unsaved`: songs with 10 or more listens not in the liked songs (any version), most listened first, first 8.
 
-### `POST /api/cleanup/dismiss`
+### `GET /api/library/songs`
 
-Body `{ "ids": [proposal id] }`. `{ "dismissed": 2 }`.
+The songs behind a figure. Params: `kind` = `songs` (default) | `duplicates` | `unsaved`; for `songs` and `duplicates`, `where` = `liked` or a playlist id (an app-owned or unknown playlist has no songs); for `songs`, optional `classes` (comma separated), `artist` (exact), `savedMonth` (`YYYY-MM`, month saved or added); `limit` (1-500, default 100), `offset`. Sorted by last listen, oldest first (`unsaved`: most listens first).
 
-### `POST /api/cleanup/apply`
+```json
+{ "group": { "kind": "songs", "where": "liked", "classes": ["dormant"] }, "total": 1098, "limit": 100, "offset": 0,
+  "items": [{ "uri": "...", "where": { "kind": "liked" }, "positions": [], "reason": "Last played Mar 2025, 3 listens in all",
+              "name": "...", "artist": "...", "album": "...", "albumArtUrl": "...", "songKey": "...", "plays": 5, "listens": 3,
+              "lastPlayed": "...", "finishedShare": 0.4, "addedAt": "...", "playClass": "dormant" }] }
+```
 
-Body `{ "ids": [proposal id] }` (1-500, all must be open, else `400 invalid_selection` with `details.ids`). The only code path that removes from the library (`DELETE /me/library`) or an owned playlist (`DELETE /playlists/{id}/items`, which removes every occurrence of a URI; duplicates re-add the kept one at its position). Proposals run in order; the undo log records what each removed. `200 { "batchId": 4, "applied": 3 }`. A Spotify failure part way returns `502 cleanup_partial` with `details.batchId`: the batch holds what was applied before it.
+`where` for playlist songs is `{ "kind": "playlist", "id", "name" }` and `positions` lists every position of the song in it. `finishedShare`: plays reaching 80% of the song's length over plays with a known time played (`null` for API-only plays). `reason` states the evidence in plain words.
 
-### `GET /api/cleanup/batches`
+## Plans
 
-`{ "items": [{ "id": 4, "proposalIds": [17, 18], "actions": 2, "appliedAt": "...", "undoneAt": null }] }`
+A plan is a named batch of proposed library actions. Nothing reaches Spotify until the owner applies a plan here, and every applied batch can be undone. The `library` job syncs saved songs (`GET /me/tracks`) and the items of playlists the owner owns (`GET /me/playlists`, then `GET /playlists/{id}/items` for playlists whose snapshot changed), one page call every `LIBRARY_PAGE_SECONDS` (20), a full pass every `LIBRARY_SYNC_HOURS` (24). The cursor is stored, so a restart resumes the pass. App-owned playlists are skipped.
 
-### `POST /api/cleanup/batches/:id/undo`
+Sources (`source`): `rule` (four ready-made plans, rebuilt after each sync pass), `analysis` (made from a group of songs, `POST /api/library/plans`), `claude` (from a conversation, `POST /api/library/conversations`), `standing` (from a standing instruction run by the `library_plans` job).
 
-Saves removed songs back to the library and re-inserts removed playlist items at their original positions (ascending). Proposals return to `open`. `{ "batchId": 4, "restored": 2 }`. Re-saved songs get a new "added" date. Undo assumes the playlist did not change since; undoing an older batch after a newer one on the same playlist can misplace items.
+**Actions** (`action`), each on `where` = the liked songs or one owned playlist:
+
+- `archive`: add the song to the private playlist "encore archive" (made on the first archive, recorded in `app_playlists` as `archive`), then take it out of `where`. Default for every song taken out.
+- `remove`: take it out of `where`. An item can switch between `archive` and `remove`.
+- `save`: add it to the liked songs.
+- `add`: add it to the end of a playlist.
+- `dedupe`: remove the extra copies of a song in a playlist; the first copy stays.
+
+Taking a song out of a playlist removes every copy of it (every version with the same `songKey`). Removing or archiving a liked song and restoring it later gives it a new date added in Spotify.
+
+**Rule plans** (`ruleKind`; stats are all-time over the song, merged by `songKey`; a song is out of rotation when its play class is `fading` or `dormant`, see [Library](#library)). Skips alone never put a song in a plan:
+
+- `saved_never_played` "Liked songs never played": liked more than 30 days ago, play class `never`.
+- `saved_dislike` "Liked songs rarely played through": the skip split classes it `dislike` (8+ plays with a known skip flag), a listen ratio (listens / plays) of 0.2 or less, at least one listen, and out of rotation.
+- `playlist_skipped` "Playlist songs rarely played through": in an own playlist, 8+ plays with a known skip flag, a skip rate of 0.9 or more, a listen ratio of 0.2 or less, and out of rotation.
+- `playlist_duplicate` "Extra copies in playlists": the same song more than once in one playlist.
+
+Rule plans stay `open`; their dismissed and applied items keep their status across refreshes, and an item skipped as stale opens again. Items from before plans (`cleanup_proposals` rows without a plan) join their rule plan at startup and on `GET /api/library/plans`; their action is the rule's default.
+
+### `GET /api/library/plans`
+
+```json
+{ "items": [{ "id": 3, "source": "rule", "ruleKind": "saved_never_played", "title": "Liked songs never played",
+              "summary": "Liked more than 30 days ago and never played past 30 seconds.", "request": null, "threadId": null, "standingId": null, "status": "open",
+              "counts": { "open": 135, "selected": 130, "dismissed": 2, "applied": 0, "skipped": 0 },
+              "runningBatchId": null, "createdAt": "...", "updatedAt": "..." }] }
+```
+
+`status`: `open`, `applied` (every ticked item applied; rule plans never), `dismissed`. `selected` counts open items that are ticked. Claude plans carry the owner's first message in `request` and their conversation in `threadId` (see `GET /api/library/conversations/:threadId`); standing plans also `standingId`.
+
+### `POST /api/library/plans`
+
+Body `{ "group": { "kind": "songs", "where": "liked", "classes": ["dormant"], "artist"?: "...", "savedMonth"?: "2025-03" } }`, or `{ "kind": "duplicates", "where": "<playlist id>" }`, or `{ "kind": "unsaved" }` (the groups of `GET /api/library/songs`). Songs are archived, duplicates deduped, unsaved songs saved. `201 { "id": 7 }`. An empty group is `400 invalid_selection`.
+
+### `GET /api/library/plans/:id`
+
+Params: `status` = `open` (default) | `dismissed` | `applied` | `skipped`, `limit` (1-500, default 100), `offset`. The plan summary plus:
+
+```json
+{ "groups": [{ "action": "archive", "where": { "kind": "liked" }, "items": 120, "selected": 118 }],
+  "page": { "status": "open", "total": 135, "limit": 100, "offset": 0 },
+  "items": [{ "id": 17, "action": "archive", "where": { "kind": "playlist", "id": "...", "name": "AMF" }, "uri": "spotify:track:...",
+              "included": true, "status": "open", "reason": "Never played since Nov 2024",
+              "evidence": { "name": "...", "artist": "...", "album": "...", "albumArtUrl": "...", "songKey": "...", "plays": 0, "listens": 0,
+                            "lastPlayed": null, "finishedShare": null, "addedAt": "...", "playClass": "never" } }] }
+```
+
+`groups` count the items with this `status` by action and place. Items are sorted by place, then action. `reason` is plain words. Rule items add rule evidence (`skips`, `skipRate`, `listenRatio`; playlist items `playlistId`, `playlistName`, `positions`; duplicates `keep`, `duplicates`).
+
+### `PATCH /api/library/plans/:id/items`
+
+Body `{ "ids": [17, 18] | "all" | { "action": "archive", "where": "liked" | "<playlist id>" }, "included"?: false, "action"?: "archive" | "remove" }`. The object form is one group of `groups`. Only open items of an open plan; `action` only on items that take a song out (with `"all"` or a group, the others are left as they are). `{ "updated": 2 }`.
+
+### `POST /api/library/plans/:id/dismiss` and `/restore`
+
+Body `{ "ids"?: [...] | "all" }` (default `"all"`; dismiss also takes a group). A rule plan dismisses (restores) items; another plan with `"all"` is dismissed (restored) whole. `{ "dismissed": 3 }`, `{ "restored": 3 }`.
+
+### `POST /api/library/plans/:id/apply`
+
+Applies the plan's ticked open items. Answers at once, `202 { "batch": Batch }` with `status: "running"`; the writes go on on the server whether or not the page stays. Follow it with `GET /api/library/batches/:id`. Only one apply or undo runs at a time: `409 batch_running`. `409 spotify_not_connected`, `503 spotify_paused` before anything starts; `400 invalid_selection` when nothing is ticked or the plan is not open.
+
+Each item is checked against the library as last synced; a stale one is skipped with a reason ("No longer in your liked songs", "Already in your liked songs", "Not one of your playlists any more", "No longer in the playlist", "No longer has extra copies", "Already in the playlist", "The playlist changed in Spotify since the last sync"). The last one comes from a snapshot check per playlist touched (`GET /playlists/{id}?fields=snapshot_id`) and flags the playlist for the next sync pass.
+
+Writes are grouped, interactive priority (ahead of job calls): archive adds (`POST /playlists/{archive}/items`, 100 a call), liked removals (`DELETE /me/library`, 40 a call), saves (`PUT /me/library`, 40 a call), then per playlist one removal of every affected URI (`DELETE /playlists/{id}/items`, 100 a call), one insert per run of kept copies that land next to each other, and additions (100 a call). Calls for N items: liked songs `ceil(N/40)` (plus `ceil(N/100)` archive adds and 1 to make the archive once); songs from one playlist 1 snapshot check + `ceil(N/100)` (plus archive adds); N duplicates in one playlist 1 + 1 + one per run of kept copies (at most N).
+
+The batch records each write and its undo entry as Spotify accepts it, so a stop part way leaves `status: "partial"` with exactly what was applied, and undo restores only that. A restart marks a running batch `partial` or `failed` ("Stopped when encore restarted").
+
+`Batch`:
+
+```json
+{ "id": 4, "planId": 3, "planTitle": "Liked songs never played", "status": "running" | "done" | "partial" | "failed",
+  "selected": 8, "applied": 5, "actions": { "archive": 5, "remove": 0, "save": 0, "add": 0, "dedupe": 0 },
+  "skipped": [{ "id": 17, "name": "...", "artist": "...", "action": "archive", "reason": "No longer in your liked songs" }],
+  "notApplied": [{ "id": 18, "name": "...", "artist": "...", "action": "archive" }],
+  "error": "Spotify API 500: ...", "calls": 4, "canUndo": true,
+  "undo": { "status": null | "running" | "done" | "failed", "error": null, "undoneAt": null },
+  "appliedAt": "...", "finishedAt": "..." }
+```
+
+Progress while running: `applied + skipped.length` of `selected`. `notApplied` is filled once the batch stops.
+
+### `POST /api/library/conversations`
+
+Body `{ "message": "clean up what I don't listen to anymore", "threadId"?: 12 }` (message 1-2000 characters). Without `threadId` it starts a conversation; with one it continues it. Claude (feature `library`, effort medium, at most 20 model calls) reads the library with tools and submits a plan; later messages change the same plan, keeping the owner's unticks and archive/remove switches on songs that stay. Supports `Accept: text/event-stream` (see [Assistant runs](#assistant-runs)). Response (or the `done` event):
+
+```json
+{ "planId": 9, "threadId": 12, "reply": null, "songs": 214 }
+```
+
+`planId` is `null` and `reply` holds Claude's question when the first turn asks before planning. `502 llm_incomplete` when Claude finished with neither a plan nor a reply. `503 llm_not_configured`, `402 llm_budget_exceeded` as for every Claude route.
+
+Tools Claude gets: `library_overview` (counts by when last played, playlists, overlaps, history start), `find_library_songs` (filter by place, when last played, artists, text, month added, listens; sort; at most 100), `played_not_liked`, `submit_plan` (groups by filter and single songs; at most 3,000 songs). Tool results use plain words ("over 6 months ago", "never") and opaque song references (`#123`, the tracks row id); a title, summary or reason containing a reference, a snake_case id or a field name is sent back as an error, so none reaches the owner. Only the owner's playlists, never app-owned ones, can be named.
+
+### `GET /api/library/conversations/:threadId`
+
+`{ "threadId": 12, "planId": 9, "turns": [{ "role": "owner" | "assistant", "text": "..." }] }`.
+
+### Standing instructions
+
+A saved instruction with a schedule. The `library_plans` job (hourly, only with `JOBS_ENABLED`) starts a conversation for each switched-on instruction that is due (weekly: 7 days after the last run, monthly: 30), counted in the ledger and the monthly cap like any Claude call. The plan waits as an open plan with `source: "standing"`; the previous open plan from the same instruction is dismissed. It never applies anything. At the cap the run stops with `lastError` "The monthly Claude budget is spent".
+
+- `GET /api/library/standing`: `{ "items": [{ "id": 1, "instruction": "...", "cadence": "weekly" | "monthly", "enabled": false, "lastRunAt": null, "nextRunAt": null, "lastPlanId": null, "lastError": null }] }`. `nextRunAt` is `null` while switched off.
+- `POST /api/library/standing`: body `{ "instruction", "cadence", "enabled"?: false }`, `201` with the item. Off by default.
+- `PATCH /api/library/standing/:id`: any of the same fields. `DELETE /api/library/standing/:id`: `{ "deleted": true }`.
+
+### `GET /api/library/batches` and `GET /api/library/batches/:id`
+
+`{ "items": [Batch] }` (newest 50), `{ "batch": Batch }`.
+
+### `POST /api/library/batches/:id/undo`
+
+Starts the undo and answers at once, `202 { "batch": Batch }` with `undo.status: "running"`. Grouped like apply: additions taken back out, removed playlist entries re-inserted at their original positions (ascending, one call per run of neighbouring positions), liked songs saved again or removed again (40 a call), and the archive entries taken out (unless another batch not undone still holds them). Items return to `open`; an applied one-off plan opens again. A stop part way leaves `undo.status: "failed"` and keeps what is left to send; undo again to finish. Undo assumes the playlist did not change since.
 
 ## Discord
 
@@ -863,7 +977,7 @@ Guild commands (registered with a bulk overwrite at startup when `DISCORD_BOT_TO
 | `/onthisday` | Same month-day in earlier years, top 3 songs per year |
 | `/forgotten` | 5 forgotten favourites (90 days, 10+ listens), each with a Queue button |
 | `/releases` | Unseen new releases from the radar |
-| `/cleanup` | Open proposal counts and a link to the dashboard; never applies |
+| `/cleanup` | Open item counts of the rule plans and a link to the dashboard; never applies |
 | `/set moment` | Deferred. Builds a set with Claude (up to 1000 chars). Shows the title (links to the dashboard), track count, the first 4 tracks with album art and reasons, and buttons Save to Spotify, Play now, Open in dashboard. If Claude asks a question instead, the question is the message content |
 | `/picks` | This week's picks: one embed per pick with album art, reason and source link; per pick (first 5) buttons Save, Not now, Never. Never generates picks |
 | `/ask question` | Deferred. Plain-text answer from Claude (up to 1000 chars in, 2000 out) |

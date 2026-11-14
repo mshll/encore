@@ -3,7 +3,7 @@ import { overview } from "../../analytics/overview";
 import { forgotten, onThisDay } from "../../analytics/recall";
 import { search } from "../../analytics/search";
 import { topArtists, topTracks } from "../../analytics/top";
-import { proposalCounts } from "../../cleanup/proposals";
+import { proposalCounts, RULES } from "../../library/rules";
 import { tracks } from "../../db/schema";
 import { trackSummary } from "../../ingest/live/watcher";
 import { localTime } from "../../plays/localTime";
@@ -194,19 +194,14 @@ export function registerCoreCommands(registry: DiscordRegistry): DiscordRegistry
       },
     })
     .addCommand({
-      definition: { name: "cleanup", description: "Library cleanup proposals" },
+      definition: { name: "cleanup", description: "Library cleanup plans" },
       defer: false,
       handle: ({ ctx }) => {
         const counts = proposalCounts(ctx.db);
         const total = Object.values(counts).reduce((a, b) => a + b, 0);
-        const lines = [
-          `Saved, never played: ${counts.saved_never_played}`,
-          `Saved, usually skipped: ${counts.saved_dislike}`,
-          `In playlists, nearly always skipped: ${counts.playlist_skipped}`,
-          `Duplicates in playlists: ${counts.playlist_duplicate}`,
-        ];
+        const lines = Object.entries(counts).map(([kind, n]) => `${RULES[kind as keyof typeof RULES].title}: ${n}`);
         return {
-          embeds: [{ title: total ? `${total} cleanup proposals` : "No cleanup proposals", description: lines.join("\n") }],
+          embeds: [{ title: total ? `${total} songs in cleanup plans` : "Nothing to clean up", description: lines.join("\n") }],
           components: [{ type: 1, components: [{ type: 2, style: 5, label: "Review in encore", url: ctx.config.publicBaseUrl }] }],
         };
       },

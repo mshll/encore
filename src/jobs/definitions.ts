@@ -1,11 +1,12 @@
 import type { Config } from "../config";
 import type { Db } from "../db/client";
-import { refreshProposals } from "../cleanup/proposals";
 import { enrich, fetchAlbumArt } from "../ingest/live/enrich";
 import { pollRecentlyPlayed } from "../ingest/live/poller";
 import { WATCH_JOB } from "../ingest/live/watcher";
+import { appOwnedPlaylistIds } from "../library/owned";
+import { refreshProposals } from "../library/rules";
 import { syncDue, syncStep, type SyncCursor } from "../library/sync";
-import { livingPlaylistIds, markRemovedPlaylists, runLiving } from "../living/refresh";
+import { markRemovedPlaylists, runLiving } from "../living/refresh";
 import { runRadar } from "../radar/radar";
 import type { Services } from "../services";
 import type { SettingsSource } from "../settings/settings";
@@ -46,13 +47,13 @@ export function createJobs(db: Db, settings: SettingsSource, spotifyAuth: Spotif
             db,
             spotify,
             spotifyAuth,
-            appPlaylistIds: () => [...services.playlists.ids(), ...livingPlaylistIds(db)],
+            appPlaylistIds: () => appOwnedPlaylistIds(db),
             appPlaylistsListed: (listed, startedAt) => markRemovedPlaylists(db, listed, startedAt, now()),
           },
           cursor,
           now(),
         );
-        return { cursor: step.cursor, calls: step.calls, ...(step.passCompleted ? { proposals: refreshProposals(db, now(), current().weekendDays) } : {}) };
+        return { cursor: step.cursor, calls: step.calls, ...(step.passCompleted ? { proposals: refreshProposals(db, now(), current()) } : {}) };
       },
       nextDelayMs: () => {
         const { libraryPageMs, librarySyncMs } = current();

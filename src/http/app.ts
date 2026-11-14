@@ -10,10 +10,10 @@ import { guardWrites, requireSession, requireSessionOrAdmin } from "./middleware
 import { rateLimit } from "./rateLimit";
 import { authRoutes } from "./routes/auth";
 import { askRoutes, blockRoutes, digestRoutes, llmRoutes, noteRoutes, pickRoutes, setRoutes } from "./routes/assistant";
-import { cleanupRoutes } from "./routes/cleanup";
 import { discordRoutes } from "./routes/discord";
 import { djRoutes } from "./routes/dj";
 import { importRoutes } from "./routes/imports";
+import { libraryRoutes } from "./routes/library";
 import { livingRoutes } from "./routes/living";
 import { mcpRoutes } from "./routes/mcp";
 import { onboardingRoutes } from "./routes/onboarding";
@@ -102,7 +102,7 @@ export function createApp(deps: Deps) {
   app.route("/api/dj", djRoutes);
   app.route("/api/radar", radarRoutes);
   app.route("/api/living", livingRoutes);
-  app.route("/api/cleanup", cleanupRoutes);
+  app.route("/api/library", libraryRoutes);
   app.all("/api/*", () => {
     throw new ApiError(404, "not_found", "Unknown API route");
   });

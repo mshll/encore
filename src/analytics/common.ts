@@ -5,7 +5,20 @@ export type Range = { from?: string; to?: string };
 export type Period = "day" | "week" | "month" | "year";
 
 export const MS = sql.raw("coalesce(p.ms_played, t.duration_ms, 0)");
-export const LISTEN = sql.raw("(p.source = 'api' or p.ms_played >= 30000)");
+const LISTEN_SQL = "(p.source = 'api' or p.ms_played >= 30000)";
+const SKIPPED_SQL = "(p.skipped = 1)";
+const SKIP_KNOWN_SQL = "(p.skipped is not null)";
+/** A play counts as played through when it reached this share of the track's length. */
+export const FINISHED_SHARE = 0.8;
+const FINISH_KNOWN_SQL = "(p.ms_played is not null and t.duration_ms > 0)";
+const FINISHED_SQL = `(${FINISH_KNOWN_SQL} and p.ms_played >= ${FINISHED_SHARE} * t.duration_ms)`;
+
+/** The shared play outcomes over `plays p join tracks t`. Use these instead of writing a listen, skip or played-through test inline. */
+export const LISTEN = sql.raw(LISTEN_SQL);
+export const SKIPPED = sql.raw(SKIPPED_SQL);
+export const SKIP_KNOWN = sql.raw(SKIP_KNOWN_SQL);
+export const FINISHED = sql.raw(FINISHED_SQL);
+export const FINISH_KNOWN = sql.raw(FINISH_KNOWN_SQL);
 export const MUSIC = sql.raw("plays p join tracks t on t.uri = p.track_uri");
 export const HOUR_BUCKET = sql.raw(
   "case when p.hour < 6 then 'night' when p.hour < 12 then 'morning' when p.hour < 18 then 'afternoon' else 'evening' end",
@@ -24,11 +37,11 @@ export const START_MODE = sql.raw(
 export const SHUFFLE = sql.raw("case p.shuffle when 1 then 'on' when 0 then 'off' end");
 
 export const STATS = sql.raw(`count(*) as plays,
-  coalesce(sum(p.source = 'api' or p.ms_played >= 30000), 0) as listens,
+  coalesce(sum(${LISTEN_SQL}), 0) as listens,
   coalesce(sum(coalesce(p.ms_played, t.duration_ms, 0)), 0) as ms,
-  coalesce(sum(p.skipped = 1), 0) as skips,
-  coalesce(sum(p.skipped is not null), 0) as skip_known,
-  coalesce(sum(p.skipped = 1 and p.ms_played < 5000), 0) as quick_skips,
+  coalesce(sum(${SKIPPED_SQL}), 0) as skips,
+  coalesce(sum(${SKIP_KNOWN_SQL}), 0) as skip_known,
+  coalesce(sum(${SKIPPED_SQL} and p.ms_played < 5000), 0) as quick_skips,
   min(p.ts) as first_ts,
   max(p.ts) as last_ts`);
 
@@ -73,11 +86,11 @@ export function songStatsSql(where: SQL): SQL {
         max(max(t.album_art_url)) over w as album_art_url,
         row_number() over w_rank as rn,
         sum(count(*)) over w as plays,
-        sum(coalesce(sum(p.source = 'api' or p.ms_played >= 30000), 0)) over w as listens,
+        sum(coalesce(sum(${LISTEN}), 0)) over w as listens,
         sum(coalesce(sum(coalesce(p.ms_played, t.duration_ms, 0)), 0)) over w as ms,
-        sum(coalesce(sum(p.skipped = 1), 0)) over w as skips,
-        sum(coalesce(sum(p.skipped is not null), 0)) over w as skip_known,
-        sum(coalesce(sum(p.skipped = 1 and p.ms_played < 5000), 0)) over w as quick_skips,
+        sum(coalesce(sum(${SKIPPED}), 0)) over w as skips,
+        sum(coalesce(sum(${SKIP_KNOWN}), 0)) over w as skip_known,
+        sum(coalesce(sum(${SKIPPED} and p.ms_played < 5000), 0)) over w as quick_skips,
         min(min(p.ts)) over w as first_ts,
         max(max(p.ts)) over w as last_ts
       from ${MUSIC}

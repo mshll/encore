@@ -51,13 +51,13 @@ export const byPlace = (place: NavPlace) => SURFACES.filter((s) => s.place === p
 export const PHONE_TABS = byPlace("listening");
 export const PHONE_MORE = SURFACES.filter((s) => s.place !== "listening");
 
-/** A tab under a surface. `owns` is the path prefix of the detail pages that sit under the tab in the breadcrumb trail. */
-export type SurfaceTab = { path: string; label: string; owns?: string };
+/** A tab under a surface. `owns` holds the path prefixes of the detail pages that sit under the tab in the breadcrumb trail. */
+export type SurfaceTab = { path: string; label: string; owns?: string[] };
 
 export const MUSIC_TABS: SurfaceTab[] = [
-  { path: "/music/artists", label: "Artists", owns: "/music/artist/" },
-  { path: "/music/albums", label: "Albums", owns: "/music/album/" },
-  { path: "/music/songs", label: "Songs", owns: "/music/song/" },
+  { path: "/music/artists", label: "Artists", owns: ["/music/artist/"] },
+  { path: "/music/albums", label: "Albums", owns: ["/music/album/"] },
+  { path: "/music/songs", label: "Songs", owns: ["/music/song/"] },
   { path: "/music/forgotten", label: "Forgotten" },
 ];
 
@@ -69,6 +69,12 @@ export const PATTERN_TABS: SurfaceTab[] = [
   { path: "/patterns/places", label: "Places" },
 ];
 
+export const LIBRARY_TABS: SurfaceTab[] = [
+  { path: "/library", label: "Overview" },
+  { path: "/library/plans", label: "Plans", owns: ["/library/plans/", "/library/claude/"] },
+  { path: "/library/instructions", label: "Instructions" },
+];
+
 export const SETTINGS_TABS: SurfaceTab[] = [
   { path: "/settings/general", label: "General" },
   { path: "/settings/spotify", label: "Spotify" },
@@ -78,7 +84,7 @@ export const SETTINGS_TABS: SurfaceTab[] = [
   { path: "/settings/account", label: "Account" },
 ];
 
-const TABS: Record<string, SurfaceTab[]> = { music: MUSIC_TABS, patterns: PATTERN_TABS, settings: SETTINGS_TABS };
+const TABS: Record<string, SurfaceTab[]> = { music: MUSIC_TABS, patterns: PATTERN_TABS, library: LIBRARY_TABS, settings: SETTINGS_TABS };
 
 export type Crumb = { label: string; path: string };
 
@@ -91,6 +97,6 @@ export function trailFor(location: string): Crumb[] | null {
   if (!surface || location === surface.path) return null;
   const tabs = TABS[surface.id] ?? [];
   if (tabs.some((t) => t.path === location)) return null;
-  const tab = tabs.find((t) => t.owns && location.startsWith(t.owns));
+  const tab = tabs.find((t) => t.owns?.some((prefix) => location.startsWith(prefix)));
   return [{ label: surface.label, path: surface.path }, ...(tab ? [{ label: tab.label, path: tab.path }] : [])];
 }
