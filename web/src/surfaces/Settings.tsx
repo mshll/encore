@@ -35,9 +35,20 @@ const SKIP_REASONS: Record<string, string> = {
   attempts_exhausted: "it failed too many times",
 };
 
+const PAUSED = /^Spotify calls paused \((rate_limited|quota_exceeded)\) until (\S+)$/;
+
+/** A job's stored error as a sentence: the Spotify pause the client raises reads as its reason and when it lifts. */
+function jobError(message: string): string {
+  const paused = PAUSED.exec(message);
+  if (!paused) return message;
+  const why = paused[1] === "quota_exceeded" ? "the daily Spotify quota ran out" : "Spotify asked encore to slow down";
+  const until = Date.parse(paused[2]!);
+  return Number.isNaN(until) || until <= Date.now() ? why : `${why}; calls resume ${fmtAgo(paused[2]!)}`;
+}
+
 function jobLine(job: JobStatus | undefined, verb = "Ran"): { text: string; problem: boolean } {
   if (!job) return { text: "", problem: false };
-  if (job.lastError) return { text: `Failed ${job.lastRunAt ? fmtAgo(job.lastRunAt) : ""}: ${job.lastError}`, problem: true };
+  if (job.lastError) return { text: `Failed ${job.lastRunAt ? fmtAgo(job.lastRunAt) : ""}: ${jobError(job.lastError)}`, problem: true };
   const skipped = job.lastResult?.skipped;
   if (typeof skipped === "string" && job.lastRunAt) return { text: `Skipped ${fmtAgo(job.lastRunAt)}: ${SKIP_REASONS[skipped] ?? skipped.replaceAll("_", " ")}`, problem: false };
   if (!job.lastSuccessAt) return { text: "Not run yet", problem: false };
