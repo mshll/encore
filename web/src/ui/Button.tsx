@@ -2,7 +2,7 @@ import { forwardRef, type ButtonHTMLAttributes, type ReactNode } from "react";
 import { cx } from "./cx";
 import { Icon, type IconGlyph } from "./Icon";
 
-export type ButtonVariant = "primary" | "accent" | "secondary" | "ghost" | "danger";
+export type ButtonVariant = "primary" | "accent" | "secondary" | "ghost" | "danger" | "standout";
 export type ButtonSize = "sm" | "md" | "lg";
 
 const VARIANT: Record<ButtonVariant, string> = {
@@ -11,6 +11,7 @@ const VARIANT: Record<ButtonVariant, string> = {
   secondary: "bg-fill-raised text-primary shadow-control hover:bg-fill-raised-hover",
   ghost: "text-secondary hover:bg-fill-hover hover:text-primary data-[popup-open]:bg-fill-hover data-[popup-open]:text-primary",
   danger: "bg-danger-subtle text-danger hover:bg-fill-hover",
+  standout: "text-on-standout hover:bg-fill-on-standout",
 };
 
 const SIZE: Record<ButtonSize, string> = {

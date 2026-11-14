@@ -95,10 +95,7 @@ export function Shell({ children }: { children: ReactNode }) {
             Skip to content
           </a>
           {desktop ? (
-            <div
-              className="grid h-dvh grid-cols-[var(--sidebar-w)_minmax(0,1fr)_auto] grid-rows-[minmax(0,1fr)_var(--player-h)]"
-              style={{ ["--bottom-chrome" as string]: "var(--player-h)" }}
-            >
+            <div className="grid h-dvh grid-cols-[var(--sidebar-w)_minmax(0,1fr)_auto] grid-rows-[minmax(0,1fr)_var(--player-h)] pr-[env(safe-area-inset-right)] pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)]">
               <Sidebar onSearch={() => setPaletteOpen(true)} />
               <main ref={main} id="main" tabIndex={-1} data-crop className="mt-(--inset) overflow-y-auto rounded-xl bg-page shadow-panel outline-none">
                 <QueueOpener.Provider value={desktop ? () => setQueueOpen(true) : () => setSheetOpen(true)}>{children}</QueueOpener.Provider>
@@ -115,7 +112,7 @@ export function Shell({ children }: { children: ReactNode }) {
               </div>
             </div>
           ) : (
-            <div className="flex h-dvh flex-col bg-page" style={{ ["--bottom-chrome" as string]: "calc(56px + 64px + env(safe-area-inset-bottom))" }}>
+            <div className="flex h-dvh flex-col bg-page">
               <main ref={main} id="main" tabIndex={-1} data-crop className="min-h-0 flex-1 overflow-y-auto pt-[env(safe-area-inset-top)] outline-none">
                 <QueueOpener.Provider value={desktop ? () => setQueueOpen(true) : () => setSheetOpen(true)}>{children}</QueueOpener.Provider>
               </main>

@@ -11,9 +11,9 @@ import { useTrackLinks } from "./links";
 import { openInSpotify, usePlayback } from "./playback";
 import { useProgress } from "./progress";
 
-function ProgressLine({ share, className }: { share: number; className?: string }) {
+function ProgressLine({ share, className = "h-1 rounded-full bg-fill" }: { share: number; className?: string }) {
   return (
-    <span aria-hidden className={cx("relative block h-1 overflow-hidden rounded-full bg-fill", className)}>
+    <span aria-hidden className={cx("relative block overflow-hidden", className)}>
       <span className="absolute inset-0 origin-left bg-primary transition-transform duration-1000 ease-linear motion-reduce:transition-none" style={{ transform: `scaleX(${share})` }} />
     </span>
   );
@@ -86,7 +86,7 @@ export function PlayerBar({ queueOpen, onToggleQueue }: { queueOpen: boolean; on
         </div>
         <div className="flex w-full items-center gap-2 text-label text-tertiary tabular">
           <span className="w-9 text-right">{track ? fmtDuration(progress.ms) : ""}</span>
-          <ProgressLine share={track ? progress.share : 0} className="flex-1" />
+          <ProgressLine share={track ? progress.share : 0} className="h-1 flex-1 rounded-full bg-fill" />
           <span className="w-9">{track ? fmtDuration(track.durationMs) : ""}</span>
         </div>
       </div>
@@ -115,7 +115,7 @@ export function MiniPlayer({ onOpen }: { onOpen: () => void }) {
   if (!track) return null;
   const playing = Boolean(now.data?.playing);
   return (
-    <section aria-label="Player" className="relative mx-2 mb-2 overflow-hidden rounded-lg bg-overlay shadow-overlay">
+    <section aria-label="Player" data-mini-player className="relative mx-2 mb-2 overflow-hidden rounded-lg bg-overlay shadow-overlay">
       <div className="flex h-14 items-center gap-1 pr-1 pl-2">
         <button type="button" onClick={onOpen} className="flex h-full min-w-0 flex-1 items-center gap-3 text-left" aria-label={`Open player: ${track.name} by ${track.artist}`}>
           <Artwork src={track.albumArtUrl} kind="song" box={40} />
@@ -127,7 +127,9 @@ export function MiniPlayer({ onOpen }: { onOpen: () => void }) {
         <IconButton icon={playing ? PauseIcon : PlayIcon} label={playing ? "Pause" : "Play"} fill onClick={() => (playing ? playback.pause() : playback.resume())} />
         <IconButton icon={SkipForwardIcon} label="Next" fill onClick={() => playback.next()} />
       </div>
-      <ProgressLine share={progress.share} className="absolute inset-x-0 bottom-0 h-0.5 rounded-none bg-transparent" />
+      <span className="absolute inset-x-0 bottom-0">
+        <ProgressLine share={progress.share} className="h-0.5" />
+      </span>
     </section>
   );
 }

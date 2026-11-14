@@ -130,7 +130,8 @@ Weights: 400, 500 (labels, titles), 600 (the display face; otherwise rare). Numb
 
 - Spacing is Tailwind's 4px scale. Page gutter `--gutter` 32 (phone 20). Section gap 40 (`gap-10`), header to content 24–32, row internal gap 12.
 - Controls: `--control-h` 32 / `-sm` 28 / `-lg` 40; phone 44 / 44 / 48 (44 is the touch floor). Rows: `--row-h` 44, compact 36; phone 60 / 48.
-- Shell: `--sidebar-w` 232, `--panel-w` 360, `--player-h` 72, `--page-max` 1200, `--inset` 8 (0 on phone).
+- Shell: `--sidebar-w` 232, `--panel-w` 360, `--player-h` 72, `--tabbar-h` 56, `--mini-player-h` 64, `--page-max` 1200, `--inset` 8 (0 on phone).
+- `--bottom-chrome` on `:root`: the height the shell pins to the foot of the screen, safe area included. Player bar on desktop; tab bar, plus the mini player while one shows, on a phone. Anything fixed to the bottom (toasts, sheets) sits above it. It lives on the root because overlays render in a portal outside the shell.
 - Radius: `rounded-xs` 4, `sm` 6, `md` 8 (controls, rows), `lg` 10, `xl` 12 (page panel), `2xl` 16 (dialogs), `full`.
 - Shadows: `shadow-control`, `shadow-panel`, `shadow-overlay`, `shadow-modal`. Dark mode replaces drops with an inset hairline.
 - Motion: `--dur-hover` 150, `--dur-swap` 200, `--dur-modal` 240, `--dur-move` 300; eases `ease-out`, `ease-(--ease-move)`, `ease-(--ease-drawer)`. Every animation has a reduced-motion branch (the global rule in `app.css` makes them instant). No bounce, no spring overshoot.
@@ -171,7 +172,7 @@ All in `web/src/ui/` unless noted. Props listed are the ones that matter.
 
 | Component | Import | Props |
 | --- | --- | --- |
-| `Button`, `buttonClass` | `ui/Button` | `variant` primary, accent, secondary, ghost, danger; `size` sm, md, lg; `icon`, `iconEnd`, `busy`, `busyLabel` |
+| `Button`, `buttonClass` | `ui/Button` | `variant` primary, accent, secondary, ghost, danger, standout (on a toast); `size` sm, md, lg; `icon`, `iconEnd`, `busy`, `busyLabel`. `cx` does not merge classes: pick a variant rather than overriding its colours |
 | `IconButton`, `iconButtonClass` | `ui/Button` | `icon`, `label` (required), `variant`, `size`, `fill` |
 | `Input`, `Field` | `ui/Field` | Input: `icon`, `end`, `invalid`. Field: `label`, `hint`, `error`, render-prop child gets `id`, `aria-describedby`, `invalid` |
 | `Select` | `ui/Select` | `value`, `onChange`, `options`, `label` |
@@ -190,7 +191,7 @@ All in `web/src/ui/` unless noted. Props listed are the ones that matter.
 | `Dialog`, `DialogClose`, `Confirm` | `ui/Dialog` | Dialog: `open`, `onOpenChange`, `title`, `description`, `footer`, `width` 440, 560, 720 (bottom sheet on phone). Confirm: `action`, `danger`, `busy`, `onConfirm`. Prefer undo over confirm |
 | `PopoverRoot`, `PopoverTrigger`, `PopoverPopup` | `ui/Popover` | `align` |
 | `Tooltip` | `ui/Tooltip` | `label`, `side`. Never the only place information lives |
-| `showToast`, `Toaster` | `lib/toast`, `ui/Toast` | `showToast(message, "info" | "problem", { label, onClick })`. An action (Undo) keeps it open |
+| `showToast`, `Toaster` | `lib/toast`, `ui/Toast` | `showToast(message, "info" | "problem", { label, onClick })`. One at a time: a new toast replaces the one showing. Info closes after 4 s, a toast with an action (Undo) after 8 s, a problem stays until dismissed. Hover, focus or a finger on it pauses the timer; a touch elsewhere resumes it. Close button, Escape, or a swipe down or sideways dismisses it. It sits 12px above `--bottom-chrome`, never over the tab bar, mini player or player bar |
 | `Skeleton`, `ChartSkeleton` | `ui/Skeleton` | Skeleton: `className` sets the shape. ChartSkeleton: `shape` bars or grid, in the chart's box |
 | `EmptyState`, `FirstUseState` | `ui/States` | EmptyState: `icon`, `title`, `description`, `action`, `size` page, section, inline. FirstUseState: before any play is imported, `icon`, `description`, `title` (default "No listening yet"), action Set up encore |
 | `ErrorState` | `ui/States` | `error`, `onRetry`, `title`, `size` |

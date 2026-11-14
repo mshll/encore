@@ -78,10 +78,16 @@
   --sidebar-w: 232px;
   --panel-w: 360px;
   --player-h: 72px;
+  --tabbar-h: 56px;
+  --mini-player-h: 64px;
   --page-max: 1200px;
   --gutter: 32px;
   --inset: 8px;
   --hairline: 0.5px;
+
+  /* What the shell pins to the foot of the screen, safe area included. Toasts, sheets and anything else
+     fixed to the bottom (portalled into body, so they read it here) sit above it. */
+  --bottom-chrome: calc(var(--player-h) + env(safe-area-inset-bottom, 0px));
 
   /* Motion (curves live in @theme below) */
   --dur-hover: 150ms;
@@ -152,6 +158,10 @@
     --row-h-compact: 48px;
     --gutter: 20px;
     --inset: 0px;
+    --bottom-chrome: calc(var(--tabbar-h) + env(safe-area-inset-bottom, 0px));
+  }
+  :root:has([data-mini-player]) {
+    --bottom-chrome: calc(var(--tabbar-h) + var(--mini-player-h) + env(safe-area-inset-bottom, 0px));
   }
 }
 

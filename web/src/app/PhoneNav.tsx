@@ -17,7 +17,7 @@ export function PhoneNav({ onSearch }: { onSearch: () => void }) {
   const moreActive = PHONE_MORE.some((s) => s.match(location));
   return (
     <>
-      <nav aria-label="Main" className="flex h-14 bg-shell px-[env(safe-area-inset-left)] hairline-t">
+      <nav aria-label="Main" className="flex h-(--tabbar-h) bg-shell px-[env(safe-area-inset-left)] hairline-t">
         {PHONE_TABS.map((s) => {
           const active = s.match(location);
           return (
