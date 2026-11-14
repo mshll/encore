@@ -64,7 +64,8 @@ export function createApp(deps: Deps) {
 
   if (existsSync(join(deps.config.webDist, "index.html"))) {
     app.use("*", serveStatic({ root: deps.config.webDist }));
-    app.get("*", serveStatic({ path: join(deps.config.webDist, "index.html") }));
+    // `path` is joined onto `root` (default "./"), so an absolute WEB_DIST must go in `root`.
+    app.get("*", serveStatic({ root: deps.config.webDist, path: "index.html" }));
   }
   return app;
 }
