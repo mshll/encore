@@ -2,6 +2,7 @@
   "name": "encore",
   "type": "module",
   "private": true,
+  "license": "MIT",
   "scripts": {
     "dev": "bun --watch src/main.ts",
     "start": "bun src/main.ts",

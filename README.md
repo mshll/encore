@@ -140,3 +140,7 @@ web/                     UI (Vite + React), built into web/dist; dither-kit char
 ```
 
 Weekends are Friday and Saturday in analytics, picks and DJ plans.
+
+## License
+
+MIT. See [LICENSE](LICENSE).
