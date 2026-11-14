@@ -15,6 +15,7 @@ COPY --from=deps /app/node_modules node_modules
 COPY package.json tsconfig.json ./
 COPY src src
 COPY drizzle drizzle
+COPY assets assets
 COPY --from=web /app/web/dist web/dist
 RUN mkdir -p /data && chown bun:bun /data
 USER bun
