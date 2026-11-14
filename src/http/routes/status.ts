@@ -22,8 +22,8 @@ export const statusRoutes = new Hono<Env>().get("/", (c) => {
   const auth = spotifyAuth.status();
   const gate = spotify.gate();
   const importState = getJobState(db, "import");
-  const counts = db.all<{ plays: number; music: number; api: number }>(
-    sql`select count(*) as plays, coalesce(sum(kind = 'track'), 0) as music, coalesce(sum(source = 'api'), 0) as api from plays`,
+  const counts = db.all<{ plays: number; music: number; api: number; live: number }>(
+    sql`select count(*) as plays, coalesce(sum(kind = 'track'), 0) as music, coalesce(sum(source = 'api'), 0) as api, coalesce(sum(source = 'live'), 0) as live from plays`,
   )[0]!;
   return c.json({
     timezone: config.timezone,
@@ -33,6 +33,7 @@ export const statusRoutes = new Hono<Env>().get("/", (c) => {
       scopes: auth.scopes,
       missingScopes: auth.connected ? SPOTIFY_SCOPES.filter((s) => !auth.scopes.includes(s)) : SPOTIFY_SCOPES,
       paused: gate && { reason: gate.reason, until: iso(gate.blockedUntil), since: iso(gate.at) },
+      pacing: { minIntervalMs: config.spotifyIntervalMs, queued: spotify.pacer.pending(), calls: spotify.pacer.calls },
     },
     poll: job(getJobState(db, "poll")),
     enrichment: { ...enrichmentProgress(db), ...job(getJobState(db, "enrich")), art: job(getJobState(db, "art")) },
