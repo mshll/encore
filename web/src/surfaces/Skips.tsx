@@ -1,10 +1,10 @@
 import { useState, type ReactNode } from "react";
 import { useSkips, useSkipSplit } from "../api/queries";
-import type { ContextDimension, MomentClass, SkipProfile, Skips as SkipsData, SkipSplit } from "../api/types";
+import type { MomentClass, SkipProfile, Skips as SkipsData, SkipSplit } from "../api/types";
 import { songPath } from "../app/paths";
 import { DitherBars } from "../charts/Dither";
-import { RateMeter } from "../charts/RateMeter";
-import { CLASS_LABELS, contextLabel, contextPhrase, DIMENSION_LABELS, fmtInt, fmtPct } from "../lib/format";
+import { ContextRates, contextRates } from "../charts/ContextRates";
+import { CLASS_LABELS, contextPhrase, fmtInt, fmtPct } from "../lib/format";
 import { useRange, type Range } from "../lib/range";
 import { AppLink } from "../ui/AppLink";
 import { Artwork } from "../ui/Artwork";
@@ -28,18 +28,7 @@ const CLASS_LINE: Record<MomentClass, string> = {
   mixed: "Skipped often, with no clear context.",
   dislike: "Skipped on 3 in 4 plays or more, in every context.",
 };
-const DIMENSIONS: ContextDimension[] = ["hourBucket", "shuffle", "startMode", "dayType", "device"];
 const PAGE = 25;
-
-type Context = { dimension: ContextDimension; value: string; plays: number; skipRate: number };
-
-/** Context values with enough plays that their rate means something: 1% of plays, and at least 30. */
-function contexts(profile: SkipProfile, plays: number): Context[] {
-  const floor = Math.max(30, plays * 0.01);
-  return DIMENSIONS.flatMap((dimension) =>
-    profile[dimension].flatMap((v) => (v.skipRate !== null && v.plays >= floor ? [{ dimension, value: v.value, plays: v.plays, skipRate: v.skipRate }] : [])),
-  );
-}
 
 function Figures({ summary }: { summary: SkipsData["summary"] }) {
   return (
@@ -77,7 +66,7 @@ function Positions({ positions }: { positions: SkipsData["positions"] }) {
 }
 
 function ContextGroups({ profile, plays, overall }: { profile: SkipProfile; plays: number; overall: number }) {
-  const list = contexts(profile, plays);
+  const list = contextRates(profile, Math.max(30, plays * 0.01));
   if (list.length === 0) return null;
   const most = list.reduce((a, b) => (b.skipRate > a.skipRate ? b : a));
   const least = list.reduce((a, b) => (b.skipRate < a.skipRate ? b : a));
@@ -86,28 +75,7 @@ function ContextGroups({ profile, plays, overall }: { profile: SkipProfile; play
       title="In what context"
       description={`Skipped most ${contextPhrase(most.dimension, most.value)} (${fmtPct(most.skipRate)}), least ${contextPhrase(least.dimension, least.value)} (${fmtPct(least.skipRate)}). The line marks the overall ${fmtPct(overall)}.`}
     >
-      <div className="grid gap-x-12 gap-y-8 md:grid-cols-2 xl:grid-cols-3">
-        {DIMENSIONS.map((d) => {
-          const values = list.filter((c) => c.dimension === d);
-          if (values.length === 0) return null;
-          return (
-            <div key={d} className="flex min-w-0 flex-col gap-1">
-              <h3 className="font-medium text-secondary">{DIMENSION_LABELS[d]}</h3>
-              <ul className="flex flex-col">
-                {values.map((v) => (
-                  <li key={v.value} className="grid h-(--row-h-compact) grid-cols-[minmax(0,1fr)_minmax(0,5rem)_2.75rem] items-center gap-3">
-                    <span className="truncate" title={`${fmtInt(v.plays)} plays`}>
-                      {contextLabel(d, v.value)}
-                    </span>
-                    <RateMeter rate={v.skipRate} mark={overall} />
-                    <span className="text-right text-secondary tabular">{fmtPct(v.skipRate)}</span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          );
-        })}
-      </div>
+      <ContextRates rates={list} overall={overall} />
     </Section>
   );
 }

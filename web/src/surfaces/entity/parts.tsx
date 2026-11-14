@@ -1,10 +1,10 @@
 import { useState, type ReactNode } from "react";
 import { ApiError } from "../../api/client";
 import { useLifetime, useTimezone } from "../../api/queries";
-import type { ContextDimension, SkipProfile, Song, Stats, TimePoint } from "../../api/types";
+import type { SkipProfile, Song, Stats, TimePoint } from "../../api/types";
 import { songPath } from "../../app/paths";
 import { DitherArea } from "../../charts/Dither";
-import { SkipProfileChart } from "../../charts/SkipProfileChart";
+import { ContextRates, contextRates, type ContextRate } from "../../charts/ContextRates";
 import { periodTick, periodTitle } from "../../charts/ticks";
 import { todayIn } from "../../lib/dates";
 import { contextPhrase, fmtAgo, fmtDate, fmtHours, fmtHoursValue, fmtInt, fmtPct } from "../../lib/format";
@@ -81,22 +81,20 @@ export function Listening({ totals, timeline }: { totals: Stats; timeline: TimeP
   );
 }
 
-const DIMENSIONS: ContextDimension[] = ["hourBucket", "dayType", "startMode", "shuffle", "device"];
-
 /** The context with the lowest and highest skip rate, from values with enough plays to mean something. */
-export function bestAndWorst(profile: SkipProfile, minPlays: number) {
-  const all = DIMENSIONS.flatMap((d) => profile[d].filter((v) => v.plays >= minPlays && v.skipRate !== null).map((v) => ({ d, value: v.value, rate: v.skipRate! })));
-  if (all.length < 2) return null;
-  const sorted = [...all].sort((a, b) => a.rate - b.rate);
+function bestAndWorst(rates: ContextRate[]) {
+  if (rates.length < 2) return null;
+  const sorted = [...rates].sort((a, b) => a.skipRate - b.skipRate);
   const best = sorted[0]!;
   const worst = sorted[sorted.length - 1]!;
-  return worst.rate - best.rate < 0.1 ? null : { best, worst };
+  return worst.skipRate - best.skipRate < 0.1 ? null : { best, worst };
 }
 
 /** Skips as context: where it plays through and where it gets skipped. Never a verdict on the music. */
 export function SkipContext({ totals, profile, minPlays = 5, lead }: { totals: Stats; profile: SkipProfile; minPlays?: number; lead?: ReactNode }) {
   if (totals.skipRate === null) return null;
-  const bw = bestAndWorst(profile, minPlays);
+  const rates = contextRates(profile, minPlays);
+  const bw = bestAndWorst(rates);
   return (
     <Section title="Skips in context" labelledBy="skips-title">
       <div className="flex max-w-2xl flex-col gap-1">
@@ -107,13 +105,13 @@ export function SkipContext({ totals, profile, minPlays = 5, lead }: { totals: S
           {bw && (
             <>
               {" "}
-              Plays through most {contextPhrase(bw.best.d, bw.best.value)} ({fmtPct(bw.best.rate)} skipped), skipped most {contextPhrase(bw.worst.d, bw.worst.value)} (
-              {fmtPct(bw.worst.rate)}).
+              Plays through most {contextPhrase(bw.best.dimension, bw.best.value)} ({fmtPct(bw.best.skipRate)} skipped), skipped most{" "}
+              {contextPhrase(bw.worst.dimension, bw.worst.value)} ({fmtPct(bw.worst.skipRate)}).
             </>
           )}
         </p>
       </div>
-      <SkipProfileChart profile={profile} overall={totals.skipRate} minPlays={minPlays} />
+      {rates.length > 0 && <ContextRates rates={rates} overall={totals.skipRate} />}
     </Section>
   );
 }
