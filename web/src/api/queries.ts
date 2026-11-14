@@ -154,7 +154,7 @@ export const useSearch = (q: string, limit = 8) =>
     placeholderData: keepPreviousData,
   });
 
-export type HistoryFilters = { q?: string; skipped?: "true" | "false"; device?: string; artist?: string; songKey?: string; country?: string; source?: string };
+export type HistoryFilters = { q?: string; outcome?: string; device?: string; artist?: string; songKey?: string; country?: string; source?: string };
 
 export const HISTORY_PAGE = 200;
 

@@ -1,7 +1,7 @@
 import { sql } from "drizzle-orm";
 import type { Db } from "../db/client";
 import { DEVICES } from "../db/schema";
-import { hours, iso, MS, MUSIC, musicWhere, periodExpr, rate, type Period, type Range } from "./common";
+import { hours, iso, LISTEN, MS, MUSIC, musicWhere, periodExpr, rate, SKIP_KNOWN, SKIPPED, type Period, type Range } from "./common";
 import { topArtists, topTracks } from "./top";
 
 export function overview(db: Db, { range }: { range: Range }) {
@@ -18,9 +18,9 @@ export function overview(db: Db, { range }: { range: Range }) {
     first_ts: number | null;
     last_ts: number | null;
   }>(sql`
-    select count(*) as plays, sum(p.source = 'api' or p.ms_played >= 30000) as listens, sum(${MS}) as ms,
+    select count(*) as plays, sum(${LISTEN}) as listens, sum(${MS}) as ms,
       count(distinct t.song_key) as songs, count(distinct t.artist) as artists,
-      sum(p.skipped = 1) as skips, sum(p.skipped is not null) as skip_known,
+      sum(${SKIPPED}) as skips, sum(${SKIP_KNOWN}) as skip_known,
       sum(p.shuffle = 1) as shuffles, sum(p.shuffle is not null) as shuffle_known,
       min(p.ts) as first_ts, max(p.ts) as last_ts
     from ${MUSIC} where ${musicWhere(range)}`)[0]!;
@@ -45,7 +45,7 @@ export function overview(db: Db, { range }: { range: Range }) {
 
 export function timeSeries(db: Db, { range, period }: { range: Range; period: Period }) {
   const rows = db.all<{ period: string; ms: number; plays: number; listens: number }>(sql`
-    select ${periodExpr(period)} as period, sum(${MS}) as ms, count(*) as plays, sum(p.source = 'api' or p.ms_played >= 30000) as listens
+    select ${periodExpr(period)} as period, sum(${MS}) as ms, count(*) as plays, sum(${LISTEN}) as listens
     from ${MUSIC} where ${musicWhere(range)} group by period order by period`);
   return { period, points: rows.map((r) => ({ period: r.period, hours: hours(r.ms), plays: r.plays, listens: r.listens })) };
 }

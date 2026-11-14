@@ -1,7 +1,7 @@
 import { sql } from "drizzle-orm";
-import { MS, MUSIC, musicWhere } from "../analytics/common";
+import { LISTEN, MS, MUSIC, musicWhere } from "../analytics/common";
 import { devices, overview } from "../analytics/overview";
-import { skips } from "../analytics/skips";
+import { MOMENT_CLASSES, MOMENT_WORDS, skips } from "../analytics/skips";
 import { topArtists, topTracks } from "../analytics/top";
 import type { Db } from "../db/client";
 import { loadCatalog, type HourBucket } from "../library/catalog";
@@ -34,7 +34,7 @@ function moodByBucket(db: Db, from: string) {
     select case when p.hour < 6 then 'night' when p.hour < 12 then 'morning' when p.hour < 18 then 'afternoon' else 'evening' end as bucket,
       avg(tg.energy) as energy, avg(tg.valence) as valence, count(*) as listens
     from ${MUSIC} join track_tags tg on tg.song_key = t.song_key
-    where ${musicWhere({ from })} and (p.source = 'api' or p.ms_played >= 30000) group by bucket`);
+    where ${musicWhere({ from })} and ${LISTEN} group by bucket`);
   const order: HourBucket[] = ["morning", "afternoon", "evening", "night"];
   return order
     .map((b) => rows.find((r) => r.bucket === b))
@@ -65,7 +65,7 @@ export function buildTasteProfile(db: Db, { timezone, weekendDays }: Locale, now
     "## Summary",
     `History ${all.firstPlayed?.slice(0, 10)} to ${all.lastPlayed?.slice(0, 10)}: ${h(all.hours)}, ${all.plays} plays, ${all.uniqueTracks} songs, ${all.uniqueArtists} artists.`,
     `Skip rate ${pct(all.skipRate)}, shuffle ${pct(all.shuffleRate)}. Devices by hours: ${deviceShares}.`,
-    "A skip is not a dislike here: most skips happen on shuffle and depend on the moment. Use the moment classes below.",
+    "A skip is next pressed before a song's outro (its last 20% or last 30 seconds). Leaving in the outro counts as played through; going back, choosing another song or closing the app is no skip. A skip is not a dislike: most skips happen on shuffle and depend on the moment. Use the moment patterns below.",
     "",
     "## Eras: top artists by hours per year",
   );
@@ -122,22 +122,22 @@ export function buildTasteProfile(db: Db, { timezone, weekendDays }: Locale, now
     return best && worst && best !== worst ? `works ${best.k} (skip ${pct(best.rate)}), fails ${worst.k} (skip ${pct(worst.rate)})` : "";
   };
   lines.push(
-    "## Moment classes (songs with 8+ plays with skip data)",
-    `keeper ${count("keeper")}, wrong_moment ${count("wrong_moment")}, dislike ${count("dislike")}, mixed ${count("mixed")}.`,
-    `Keepers (rarely skipped): ${classified
+    "## Moment patterns (songs with 8+ plays with a known ending)",
+    MOMENT_CLASSES.map((c) => `${MOMENT_WORDS[c]} ${count(c)}`).join(", ") + ".",
+    `Usually played through: ${classified
       .filter((s) => s.class === "keeper")
       .sort(byPlays)
       .slice(0, 15)
       .map((s) => `${s.name} - ${s.artist}`)
       .join("; ")}`,
-    `Wrong-moment songs (loved in one context, skipped in another): ${classified
+    `Played through at some times, skipped at others: ${classified
       .filter((s) => s.class === "wrong_moment")
       .sort(byPlays)
       .slice(0, 12)
       .map((s) => `${s.name} - ${s.artist}: ${contextNote(s)}`)
       .join("; ")}`,
-    `Hard dislikes (skipped nearly everywhere): ${classified
-      .filter((s) => s.class === "dislike")
+    `Skipped nearly everywhere (still not a dislike): ${classified
+      .filter((s) => s.class === "skipped_everywhere")
       .sort(byPlays)
       .slice(0, 15)
       .map((s) => `${s.name} - ${s.artist}`)

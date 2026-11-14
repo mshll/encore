@@ -1,10 +1,11 @@
 import { Hono } from "hono";
 import { z } from "zod";
+import { PLAY_OUTCOMES } from "../../analytics/common";
 import { artistPage, albumPage, trackPage } from "../../analytics/entities";
 import { history } from "../../analytics/history";
 import { clock, devices, overview, timeSeries } from "../../analytics/overview";
 import { forgotten, onThisDay } from "../../analytics/recall";
-import { momentSplit, skipContext, skips } from "../../analytics/skips";
+import { MOMENT_CLASSES, momentSplit, skipContext, skips } from "../../analytics/skips";
 import { search } from "../../analytics/search";
 import { energyByHour, genreSeries, moodSeries } from "../../analytics/tags";
 import { eras, topAlbums, topArtists, topTracks } from "../../analytics/top";
@@ -70,7 +71,7 @@ export const statsRoutes = new Hono<Env>()
         minPlays: int(2, 1000, 8),
         minContextPlays: int(1, 1000, 5),
         limit: int(1, 500, 100),
-        class: z.enum(["keeper", "wrong_moment", "dislike", "mixed"]).optional(),
+        class: z.enum(MOMENT_CLASSES).optional(),
       }),
       c.req.query(),
     );
@@ -125,7 +126,7 @@ const historyQuery = ranged({
   songKey: z.string().min(1).optional(),
   uri: z.string().min(1).optional(),
   device: z.enum(DEVICES).optional(),
-  skipped: z.enum(["true", "false"]).transform((v) => v === "true").optional(),
+  outcome: z.string().transform((v) => v.split(",")).pipe(z.array(z.enum(PLAY_OUTCOMES)).min(1)).optional(),
   country: z.string().regex(/^[A-Z]{2}$/).optional(),
   source: z.enum(PLAY_SOURCES).optional(),
   q: z.string().trim().min(1).max(200).optional(),
@@ -134,8 +135,8 @@ const historyQuery = ranged({
 });
 
 export const historyRoutes = new Hono<Env>().get("/", (c) => {
-  const q = parse(historyQuery, c.req.query());
-  return c.json(history(c.var.deps.db, { ...q, range: range(q) }));
+  const { outcome, ...q } = parse(historyQuery, c.req.query());
+  return c.json(history(c.var.deps.db, { ...q, outcomes: outcome, range: range(q) }));
 });
 
 export const searchRoutes = new Hono<Env>().get("/", (c) => {

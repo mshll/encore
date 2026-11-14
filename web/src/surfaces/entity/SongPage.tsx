@@ -19,7 +19,7 @@ import { EntityLoading, EntityMissing, FirstLast, Listening, SkipContext, usePer
 const MOMENT: Record<MomentClass, string> = {
   keeper: "You play this one through.",
   wrong_moment: "It depends on the moment: it plays through in some contexts and gets skipped in others.",
-  dislike: "Skipped in every context with enough plays to tell.",
+  skipped_everywhere: "Skipped in every context with enough plays to tell.",
   mixed: "Skipped now and then, with no clear pattern by context.",
 };
 

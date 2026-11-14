@@ -44,31 +44,37 @@ Runs live in memory: a restart ends them.
 - **Play**: one row. Includes very short plays.
 - **Listen**: a music play with `ms_played >= 30000` (export and live rows) or any API row. The Spotify recently-played API only reports plays it counted, and it does not give `ms_played`.
 - **Hours**: sum of `ms_played`. API rows have no `ms_played`, so they count the track's full `duration_ms` once known (from the poll itself or enrichment), else 0.
-- **Skip**: Spotify's own `skipped` flag on export rows. Live rows carry the watcher's flag: the track changed before 90% of its duration (see Live plays). API rows have no skip data (`skipped: null`) and are left out of every skip rate denominator, as are live rows whose end the watcher did not see. `skipRate = skips / plays with known skip flag`.
-- **Quick skip**: a skip with `ms_played < 5000`.
+- **Outcome**: how a music play ended, one of four, defined once (`playOutcome` and `OUTCOME` in `src/analytics/common.ts`) and computed at query time from `reason_end`, `ms_played` and the track's `duration_ms`, so a length that enrichment fills in later applies to every stored play. The outro starts at 80% of the song or 30 s before its end, whichever comes first, but never inside the first 30 s.
+  - `through` (played through): `reason_end` is `trackdone`, or `fwdbtn` at or past the outro.
+  - `early` (skipped early): `fwdbtn` before 30 s and before the outro. Known even without the song's length.
+  - `midway` (skipped midway): `fwdbtn` from 30 s up to the outro.
+  - `interrupted` (not a skip): any other `reason_end`: `backbtn` (went back), `endplay` (another song chosen, or playback stopped), `logout`, `remote`, `trackerror`, `unexpected-exit`, `unexpected-exit-while-paused`.
+  - `null` (unknown): no `reason_end` (API rows; live rows whose end the watcher did not see), no `ms_played`, or `fwdbtn` after 30 s of a song whose length is not known. Spotify's `skipped` flag is kept on the row but no longer read: it is set on every `fwdbtn`, `backbtn` and almost every `endplay`. `reason_start` never changes the outcome; it only feeds `startMode`.
+- **Skip**: an `early` or `midway` outcome. `skipRate = skips / plays with a known outcome` (`interrupted` plays count in the denominator). `earlySkips` counts `early` outcomes.
+- **Played through share** (`finishedShare`): `through` outcomes / plays with a known outcome.
 - **Shuffle rate**: plays with `shuffle = true` / plays with a known shuffle flag.
 - **Song (merged track)**: plays are grouped by `songKey`, not URI. `songKey = normalizedTitle + "|" + normalizedArtist`, where normalization lowercases, strips accents, removes `(feat. ...)`, `(with ...)`, `[ft. ...]`, trailing `feat. ...`, and remaster markers (`- Remastered 2011`, `(Remastered)`), then collapses all punctuation to single spaces. Live versions and other edits stay separate. Artist is the export's `master_metadata_album_artist_name` (Spotify's primary artist for the track) or, for API-only tracks, the first listed artist. Song rows show the name, album, and URI of the song's most-played URI.
 - **Artist**: grouped by artist name string. **Album**: grouped by (artist, album name).
-- **Context dimensions** (used by the skip split and skip profiles). Only rows with a known skip flag (export and live):
+- **Context dimensions** (used by the skip split and skip profiles). Only plays with a known outcome:
   - `hourBucket`: `night` 00-05, `morning` 06-11, `afternoon` 12-17, `evening` 18-23 (local hour).
   - `dayType`: `weekend` on the `weekendDays` setting's ISO weekdays (default 5, 6: Friday and Saturday), else `weekday`. Decided at query time, so a change applies to all stored plays.
   - `shuffle`: `on` / `off`.
   - `device`: the device enum below.
   - `startMode`: `chosen` when `reason_start` is `clickrow`, `playbtn`, or `backbtn` (the owner picked this track); `auto` when it is `trackdone` or `fwdbtn` (the track arrived from the queue). Other start reasons (`appload`, `remote`, `trackerror`, `unknown`) are not a context value.
-- **Wrong moment vs dislike** (`GET /api/stats/skips/split`). A skip is not a dislike: a song finished in some contexts and skipped in others was skipped at the wrong moment. For each song with at least `minPlays` (default 8) plays with a known skip flag in the range:
+- **Moment split** (`GET /api/stats/skips/split`). A skip is not a dislike: a song played through in some contexts and skipped in others was skipped at the wrong moment. For each song with at least `minPlays` (default 8) plays with a known outcome in the range:
   1. For each context dimension value with at least `minContextPlays` (default 5) of that song's plays, compute that context's skip rate.
   2. A context **works** if its skip rate is `<= 1/3`. A context **fails** if its skip rate is `>= 2/3`.
   3. Classes, checked in this order:
      - `keeper`: overall skip rate `< 0.25`.
      - `wrong_moment`: at least one context works AND at least one context fails.
-     - `dislike`: overall skip rate `>= 0.75` AND no context works (skipped nearly everywhere).
+     - `skipped_everywhere`: overall skip rate `>= 0.75` AND no context works. A description, not a verdict: nothing removes or drops a song for this class alone.
      - `mixed`: everything else (skipped often, but no clear context pattern in the data).
   `bestContext` / `worstContext` are the qualifying contexts with the lowest / highest skip rate.
 - **Era** (`/api/stats/eras`): top N artists by hours in the range; for each, hours per local month across a continuous month axis, the month with the most hours (`peakMonth`), and first/last play of all time (not limited to the range).
 - **Trip**: plays ordered by time, ignoring rows without `conn_country` (all API rows). A trip is a maximal run of consecutive plays whose country is not `HOME_COUNTRY` (unset: the country with the most plays; `homeCountry` is `null` when no play has a country); a single home-country play ends it. A trip can span several countries. Trips with fewer than `minPlays` plays (default 5) are dropped. `days` counts local days from first to last play inclusive. Trip plays count all kinds (country is about location); `hours` and `topTracks` count music only.
 - **Forgotten**: songs with at least `minListens` listens (all time) and no play of any kind in the last `days` days.
 - **Export vs API and live**: export rows are the source of truth. Importing an export deletes API and live rows from the export's first to last timestamp (plus 999 ms, since export timestamps have second precision), and the poller and the watcher ignore plays at or before the newest export row (+999 ms). `apiPlaysRemoved` counts both.
-- **Live plays** (`source: "live"`): the `watch` job polls `GET /me/player` and turns state changes into plays. `ms_played` is the progress it observed (pauses excluded, forward seeks capped at wall time). `skipped` is true when the track changed before 90% of its duration; stopping playback is not a skip. `reason_end` is `trackdone` (reached the last 5 s), `fwdbtn` (changed earlier) or `endplay` (playback stopped); `reason_start` is the previous play's `trackdone`/`fwdbtn`, else `null`. All three are inferred, not Spotify's values. A gap between polls over `2 x WATCHER_IDLE_SECONDS + 30 s` leaves the end unknown (`skipped`, `reason_end` null). `device` comes from the Spotify device name and type; `contextUri` is the playlist or album played from. A watcher that starts mid-track counts the part before its first poll as played.
+- **Live plays** (`source: "live"`): the `watch` job polls `GET /me/player` and turns state changes into plays. `ms_played` is the progress it observed (pauses excluded, forward seeks capped at wall time). `skipped` is true when the track changed before its last 5 s, like Spotify's flag on `fwdbtn`; the outcome comes from `reason_end` and the time played, as for export rows. `reason_end` is `trackdone` (reached the last 5 s), `fwdbtn` (changed earlier) or `endplay` (playback stopped); `reason_start` is the previous play's `trackdone`/`fwdbtn`, else `null`. All three are inferred, not Spotify's values. A gap between polls over `2 x WATCHER_IDLE_SECONDS + 30 s` leaves the end unknown (`skipped`, `reason_end` null). `device` comes from the Spotify device name and type; `contextUri` is the playlist or album played from. A watcher that starts mid-track counts the part before its first poll as played.
 - **History start** (`historyStart` setting): plays on a local day before it are never stored, whichever path brings them (export import, recently-played poll, watcher). Saving the setting only filters what arrives from then on; plays already stored are removed only by `POST /api/settings/history-start`. Clearing it removes nothing and restores nothing: removed plays return only by importing the export again.
 - **One play, two sources**: recently-played reports the same play the watcher saw. An API play matches a live row of the same track when its `played_at` falls between the live row's `ts - ms_played - 15 s` and `ts + 60 s`. The live row wins: the poller skips a matched API play (`skippedCoveredByLive`), and a live row recorded after the API row replaces the nearest matching one.
 
@@ -83,7 +89,7 @@ Runs live in memory: a restart ends them.
 `Stats` (used inside many responses):
 
 ```json
-{ "hours": 47.34, "plays": 810, "listens": 692, "skips": 335, "skipRate": 0.414, "quickSkips": 68,
+{ "hours": 47.34, "plays": 810, "listens": 692, "skips": 235, "skipRate": 0.302, "earlySkips": 180,
   "firstPlayed": "2024-12-06T12:19:36.000Z", "lastPlayed": "2026-11-06T17:16:17.000Z" }
 ```
 
@@ -92,7 +98,7 @@ Runs live in memory: a restart ends them.
 ```json
 { "songKey": "like you do|joji", "uri": "spotify:track:4vgU9MGJwhgBEtlO8mMN49", "name": "Like You Do", "artist": "Joji",
   "album": "Nectar", "albumArtUrl": "https://i.scdn.co/image/...", "hours": 8.41, "plays": 166, "listens": 121,
-  "skips": 64, "skipRate": 0.386, "quickSkips": 40, "firstPlayed": "...", "lastPlayed": "..." }
+  "skips": 44, "skipRate": 0.265, "earlySkips": 36, "firstPlayed": "...", "lastPlayed": "..." }
 ```
 
 `albumArtUrl` is `null` until art is found. The `art` job fills it from Spotify's public oEmbed endpoint (300 px); track enrichment replaces it with the Web API's largest album image (640 px). A song's art falls back to any version of it that has art.
@@ -396,7 +402,7 @@ All under `/api/stats`. All accept `from`/`to` unless noted.
 ```json
 {
   "hours": 1444.74, "plays": 39338, "listens": 25093, "uniqueTracks": 5055, "uniqueArtists": 1589,
-  "skipRate": 0.504, "shuffleRate": 0.716,
+  "skipRate": 0.345, "shuffleRate": 0.716,
   "firstPlayed": "2021-05-16T06:56:32.000Z", "lastPlayed": "2026-11-13T21:07:27.573Z",
   "topArtist": { "artist": "Mac Miller", "imageUrl": "https://i.scdn.co/image/...", "hours": 118.48, "listens": 1889 },
   "topTrack": { "songKey": "glimpse of us|joji", "uri": "spotify:track:3aBGKDiAAvH2H7HLOyQ4US", "name": "Glimpse of Us", "artist": "Joji", "albumArtUrl": "...", "hours": 9.6, "listens": 137 }
@@ -453,32 +459,32 @@ Params: `period`.
 
 ### `GET /api/stats/skips`
 
-Params: `minPlays` (default 10, plays with a known skip flag needed to appear in a list), `limit` (1-200, default 50).
+Params: `minPlays` (default 10, plays with a known outcome needed to appear in a list), `limit` (1-200, default 50).
 
 ```json
 {
   "minPlays": 10,
-  "summary": { "plays": 39338, "skips": 19820, "skipRate": 0.504, "quickSkips": 10466 },
+  "summary": { "plays": 39339, "skips": 13252, "skipRate": 0.345, "earlySkips": 11005,
+               "outcomes": { "through": 19415, "early": 11005, "midway": 2247, "interrupted": 5719, "unknown": 953 } },
   "mostSkippedTracks": [Song],
   "mostSkippedArtists": [{ "artist": "CeeLo Green", "imageUrl": null, ...Stats }],
-  "quickSkips": [Song],
+  "earlySkips": [Song],
   "neverSkipped": [Song],
-  "profile": SkipProfile,
-  "positions": [{ "start": 0, "end": 0.1, "skips": 5210 }]
+  "profile": SkipProfile
 }
 ```
 
-`mostSkipped*` sort by skip rate, then volume. `quickSkips` sorts by quick-skip count. `neverSkipped` is songs with 0 skips, sorted by plays. `profile` is the skip rate per context value over every play in the range with a known skip flag (see Context dimensions). `positions` is always 10 entries: skipped plays by the share of the song played before the skip (`start` inclusive, `end` exclusive; a play longer than the song counts in the last entry). Skips of songs without a known duration are left out, so `positions` can sum to less than `summary.skips`.
+`summary.outcomes` counts every music play in the range by outcome; `unknown` holds plays without one. `mostSkipped*` sort by skip rate, then volume. `earlySkips` sorts by early-skip count. `neverSkipped` is songs with 0 skips, sorted by plays. `profile` is the skip rate per context value over every play in the range with a known outcome (see Context dimensions).
 
 ### `GET /api/stats/skips/split`
 
-Wrong moment vs dislike, see the definition above. Params: `minPlays` (2-1000, default 8), `minContextPlays` (default 5), `limit` (1-500, default 100), `class` = `keeper` | `wrong_moment` | `dislike` | `mixed` (optional filter on `songs`; `counts` always covers all classes).
+Moment split, see the definition above. Params: `minPlays` (2-1000, default 8), `minContextPlays` (default 5), `limit` (1-500, default 100), `class` = `keeper` | `wrong_moment` | `skipped_everywhere` | `mixed` (optional filter on `songs`; `counts` always covers all classes).
 
 ```json
 {
-  "params": { "minPlays": 8, "minContextPlays": 5, "keeperBelow": 0.25, "dislikeAtLeast": 0.75, "worksAtMost": 0.333, "failsAtLeast": 0.667 },
-  "eligibleSongs": 1440,
-  "counts": { "keeper": 112, "wrong_moment": 205, "dislike": 308, "mixed": 815 },
+  "params": { "minPlays": 8, "minContextPlays": 5, "keeperBelow": 0.25, "skippedEverywhereAtLeast": 0.75, "worksAtMost": 0.333, "failsAtLeast": 0.667 },
+  "eligibleSongs": 1403,
+  "counts": { "keeper": 417, "wrong_moment": 125, "skipped_everywhere": 166, "mixed": 695 },
   "songs": [{
     ...Song,
     "class": "wrong_moment",
@@ -488,7 +494,7 @@ Wrong moment vs dislike, see the definition above. Params: `minPlays` (2-1000, d
 }
 ```
 
-`songs` is sorted by plays. `bestContext`/`worstContext` are `null` when no context reaches `minContextPlays`. The split uses rows with a known skip flag (export and live), so `plays` here counts only those. `params` are the exact thresholds used (unrounded in the response).
+`songs` is sorted by plays. `bestContext`/`worstContext` are `null` when no context reaches `minContextPlays`. The split uses plays with a known outcome, so `plays` here counts only those. `params` are the exact thresholds used (unrounded in the response).
 
 ### `GET /api/stats/forgotten`
 
@@ -569,7 +575,7 @@ Merged across URIs: any URI of the song gives the same page.
   "uris": [{ "uri": "spotify:track:...", "name": "Song A", "album": "Album", "plays": 120 }] }
 ```
 
-`class` uses the split rules with `minContextPlays = 3`, or is `null` with fewer than 8 plays with a known skip flag.
+`class` uses the split rules with `minContextPlays = 3`, or is `null` with fewer than 8 plays with a known outcome.
 
 ## Search
 
@@ -587,17 +593,17 @@ Case-insensitive substring match over all music plays (no range). Params: `q` (1
 
 ### `GET /api/history`
 
-Newest first. Params (all optional): `from`, `to`, `kind` (default `track`), `artist` (exact), `songKey`, `uri` (exact track URI), `device`, `skipped` (`true`/`false`), `country` (2-letter), `source`, `q` (case-insensitive substring of track, artist, album, episode, or show name), `limit` (1-500, default 100), `offset`.
+Newest first. Params (all optional): `from`, `to`, `kind` (default `track`), `artist` (exact), `songKey`, `uri` (exact track URI), `device`, `outcome` (one or more of `through`, `early`, `midway`, `interrupted`, comma-separated; only music plays match), `country` (2-letter), `source`, `q` (case-insensitive substring of track, artist, album, episode, or show name), `limit` (1-500, default 100), `offset`.
 
 ```json
 { "total": 39338, "limit": 1, "offset": 0,
   "items": [{ "id": 79623, "ts": "2026-11-13T21:07:27.573Z", "day": "2026-11-14", "hour": 0, "kind": "track",
               "uri": "spotify:track:...", "songKey": "do i wanna know|arctic monkeys", "name": "Do I Wanna Know?", "artist": "Arctic Monkeys",
-              "album": "AM", "albumArtUrl": "...", "msPlayed": null, "skipped": null, "shuffle": null,
+              "album": "AM", "albumArtUrl": "...", "msPlayed": null, "outcome": null, "shuffle": null,
               "reasonStart": null, "reasonEnd": null, "device": "unknown", "country": null, "source": "api" }] }
 ```
 
-For episodes, `name` is the episode, `artist` the show, `uri` the episode URI, `songKey` `null`. `ts` is the end of the play (Spotify's export and recently-played both report end time).
+`outcome` is the play's outcome (see Metric definitions), `null` when unknown and for every non-music row. For episodes, `name` is the episode, `artist` the show, `uri` the episode URI, `songKey` `null`. `ts` is the end of the play (Spotify's export and recently-played both report end time).
 
 ## Tracks
 
@@ -688,11 +694,11 @@ All `POST`, all answer `200 { "ok": true }`.
 
 ## DJ session
 
-Plays an ordered list of songs through the app-owned playlist "encore session" with shuffle off. Spotify cannot reorder or clear the user queue, so the session rewrites the playlist's not-yet-played tail instead. The watcher tracks the position. After `DJ_SKIP_TRIGGER` (default 2) consecutive skips inside the playlist, the re-planner returns a new tail; the session deletes the old tail items and appends the new ones. Played songs and the current song are never touched. Songs appear once per session (duplicates are dropped at start). Playing anything outside the playlist ends the session.
+Plays an ordered list of songs through the app-owned playlist "encore session" with shuffle off. Spotify cannot reorder or clear the user queue, so the session rewrites the playlist's not-yet-played tail instead. The watcher tracks the position. After `DJ_SKIP_TRIGGER` (default 2) consecutive skips (outcome `early` or `midway`) inside the playlist, the re-planner returns a new tail; the session deletes the old tail items and appends the new ones. Played songs and the current song are never touched. Songs appear once per session (duplicates are dropped at start). Playing anything outside the playlist ends the session.
 
-Default re-planner (deterministic): keeps the remaining tail minus songs classed `dislike` and songs already skipped in the session, scores each by context fit for the current local hour bucket and day type (1 - skip rate, from plays with a known skip flag, needs 3 plays, else 0.5) plus tag similarity to finished songs minus tag similarity to skipped ones (genres, moods, energy, valence), and orders by score. Dropped songs are replaced from the owner's 300 most listened tagged songs that score above neutral.
+Default re-planner (deterministic): keeps the remaining tail minus songs already skipped in the session, scores each by context fit for the current local hour bucket and day type (1 - skip rate, from plays with a known outcome, needs 3 plays, else 0.5) plus tag similarity to played-through songs minus tag similarity to skipped ones (genres, moods, energy, valence), and orders by score. Dropped songs are replaced from the owner's 300 most listened tagged songs that score above neutral.
 
-Claude re-planner: with `DJ_REPLANNER=llm` (default `deterministic`), the deterministic re-planner runs first, then Claude orders the remaining planned songs plus the deterministic list, given what was finished and skipped this session, the song playing now and the taste profile (feature `dj` in the ledger, effort low). Any failure falls back to the deterministic list: no API key, budget spent, refusal, no answer, or no answer within `DJ_REPLAN_TIMEOUT_SECONDS` (default 20).
+Claude re-planner: with `DJ_REPLANNER=llm` (default `deterministic`), the deterministic re-planner runs first, then Claude orders the remaining planned songs plus the deterministic list, given what was played through and skipped this session, the song playing now and the taste profile (feature `dj` in the ledger, effort low). Any failure falls back to the deterministic list: no API key, budget spent, refusal, no answer, or no answer within `DJ_REPLAN_TIMEOUT_SECONDS` (default 20).
 
 A re-plan reads the session again after the re-planner returns and cuts the tail at the position it finds then, so a song that became current while the re-plan ran is never removed.
 
@@ -710,7 +716,7 @@ Body `{ "uris": [track URI] (1-500), "deviceId"? }`. Replaces any active session
 
 ### `GET /api/dj`
 
-`{ "session": Session | null }`: the active session, else the latest one. `status` is `active`, `stopped` or `ended`; `endReason` is `stopped`, `replaced` or `left_playlist`. `played[].outcome` is `finished` or `skipped`, from the watcher's live plays (inferred skip, see Live plays). `skipStreak` counts consecutive skips; `replans` counts re-plans this session; `replannedAt` is the time of the last re-plan and `replanSkips` the skips in a row that triggered it (both `null` before the first). `set` is `{ id, title }` when the session was started from a set.
+`{ "session": Session | null }`: the active session, else the latest one. `status` is `active`, `stopped` or `ended`; `endReason` is `stopped`, `replaced` or `left_playlist`. `played[].outcome` is `finished` (played through) or `skipped` (early or midway), from the watcher's live plays; interrupted plays are not listed and leave the streak as it was (inferred skip, see Live plays). `skipStreak` counts consecutive skips; `replans` counts re-plans this session; `replannedAt` is the time of the last re-plan and `replanSkips` the skips in a row that triggered it (both `null` before the first). `set` is `{ id, title }` when the session was started from a set.
 
 Start latency: starting a session makes about 4 Web API calls (playlist items, shuffle off, play), so with the default pacing it takes about 6 s (computed from `SPOTIFY_MIN_INTERVAL_MS`, not measured).
 
@@ -835,7 +841,7 @@ The songs behind a figure. Params: `kind` = `songs` (default) | `duplicates` | `
               "lastPlayed": "...", "finishedShare": 0.4, "addedAt": "...", "playClass": "dormant" }] }
 ```
 
-`where` for playlist songs is `{ "kind": "playlist", "id", "name" }` and `positions` lists every position of the song in it. `finishedShare`: plays reaching 80% of the song's length over plays with a known time played (`null` for API-only plays). `reason` states the evidence in plain words.
+`where` for playlist songs is `{ "kind": "playlist", "id", "name" }` and `positions` lists every position of the song in it. `finishedShare`: plays played through over plays with a known outcome (`null` when none has one). `reason` states the evidence in plain words.
 
 ## Plans
 
@@ -856,8 +862,8 @@ Taking a song out of a playlist removes every copy of it (every version with the
 **Rule plans** (`ruleKind`; stats are all-time over the song, merged by `songKey`; a song is out of rotation when its play class is `fading` or `dormant`, see [Library](#library)). Skips alone never put a song in a plan:
 
 - `saved_never_played` "Liked songs never played": liked more than 30 days ago, play class `never`.
-- `saved_dislike` "Liked songs rarely played through": the skip split classes it `dislike` (8+ plays with a known skip flag), a listen ratio (listens / plays) of 0.2 or less, at least one listen, and out of rotation.
-- `playlist_skipped` "Playlist songs rarely played through": in an own playlist, 8+ plays with a known skip flag, a skip rate of 0.9 or more, a listen ratio of 0.2 or less, and out of rotation.
+- `saved_dislike` "Liked songs rarely played through": the skip split classes it `skipped_everywhere` (8+ plays with a known outcome), a listen ratio (listens / plays) of 0.2 or less, at least one listen, and out of rotation.
+- `playlist_skipped` "Playlist songs rarely played through": in an own playlist, 8+ plays with a known outcome, a skip rate of 0.9 or more, a listen ratio of 0.2 or less, and out of rotation.
 - `playlist_duplicate` "Extra copies in playlists": the same song more than once in one playlist.
 
 Rule plans stay `open`; their dismissed and applied items keep their status across refreshes, and an item skipped as stale opens again. Items from before plans (`cleanup_proposals` rows without a plan) join their rule plan at startup and on `GET /api/library/plans`; their action is the rule's default.
@@ -1007,7 +1013,7 @@ Seams for other modules (`src/discord/`): `DiscordRegistry.addCommand({ definiti
 | --- | --- |
 | `overview` | `from?`, `to?` |
 | `top` | `kind` (`artists`, `songs`, `albums`), `sort?`, `limit?`, `from?`, `to?` |
-| `history` | `from?`, `to?`, `artist?`, `songKey?`, `uri?`, `skipped?`, `q?`, `limit?`, `offset?` |
+| `history` | `from?`, `to?`, `artist?`, `songKey?`, `uri?`, `outcomes?` (`through`, `early`, `midway`, `interrupted`), `q?`, `limit?`, `offset?` |
 | `lookup` | `query?` (name search) or `artist` (+ `album`) or `songKey`/`uri` (entity page) |
 | `on_this_day` | `date?`, `limit?` |
 | `forgotten` | `days?`, `minListens?`, `limit?` |
@@ -1068,7 +1074,7 @@ Set shape (`GET /api/sets/:id`, and `set` in create/refine):
     "position": 1, "kind": "library", "songKey": "woods|mac miller", "uri": "spotify:track:...",
     "name": "Woods", "artist": "Mac Miller", "album": "Circles",
     "albumArtUrl": "https://i.scdn.co/image/...", "artistImageUrl": "https://i.scdn.co/image/...",
-    "reason": "Finished 41 of 44 night plays.",
+    "reason": "Played through 41 of 44 night plays.",
     "pinned": false,
     "history": { "listens": 44, "lastPlayed": "..." },
     "outcome": { "plays": 3, "finished": 2, "skipped": 1, "firstPlayedAt": "..." },
@@ -1086,7 +1092,7 @@ Set shape (`GET /api/sets/:id`, and `set` in create/refine):
 - A refinement that changes mood or direction ("less sad") is applied to every track: familiar songs whose tags conflict with it are rejected unless the owner asked to keep them.
 - `playlist` is `null` until saved. `outdated: true` when the set changed after the last save; saving again updates the same playlist.
 - `coverUrl`: the set's generated cover (see `GET /api/sets/:id/cover`), `null` while the set has no tracks. `v` changes whenever the cover would change.
-- `outcome` counts plays of the song after the set was saved (or created, if never saved), from all sources: `finished` uses the skip flag and play time of export and live rows; API rows count as finished. Refreshed hourly.
+- `outcome` counts plays of the song after the set was saved (or created, if never saved), from all sources: `finished` counts plays played through and `skipped` plays skipped early or midway (see Outcome); API rows have no outcome and count in neither. Refreshed hourly.
 - `history`: for `library` tracks, the owner's all-time listens and last play of the song; `null` for `new` tracks.
 - `pinned`: the owner pinned the track. A refinement that leaves out a pinned track is rejected and Claude must keep it; Claude is told which tracks are pinned with every refinement.
 - `changes`: one entry per version after the first, oldest first. `source` is `claude` (a refinement; `message` is the owner's message) or `owner` (a track removed by hand; `message` is `null`). `moved` lists kept songs whose order relative to the other kept songs changed (songs only shifted by an insert or removal are not listed); `from` and `to` are 1-based positions.
@@ -1141,7 +1147,7 @@ Pick shape:
   "id": 7, "week": "2026-11-09", "position": 1, "uri": "spotify:track:...", "songKey": "no love|lyves",
   "name": "No Love", "artist": "Lyves", "album": "...", "releaseDate": "2016-05-20",
   "albumArtUrl": "https://i.scdn.co/image/...", "artistImageUrl": null,
-  "reason": "Sampled on WHEN SPARKS FLY, which you finished 38 times.",
+  "reason": "Sampled on WHEN SPARKS FLY, which you played through 38 times.",
   "source": { "url": "https://www.whosampled.com/...", "title": "..." },
   "distance": "near", "state": "new", "stateAt": "...",
   "outcome": { "plays": 2, "finished": 2, "playDays": 2, "inLibrary": true, "firstPlayedAt": "...", "hit": true }
@@ -1151,7 +1157,7 @@ Pick shape:
 - `distance`: `near` or `far`.
 - `source`: the web search result from the run that supports the reason. A pick is stored only when its source was returned by that run's search and names the song or its artist. `null` only on picks made before this field existed.
 - `state`: `new`, `saved`, `not_now`, `never`. `never` blocks the song from all future suggestions (sets and picks); a second `never` for the same artist blocks the artist. Moving a pick out of `never` lifts those blocks. `not_now` songs may be picked again after 28 days.
-- `outcome.hit`: finished at least once and (played on 2+ days, or in the Spotify library, or state `saved`). Plays are refreshed hourly, library state daily.
+- `outcome.hit`: played through at least once and (played on 2+ days, or in the Spotify library, or state `saved`). Plays are refreshed hourly, library state daily.
 
 #### `GET /api/picks`
 

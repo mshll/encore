@@ -29,7 +29,6 @@ export type FinishedPlay = Omit<Observation, "lastSeenAt" | "lastProgressMs" | "
 
 export type StepResult = { current: Observation | null; finished: FinishedPlay[] };
 
-export const SKIP_BEFORE_SHARE = 0.9;
 const END_MARGIN_MS = 5000;
 const SEEK_SLACK_MS = 2000;
 const BACKWARD_JUMP_MS = 5000;
@@ -48,7 +47,7 @@ function close(obs: Observation, endPosition: number | null, endedAt: number, tr
     ...rest,
     endedAt,
     msPlayed: playedMs + Math.max(0, position - lastProgressMs),
-    skipped: trackChanged ? position < obs.durationMs * SKIP_BEFORE_SHARE : false,
+    skipped: trackChanged && !reachedEnd,
     reasonEnd: reachedEnd ? "trackdone" : trackChanged ? "fwdbtn" : "endplay",
   };
 }

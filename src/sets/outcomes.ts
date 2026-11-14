@@ -1,6 +1,7 @@
 import { eq, sql } from "drizzle-orm";
 import type { Db } from "../db/client";
 import { setItems, sets } from "../db/schema";
+import { isSkip } from "../analytics/common";
 import { songPlaysSince } from "../library/outcomes";
 
 export function refreshSetOutcomes(db: Db) {
@@ -16,8 +17,8 @@ export function refreshSetOutcomes(db: Db) {
       tx.update(setItems)
         .set({
           playsAfter: plays.length,
-          finished: plays.filter((p) => p.outcome === "finished").length,
-          skipped: plays.filter((p) => p.outcome === "skipped").length,
+          finished: plays.filter((p) => p.outcome === "through").length,
+          skipped: plays.filter((p) => isSkip(p.outcome)).length,
           firstPlayedAt: plays[0]?.ts ?? null,
         })
         .where(eq(setItems.id, item.id))
@@ -33,15 +34,15 @@ export function setOutcomeSummary(db: Db): string {
     select kind, count(*) as items, sum(plays_after > 0) as played, sum(finished) as finished, sum(skipped) as skipped
     from set_items group by kind order by kind`);
   if (rows.length === 0) return "Sets: none built yet.";
-  const parts = rows.map((r) => `${r.kind} songs: ${r.items} placed, ${r.played} played since, ${r.finished} finished plays, ${r.skipped} skipped plays`);
+  const parts = rows.map((r) => `${r.kind} songs: ${r.items} placed, ${r.played} played since, ${r.finished} plays played through, ${r.skipped} skipped before the outro`);
   const skippedNew = db.all<{ name: string; artist: string }>(sql`
     select name, artist from set_items where kind = 'new' and skipped > 0 and finished = 0 order by first_played_at desc limit 8`);
   const keptNew = db.all<{ name: string; artist: string }>(sql`
     select name, artist from set_items where kind = 'new' and finished > 0 order by finished desc limit 8`);
   return [
     `Sets: ${parts.join("; ")}.`,
-    keptNew.length ? `New songs from sets that were finished: ${keptNew.map((s) => `${s.name} - ${s.artist}`).join("; ")}.` : "",
-    skippedNew.length ? `New songs from sets that were only skipped: ${skippedNew.map((s) => `${s.name} - ${s.artist}`).join("; ")}.` : "",
+    keptNew.length ? `New songs from sets that were played through: ${keptNew.map((s) => `${s.name} - ${s.artist}`).join("; ")}.` : "",
+    skippedNew.length ? `New songs from sets that were only skipped (not a dislike): ${skippedNew.map((s) => `${s.name} - ${s.artist}`).join("; ")}.` : "",
   ]
     .filter(Boolean)
     .join("\n");

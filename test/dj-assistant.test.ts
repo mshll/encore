@@ -81,7 +81,10 @@ describe("playing a set through the DJ", () => {
     expect(spotifyCalls.map((c) => `${c.method} ${c.path.split("?")[0]}`)).toContain("PUT /v1/me/player/play");
 
     const context = `spotify:playlist:${session.playlistId}`;
-    const finished = (trackUri: string, skipped: boolean) => ({ type: "finished" as const, play: { trackUri, contextUri: context, skipped } as FinishedPlay });
+    const finished = (trackUri: string, skipped: boolean) => ({
+      type: "finished" as const,
+      play: { trackUri, contextUri: context, reasonEnd: skipped ? "fwdbtn" : "trackdone", msPlayed: skipped ? 10_000 : 200_000, durationMs: 200_000 } as FinishedPlay,
+    });
     const started = (trackUri: string) => ({ type: "started" as const, observation: { trackUri, contextUri: context } as Observation });
     dj.onWatchEvent(started(uri("w1")));
     dj.onWatchEvent(finished(uri("w1"), false));

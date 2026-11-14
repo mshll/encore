@@ -58,7 +58,7 @@ export function computeProposals(db: Db, now: number, settings: { timezone: stri
   const snapshot = loadLibrary(db, now, settings);
   const stats = songStats(db);
   const cutShort = new Set(
-    momentSplit(db, { range: {}, minPlays: CLEANUP_RULES.dislikeMinPlays, minContextPlays: CLEANUP_RULES.dislikeMinContextPlays, limit: 1_000_000, only: "dislike", weekendDays: settings.weekendDays }).songs.map(
+    momentSplit(db, { range: {}, minPlays: CLEANUP_RULES.dislikeMinPlays, minContextPlays: CLEANUP_RULES.dislikeMinContextPlays, limit: 1_000_000, only: "skipped_everywhere", weekendDays: settings.weekendDays }).songs.map(
       (s) => s.songKey,
     ),
   );

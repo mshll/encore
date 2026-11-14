@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { HOUR_BUCKET, dayTypeSql, MUSIC, musicWhere, songStatsSql, type SongRow } from "../analytics/common";
+import { HOUR_BUCKET, dayTypeSql, MUSIC, musicWhere, SKIP_KNOWN, SKIPPED, songStatsSql, type SongRow } from "../analytics/common";
 import { momentSplit, type MomentClass } from "../analytics/skips";
 import type { Db } from "../db/client";
 
@@ -30,10 +30,11 @@ export type Catalog = { version: string; songs: Map<string, CatalogSong> };
 let cached: { db: Db; catalog: Catalog } | null = null;
 
 function dataVersion(db: Db): string {
-  const row = db.all<{ plays: number; played: number; tags: number; tagged: number }>(
-    sql`select (select max(id) from plays) as plays, (select count(*) from plays) as played, (select count(*) from track_tags) as tags, (select max(tagged_at) from track_tags) as tagged`,
+  const row = db.all<{ plays: number; played: number; tags: number; tagged: number; lengths: number }>(
+    sql`select (select max(id) from plays) as plays, (select count(*) from plays) as played, (select count(*) from track_tags) as tags, (select max(tagged_at) from track_tags) as tagged,
+      (select count(*) from tracks where duration_ms > 0) as lengths`,
   )[0]!;
-  return `${row.plays}:${row.played}:${row.tags}:${row.tagged}`;
+  return `${row.plays}:${row.played}:${row.tags}:${row.tagged}:${row.lengths}`;
 }
 
 export function loadCatalog(db: Db, weekendDays: readonly number[]): Catalog {
@@ -71,11 +72,11 @@ export function loadCatalog(db: Db, weekendDays: readonly number[]): Catalog {
     if (song) song.class = s.class;
   }
   const contexts = db.all<{ song_key: string; dim: "hourBucket" | "dayType"; value: string; plays: number; skips: number }>(sql`
-    select t.song_key, 'hourBucket' as dim, ${HOUR_BUCKET} as value, count(*) as plays, sum(p.skipped = 1) as skips
-    from ${MUSIC} where ${musicWhere({})} and p.skipped is not null group by t.song_key, value
+    select t.song_key, 'hourBucket' as dim, ${HOUR_BUCKET} as value, count(*) as plays, sum(${SKIPPED}) as skips
+    from ${MUSIC} where ${musicWhere({}, SKIP_KNOWN)} group by t.song_key, value
     union all
-    select t.song_key, 'dayType' as dim, ${dayTypeSql(weekendDays)} as value, count(*) as plays, sum(p.skipped = 1) as skips
-    from ${MUSIC} where ${musicWhere({})} and p.skipped is not null group by t.song_key, value`);
+    select t.song_key, 'dayType' as dim, ${dayTypeSql(weekendDays)} as value, count(*) as plays, sum(${SKIPPED}) as skips
+    from ${MUSIC} where ${musicWhere({}, SKIP_KNOWN)} group by t.song_key, value`);
   for (const c of contexts) {
     const song = songs.get(c.song_key);
     if (!song) continue;

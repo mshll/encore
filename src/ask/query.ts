@@ -1,6 +1,6 @@
 import { sql, type SQL } from "drizzle-orm";
 import { z } from "zod";
-import { dayTypeSql, HOUR_BUCKET, SHUFFLE, periodExpr } from "../analytics/common";
+import { dayTypeSql, HOUR_BUCKET, LISTEN, OUTCOME, OUTCOME_WORDS, PLAY_OUTCOMES, SHUFFLE, SKIP_KNOWN, SKIPPED, periodExpr } from "../analytics/common";
 import type { Db } from "../db/client";
 import { DEVICES, PLAY_SOURCES } from "../db/schema";
 import { GENRES, MOODS } from "../tags/vocabulary";
@@ -19,7 +19,10 @@ export const queryPlaysInput = z.strictObject({
   hours: z.array(z.number().int().min(0).max(23)).optional().describe("Local hours 0-23."),
   weekdays: z.array(z.number().int().min(1).max(7)).optional().describe("ISO weekdays, 1 = Monday."),
   devices: z.array(z.enum(DEVICES)).optional(),
-  skipped: z.boolean().optional().describe("Only plays with this skip flag (export and live rows; API rows have no flag)."),
+  outcomes: z
+    .array(z.enum(Object.values(OUTCOME_WORDS) as [string, ...string[]]))
+    .optional()
+    .describe("Only plays that ended this way. Recently-played API rows, and plays left after 30 seconds of a song with no known length, have no outcome."),
   shuffle: z.boolean().optional(),
   source: z.enum(PLAY_SOURCES).optional(),
   country: z.string().length(2).optional().describe("Two-letter country code (export rows only)."),
@@ -57,10 +60,10 @@ const groupExpressions = (weekendDays: readonly number[]): Record<(typeof GROUPS
 
 const METRIC_SQL: Record<(typeof METRICS)[number], SQL> = {
   plays: sql.raw("count(*)"),
-  listens: sql.raw("sum(p.source = 'api' or p.ms_played >= 30000)"),
+  listens: sql`sum(${LISTEN})`,
   hours: sql.raw("round(sum(coalesce(p.ms_played, t.duration_ms, 0)) / 3600000.0, 2)"),
-  skips: sql.raw("sum(p.skipped = 1)"),
-  skipRate: sql.raw("round(1.0 * sum(p.skipped = 1) / nullif(sum(p.skipped is not null), 0), 3)"),
+  skips: sql`sum(${SKIPPED})`,
+  skipRate: sql`round(1.0 * sum(${SKIPPED}) / nullif(sum(${SKIP_KNOWN}), 0), 3)`,
   uniqueSongs: sql.raw("count(distinct t.song_key)"),
   uniqueArtists: sql.raw("count(distinct t.artist)"),
   firstPlayed: sql.raw("min(p.ts)"),
@@ -90,7 +93,7 @@ export function queryPlays(db: Db, input: QueryPlaysInput, weekendDays: readonly
   if (input.hours?.length) where.push(sql`p.hour in (${list(input.hours)})`);
   if (input.weekdays?.length) where.push(sql`p.weekday in (${list(input.weekdays)})`);
   if (input.devices?.length) where.push(sql`p.device in (${list(input.devices)})`);
-  if (input.skipped !== undefined) where.push(sql`p.skipped = ${input.skipped ? 1 : 0}`);
+  if (input.outcomes?.length) where.push(sql`${OUTCOME} in (${list(PLAY_OUTCOMES.filter((o) => input.outcomes!.includes(OUTCOME_WORDS[o])))})`);
   if (input.shuffle !== undefined) where.push(sql`p.shuffle = ${input.shuffle ? 1 : 0}`);
   if (input.source) where.push(sql`p.source = ${input.source}`);
   if (input.country) where.push(sql`p.conn_country = ${input.country.toUpperCase()}`);

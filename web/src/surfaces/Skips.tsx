@@ -1,10 +1,10 @@
 import { useState, type ReactNode } from "react";
 import { useSkips, useSkipSplit } from "../api/queries";
-import type { MomentClass, SkipProfile, Skips as SkipsData, SkipSplit } from "../api/types";
+import type { MomentClass, PlayOutcome, SkipProfile, Skips as SkipsData, SkipSplit } from "../api/types";
 import { songPath } from "../app/paths";
-import { DitherBars } from "../charts/Dither";
 import { ContextRates, contextRates } from "../charts/ContextRates";
-import { CLASS_LABELS, contextPhrase, fmtInt, fmtPct } from "../lib/format";
+import { RateMeter } from "../charts/RateMeter";
+import { CLASS_LABELS, contextPhrase, fmtInt, fmtPct, OUTCOME_LABELS } from "../lib/format";
 import { useRange, type Range } from "../lib/range";
 import { AppLink } from "../ui/AppLink";
 import { Artwork } from "../ui/Artwork";
@@ -12,56 +12,44 @@ import { Button } from "../ui/Button";
 import { cx } from "../ui/cx";
 import { SkipForwardIcon } from "../ui/icons";
 import { SECTIONS, Section, dimWhile } from "../ui/Page";
+import { Stat } from "../ui/Stat";
 import { RangePicker } from "../ui/RangePicker";
 import { RowSkeleton } from "../ui/Rows";
 import { TabList, TabsRoot } from "../ui/Segmented";
 import { ChartSkeleton, Skeleton } from "../ui/Skeleton";
 import { SongContext, SongMenu } from "../ui/SongMenu";
-import { Stat } from "../ui/Stat";
 import { EmptyState, ErrorState } from "../ui/States";
 import { StartSessionButton } from "../ui/StartSessionButton";
 import { PatternsFrame } from "./PatternsFrame";
 
-const CLASSES: MomentClass[] = ["wrong_moment", "keeper", "mixed", "dislike"];
+const CLASSES: MomentClass[] = ["wrong_moment", "keeper", "mixed", "skipped_everywhere"];
 const CLASS_LINE: Record<MomentClass, string> = {
   wrong_moment: "Played through in one context, skipped in another.",
   keeper: "Skipped on fewer than 1 in 4 plays.",
   mixed: "Skipped often, with no clear context.",
-  dislike: "Skipped on 3 in 4 plays or more, in every context.",
+  skipped_everywhere: "Skipped on 3 in 4 plays or more, in every context.",
 };
+const OUTCOMES: PlayOutcome[] = ["through", "early", "midway", "interrupted"];
 const PAGE = 25;
 
-function Figures({ summary }: { summary: SkipsData["summary"] }) {
-  return (
-    <div className="flex flex-wrap gap-x-12 gap-y-6">
-      <Stat item={{ id: "rate", label: "Plays skipped", value: fmtPct(summary.skipRate) }} />
-      {summary.skips > 0 && <Stat item={{ id: "quick", label: "Skips in the first 5 seconds", value: fmtPct(summary.quickSkips / summary.skips) }} />}
-    </div>
-  );
-}
-
-function Positions({ positions }: { positions: SkipsData["positions"] }) {
-  const total = positions.reduce((sum, p) => sum + p.skips, 0);
-  if (total === 0) return null;
-  const first = positions[0]!.skips / total;
-  const last = positions[positions.length - 1]!.skips / total;
-  const rows = positions.map((p) => ({ part: `${Math.round(p.start * 100)}–${Math.round(p.end * 100)}%`, skips: p.skips }));
+function Endings({ summary }: { summary: SkipsData["summary"] }) {
+  const known = OUTCOMES.reduce((sum, o) => sum + summary.outcomes[o], 0);
   return (
     <Section
-      title="Where in the song"
-      description={`${fmtPct(first)} of skips come in the first tenth of a song, ${fmtPct(last)} in the last tenth.`}
+      title="How plays end"
+      description={summary.skips > 0 ? `${fmtPct(summary.earlySkips / summary.skips)} of skips come in the first 30 seconds.` : undefined}
     >
-      <DitherBars
-        label="Skips by how far into the song they came"
-        rows={rows}
-        xKey="part"
-        tipLabel="part"
-        valueKey="skips"
-        valueLabel="Skips"
-        xFormat={(v) => v}
-        format={(v) => fmtInt(Math.round(v))}
-        height={200}
-      />
+      <ul className="flex max-w-xl flex-col">
+        {OUTCOMES.map((o) => (
+          <li key={o} className="grid h-(--row-h-compact) grid-cols-[minmax(0,8rem)_minmax(0,1fr)_2.75rem] items-center gap-3">
+            <span className="truncate" title={`${fmtInt(summary.outcomes[o])} plays`}>
+              {OUTCOME_LABELS[o]}
+            </span>
+            <RateMeter rate={summary.outcomes[o] / known} />
+            <span className="text-right text-secondary tabular">{fmtPct(summary.outcomes[o] / known)}</span>
+          </li>
+        ))}
+      </ul>
     </Section>
   );
 }
@@ -119,7 +107,7 @@ function ClassSongs({ range, cls, onClass }: { range: Range; cls: MomentClass; o
           <RowSkeleton rows={6} />
         </div>
       ) : q.data.eligibleSongs === 0 ? (
-        <EmptyState size="inline" title="No song has enough plays with skip data" description={`A song needs ${q.data.params.minPlays} plays with skip data. A wider range adds more.`} />
+        <EmptyState size="inline" title="No song has enough plays with a known ending" description={`A song needs ${q.data.params.minPlays} of them. A wider range adds more.`} />
       ) : (
         <TabsRoot
           value={cls}
@@ -188,15 +176,15 @@ function SkipsView({ range }: { range: Range }) {
     return (
       <EmptyState
         size="section"
-        title="No skip data in this range"
-        description="Skips come from the Spotify export and from plays encore saw live. Pick a range they cover."
+        title="No play in this range has a known ending"
+        description="Endings come from the Spotify export and from plays encore saw live. Pick a range they cover."
         action={<RangePicker />}
       />
     );
   return (
     <div className={cx(SECTIONS, dimWhile(q.isPlaceholderData))}>
-      <Figures summary={summary} />
-      <Positions positions={q.data.positions} />
+      <Stat item={{ id: "rate", label: "Plays skipped", value: fmtPct(summary.skipRate) }} />
+      <Endings summary={summary} />
       <ContextGroups profile={q.data.profile} plays={summary.plays} overall={summary.skipRate} />
       <ClassSongs range={range} cls={cls} onClass={setCls} />
     </div>

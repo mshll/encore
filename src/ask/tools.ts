@@ -3,7 +3,7 @@ import { artistPage, trackPage } from "../analytics/entities";
 import { overview } from "../analytics/overview";
 import { forgotten, onThisDay } from "../analytics/recall";
 import { search } from "../analytics/search";
-import { momentSplit } from "../analytics/skips";
+import { MOMENT_CLASSES, momentSplit } from "../analytics/skips";
 import { energyByHour, genreSeries, moodSeries } from "../analytics/tags";
 import { eras, topAlbums, topArtists, topTracks } from "../analytics/top";
 import { trips } from "../analytics/trips";
@@ -100,8 +100,8 @@ export function askTools(db: Db, { homeCountry, weekendDays }: { homeCountry?: s
     tool({
       name: "skip_split",
       description:
-        "Classify songs with 8+ plays with skip data as keeper, wrong_moment (finished in some contexts, skipped in others), dislike (skipped nearly everywhere) or mixed. A skip is not a dislike; use this before calling a song disliked.",
-      schema: z.strictObject({ ...range, class: z.enum(["keeper", "wrong_moment", "dislike", "mixed"]).optional(), limit: z.number().int().min(1).max(50).optional() }),
+        "Classify songs with 8+ plays with a known outcome as keeper, wrong_moment (played through in some contexts, skipped in others), skipped_everywhere or mixed. A skip is next pressed before the song's outro; leaving in the outro counts as played through, and going back or choosing another song is no skip. A skip is not a dislike, not even skipped_everywhere; use this before saying the owner avoids a song. Name a class to the owner in plain words, never by its id.",
+      schema: z.strictObject({ ...range, class: z.enum(MOMENT_CLASSES).optional(), limit: z.number().int().min(1).max(50).optional() }),
       run: ({ class: only, limit, ...r }) => {
         const split = momentSplit(db, { range: checkRange(r), minPlays: 8, minContextPlays: 5, limit: limit ?? 20, only, weekendDays });
         return { ...split, songs: split.songs.map((s) => ({ ...songBrief(s), class: s.class, bestContext: s.bestContext, worstContext: s.worstContext })) };

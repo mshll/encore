@@ -6,7 +6,7 @@ import type { Device, HistoryItem } from "../api/types";
 import { artistPath, songPath } from "../app/paths";
 import { useScrollElement } from "../app/Shell";
 import { useWidth } from "../charts/core";
-import { countryName, DEVICE_LABELS, fmtDuration, fmtInt, fmtTime } from "../lib/format";
+import { countryName, DEVICE_LABELS, fmtDuration, fmtInt, fmtTime, OUTCOME_LABELS } from "../lib/format";
 import { useRange } from "../lib/range";
 import { AppLink } from "../ui/AppLink";
 import { Artwork } from "../ui/Artwork";
@@ -28,6 +28,8 @@ type Line = { type: "day"; day: string } | { type: "play"; item: HistoryItem };
 
 const SOURCE_LABELS: Record<HistoryItem["source"], string> = { export: "From the export", api: "Recently played", live: "Watched live" };
 
+const skipLabel = (item: HistoryItem) => (item.outcome === "early" || item.outcome === "midway" ? OUTCOME_LABELS[item.outcome] : null);
+
 const dayHeading = new Intl.DateTimeFormat("en-GB", { weekday: "long", day: "numeric", month: "long", year: "numeric", timeZone: "UTC" });
 
 const COLUMNS: Column[] = [
@@ -37,7 +39,7 @@ const COLUMNS: Column[] = [
   { id: "artist", label: "Artist", width: "minmax(0,2fr)" },
   { id: "album", label: "Album", width: "minmax(0,2fr)", from: "xl" },
   { id: "played", label: "Played", width: "56px", align: "end" },
-  { id: "skipped", label: "Skipped", width: "64px", from: "lg", srLabel: true },
+  { id: "ending", label: "Ending", width: "112px", from: "lg", srLabel: true },
   { id: "where", label: "Device", width: "minmax(0,1.2fr)", from: "lg" },
   { id: "actions", label: "Actions", width: "60px", srLabel: true },
 ];
@@ -46,7 +48,7 @@ function useFilters() {
   const [params, setParams] = useSearchParams();
   const filters: HistoryFilters = {
     q: params.get("q") ?? undefined,
-    skipped: (params.get("skipped") as "true" | "false" | null) ?? undefined,
+    outcome: params.get("outcome") ?? undefined,
     device: params.get("device") ?? undefined,
     artist: params.get("artist") ?? undefined,
     songKey: params.get("songKey") ?? undefined,
@@ -101,7 +103,7 @@ function DesktopRow({ item, timezone, columns, style, home }: { item: HistoryIte
     artist: <ArtistName item={item} />,
     album: <span className="truncate text-secondary">{item.album}</span>,
     played: <span className="tabular">{fmtDuration(item.msPlayed)}</span>,
-    skipped: item.skipped ? <span className="text-secondary">Skipped</span> : null,
+    ending: skipLabel(item) && <span className="text-secondary">{skipLabel(item)}</span>,
     where: <span className="truncate text-secondary">{where(item, home)}</span>,
     actions: song ? (
       <span className="flex justify-end can-hover:opacity-0 transition-opacity duration-150 group-hover:opacity-100 group-focus-within:opacity-100 has-[[data-popup-open]]:opacity-100">
@@ -140,7 +142,7 @@ function PhoneRow({ item, timezone }: { item: HistoryItem; timezone: string }) {
       </span>
       <span className="pointer-events-none flex shrink-0 flex-col items-end text-caption tabular">
         <span>{fmtTime(item.ts, timezone)}</span>
-        <span className="text-secondary">{item.skipped ? "Skipped" : fmtDuration(item.msPlayed)}</span>
+        <span className="text-secondary">{skipLabel(item) ?? fmtDuration(item.msPlayed)}</span>
       </span>
     </div>
   );
@@ -153,10 +155,10 @@ function PhoneRow({ item, timezone }: { item: HistoryItem; timezone: string }) {
   );
 }
 
-const SKIPPED_OPTIONS = [
-  { value: "all", label: "All plays" },
-  { value: "true", label: "Skipped" },
-  { value: "false", label: "Played through" },
+const ENDING_OPTIONS = [
+  { value: "all", label: "Any ending" },
+  { value: "early,midway", label: "Skipped" },
+  ...(["early", "midway", "through", "interrupted"] as const).map((o) => ({ value: o, label: OUTCOME_LABELS[o] })),
 ];
 const DEVICE_OPTIONS = [{ value: "all", label: "All devices" }, ...(Object.keys(DEVICE_LABELS) as Device[]).map((d) => ({ value: d, label: DEVICE_LABELS[d] }))];
 const SOURCE_OPTIONS = [{ value: "all", label: "All sources" }, ...Object.entries(SOURCE_LABELS).map(([value, label]) => ({ value, label }))];
@@ -166,7 +168,7 @@ function Toolbar({ filters, setFilters }: { filters: HistoryFilters; setFilters:
     <div className="flex flex-col gap-2 md:flex-row md:items-center">
       <SearchField label="Search plays" placeholder="Song, artist or album…" value={filters.q ?? ""} onChange={(v) => setFilters({ q: v.trim() || undefined })} />
       <div className="-mx-(--gutter) flex gap-2 overflow-x-auto px-(--gutter) no-scrollbar md:mx-0 md:px-0">
-        <Select label="Skipped" value={filters.skipped ?? "all"} options={SKIPPED_OPTIONS} onChange={(v) => setFilters({ skipped: v === "all" ? undefined : (v as "true" | "false") })} />
+        <Select label="Ending" value={filters.outcome ?? "all"} options={ENDING_OPTIONS} onChange={(v) => setFilters({ outcome: v === "all" ? undefined : v })} />
         <Select label="Device" value={filters.device ?? "all"} options={DEVICE_OPTIONS} onChange={(v) => setFilters({ device: v === "all" ? undefined : v })} />
         <Select label="Source" value={filters.source ?? "all"} options={SOURCE_OPTIONS} onChange={(v) => setFilters({ source: v === "all" ? undefined : v })} />
       </div>
@@ -224,7 +226,7 @@ export function Plays() {
 
   const total = q.data?.pages[0]?.total;
   const scoped = filters.artist ?? filters.songKey;
-  const filtered = Boolean(filters.q || filters.skipped || filters.device || filters.source || scoped);
+  const filtered = Boolean(filters.q || filters.outcome || filters.device || filters.source || scoped);
   const firstUse = lifetime.data?.plays === 0;
 
   return (
@@ -257,7 +259,7 @@ export function Plays() {
                 description={filtered ? "Clear the search or filters, or pick a wider range." : "Pick a wider range to see plays."}
                 action={
                   filtered && (
-                    <Button size="sm" onClick={() => setFilters({ q: undefined, skipped: undefined, device: undefined, source: undefined, artist: undefined, songKey: undefined })}>
+                    <Button size="sm" onClick={() => setFilters({ q: undefined, outcome: undefined, device: undefined, source: undefined, artist: undefined, songKey: undefined })}>
                       Clear filters
                     </Button>
                   )

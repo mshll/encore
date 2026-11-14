@@ -1,7 +1,7 @@
 import { eq, sql, type SQL } from "drizzle-orm";
 import type { Db } from "../db/client";
 import { tracks } from "../db/schema";
-import { hours, MS, MUSIC, musicWhere, periodExpr, type Period, type Range, songStatsSql, songWithStats, STATS, stats, type SongRow, type StatsRow, withArtistImages } from "./common";
+import { hours, LISTEN, MS, MUSIC, musicWhere, periodExpr, type Period, type Range, songStatsSql, songWithStats, STATS, stats, type SongRow, type StatsRow, withArtistImages } from "./common";
 import { classify, skipProfile, type ContextDimension, type ContextStat } from "./skips";
 
 type EntityParams = { range: Range; period: Period; weekendDays: readonly number[] };
@@ -10,7 +10,7 @@ function base(db: Db, where: SQL, { period, weekendDays }: Pick<EntityParams, "p
   const totals = db.all<StatsRow>(sql`select ${STATS} from ${MUSIC} where ${where}`)[0]!;
   if (totals.plays === 0) return null;
   const timeline = db.all<{ period: string; ms: number; plays: number; listens: number }>(sql`
-    select ${periodExpr(period)} as period, sum(${MS}) as ms, count(*) as plays, sum(p.source = 'api' or p.ms_played >= 30000) as listens
+    select ${periodExpr(period)} as period, sum(${MS}) as ms, count(*) as plays, sum(${LISTEN}) as listens
     from ${MUSIC} where ${where} group by period order by period`);
   return {
     totals: stats(totals),

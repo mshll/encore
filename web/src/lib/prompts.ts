@@ -38,7 +38,7 @@ export function useSetStarters(): string[] {
     h.peak && `My ${h.peak.artist} era around ${h.peak.month}, but the songs I haven’t played since`,
     h.busiest && `${h.busiest.day} at ${h.busiest.hour}: what usually works then, plus a few songs I’ve never heard`,
     h.trip && `Back on the ${h.trip.places} trip in ${h.trip.when}, an hour of it`,
-    h.faded && `Bring back ${h.faded.artist}, the songs I finished most`,
+    h.faded && `Bring back ${h.faded.artist}, the songs I played through most`,
   ].filter((s): s is string => Boolean(s));
 }
 

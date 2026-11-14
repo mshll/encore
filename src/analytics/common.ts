@@ -5,20 +5,72 @@ export type Range = { from?: string; to?: string };
 export type Period = "day" | "week" | "month" | "year";
 
 export const MS = sql.raw("coalesce(p.ms_played, t.duration_ms, 0)");
-const LISTEN_SQL = "(p.source = 'api' or p.ms_played >= 30000)";
-const SKIPPED_SQL = "(p.skipped = 1)";
-const SKIP_KNOWN_SQL = "(p.skipped is not null)";
-/** A play counts as played through when it reached this share of the track's length. */
-export const FINISHED_SHARE = 0.8;
-const FINISH_KNOWN_SQL = "(p.ms_played is not null and t.duration_ms > 0)";
-const FINISHED_SQL = `(${FINISH_KNOWN_SQL} and p.ms_played >= ${FINISHED_SHARE} * t.duration_ms)`;
 
-/** The shared play outcomes over `plays p join tracks t`. Use these instead of writing a listen, skip or played-through test inline. */
+/**
+ * How a track play ended. A skip is the owner pressing next before the outro: `early` within the first
+ * `earlyMs`, `midway` after it. Leaving within the outro counts as played through, and going back, choosing
+ * another song, closing the app or an error is no skip at all (`interrupted`).
+ */
+export const PLAY_OUTCOMES = ["through", "early", "midway", "interrupted"] as const;
+export type PlayOutcome = (typeof PLAY_OUTCOMES)[number];
+export const SKIP_OUTCOMES: readonly PlayOutcome[] = ["early", "midway"];
+
+/** The outro starts at `throughShare` of the song or `outroMs` before its end, whichever comes first, but never inside the first `earlyMs`. */
+export const OUTCOME_RULES = { throughShare: 0.8, outroMs: 30_000, earlyMs: 30_000 } as const;
+/** @deprecated The share half of the outro rule; use `OUTCOME_RULES`. */
+export const FINISHED_SHARE = OUTCOME_RULES.throughShare;
+
+const { throughShare, outroMs, earlyMs } = OUTCOME_RULES;
+
+export type OutcomeInput = { reasonEnd: string | null; msPlayed: number | null; durationMs: number | null };
+
+/**
+ * The single definition of a play's outcome; `OUTCOME` is the same rule in SQL. Null when it can't be told:
+ * no reason recorded (recently-played API rows), or next pressed after `earlyMs` on a song of unknown length.
+ */
+export function playOutcome({ reasonEnd, msPlayed, durationMs }: OutcomeInput): PlayOutcome | null {
+  if (reasonEnd === "trackdone") return "through";
+  if (reasonEnd === null) return null;
+  if (reasonEnd !== "fwdbtn") return "interrupted";
+  if (msPlayed === null) return null;
+  const known = durationMs !== null && durationMs > 0;
+  if (known && msPlayed >= Math.min(throughShare * durationMs, Math.max(earlyMs, durationMs - outroMs))) return "through";
+  if (msPlayed < earlyMs) return "early";
+  return known ? "midway" : null;
+}
+
+/** The outcomes in the words Claude and the owner read. */
+export const OUTCOME_WORDS: Record<PlayOutcome, string> = { through: "played through", early: "skipped early", midway: "skipped midway", interrupted: "interrupted" };
+
+export const isSkip = (outcome: PlayOutcome | null): boolean => outcome !== null && SKIP_OUTCOMES.includes(outcome);
+
+const OUTCOME_SQL = `(case
+  when p.reason_end = 'trackdone' then 'through'
+  when p.reason_end is null then null
+  when p.reason_end != 'fwdbtn' then 'interrupted'
+  when p.ms_played is null then null
+  when t.duration_ms > 0 and p.ms_played >= min(${throughShare} * t.duration_ms, max(${earlyMs}, t.duration_ms - ${outroMs})) then 'through'
+  when p.ms_played < ${earlyMs} then 'early'
+  when t.duration_ms > 0 then 'midway'
+end)`;
+const LISTEN_SQL = "(p.source = 'api' or p.ms_played >= 30000)";
+const SKIPPED_SQL = `(${OUTCOME_SQL} in ('early', 'midway'))`;
+const SKIP_KNOWN_SQL = `(${OUTCOME_SQL} is not null)`;
+const EARLY_SQL = `(${OUTCOME_SQL} = 'early')`;
+const FINISHED_SQL = `(${OUTCOME_SQL} = 'through')`;
+
+/**
+ * The shared play outcomes over `plays p join tracks t`. Use these instead of writing a listen, skip or played-through test inline.
+ * `SKIPPED` is a skip by `playOutcome` (early or midway), `FINISHED` played through, and `SKIP_KNOWN`/`FINISH_KNOWN` a play
+ * whose outcome is known: the denominator of both rates.
+ */
+export const OUTCOME = sql.raw(OUTCOME_SQL);
 export const LISTEN = sql.raw(LISTEN_SQL);
 export const SKIPPED = sql.raw(SKIPPED_SQL);
 export const SKIP_KNOWN = sql.raw(SKIP_KNOWN_SQL);
+export const EARLY_SKIP = sql.raw(EARLY_SQL);
 export const FINISHED = sql.raw(FINISHED_SQL);
-export const FINISH_KNOWN = sql.raw(FINISH_KNOWN_SQL);
+export const FINISH_KNOWN = SKIP_KNOWN;
 export const MUSIC = sql.raw("plays p join tracks t on t.uri = p.track_uri");
 export const HOUR_BUCKET = sql.raw(
   "case when p.hour < 6 then 'night' when p.hour < 12 then 'morning' when p.hour < 18 then 'afternoon' else 'evening' end",
@@ -41,7 +93,7 @@ export const STATS = sql.raw(`count(*) as plays,
   coalesce(sum(coalesce(p.ms_played, t.duration_ms, 0)), 0) as ms,
   coalesce(sum(${SKIPPED_SQL}), 0) as skips,
   coalesce(sum(${SKIP_KNOWN_SQL}), 0) as skip_known,
-  coalesce(sum(${SKIPPED_SQL} and p.ms_played < 5000), 0) as quick_skips,
+  coalesce(sum(${EARLY_SQL}), 0) as early_skips,
   min(p.ts) as first_ts,
   max(p.ts) as last_ts`);
 
@@ -51,7 +103,7 @@ export type StatsRow = {
   ms: number;
   skips: number;
   skip_known: number;
-  quick_skips: number;
+  early_skips: number;
   first_ts: number | null;
   last_ts: number | null;
 };
@@ -81,7 +133,7 @@ export function periodExpr(period: Period): SQL {
 
 export function songStatsSql(where: SQL): SQL {
   return sql`
-    select song_key, uri, name, artist, album, album_art_url, plays, listens, ms, skips, skip_known, quick_skips, first_ts, last_ts from (
+    select song_key, uri, name, artist, album, album_art_url, plays, listens, ms, skips, skip_known, early_skips, first_ts, last_ts from (
       select t.song_key, t.uri, t.name, t.artist, t.album,
         max(max(t.album_art_url)) over w as album_art_url,
         row_number() over w_rank as rn,
@@ -90,7 +142,7 @@ export function songStatsSql(where: SQL): SQL {
         sum(coalesce(sum(coalesce(p.ms_played, t.duration_ms, 0)), 0)) over w as ms,
         sum(coalesce(sum(${SKIPPED}), 0)) over w as skips,
         sum(coalesce(sum(${SKIP_KNOWN}), 0)) over w as skip_known,
-        sum(coalesce(sum(${SKIPPED} and p.ms_played < 5000), 0)) over w as quick_skips,
+        sum(coalesce(sum(${EARLY_SKIP}), 0)) over w as early_skips,
         min(min(p.ts)) over w as first_ts,
         max(max(p.ts)) over w as last_ts
       from ${MUSIC}
@@ -120,7 +172,7 @@ export function stats(row: StatsRow) {
     listens: row.listens,
     skips: row.skips,
     skipRate: rate(row.skips, row.skip_known),
-    quickSkips: row.quick_skips,
+    earlySkips: row.early_skips,
     firstPlayed: iso(row.first_ts),
     lastPlayed: iso(row.last_ts),
   };

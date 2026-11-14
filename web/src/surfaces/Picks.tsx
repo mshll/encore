@@ -62,7 +62,7 @@ function outcomeLine(p: Pick): string | null {
   const o = p.outcome;
   if (o.plays === 0) return o.inLibrary ? "In your library, not played yet" : null;
   return [
-    `Played ${plural(o.plays, "time", "times")} on ${plural(o.playDays, "day", "days")}, ${fmtInt(o.finished)} finished`,
+    `Played ${plural(o.plays, "time", "times")} on ${plural(o.playDays, "day", "days")}, ${fmtInt(o.finished)} played through`,
     o.inLibrary && "in your library",
     o.hit && "kept",
   ]
@@ -220,7 +220,7 @@ function HowPicksDid({ stats }: { stats: PicksWeek["stats"] }) {
     <Section title="How picks did">
       <p className="max-w-[60ch] text-body text-pretty">
         Of {plural(stats.settled, "pick", "picks")} older than a week, you played {fmtInt(stats.played)} and kept{" "}
-        <span className="font-medium tabular">{fmtInt(stats.hits)}</span> ({fmtPct(stats.hitRate)}): finished, then played again on another day or saved.
+        <span className="font-medium tabular">{fmtInt(stats.hits)}</span> ({fmtPct(stats.hitRate)}): played through, then played again on another day or saved.
       </p>
     </Section>
   );

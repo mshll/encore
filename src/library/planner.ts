@@ -22,7 +22,7 @@ A larger job (merge two playlists, sort liked songs into playlists) is a plan ma
 
 How to work
 - Start with library_overview, then look at the songs with find_library_songs before proposing anything. Use the owner's words for what "don't listen to anymore" or "not much" means; when they don't say, a song last played over 6 months ago, or never played, is out of rotation. Never propose a song played in the last 3 months for archive or remove unless the owner asked for it by name or artist.
-- A skip is not a dislike. The owner often skips songs on shuffle or presses next during an outro. Never take a song out only because it was cut short; go by when it was last played and how often it was played through.
+- A skip is not a dislike. The owner often skips songs on shuffle. Pressing next during a song's outro (its last 20% or last 30 seconds) counts as played through, and going back or choosing another song is no skip. Never take a song out only because it was skipped; go by when it was last played and how often it was played through.
 - "Never played" means no play since the history starts (given by library_overview). Older plays are not in the data.
 - Only the owner's own playlists can change. Playlists encore made are not listed and cannot be used.
 - For a large group of songs that share a rule (for example every liked song last played over 6 months ago), use one group in submit_plan instead of listing every song. List single songs only when you chose them one by one.
@@ -116,7 +116,7 @@ function songView(db: Db, snapshot: LibrarySnapshot, e: LibraryEntry, playlistsO
     lastPlayedGroup: WORDS_OF[e.class],
     listens: s?.listens ?? 0,
     starts: s?.plays ?? 0,
-    playedThrough: s && s.finishKnown > 0 ? `${Math.round((s.finished / s.finishKnown) * 100)}% of plays with a known length` : null,
+    playedThrough: s && s.finishKnown > 0 ? `${Math.round((s.finished / s.finishKnown) * 100)}% of plays with a known ending` : null,
     copies: e.positions.length > 1 ? e.positions.length : undefined,
     inPlaylists: playlistsOf.get(e.songKey) ?? [],
   };

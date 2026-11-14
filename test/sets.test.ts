@@ -1,6 +1,5 @@
 import { describe, expect, test } from "bun:test";
 import { Llm } from "../src/llm/client";
-import { outcomeOf } from "../src/library/outcomes";
 import { songKey } from "../src/plays/song";
 import { refreshSetOutcomes } from "../src/sets/outcomes";
 import { saveSetPlaylist } from "../src/sets/playlist";
@@ -341,19 +340,18 @@ describe("playlist cover", () => {
 });
 
 describe("outcome tracking", () => {
-  test("export rows use Spotify's skip flag and play share", () => {
-    const base = { ts: 0, day: "2026-01-01", source: "export" as const, reason_end: null, duration_ms: 200_000, prev_ts: null };
-    expect(outcomeOf({ ...base, ms_played: 200_000, skipped: 1 })).toBe("skipped");
-    expect(outcomeOf({ ...base, ms_played: 10_000, skipped: 0, reason_end: "trackdone" })).toBe("finished");
-    expect(outcomeOf({ ...base, ms_played: 170_000, skipped: 0 })).toBe("finished");
-    expect(outcomeOf({ ...base, ms_played: 100_000, skipped: 0 })).toBe("skipped");
-  });
+  test("a play left in its outro counts for a set item as played through, not skipped", async () => {
+    const env = await builtSet();
+    await saveSetPlaylist(env.db, env.ctx.spotify, env.result.set.id, env.ctx.now());
+    seed(
+      env.db,
+      [track("g1", "Good News", "Mac Miller", "Circles", { durationMs: 200_000 })],
+      [play("2026-02-05T10:00:00Z", uri("g1"), 185_000, { skipped: true, reasonEnd: "fwdbtn" })],
+    );
 
-  test("API rows compare the gap since the previous play with the duration", () => {
-    const base = { day: "2026-01-01", source: "api" as const, ms_played: null, skipped: null, reason_end: null, duration_ms: 200_000 };
-    expect(outcomeOf({ ...base, ts: 200_000, prev_ts: 0 })).toBe("finished");
-    expect(outcomeOf({ ...base, ts: 30_000, prev_ts: 0 })).toBe("skipped");
-    expect(outcomeOf({ ...base, ts: 30_000, prev_ts: null })).toBe("unknown");
+    refreshSetOutcomes(env.db);
+
+    expect(getSet(env.db, env.result.set.id)!.items[1]!.outcome).toMatchObject({ plays: 1, finished: 1, skipped: 0 });
   });
 
   test("set items count plays after the set was saved", async () => {
@@ -365,7 +363,7 @@ describe("outcome tracking", () => {
       [
         play("2026-01-15T10:00:00Z", uri("g1"), 200_000),
         play("2026-02-05T10:00:00Z", uri("g1"), 200_000),
-        play("2026-02-06T10:00:00Z", uri("g1"), 5_000, { skipped: true }),
+        play("2026-02-06T10:00:00Z", uri("g1"), 5_000, { skipped: true, reasonEnd: "fwdbtn" }),
       ],
     );
     refreshSetOutcomes(env.db);
