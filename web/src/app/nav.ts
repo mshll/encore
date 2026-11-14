@@ -3,15 +3,18 @@ import {
   Airplane01Icon,
   Clock01Icon,
   CompassIcon,
+  Delete02Icon,
   Home01Icon,
   HourglassIcon,
   Layers01Icon,
   LeftToRightListBulletIcon,
+  NewReleasesIcon,
   NextIcon,
+  Radio01Icon,
   Settings01Icon,
 } from "../ui/Icon";
 
-export type NavItem = { path: string; label: string; icon: IconSvgElement; match: (location: string) => boolean };
+export type NavItem = { path: string; label: string; icon: IconSvgElement; match: (location: string) => boolean; group?: string };
 
 const exact = (path: string) => (location: string) => location === path;
 const prefix =
@@ -27,8 +30,13 @@ export const NAV: NavItem[] = [
   { path: "/forgotten", label: "Forgotten", icon: HourglassIcon, match: exact("/forgotten") },
   { path: "/trips", label: "Trips", icon: Airplane01Icon, match: exact("/trips") },
   { path: "/history", label: "History", icon: LeftToRightListBulletIcon, match: exact("/history") },
-  { path: "/explore", label: "Explore", icon: CompassIcon, match: prefix("/explore", "/artist", "/album", "/song") },
+  { path: "/explore", label: "Explore", icon: CompassIcon, match: prefix("/explore", "/artist", "/album", "/song"), group: "Play" },
+  { path: "/session", label: "Session", icon: Radio01Icon, match: exact("/session"), group: "Play" },
+  { path: "/releases", label: "Releases", icon: NewReleasesIcon, match: exact("/releases"), group: "Play" },
+  { path: "/cleanup", label: "Cleanup", icon: Delete02Icon, match: exact("/cleanup"), group: "Library" },
 ];
+
+export const NAV_GROUPS = [...new Set(NAV.map((n) => n.group))].map((group) => ({ group, items: NAV.filter((n) => n.group === group) }));
 
 export const SETTINGS: NavItem = { path: "/settings", label: "Settings", icon: Settings01Icon, match: exact("/settings") };
 

@@ -1,10 +1,10 @@
-import { useDeferredValue } from "react";
+import { useDeferredValue, useState } from "react";
 import { useSearchParams } from "wouter";
 import { useSearch, useTopAlbums, useTopArtists } from "../api/queries";
 import { fmtHours, fmtInt } from "../lib/format";
 import { useDesktop } from "../lib/useMedia";
 import { albumPath, artistPath, songPath } from "../ui/AppLink";
-import { Shelf, ShelfSkeleton, Tile } from "../ui/Shelf";
+import { Shelf, ShelfSkeleton, ShowAll, Tile } from "../ui/Shelf";
 import { Page, Section } from "../ui/Page";
 import { Row, RowList } from "../ui/rows";
 import { Empty, ErrorState, SkeletonRows } from "../ui/states";
@@ -26,6 +26,7 @@ function Results({ q }: { q: string }) {
                 key={s.songKey}
                 to={songPath(s.songKey)}
                 art={{ src: s.albumArtUrl }}
+                song={{ uri: s.uri, name: s.name }}
                 title={s.name}
                 subtitle={s.artist}
                 value={`${fmtInt(s.listens)} listens`}
@@ -68,24 +69,26 @@ function Results({ q }: { q: string }) {
 function StartingPoints() {
   const artists = useTopArtists({}, 20);
   const albums = useTopAlbums({}, 20);
+  const [expanded, setExpanded] = useState<"artists" | "albums" | null>(null);
+  const toggle = (shelf: "artists" | "albums") => () => setExpanded((e) => (e === shelf ? null : shelf));
   return (
     <>
-      <Section title="Most played artists">
+      <Section title="Most played artists" aside={<ShowAll expanded={expanded === "artists"} onToggle={toggle("artists")} />}>
         {!artists.data ? (
           <ShelfSkeleton round />
         ) : (
-          <Shelf label="Most played artists">
+          <Shelf label="Most played artists" expanded={expanded === "artists"}>
             {artists.data.items.map((a) => (
               <Tile key={a.artist} to={artistPath(a.artist)} src={a.imageUrl} round title={a.artist} subtitle={fmtHours(a.hours)} />
             ))}
           </Shelf>
         )}
       </Section>
-      <Section title="Most played albums">
+      <Section title="Most played albums" aside={<ShowAll expanded={expanded === "albums"} onToggle={toggle("albums")} />}>
         {!albums.data ? (
           <ShelfSkeleton />
         ) : (
-          <Shelf label="Most played albums">
+          <Shelf label="Most played albums" expanded={expanded === "albums"}>
             {albums.data.items.map((a) => (
               <Tile key={`${a.artist}|${a.album}`} to={albumPath(a.artist, a.album)} src={a.albumArtUrl} title={a.album} subtitle={a.artist} />
             ))}

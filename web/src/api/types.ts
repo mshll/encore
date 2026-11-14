@@ -54,6 +54,8 @@ export type Status = {
   import: null | { lastImportAt: string | null; result: ImportResult | null };
   tags: { songs: number; tagged: number; coverage: number | null };
   plays: { plays: number; music: number; api: number };
+  live: { watch: JobStatus; radar: JobStatus; library: JobStatus };
+  integrations: { discord: boolean; mcp: boolean };
 };
 
 export type JobStatus = {
@@ -200,7 +202,92 @@ export type HistoryItem = {
   reasonEnd: string | null;
   device: Device;
   country: string | null;
-  source: "export" | "api";
+  source: "export" | "api" | "live";
 };
 
 export type History = { total: number; limit: number; offset: number; items: HistoryItem[] };
+
+export type TrackRef = { uri: string; name: string; artist: string; albumArtUrl: string | null };
+export type TrackIdentity = TrackRef & { songKey: string; album: string | null };
+
+export type PlayerNow = {
+  playing: boolean;
+  track: (TrackRef & { album: string | null; durationMs: number }) | null;
+  progressMs: number | null;
+  shuffle: boolean | null;
+  device: { name: string; type: string } | null;
+  contextUri: string | null;
+  fetchedAt: string;
+};
+
+export type PlayerQueue = { current: TrackRef | null; queue: TrackRef[] };
+
+export type DjSession = {
+  id: number;
+  status: "active" | "stopped" | "ended";
+  playlistUri: string;
+  position: number;
+  current: string | null;
+  upcoming: string[];
+  played: { uri: string; outcome: "finished" | "skipped" | string }[];
+  skipStreak: number;
+  replans: number;
+  startedAt: string;
+  endedAt: string | null;
+  endReason: "stopped" | "replaced" | "left_playlist" | null;
+};
+
+export type Release = {
+  id: string;
+  uri: string;
+  url: string;
+  name: string;
+  artist: string;
+  artistId: string;
+  albumType: "album" | "single" | "compilation";
+  releaseDate: string;
+  totalTracks: number;
+  imageUrl: string | null;
+  isNew: boolean;
+  seen: boolean;
+  firstSeenAt: string;
+};
+
+export type Radar = { artists: number; withId: number; checkedRecently: number; unseenNew: number; lastRunAt: string | null; items: Release[] };
+
+export type CleanupKind = "saved_never_played" | "saved_dislike" | "playlist_skipped" | "playlist_duplicate";
+
+export type CleanupProposal = {
+  id: number;
+  kind: CleanupKind;
+  playlistId: string | null;
+  uri: string;
+  status: "open" | "dismissed" | "applied";
+  updatedAt: string;
+  evidence: {
+    name: string;
+    artist: string;
+    albumArtUrl: string | null;
+    songKey: string | null;
+    plays: number;
+    listens: number;
+    skips: number;
+    skipRate: number | null;
+    lastPlayed: string | null;
+    savedAt?: string | null;
+    class?: MomentClass | null;
+    playlistName?: string;
+    duplicates?: { position: number; uri: string }[];
+  };
+};
+
+export type Cleanup = {
+  counts: Record<CleanupKind, number>;
+  library: { savedTracks: number; playlists: number; syncing: boolean; lastSyncAt: string | null };
+  total: number;
+  limit: number;
+  offset: number;
+  items: CleanupProposal[];
+};
+
+export type CleanupBatch = { id: number; proposalIds: number[]; actions: number; appliedAt: string; undoneAt: string | null };

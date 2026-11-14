@@ -5,6 +5,7 @@ import { songPath } from "../ui/AppLink";
 import { Page, Section } from "../ui/Page";
 import { Row, RowList } from "../ui/rows";
 import { Segmented } from "../ui/Segmented";
+import { StartSessionButton } from "../ui/SongMenu";
 import { Empty, ErrorState, SkeletonRows } from "../ui/states";
 
 const WINDOWS = [
@@ -19,7 +20,7 @@ export default function Forgotten() {
   const q = useForgotten(Number(days));
   const label = WINDOWS.find((w) => w.value === days)!.label;
   return (
-    <Page title="Forgotten">
+    <Page title="Forgotten" actions={q.data && !q.isPlaceholderData && <StartSessionButton uris={q.data.items.map((s) => s.uri)} />}>
       <Section>
         <p className="max-w-2xl text-body-lg text-secondary text-pretty">Songs you listened to at least 10 times and have not played since.</p>
         <Segmented label="Not played for" value={days} onChange={setDays} options={WINDOWS} className="md:self-start" />
@@ -38,6 +39,7 @@ export default function Forgotten() {
                 key={s.songKey}
                 to={songPath(s.songKey)}
                 art={{ src: s.albumArtUrl }}
+                song={{ uri: s.uri, name: s.name }}
                 title={s.name}
                 subtitle={s.artist}
                 value={`${fmtInt(s.listens)} listens`}

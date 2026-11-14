@@ -3,7 +3,15 @@ import { DEFAULT_TIMEZONE } from "../lib/dates";
 import type { Range } from "../lib/range";
 import { get } from "./client";
 import type {
+  Cleanup,
+  CleanupBatch,
+  CleanupKind,
+  DjSession,
   Energy,
+  PlayerNow,
+  PlayerQueue,
+  Radar,
+  TrackIdentity,
   AlbumPage,
   ArtistPage,
   AlbumStats,
@@ -81,6 +89,14 @@ export const useAlbumPage = (artist: string, album: string, range: Range, period
 
 export const useTrackPage = (songKey: string, range: Range, period: Period) => useQuery(ranged<TrackPage>("/api/entities/track", range, { songKey, period }));
 
+export const useTrackByUri = (uri: string | undefined) =>
+  useQuery({
+    queryKey: ["track-by-uri", uri],
+    queryFn: () => get<TrackPage>("/api/entities/track", { uri, period: "month" }),
+    enabled: Boolean(uri),
+    retry: false,
+  });
+
 export const useSearch = (q: string, limit = 8) =>
   useQuery({
     queryKey: ["search", q, limit],
@@ -89,7 +105,7 @@ export const useSearch = (q: string, limit = 8) =>
     placeholderData: keepPreviousData,
   });
 
-export type HistoryFilters = { q?: string; skipped?: "true" | "false"; device?: string; artist?: string; songKey?: string; country?: string };
+export type HistoryFilters = { q?: string; skipped?: "true" | "false"; device?: string; artist?: string; songKey?: string; country?: string; source?: string };
 
 export const HISTORY_PAGE = 200;
 
@@ -101,3 +117,46 @@ export const useHistory = (range: Range, filters: HistoryFilters) =>
     getNextPageParam: (last) => (last.offset + last.items.length < last.total ? last.offset + last.items.length : undefined),
     placeholderData: keepPreviousData,
   });
+
+export const usePlayerNow = () =>
+  useQuery({ queryKey: ["player", "now"], queryFn: () => get<PlayerNow>("/api/player/now"), refetchInterval: 5_000, staleTime: 0, retry: false });
+
+export const usePlayerQueue = (enabled: boolean) =>
+  useQuery({
+    queryKey: ["player", "queue"],
+    queryFn: () => get<PlayerQueue>("/api/player/queue"),
+    enabled,
+    refetchInterval: enabled ? 15_000 : false,
+    retry: false,
+  });
+
+export const useDj = () =>
+  useQuery({
+    queryKey: ["dj"],
+    queryFn: () => get<{ session: DjSession | null }>("/api/dj"),
+    refetchInterval: (q) => (q.state.data?.session?.status === "active" ? 5_000 : false),
+  });
+
+export const useTracks = (uris: string[]) =>
+  useQuery({
+    queryKey: ["tracks", uris],
+    queryFn: async () => {
+      const params = new URLSearchParams(uris.map((u) => ["uri", u]));
+      return get<{ items: TrackIdentity[] }>(`/api/tracks?${params}`);
+    },
+    enabled: uris.length > 0,
+    placeholderData: keepPreviousData,
+    staleTime: Infinity,
+  });
+
+export const useRadar = (status: "new" | "recent", days = 30) =>
+  useQuery({ queryKey: ["radar", status, days], queryFn: () => get<Radar>("/api/radar", { status, days, limit: 200 }) });
+
+export const useCleanup = (kind: CleanupKind | undefined, status: "open" | "dismissed" | "applied") =>
+  useQuery({
+    queryKey: ["cleanup", kind ?? null, status],
+    queryFn: () => get<Cleanup>("/api/cleanup", { kind, status, limit: 500 }),
+    placeholderData: keepPreviousData,
+  });
+
+export const useCleanupBatches = () => useQuery({ queryKey: ["cleanup", "batches"], queryFn: () => get<{ items: CleanupBatch[] }>("/api/cleanup/batches") });

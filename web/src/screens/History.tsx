@@ -10,9 +10,12 @@ import { AppLink, artistPath, songPath } from "../ui/AppLink";
 import { Cancel01Icon, Icon } from "../ui/Icon";
 import { Page } from "../ui/Page";
 import { Artwork } from "../ui/Artwork";
+import { SongContext, SongMenu } from "../ui/SongMenu";
 import { Empty, ErrorState, SkeletonRows } from "../ui/states";
 
 type Line = { type: "day"; day: string } | { type: "play"; item: HistoryItem };
+
+const SOURCE_LABELS: Record<HistoryItem["source"], string> = { export: "From export", api: "Recently played", live: "Watched live" };
 
 const dayHeading = new Intl.DateTimeFormat("en-GB", { weekday: "long", day: "numeric", month: "long", year: "numeric", timeZone: "UTC" });
 
@@ -24,6 +27,7 @@ function useFilters() {
     device: params.get("device") ?? undefined,
     artist: params.get("artist") ?? undefined,
     songKey: params.get("songKey") ?? undefined,
+    source: params.get("source") ?? undefined,
   };
   const set = (patch: Partial<HistoryFilters>) =>
     setParams(
@@ -71,8 +75,8 @@ function PlayRow({ item, timezone, desktop }: { item: HistoryItem; timezone: str
     </AppLink>
   ) : null;
   const skipped = item.skipped ? "Skipped" : "";
-  if (!desktop)
-    return (
+  if (!desktop) {
+    const row = (
       <div className="flex h-full items-center gap-3">
         <Artwork src={item.albumArtUrl} name={item.name ?? undefined} className="size-11" />
         <span className="flex min-w-0 flex-1 flex-col">
@@ -85,8 +89,16 @@ function PlayRow({ item, timezone, desktop }: { item: HistoryItem; timezone: str
         </span>
       </div>
     );
+    return item.kind === "track" && item.uri && item.name ? (
+      <SongContext song={{ uri: item.uri, name: item.name }} element="div" className="h-full">
+        {row}
+      </SongContext>
+    ) : (
+      row
+    );
+  }
   return (
-    <div className="grid h-full grid-cols-[48px_40px_minmax(0,3fr)_minmax(0,2fr)_minmax(0,2fr)_56px_72px_minmax(0,1.2fr)] items-center gap-4 text-body-sm">
+    <div className="group grid h-full grid-cols-[48px_40px_minmax(0,3fr)_minmax(0,2fr)_minmax(0,2fr)_56px_72px_minmax(0,1.2fr)_32px] items-center gap-4 text-body-sm">
       <span className="text-secondary tabular">{time}</span>
       <Artwork src={item.albumArtUrl} name={item.name ?? undefined} className="size-10" />
       <span className="flex min-w-0">{title}</span>
@@ -95,9 +107,22 @@ function PlayRow({ item, timezone, desktop }: { item: HistoryItem; timezone: str
       <span className="text-right tabular">{played}</span>
       <span className="text-secondary">{skipped}</span>
       <span className="truncate text-secondary">
-        {item.device === "unknown" ? "" : DEVICE_LABELS[item.device]}
-        {item.country && item.country !== "KW" ? `, ${countryName(item.country)}` : ""}
+        {[
+          item.device === "unknown" ? null : DEVICE_LABELS[item.device],
+          item.country && item.country !== "KW" ? countryName(item.country) : null,
+          item.source === "live" ? "live" : null,
+        ]
+          .filter(Boolean)
+          .join(", ")}
       </span>
+      {item.kind === "track" && item.uri && item.name ? (
+        <SongMenu
+          song={{ uri: item.uri, name: item.name }}
+          className="md:opacity-0 md:group-hover:opacity-100 md:focus-visible:opacity-100 md:data-[popup-open]:opacity-100"
+        />
+      ) : (
+        <span />
+      )}
     </div>
   );
 }
@@ -166,8 +191,24 @@ export default function History() {
                   ))}
                 </select>
               </label>
+              <label className="field md:w-44">
+                <span className="sr-only">Source</span>
+                <select value={filters.source ?? ""} onChange={(e) => setFilters({ source: e.target.value || undefined })}>
+                  <option value="">All sources</option>
+                  {Object.entries(SOURCE_LABELS).map(([value, label]) => (
+                    <option key={value} value={value}>
+                      {label}
+                    </option>
+                  ))}
+                </select>
+              </label>
             </div>
           </div>
+          {filters.source === "live" && (
+            <p className="max-w-2xl text-body-sm text-secondary text-pretty">
+              Live plays are watched as they happen. Play time is what encore saw, and a skip means the song changed before 90% of it.
+            </p>
+          )}
           <div className="flex min-h-8 flex-wrap items-center gap-x-3 gap-y-1 text-body-sm text-secondary">
             {total !== undefined && <span className="tabular">{fmtInt(total)} plays</span>}
             {scoped && (
@@ -188,7 +229,7 @@ export default function History() {
         ) : (
           <div ref={listRef} className={q.isPlaceholderData ? "opacity-60" : ""}>
             {desktop && (
-              <div className="grid h-9 grid-cols-[48px_40px_minmax(0,3fr)_minmax(0,2fr)_minmax(0,2fr)_56px_72px_minmax(0,1.2fr)] items-center gap-4 border-b-[0.5px] border-border-strong text-caption-lg font-medium text-secondary">
+              <div className="grid h-9 grid-cols-[48px_40px_minmax(0,3fr)_minmax(0,2fr)_minmax(0,2fr)_56px_72px_minmax(0,1.2fr)_32px] items-center gap-4 border-b-[0.5px] border-border-strong text-caption-lg font-medium text-secondary">
                 <span>Time</span>
                 <span />
                 <span>Song</span>
@@ -197,6 +238,7 @@ export default function History() {
                 <span className="text-right">Played</span>
                 <span />
                 <span>Device</span>
+                <span />
               </div>
             )}
             <div className="relative" style={{ height: virtualizer.getTotalSize() }}>

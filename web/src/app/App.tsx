@@ -15,6 +15,9 @@ const History = lazy(() => import("../screens/History"));
 const Explore = lazy(() => import("../screens/Explore"));
 const Entity = lazy(() => import("../screens/Entity"));
 const Settings = lazy(() => import("../screens/Settings"));
+const Session = lazy(() => import("../screens/Session"));
+const Releases = lazy(() => import("../screens/Releases"));
+const Cleanup = lazy(() => import("../screens/Cleanup"));
 
 export function App() {
   const session = useSession();
@@ -41,6 +44,9 @@ export function App() {
           <Route path="/artist/:name">{(p) => <Entity kind="artist" artist={decodeURIComponent(p.name)} />}</Route>
           <Route path="/album/:artist/:album">{(p) => <Entity kind="album" artist={decodeURIComponent(p.artist)} album={decodeURIComponent(p.album)} />}</Route>
           <Route path="/song/:songKey">{(p) => <Entity kind="song" songKey={decodeURIComponent(p.songKey)} />}</Route>
+          <Route path="/session" component={Session} />
+          <Route path="/releases" component={Releases} />
+          <Route path="/cleanup" component={Cleanup} />
           <Route path="/settings" component={Settings} />
           <Route>
             <div className="safe-x pt-10 md:px-10">

@@ -132,6 +132,7 @@ function CellDetail({ cell, range }: { cell: Cell; range: Range }) {
                     to={songPath(s.songKey)}
                     rank={i + 1}
                     art={{ src: s.albumArtUrl }}
+                    song={{ uri: s.uri, name: s.name }}
                     title={s.name}
                     subtitle={s.artist}
                     value={fmtHours(s.hours)}

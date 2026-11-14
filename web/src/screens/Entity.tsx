@@ -10,6 +10,7 @@ import { CLASS_LABELS, contextPhrase, fmtDate, fmtHours, fmtInt, fmtPct, hoursPa
 import { periodFor, useRange, type Range } from "../lib/range";
 import { fillPeriods } from "../lib/series";
 import { AppLink, albumPath, artistPath, songPath } from "../ui/AppLink";
+import { PlayButtons } from "../ui/SongMenu";
 import { EntityHero } from "../ui/Artwork";
 import { Page, Section } from "../ui/Page";
 import { MoreButton, Row, RowList } from "../ui/rows";
@@ -115,6 +116,7 @@ function SongList({ title, songs, showAlbum }: { title: string; songs: Song[]; s
             to={songPath(s.songKey)}
             rank={i + 1}
             art={{ src: s.albumArtUrl }}
+            song={{ uri: s.uri, name: s.name }}
             title={s.name}
             subtitle={showAlbum ? (s.album ?? undefined) : s.artist}
             value={fmtHours(s.hours)}
@@ -164,7 +166,12 @@ function ArtistView({ name }: { name: string }) {
       docTitle={name}
       hero={(controls) => <EntityHero art={q.data?.imageUrl} round name={name} controls={controls} />}
       ranged
-      actions={<SeeHistory query={`artist=${encodeURIComponent(name)}`} />}
+      actions={
+        <>
+          <PlayButtons uris={q.data?.tracks.map((t) => t.uri) ?? []} />
+          <SeeHistory query={`artist=${encodeURIComponent(name)}`} />
+        </>
+      }
     >
       {q.isError ? (
         <Missing error={q.error} retry={() => q.refetch()} what="artist" />
@@ -223,6 +230,7 @@ function AlbumView({ artist, album }: { artist: string; album: string }) {
       )}
       docTitle={album}
       ranged
+      actions={<PlayButtons uris={q.data?.tracks.map((t) => t.uri) ?? []} />}
     >
       {q.isError ? (
         <Missing error={q.error} retry={() => q.refetch()} what="album" />
@@ -281,7 +289,12 @@ function SongView({ songKey }: { songKey: string }) {
       }
       docTitle={d?.name}
       ranged
-      actions={<SeeHistory query={`songKey=${encodeURIComponent(songKey)}`} />}
+      actions={
+        <>
+          {d && <PlayButtons uris={[d.uri]} queue={{ uri: d.uri, name: d.name }} />}
+          <SeeHistory query={`songKey=${encodeURIComponent(songKey)}`} />
+        </>
+      }
     >
       {q.isError ? (
         <Missing error={q.error} retry={() => q.refetch()} what="song" />

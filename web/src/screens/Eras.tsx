@@ -10,6 +10,7 @@ import { useDesktop } from "../lib/useMedia";
 import { AppLink, artistPath, songPath } from "../ui/AppLink";
 import { Artwork } from "../ui/Artwork";
 import { Page, Section } from "../ui/Page";
+import { StartSessionButton } from "../ui/SongMenu";
 import { Row, RowList } from "../ui/rows";
 import { Empty, ErrorState, Skeleton, SkeletonRows } from "../ui/states";
 
@@ -55,6 +56,7 @@ function ArtistDetail({ era, month, range }: { era: ErasData["artists"][number];
               to={songPath(s.songKey)}
               rank={i + 1}
               art={{ src: s.albumArtUrl }}
+              song={{ uri: s.uri, name: s.name }}
               title={s.name}
               subtitle={s.album ?? undefined}
               value={fmtHours(s.hours)}
@@ -72,7 +74,10 @@ function MonthDetail({ month }: { month: string }) {
   const artists = useTopArtists(range, 5);
   return (
     <div className="flex flex-col gap-4">
-      <h3 className="text-body-lg font-semibold">{fmtMonthLong(month)}</h3>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h3 className="text-body-lg font-semibold">{fmtMonthLong(month)}</h3>
+        {songs.data && <StartSessionButton uris={songs.data.items.map((s) => s.uri)} />}
+      </div>
       <div className="grid gap-8 md:grid-cols-2">
         <div className="flex flex-col gap-1">
           <p className="text-body-sm font-medium text-secondary">Top songs</p>
@@ -88,6 +93,7 @@ function MonthDetail({ month }: { month: string }) {
                   to={songPath(s.songKey)}
                   rank={i + 1}
                   art={{ src: s.albumArtUrl }}
+                  song={{ uri: s.uri, name: s.name }}
                   title={s.name}
                   subtitle={s.artist}
                   value={fmtHours(s.hours)}

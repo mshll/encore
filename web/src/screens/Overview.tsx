@@ -11,8 +11,9 @@ import { fillPeriods } from "../lib/series";
 import { AppLink, artistPath, songPath } from "../ui/AppLink";
 import { Artwork } from "../ui/Artwork";
 import { Page, Section } from "../ui/Page";
+import { StartSessionButton } from "../ui/SongMenu";
 import { MoreButton, Row, RowList } from "../ui/rows";
-import { Shelf, ShelfSkeleton, Tile } from "../ui/Shelf";
+import { Shelf, ShelfSkeleton, ShowAll, Tile } from "../ui/Shelf";
 import { Empty, ErrorState, Skeleton, SkeletonRows } from "../ui/states";
 
 function Headline() {
@@ -104,8 +105,9 @@ function OverTime() {
 function TopArtists() {
   const { range } = useRange();
   const q = useTopArtists(range, 20);
+  const [expanded, setExpanded] = useState(false);
   return (
-    <Section title="Top artists">
+    <Section title="Top artists" aside={q.data && q.data.items.length > 6 && <ShowAll expanded={expanded} onToggle={() => setExpanded((e) => !e)} />}>
       {q.isError ? (
         <ErrorState error={q.error} onRetry={() => q.refetch()} />
       ) : !q.data ? (
@@ -113,7 +115,7 @@ function TopArtists() {
       ) : q.data.items.length === 0 ? (
         <Empty title="No artists in this range" />
       ) : (
-        <Shelf label="Top artists" className={q.isPlaceholderData ? "opacity-60" : ""}>
+        <Shelf label="Top artists" expanded={expanded} className={q.isPlaceholderData ? "opacity-60" : ""}>
           {q.data.items.map((a, i) => (
             <Tile key={a.artist} to={artistPath(a.artist)} src={a.imageUrl} round rank={i + 1} title={a.artist} subtitle={fmtHours(a.hours)} />
           ))}
@@ -128,7 +130,7 @@ function TopSongs() {
   const [expanded, setExpanded] = useState(false);
   const q = useTopTracks(range, expanded ? 50 : 10);
   return (
-    <Section title="Top songs">
+    <Section title="Top songs" aside={q.data && <StartSessionButton uris={q.data.items.map((s) => s.uri)} />}>
       {q.isError ? (
         <ErrorState error={q.error} onRetry={() => q.refetch()} />
       ) : !q.data ? (
@@ -148,6 +150,7 @@ function TopSongs() {
                       to={songPath(s.songKey)}
                       rank={half * size + i + 1}
                       art={{ src: s.albumArtUrl }}
+                      song={{ uri: s.uri, name: s.name }}
                       title={s.name}
                       subtitle={s.artist}
                       value={fmtHours(s.hours)}
@@ -186,6 +189,7 @@ function OnThisDay() {
                   key={s.songKey}
                   to={songPath(s.songKey)}
                   art={{ src: s.albumArtUrl }}
+                  song={{ uri: s.uri, name: s.name }}
                   title={s.name}
                   subtitle={s.artist}
                   value={`${s.listens} ${s.listens === 1 ? "listen" : "listens"}`}

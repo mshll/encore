@@ -1,11 +1,14 @@
 import { Drawer } from "@base-ui/react/drawer";
-import { useEffect, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { useLocation, useSearchParams } from "wouter";
 import { AppLink } from "../ui/AppLink";
 import { Lockup } from "../ui/Brand";
 import { Cancel01Icon, Icon, MoreHorizontalIcon, Search01Icon } from "../ui/Icon";
+import { dismissToast, showToast, useToasts } from "../lib/toast";
+import { MiniPlayer } from "../player/MiniPlayer";
+import { NowPlaying } from "../player/NowPlaying";
 import { CommandPalette } from "./CommandPalette";
-import { NAV, SETTINGS, TAB_PATHS, type NavItem } from "./nav";
+import { NAV, NAV_GROUPS, SETTINGS, TAB_PATHS, type NavItem } from "./nav";
 
 function SidebarLink({ item, location }: { item: NavItem; location: string }) {
   const active = item.match(location);
@@ -42,9 +45,14 @@ function Sidebar({ location, onSearch }: { location: string; onSearch: () => voi
           <kbd className="kbd">K</kbd>
         </span>
       </button>
-      <nav aria-label="Main" className="flex flex-1 flex-col gap-0.5">
-        {NAV.map((item) => (
-          <SidebarLink key={item.path} item={item} location={location} />
+      <nav aria-label="Main" className="flex flex-1 flex-col gap-4 overflow-y-auto">
+        {NAV_GROUPS.map(({ group, items }) => (
+          <div key={group ?? "listening"} className="flex flex-col gap-0.5">
+            {group && <p className="px-2.5 pb-1 text-caption-lg font-medium text-tertiary">{group}</p>}
+            {items.map((item) => (
+              <SidebarLink key={item.path} item={item} location={location} />
+            ))}
+          </div>
         ))}
       </nav>
       <SidebarLink item={SETTINGS} location={location} />
@@ -110,19 +118,19 @@ function TabBar({ location }: { location: string }) {
   );
 }
 
-const SPOTIFY_NOTICES: Record<string, string> = {
-  connected: "Spotify connected.",
-  denied: "Spotify was not connected: access was declined.",
-  error: "Spotify could not be connected. Try again from Settings.",
+const SPOTIFY_NOTICES: Record<string, { message: string; tone: "info" | "problem" }> = {
+  connected: { message: "Spotify connected.", tone: "info" },
+  denied: { message: "Spotify was not connected: access was declined.", tone: "problem" },
+  error: { message: "Spotify could not be connected. Try again from Settings.", tone: "problem" },
 };
 
-function SpotifyNotice() {
+function useSpotifyNotice() {
   const [params, setParams] = useSearchParams();
-  const [message, setMessage] = useState<string | null>(null);
   const result = params.get("spotify");
   useEffect(() => {
     if (!result) return;
-    setMessage(SPOTIFY_NOTICES[result] ?? null);
+    const notice = SPOTIFY_NOTICES[result];
+    if (notice) showToast(notice.message, notice.tone);
     setParams(
       (prev) => {
         const out = new URLSearchParams(prev);
@@ -132,26 +140,29 @@ function SpotifyNotice() {
       { replace: true },
     );
   }, [result, setParams]);
-  useEffect(() => {
-    if (!message) return;
-    const t = setTimeout(() => setMessage(null), 6000);
-    return () => clearTimeout(t);
-  }, [message]);
-  if (!message) return null;
+}
+
+function Toaster() {
+  const toasts = useToasts();
   return (
-    <div
-      role="status"
-      className="fixed inset-x-4 bottom-[calc(72px+env(safe-area-inset-bottom))] z-50 flex items-center justify-between gap-3 rounded-xl bg-standout px-4 py-3 text-on-standout shadow-large transition-[opacity,transform] duration-200 ease-(--ease-out-quint) starting:translate-y-2 starting:opacity-0 md:right-6 md:bottom-6 md:left-auto md:w-96"
-    >
-      <span>{message}</span>
-      <button
-        type="button"
-        className="btn btn-icon -mr-2 [--btn-bg:transparent] [--btn-fg:var(--fg-on-standout)]"
-        aria-label="Dismiss"
-        onClick={() => setMessage(null)}
-      >
-        <Icon icon={Cancel01Icon} />
-      </button>
+    <div className="pointer-events-none fixed inset-x-4 top-[max(12px,env(safe-area-inset-top))] z-[70] flex flex-col items-center gap-2 md:top-auto md:right-6 md:bottom-6 md:left-auto md:w-96 md:items-stretch">
+      {toasts.map((t) => (
+        <div
+          key={t.id}
+          role={t.tone === "problem" ? "alert" : "status"}
+          className="pointer-events-auto flex w-full items-center justify-between gap-3 rounded-xl bg-standout px-4 py-3 text-on-standout shadow-large transition-[opacity,transform] duration-200 ease-(--ease-out-quint) starting:-translate-y-2 starting:opacity-0 md:starting:translate-y-2"
+        >
+          <span className="text-pretty">{t.message}</span>
+          <button
+            type="button"
+            className="btn btn-icon -mr-2 shrink-0 [--btn-bg:transparent] [--btn-fg:var(--fg-on-standout)]"
+            aria-label="Dismiss"
+            onClick={() => dismissToast(t.id)}
+          >
+            <Icon icon={Cancel01Icon} />
+          </button>
+        </div>
+      ))}
     </div>
   );
 }
@@ -159,6 +170,9 @@ function SpotifyNotice() {
 export function Shell({ children }: { children: ReactNode }) {
   const [location] = useLocation();
   const [paletteOpen, setPaletteOpen] = useState(false);
+  const [player, setPlayer] = useState<{ open: boolean; section?: "queue" }>({ open: false });
+  const setPlayerOpen = useCallback((open: boolean) => setPlayer((p) => ({ ...p, open })), []);
+  useSpotifyNotice();
   return (
     <div className="flex min-h-dvh">
       <a
@@ -171,13 +185,15 @@ export function Shell({ children }: { children: ReactNode }) {
       <main
         id="main"
         tabIndex={-1}
-        className="min-w-0 flex-1 bg-canvas pb-[calc(56px+env(safe-area-inset-bottom))] outline-none md:my-2 md:mr-2 md:min-h-[calc(100dvh-16px)] md:rounded-2xl md:pb-0 md:shadow-border"
+        className="flex min-w-0 flex-1 flex-col bg-canvas pb-[calc(56px+env(safe-area-inset-bottom))] outline-none md:my-2 md:mr-2 md:min-h-[calc(100dvh-16px)] md:rounded-2xl md:pb-0 md:shadow-border"
       >
-        {children}
+        <div className="flex-1">{children}</div>
+        <MiniPlayer onOpen={(section) => setPlayer({ open: true, section })} />
       </main>
+      <NowPlaying open={player.open} section={player.section} onOpenChange={setPlayerOpen} />
       <TabBar location={location} />
       <CommandPalette open={paletteOpen} onOpenChange={setPaletteOpen} />
-      <SpotifyNotice />
+      <Toaster />
     </div>
   );
 }

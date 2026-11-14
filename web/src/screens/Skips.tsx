@@ -5,6 +5,7 @@ import { SegmentedBar } from "../charts/SegmentedBar";
 import { CLASS_LABELS, contextPhrase, fmtInt, fmtPct } from "../lib/format";
 import { useRange } from "../lib/range";
 import { Artwork } from "../ui/Artwork";
+import { SongContext, SongMenu, StartSessionButton } from "../ui/SongMenu";
 import { AppLink, artistPath, songPath } from "../ui/AppLink";
 import { Page, Section } from "../ui/Page";
 import { Row, RowList } from "../ui/rows";
@@ -44,10 +45,10 @@ function SplitSongs({ cls }: { cls: MomentClass }) {
     <div className={`flex flex-col gap-2 ${q.isPlaceholderData ? "opacity-60" : ""}`}>
       <ol className="flex flex-col [&>li+li]:border-t-[0.5px] [&>li+li]:border-border-default">
         {songs.slice(0, limit).map((s) => (
-          <li key={s.songKey}>
+          <SongContext key={s.songKey} song={{ uri: s.uri, name: s.name }} className="group flex items-start gap-1">
             <AppLink
               to={songPath(s.songKey)}
-              className="-mx-2 flex items-start gap-3 rounded-lg px-2 py-2.5 transition-colors duration-150 hover-fine:bg-transparent-hover"
+              className="-mx-2 flex min-w-0 flex-1 items-start gap-3 rounded-lg px-2 py-2.5 transition-colors duration-150 hover-fine:bg-transparent-hover"
             >
               <Artwork src={s.albumArtUrl} name={s.name} className="size-11 md:size-10" />
               <span className="flex min-w-0 flex-1 flex-col">
@@ -65,14 +66,21 @@ function SplitSongs({ cls }: { cls: MomentClass }) {
                 <span className="text-body-sm text-secondary tabular">{fmtInt(s.plays)} plays</span>
               </span>
             </AppLink>
-          </li>
+            <SongMenu
+              song={{ uri: s.uri, name: s.name }}
+              className="mt-2 max-md:hidden md:opacity-0 md:group-hover:opacity-100 md:focus-visible:opacity-100 md:data-[popup-open]:opacity-100"
+            />
+          </SongContext>
         ))}
       </ol>
-      {songs.length > limit && (
-        <button type="button" className="btn btn-transparent -ml-3 self-start" onClick={() => setLimit((l) => l + 50)}>
-          Show more
-        </button>
-      )}
+      <div className="flex flex-wrap items-center gap-3">
+        {songs.length > limit && (
+          <button type="button" className="btn btn-transparent -ml-3" onClick={() => setLimit((l) => l + 50)}>
+            Show more
+          </button>
+        )}
+        {cls === "keeper" && <StartSessionButton uris={songs.map((s) => s.uri)} />}
+      </div>
     </div>
   );
 }
@@ -149,6 +157,7 @@ function SkipLists() {
                     key={s.songKey}
                     to={songPath(s.songKey)}
                     art={{ src: s.albumArtUrl }}
+                    song={{ uri: s.uri, name: s.name }}
                     title={s.name}
                     subtitle={s.artist}
                     value={`${fmtInt(s.plays)} plays`}
@@ -162,6 +171,7 @@ function SkipLists() {
                     key={s.songKey}
                     to={songPath(s.songKey)}
                     art={{ src: s.albumArtUrl }}
+                    song={{ uri: s.uri, name: s.name }}
                     title={s.name}
                     subtitle={s.artist}
                     value={`${fmtInt(s.quickSkips)} times`}
@@ -189,6 +199,7 @@ function SkipLists() {
                     key={s.songKey}
                     to={songPath(s.songKey)}
                     art={{ src: s.albumArtUrl }}
+                    song={{ uri: s.uri, name: s.name }}
                     title={s.name}
                     subtitle={s.artist}
                     value={`${fmtPct(s.skipRate)} skipped`}

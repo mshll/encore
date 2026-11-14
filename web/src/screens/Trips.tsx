@@ -4,6 +4,7 @@ import { countryName, fmtDayRange, fmtHours, fmtInt } from "../lib/format";
 import { useRange } from "../lib/range";
 import { songPath } from "../ui/AppLink";
 import { Page } from "../ui/Page";
+import { StartSessionButton } from "../ui/SongMenu";
 import { Row, RowList } from "../ui/rows";
 import { Empty, ErrorState, SkeletonRows } from "../ui/states";
 
@@ -21,6 +22,7 @@ function TripBlock({ trip }: { trip: Trip }) {
         <p className="text-body-sm text-secondary tabular">
           {trip.days} {trip.days === 1 ? "day" : "days"}, {fmtInt(trip.plays)} plays, {fmtHours(trip.hours)}
         </p>
+        <StartSessionButton uris={trip.topTracks.map((s) => s.uri)} className="mt-2 self-start" />
       </div>
       {trip.topTracks.length > 0 && (
         <RowList>
@@ -29,6 +31,7 @@ function TripBlock({ trip }: { trip: Trip }) {
               key={s.songKey}
               to={songPath(s.songKey)}
               art={{ src: s.albumArtUrl }}
+              song={{ uri: s.uri, name: s.name }}
               title={s.name}
               subtitle={s.artist}
               value={`${s.plays} ${s.plays === 1 ? "play" : "plays"}`}

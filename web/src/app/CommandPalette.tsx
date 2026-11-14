@@ -5,9 +5,13 @@ import { useLocation } from "wouter";
 import { useSearch } from "../api/queries";
 import { fmtHours } from "../lib/format";
 import { albumPath, artistPath, songPath, useRangeHref } from "../ui/AppLink";
+import { usePlayback } from "../player/playback";
+import type { SongRef } from "../ui/SongMenu";
 import { NAV, SETTINGS } from "./nav";
 
-type Entry = { id: string; group: string; label: string; detail?: string; path: string; art?: { src: string | null; round?: boolean } };
+type Entry = { id: string; group: string; label: string; detail?: string; path: string; art?: { src: string | null; round?: boolean }; song?: SongRef };
+
+const MOD = typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform) ? "⌘" : "Ctrl";
 
 export function CommandPalette({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
   const [query, setQuery] = useState("");
@@ -51,6 +55,7 @@ export function CommandPalette({ open, onOpenChange }: { open: boolean; onOpenCh
         detail: s.artist,
         path: songPath(s.songKey),
         art: { src: s.albumArtUrl },
+        song: { uri: s.uri, name: s.name },
       })),
       ...albums.map((a) => ({
         id: `album:${a.artist}|${a.album}`,
@@ -66,12 +71,17 @@ export function CommandPalette({ open, onOpenChange }: { open: boolean; onOpenCh
 
   useEffect(() => setActive(0), [deferred]);
 
-  const go = (entry: Entry | undefined) => {
-    if (!entry) return;
-    navigate(href(entry.path));
+  const close = () => {
     onOpenChange(false);
     setQuery("");
   };
+  const go = (entry: Entry | undefined) => {
+    if (!entry) return;
+    navigate(href(entry.path));
+    close();
+  };
+  const playback = usePlayback();
+  const activeSong = entries[active]?.song;
 
   return (
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
@@ -90,6 +100,13 @@ export function CommandPalette({ open, onOpenChange }: { open: boolean; onOpenCh
               } else if (e.key === "ArrowUp") {
                 e.preventDefault();
                 setActive((i) => Math.max(i - 1, 0));
+              } else if (e.key === "Enter" && activeSong && (e.metaKey || e.ctrlKey)) {
+                e.preventDefault();
+                playback.play([activeSong.uri]);
+                close();
+              } else if (e.key === "Enter" && activeSong && e.shiftKey) {
+                e.preventDefault();
+                playback.queue(activeSong.uri, activeSong.name);
               } else if (e.key === "Enter") {
                 e.preventDefault();
                 go(entries[active]);
@@ -122,6 +139,16 @@ export function CommandPalette({ open, onOpenChange }: { open: boolean; onOpenCh
               </div>
             ))}
           </div>
+          {activeSong && (
+            <p className="flex gap-4 border-t-[0.5px] border-border-strong px-4 py-2 text-caption-lg text-secondary">
+              <span>
+                <kbd className="kbd">{MOD} ↵</kbd> Play
+              </span>
+              <span>
+                <kbd className="kbd">⇧ ↵</kbd> Add to queue
+              </span>
+            </p>
+          )}
         </Dialog.Popup>
       </Dialog.Portal>
     </Dialog.Root>

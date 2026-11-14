@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { AppLink } from "./AppLink";
 import { Artwork } from "./Artwork";
+import { SongContext, SongMenu, type SongRef } from "./SongMenu";
 
 export function RowList({ children, className = "" }: { children: ReactNode; className?: string }) {
   return <ol className={`flex flex-col [&>li+li]:border-t-[0.5px] [&>li+li]:border-border-default ${className}`}>{children}</ol>;
@@ -14,8 +15,10 @@ export function Row({
   value,
   detail,
   art,
+  song,
 }: {
   to?: string;
+  song?: SongRef;
   rank?: number;
   art?: { src: string | null | undefined; name?: string; round?: boolean };
   title: ReactNode;
@@ -39,17 +42,20 @@ export function Row({
       )}
     </>
   );
-  const cls = "-mx-2 flex min-h-14 items-center gap-3 rounded-lg px-2 py-1.5";
+  const cls = "-mx-2 flex min-h-14 flex-1 min-w-0 items-center gap-3 rounded-lg px-2 py-1.5";
+  const main = to ? (
+    <AppLink to={to} className={`${cls} transition-colors duration-150 hover-fine:bg-transparent-hover`}>
+      {body}
+    </AppLink>
+  ) : (
+    <div className={cls}>{body}</div>
+  );
+  if (!song) return <li className="flex">{main}</li>;
   return (
-    <li>
-      {to ? (
-        <AppLink to={to} className={`${cls} transition-colors duration-150 hover-fine:bg-transparent-hover`}>
-          {body}
-        </AppLink>
-      ) : (
-        <div className={cls}>{body}</div>
-      )}
-    </li>
+    <SongContext song={song} className="group flex items-center gap-1">
+      {main}
+      <SongMenu song={song} className="max-md:hidden md:opacity-0 md:group-hover:opacity-100 md:focus-visible:opacity-100 md:data-[popup-open]:opacity-100" />
+    </SongContext>
   );
 }
 

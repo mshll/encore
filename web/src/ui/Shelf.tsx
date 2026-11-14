@@ -3,15 +3,25 @@ import { AppLink } from "./AppLink";
 import { Artwork } from "./Artwork";
 import { Skeleton } from "./states";
 
-const TRACK =
-  "-mx-4 flex snap-x snap-mandatory scroll-px-4 gap-4 overflow-x-auto px-4 pb-2 [scrollbar-width:none] md:-mx-10 md:scroll-px-10 md:gap-5 md:px-10 [&::-webkit-scrollbar]:hidden";
+const PHONE_TRACK = "-mx-4 flex snap-x snap-mandatory scroll-px-4 gap-4 overflow-x-auto px-4 pb-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden";
+const DESKTOP_TRACK = "md:-mx-10 md:scroll-px-10 md:gap-5 md:px-10";
+const DESKTOP_GRID = "md:mx-0 md:grid md:grid-cols-[repeat(auto-fill,minmax(168px,1fr))] md:gap-x-5 md:gap-y-6 md:overflow-visible md:px-0 md:[&>li]:w-auto";
+const TRACK = `${PHONE_TRACK} ${DESKTOP_TRACK}`;
 const WIDTH = "w-[136px] md:w-[168px]";
 
-export function Shelf({ label, children, className = "" }: { label: string; children: ReactNode; className?: string }) {
+export function Shelf({ label, children, expanded = false, className = "" }: { label: string; children: ReactNode; expanded?: boolean; className?: string }) {
   return (
-    <ol aria-label={label} className={`${TRACK} ${className}`}>
+    <ol aria-label={label} className={`${PHONE_TRACK} ${expanded ? DESKTOP_GRID : DESKTOP_TRACK} ${className}`}>
       {children}
     </ol>
+  );
+}
+
+export function ShowAll({ expanded, onToggle }: { expanded: boolean; onToggle: () => void }) {
+  return (
+    <button type="button" className="btn btn-transparent -mr-3 max-md:hidden" aria-expanded={expanded} onClick={onToggle}>
+      {expanded ? "Show less" : "Show all"}
+    </button>
   );
 }
 

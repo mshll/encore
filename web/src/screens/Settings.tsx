@@ -3,7 +3,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useRef, useState, type ReactNode } from "react";
 import { request } from "../api/client";
 import { useStatus } from "../api/queries";
-import type { ImportResult, Status } from "../api/types";
+import type { ImportResult, JobStatus, Status } from "../api/types";
 import { fmtAgo, fmtDate, fmtInt, fmtPct } from "../lib/format";
 import { useTheme, type ThemePref } from "../lib/theme";
 import { Page } from "../ui/Page";
@@ -188,8 +188,44 @@ function Library({ status }: { status: Status }) {
         <p className="text-body-sm text-secondary">{fmtPct(status.tags.coverage)} of songs tagged.</p>
       )}
       <p className="text-secondary tabular">
-        {fmtInt(status.plays.plays)} plays stored, {fmtInt(status.plays.api)} logged live from Spotify.
+        {fmtInt(status.plays.plays)} plays stored, {fmtInt(status.plays.api)} from Spotify’s recently played.
       </p>
+    </Block>
+  );
+}
+
+function jobLine(job: JobStatus, verb: string) {
+  if (job.lastError) return { text: `Failed ${job.lastRunAt ? fmtAgo(job.lastRunAt) : ""}: ${job.lastError}`, problem: true };
+  if (!job.lastSuccessAt) return { text: "Not run yet", problem: false };
+  return { text: `${verb} ${fmtAgo(job.lastSuccessAt)}`, problem: false };
+}
+
+function libraryLine(job: JobStatus) {
+  const cursor = job.lastResult?.cursor as { phase?: string; completedAt?: number } | undefined;
+  if (!job.lastError && cursor?.phase && cursor.phase !== "idle") return { text: "Syncing now", problem: false };
+  if (!job.lastError && cursor?.completedAt) return { text: `Synced ${fmtAgo(new Date(cursor.completedAt).toISOString())}`, problem: false };
+  return jobLine(job, "Checked");
+}
+
+function Jobs({ status }: { status: Status }) {
+  const playing = status.live.watch.lastResult?.playing === true;
+  const rows = [
+    { name: "Playback watcher", ...jobLine(status.live.watch, playing ? "Playing, checked" : "Checked") },
+    { name: "Release radar", ...jobLine(status.live.radar, "Checked") },
+    { name: "Library sync", ...libraryLine(status.live.library) },
+    { name: "Discord", text: status.integrations.discord ? "Connected" : "Not set up", problem: false },
+    { name: "MCP", text: status.integrations.mcp ? "Enabled" : "Off", problem: false },
+  ];
+  return (
+    <Block title="Background">
+      <dl className="grid max-w-xl grid-cols-[minmax(0,auto)_minmax(0,1fr)] gap-x-6 gap-y-2">
+        {rows.map((r) => (
+          <div key={r.name} className="contents">
+            <dt className="text-secondary">{r.name}</dt>
+            <dd className={r.problem ? "text-danger" : ""}>{r.text}</dd>
+          </div>
+        ))}
+      </dl>
     </Block>
   );
 }
@@ -259,6 +295,7 @@ export default function Settings() {
           <Spotify status={q.data} />
           <Import status={q.data} />
           <Library status={q.data} />
+          <Jobs status={q.data} />
           <Account />
         </div>
       )}
