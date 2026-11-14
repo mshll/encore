@@ -122,7 +122,7 @@ export function CommandPalette({ open, onOpenChange }: { open: boolean; onOpenCh
             />
             <Dialog.Close className="text-body-sm text-secondary md:hidden">Cancel</Dialog.Close>
           </div>
-          <div ref={listRef} id="palette-list" role="listbox" aria-label="Results" data-crop className="flex-1 overflow-y-auto p-1.5">
+          <div ref={listRef} id="palette-list" role="listbox" aria-label="Results" tabIndex={-1} data-crop className="flex-1 overflow-y-auto p-1.5">
             {entries.length === 0 && <p className="px-3 py-8 text-center text-secondary">{search.isFetching ? "Searching…" : `Nothing matches “${deferred}”.`}</p>}
             {entries.map((entry, i) => (
               <div key={entry.id}>
