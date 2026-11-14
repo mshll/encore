@@ -80,7 +80,7 @@ Contract between the server and the web UI. All routes are JSON over HTTP on the
   "skips": 64, "skipRate": 0.386, "quickSkips": 40, "firstPlayed": "...", "lastPlayed": "..." }
 ```
 
-`albumArtUrl` is `null` until the track is enriched.
+`albumArtUrl` is `null` until art is found. The `art` job fills it from Spotify's public oEmbed endpoint (300 px); track enrichment replaces it with the Web API's largest album image (640 px).
 
 `SkipProfile`: an object keyed by context dimension; each value is a list sorted by plays, descending.
 
@@ -109,8 +109,12 @@ Contract between the server and the web UI. All routes are JSON over HTTP on the
   },
   "poll": { "lastRunAt": "...", "lastSuccessAt": "...", "lastError": null,
             "lastResult": { "received": 50, "inserted": 2, "skippedCoveredByExport": 0 } },
-  "enrichment": { "total": 5472, "enriched": 14, "failed": 0, "lastRunAt": "...", "lastSuccessAt": "...", "lastError": null,
-                  "lastResult": { "attempted": 3, "enriched": 3, "failed": 0 } },
+  "enrichment": { "total": 5472, "enriched": 14, "failed": 0, "withArt": 812,
+                  "artists": { "total": 310, "fetched": 120, "withImage": 118 },
+                  "lastRunAt": "...", "lastSuccessAt": "...", "lastError": null,
+                  "lastResult": { "tracks": 1, "artists": 0, "failed": 0 },
+                  "art": { "lastRunAt": "...", "lastSuccessAt": "...", "lastError": null,
+                           "lastResult": { "attempted": 1, "found": 1, "failed": 0 } } },
   "import": { "lastImportAt": "...", "result": { "...": "ImportResult, see POST /api/import" } },
   "tags": { "songs": 5055, "tagged": 0, "coverage": 0 },
   "plays": { "plays": 39821, "music": 39338, "api": 10 }
@@ -121,7 +125,9 @@ Contract between the server and the web UI. All routes are JSON over HTTP on the
 - `spotify.paused` is `null` or `{ "reason": "rate_limited" | "quota_exceeded", "until": "...", "since": "..." }`. While paused, the server makes no Spotify calls. `quota_exceeded` means the developer-account quota was hit; the pause lasts `QUOTA_BACKOFF_HOURS` (default 12) and the UI should show it.
 - `missingScopes`: scopes the server asks for that the stored grant lacks. Reconnect to grant them.
 - `poll.lastResult` may be `{ "skipped": "spotify_not_connected" }`. `lastRunAt`/`lastSuccessAt` are `null` before the first run. `import` is `null` before the first import.
-- `enrichment.failed`: tracks given up on after 3 failed lookups.
+- `enrichment.failed`: tracks given up on after 3 failed lookups. `withArt`: tracks with an `albumArtUrl`.
+- Enrichment makes one Web API call per run (`ENRICH_INTERVAL_SECONDS`, default 4): `GET /tracks/{id}` (metadata, 640 px art, artist ids) or `GET /artists/{id}` (image), whichever pending item has more listens. `enrichment.art` is the oEmbed job (`ART_INTERVAL_SECONDS`, default 4). Both stop while `spotify.paused` is set.
+- `enrichment.artists`: artists learned from enriched or polled tracks; `fetched` had their `GET /artists/{id}` lookup.
 
 ## Auth (passkeys)
 

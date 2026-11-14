@@ -37,7 +37,8 @@ All config is env vars, validated at boot (the process exits on invalid values).
 | `HOME_COUNTRY` | `KW` | For trips |
 | `JOBS_ENABLED` | `true` | Poller and enrichment |
 | `POLL_INTERVAL_SECONDS` | `300` | Min 60 |
-| `ENRICH_INTERVAL_SECONDS`, `ENRICH_BATCH_SIZE` | `60`, `3` | Track lookups per run |
+| `ENRICH_INTERVAL_SECONDS`, `ENRICH_BATCH_SIZE` | `4`, `1` | Seconds between enrichment runs, Web API calls per run (track or artist, most listened first) |
+| `ART_INTERVAL_SECONDS` | `4` | Seconds between album-art lookups through Spotify's public oEmbed endpoint |
 | `QUOTA_BACKOFF_HOURS` | `12` | Pause after a Spotify `QUOTA_EXCEEDED` 429 |
 
 ## Import
@@ -62,7 +63,7 @@ src/config.ts            env validation
 src/db/                  Drizzle schema, migrations runner (SQL in drizzle/)
 src/plays/               shared play model: song key, device enum, local time, inserts
 src/ingest/export/       export parsing, import, CLI
-src/ingest/live/         recently-played poller, track enrichment
+src/ingest/live/         recently-played poller, track and artist enrichment, album art
 src/spotify/             OAuth (PKCE, rotating refresh), API client, rate-limit gate
 src/auth/                passkeys, sessions
 src/tags/                tag vocabulary, validation, storage

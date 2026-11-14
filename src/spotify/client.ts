@@ -3,9 +3,10 @@ import type { Db } from "../db/client";
 import { getJobState, setJobState } from "../jobs/state";
 import type { SpotifyAuth } from "./auth";
 import { SpotifyApiError, SpotifyBlockedError, type BlockReason } from "./errors";
-import type { RecentlyPlayed, SpotifyMe, SpotifyTrack } from "./types";
+import type { RecentlyPlayed, SpotifyArtist, SpotifyMe, SpotifyTrack } from "./types";
 
 const apiUrl = "https://api.spotify.com/v1";
+const oembedUrl = "https://open.spotify.com/oembed";
 const defaultRetryAfterSeconds = 60;
 
 export type SpotifyGate = { blockedUntil: number; reason: BlockReason; at: number };
@@ -36,11 +37,25 @@ export class SpotifyClient {
     return this.get<SpotifyTrack>(`/tracks/${encodeURIComponent(id)}`);
   }
 
-  private async get<T>(path: string): Promise<T> {
+  artist(id: string) {
+    return this.get<SpotifyArtist>(`/artists/${encodeURIComponent(id)}`);
+  }
+
+  async trackThumbnail(id: string): Promise<string | null> {
+    const url = `${oembedUrl}?url=${encodeURIComponent(`spotify:track:${id}`)}`;
+    const body = await this.call<{ thumbnail_url?: string }>(() => this.fetchFn(url));
+    return body.thumbnail_url ?? null;
+  }
+
+  private get<T>(path: string): Promise<T> {
+    return this.call<T>(async (refresh) => this.send(path, await this.auth.accessToken(refresh)), true);
+  }
+
+  private async call<T>(send: (refresh: boolean) => Promise<Response>, retryUnauthorized = false): Promise<T> {
     const gate = this.gate();
     if (gate) throw new SpotifyBlockedError(gate.reason, gate.blockedUntil);
-    let res = await this.send(path, await this.auth.accessToken());
-    if (res.status === 401) res = await this.send(path, await this.auth.accessToken(true));
+    let res = await send(false);
+    if (res.status === 401 && retryUnauthorized) res = await send(true);
     if (res.status === 429) throw await this.block(res);
     if (!res.ok) {
       const body = (await res.json().catch(() => ({}))) as { error?: { message?: string } };

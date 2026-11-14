@@ -14,3 +14,5 @@ export type RecentlyPlayed = {
 };
 
 export type SpotifyMe = { id: string; display_name: string | null };
+
+export type SpotifyArtist = { id: string; name: string; images?: SpotifyImage[] };

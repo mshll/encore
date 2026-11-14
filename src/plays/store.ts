@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import type { DbOrTx } from "../db/client";
-import { plays, tracks } from "../db/schema";
+import { artists, plays, trackArtists, tracks } from "../db/schema";
 import { localTime } from "./localTime";
 import { songKey } from "./song";
 
@@ -53,6 +53,20 @@ export function upsertTracks(db: DbOrTx, input: TrackInput[], now = Date.now()) 
       })
       .run();
   }
+}
+
+export type ArtistInput = { id: string; name: string };
+
+export function linkArtists(db: DbOrTx, trackUri: string, input: ArtistInput[]) {
+  if (input.length === 0) return;
+  db.insert(artists)
+    .values(input.map((a) => ({ id: a.id, name: a.name })))
+    .onConflictDoUpdate({ target: artists.id, set: { name: sql`excluded.name` } })
+    .run();
+  db.delete(trackArtists).where(sql`${trackArtists.trackUri} = ${trackUri}`).run();
+  db.insert(trackArtists)
+    .values(input.map((a, position) => ({ trackUri, artistId: a.id, position })))
+    .run();
 }
 
 export function insertPlays(db: DbOrTx, input: PlayInput[], timezone: string): number {
