@@ -216,13 +216,13 @@ Runtime configuration, edited from the dashboard. Boot config (`HOST`, `PORT`, `
   "groups": [
     { "id": "locale", "fields": [
       { "key": "timezone", "env": "TIMEZONE", "type": "timezone", "secret": false, "value": "Asia/Kuwait", "default": "UTC",
-        "source": "env", "locked": true, "set": true, "hint": null, "unreadable": false, "options": ["Africa/Abidjan", "..."] },
+        "source": "env", "locked": true, "set": true, "hint": null, "unreadable": false, "stored": true, "options": ["Africa/Abidjan", "..."] },
       { "key": "weekendDays", "env": "WEEKEND_DAYS", "type": "weekdays", "secret": false, "value": [5, 6], "default": [5, 6],
-        "source": "default", "locked": false, "set": true, "hint": null, "unreadable": false, "min": 1, "max": 7, "unit": "weekday" }
+        "source": "default", "locked": false, "set": true, "hint": null, "unreadable": false, "stored": false, "min": 1, "max": 7, "unit": "weekday" }
     ] },
     { "id": "claude", "fields": [
       { "key": "claudeApiKey", "env": "ANTHROPIC_API_KEY", "type": "string", "secret": true, "value": null, "default": null,
-        "source": "db", "locked": false, "set": true, "hint": "WXYZ", "unreadable": false }
+        "source": "db", "locked": false, "set": true, "hint": "WXYZ", "unreadable": false, "stored": true }
     ] }
   ],
   "secretStorage": { "available": true, "envVar": "SECRETS_KEY" }
@@ -230,6 +230,7 @@ Runtime configuration, edited from the dashboard. Boot config (`HOST`, `PORT`, `
 ```
 
 - `type`: `string`, `integer`, `number`, `boolean`, `enum` (pick from `options`), `timezone` (IANA, `options` lists the zones the server accepts), `weekdays` (array of ISO weekdays 1-7, no repeats, returned sorted).
+- `stored`: the settings table holds a valid value for this field, whatever the `source`. With `source: "env"`, it is the value that applies once the env var is removed and the server restarts.
 - `min`/`max` bound numbers (for `weekdays`, each day). `unit`: `ms`, `seconds`, `minutes`, `hours`, `days`, `usd`, `weekday` (ISO 1-7), `hour` (local 0-23).
 - `value` is `null` for secrets and for unset optional fields; `set` is false for the latter.
 
@@ -266,6 +267,18 @@ Body: an object of field key to value, e.g. `{ "timezone": "Europe/London", "pic
 `400 invalid_settings` with `details: [{ "key", "reason", "message" }]`, `reason` one of `invalid`, `unknown`, `locked` (set by env; change it there), `secrets_key_missing`.
 
 No setting needs a restart.
+
+### `POST /api/settings/adopt-env`
+
+No body. Copies the current value of every env-provided field into the settings table (secrets encrypted with `SECRETS_KEY`), so the owner can then remove the env vars without a gap. Env keeps precedence: no effective value changes, every field keeps `source: "env"` and `locked: true`, and no effect runs (no Spotify disconnect, no Discord registration, no reschedule). After an env var is removed and the server restarts, the field reads `source: "db"` with the same value. Running it again writes nothing.
+
+`200`: the `GET` shape plus:
+
+- `adopted`: keys written by this call. A key whose stored value already matches env is not written and not listed.
+- `replaced`: keys in `adopted` whose stored value differed from env and was overwritten.
+- `skipped`: `[{ "key", "reason" }]`, `reason` `secrets_key_missing` (a secret, and `SECRETS_KEY` is not set) or `invalid` (the env value fails the field's validation).
+
+Secret values are never returned or logged.
 
 ### `POST /api/settings/claude/verify`
 

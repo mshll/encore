@@ -223,6 +223,7 @@ export type SettingField = {
   set: boolean;
   hint: string | null;
   unreadable: boolean;
+  stored: boolean;
   min?: number;
   max?: number;
   unit?: SettingUnit;
@@ -239,6 +240,7 @@ export type SettingsEffect =
   | { type: "discord_registration_failed"; message: string };
 
 export type SettingsPatchResult = Settings & { changed: string[]; effects: SettingsEffect[] };
+export type SettingsAdoptResult = Settings & { adopted: string[]; replaced: string[]; skipped: { key: string; reason: "invalid" | "secrets_key_missing" }[] };
 export type SettingIssue = { key: string; reason: "unknown" | "locked" | "invalid" | "secrets_key_missing"; message: string };
 
 export type ClaudeKeyCheck = { valid: true; model: string } | { valid: false; model: string; message: string };

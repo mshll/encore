@@ -117,6 +117,56 @@ describe("PATCH /api/settings", () => {
   });
 });
 
+describe("POST /api/settings/adopt-env", () => {
+  type Adopted = SettingsView & { adopted: string[]; replaced: string[]; skipped: { key: string; reason: string }[] };
+
+  test("needs a session", async () => {
+    const { request } = testApp();
+
+    expect((await request("/api/settings/adopt-env", { method: "POST" })).status).toBe(401);
+  });
+
+  test("rejects a cross-origin request", async () => {
+    const { app, db, get } = signedIn({ env: { HOME_COUNTRY: "KW" } });
+    const cookie = `encore_session=${createSession(db)}`;
+
+    const res = await app.request("/api/settings/adopt-env", { method: "POST", headers: { cookie, origin: "https://evil.example" } });
+    const view = (await (await get("/api/settings")).json()) as SettingsView;
+
+    expect(res.status).toBe(403);
+    expect(field(view, "homeCountry").stored).toBe(false);
+  });
+
+  test("stores env values without changing the source, never echoes a secret, and GET reports them as stored", async () => {
+    const { send, get } = signedIn({ env: { HOME_COUNTRY: "KW", MCP_TOKEN } });
+
+    const res = await send("POST", "/api/settings/adopt-env", {});
+    const text = await res.clone().text();
+    const body = (await res.json()) as Adopted;
+    const view = (await (await get("/api/settings")).json()) as SettingsView;
+
+    expect(res.status).toBe(200);
+    expect(text).not.toContain(MCP_TOKEN);
+    expect(body.adopted).toEqual(expect.arrayContaining(["homeCountry", "mcpToken"]));
+    expect(body.skipped).toEqual([]);
+    expect(field(view, "homeCountry")).toMatchObject({ value: "KW", source: "env", locked: true, stored: true });
+    expect(field(view, "mcpToken")).toMatchObject({ value: null, source: "env", locked: true, stored: true });
+    expect(field(view, "picksHour").stored).toBe(false);
+  });
+
+  test("without SECRETS_KEY, reports env secrets as skipped", async () => {
+    const { send } = signedIn({ env: { SECRETS_KEY: "", MCP_TOKEN } });
+
+    const body = (await (await send("POST", "/api/settings/adopt-env", {})).json()) as Adopted;
+
+    expect(body.skipped).toEqual([
+      { key: "mcpToken", reason: "secrets_key_missing" },
+      { key: "adminToken", reason: "secrets_key_missing" },
+    ]);
+    expect(field(body, "mcpToken").stored).toBe(false);
+  });
+});
+
 describe("settings actions", () => {
   test("verifies a candidate Claude key without storing or echoing it", async () => {
     const seen: string[] = [];

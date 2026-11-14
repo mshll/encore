@@ -13,6 +13,7 @@ export type SettingFieldView = {
   set: boolean;
   hint: string | null;
   unreadable: boolean;
+  stored: boolean;
   min?: number;
   max?: number;
   unit?: SettingUnit;
@@ -29,7 +30,7 @@ const HINT_MIN_LENGTH = 16;
 /** Last four characters of a long secret, so the owner can tell which one is set. Short secrets get none. */
 const hintOf = (value: SettingValue | null) => (typeof value === "string" && value.length >= HINT_MIN_LENGTH ? value.slice(-4) : null);
 
-export function fieldView({ field, value, source, unreadable }: SettingEntry): SettingFieldView {
+export function fieldView({ field, value, source, unreadable, stored }: SettingEntry): SettingFieldView {
   return {
     key: field.key,
     env: field.env,
@@ -42,6 +43,7 @@ export function fieldView({ field, value, source, unreadable }: SettingEntry): S
     set: value !== null,
     hint: field.secret ? hintOf(value) : null,
     unreadable,
+    stored,
     ...(field.min !== undefined ? { min: field.min } : {}),
     ...(field.max !== undefined ? { max: field.max } : {}),
     ...(field.unit ? { unit: field.unit } : {}),

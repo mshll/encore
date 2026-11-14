@@ -14,10 +14,17 @@ export type SettingEntry = {
   source: SettingSource;
   /** A stored secret that SECRETS_KEY cannot open. The setting then falls back to its default. */
   unreadable: boolean;
+  /** The table holds a valid value for this key, which applies whenever no env var sets it. */
+  stored: boolean;
 };
 
 export type SettingIssueReason = "unknown" | "locked" | "invalid" | "secrets_key_missing";
 export type SettingIssue = { key: string; reason: SettingIssueReason; message: string };
+
+export type AdoptSkip = { key: string; reason: "invalid" | "secrets_key_missing" };
+export type AdoptResult = { adopted: string[]; replaced: string[]; skipped: AdoptSkip[] };
+
+type StoredRead = { ok: true; value: SettingValue } | { ok: false; unreadable: boolean; message: string };
 
 export class SettingsValidationError extends Error {
   constructor(readonly issues: SettingIssue[]) {
@@ -104,6 +111,51 @@ export class SettingsStore implements SettingsSource {
     if (issues.length) throw new SettingsValidationError(issues);
 
     const before = this.load();
+    this.write(writes);
+    const after = this.load();
+    const changed = writes.map((w) => w.field.key).filter((key) => !sameValue(before.get(key)!.value, after.get(key)!.value));
+    if (changed.length) for (const listener of this.listeners) listener(changed);
+    return changed;
+  }
+
+  /**
+   * Copies every env-provided value into the table, so it still applies once the env var is removed. Env keeps
+   * precedence, so no effective value changes and no listener fires. A stored value that differs is replaced.
+   */
+  adoptEnv(): AdoptResult {
+    const rows = this.rows();
+    const writes: { field: SettingField; value: SettingValue }[] = [];
+    const replaced: string[] = [];
+    const skipped: AdoptSkip[] = [];
+    for (const field of this.fields) {
+      const env = this.config.envSettings[field.key];
+      if (env === undefined) continue;
+      const parsed = field.schema.safeParse(env);
+      if (!parsed.success) {
+        skipped.push({ key: field.key, reason: "invalid" });
+        continue;
+      }
+      if (field.secret && !this.box) {
+        skipped.push({ key: field.key, reason: "secrets_key_missing" });
+        continue;
+      }
+      const raw = rows.get(field.key);
+      const current = raw === undefined ? undefined : this.readStored(field, raw);
+      if (current?.ok && sameValue(current.value, parsed.data)) continue;
+      if (raw !== undefined) replaced.push(field.key);
+      writes.push({ field, value: parsed.data });
+    }
+    this.write(writes);
+    return { adopted: writes.map((w) => w.field.key), replaced, skipped };
+  }
+
+  subscribe(listener: SettingsListener): () => void {
+    this.listeners.add(listener);
+    return () => this.listeners.delete(listener);
+  }
+
+  private write(writes: { field: SettingField; value: SettingValue | null }[]) {
+    if (!writes.length) return;
     const at = this.now();
     this.db.transaction((tx) => {
       for (const { field, value } of writes) {
@@ -121,46 +173,46 @@ export class SettingsStore implements SettingsSource {
     for (const { field } of writes) this.warned.delete(field.key);
     this.entries = null;
     this.resolved = null;
-    const after = this.load();
-    const changed = writes.map((w) => w.field.key).filter((key) => !sameValue(before.get(key)!.value, after.get(key)!.value));
-    if (changed.length) for (const listener of this.listeners) listener(changed);
-    return changed;
   }
 
-  subscribe(listener: SettingsListener): () => void {
-    this.listeners.add(listener);
-    return () => this.listeners.delete(listener);
+  private rows(): Map<string, unknown> {
+    return new Map(this.db.select().from(settingsTable).all().map((row) => [row.key, row.value]));
   }
 
   private load(): Map<string, SettingEntry> {
     if (this.entries) return this.entries;
-    const stored = new Map(this.db.select().from(settingsTable).all().map((row) => [row.key, row.value]));
-    this.entries = new Map(this.fields.map((field) => [field.key, this.resolve(field, stored.get(field.key))]));
+    const rows = this.rows();
+    this.entries = new Map(this.fields.map((field) => [field.key, this.resolve(field, rows.get(field.key))]));
     return this.entries;
   }
 
-  private resolve(field: SettingField, stored: unknown): SettingEntry {
+  private resolve(field: SettingField, raw: unknown): SettingEntry {
+    const stored = raw === undefined ? undefined : this.readStored(field, raw);
     const env = this.config.envSettings[field.key];
-    if (env !== undefined) return { field, value: env, source: "env", unreadable: false };
-    const fallback: SettingEntry = { field, value: field.default, source: "default", unreadable: false };
-    if (stored === undefined) return fallback;
-    let candidate = stored;
+    if (env !== undefined) return { field, value: env, source: "env", unreadable: false, stored: stored?.ok === true };
+    const fallback: SettingEntry = { field, value: field.default, source: "default", unreadable: false, stored: false };
+    if (!stored) return fallback;
+    if (!stored.ok) {
+      this.warnOnce(field.key, stored.message);
+      return { ...fallback, unreadable: stored.unreadable };
+    }
+    return { field, value: stored.value, source: "db", unreadable: false, stored: true };
+  }
+
+  private readStored(field: SettingField, raw: unknown): StoredRead {
+    let candidate = raw;
     if (field.secret) {
       try {
         if (!this.box) throw new SecretUnreadableError("SECRETS_KEY is not set");
-        candidate = this.box.open(String(stored));
+        candidate = this.box.open(String(raw));
       } catch (error) {
         if (!(error instanceof SecretUnreadableError)) throw error;
-        this.warnOnce(field.key, `stored secret ${field.key} cannot be read (${error.message}); it is ignored until saved again`);
-        return { ...fallback, unreadable: true };
+        return { ok: false, unreadable: true, message: `stored secret ${field.key} cannot be read (${error.message}); it is ignored until saved again` };
       }
     }
     const parsed = field.schema.safeParse(candidate);
-    if (!parsed.success) {
-      this.warnOnce(field.key, `stored value for ${field.key} is invalid (${parsed.error.issues[0]!.message}); using the default`);
-      return fallback;
-    }
-    return { field, value: parsed.data, source: "db", unreadable: false };
+    if (!parsed.success) return { ok: false, unreadable: false, message: `stored value for ${field.key} is invalid (${parsed.error.issues[0]!.message}); using the default` };
+    return { ok: true, value: parsed.data };
   }
 
   private warnOnce(key: string, message: string) {

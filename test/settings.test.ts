@@ -164,3 +164,85 @@ describe("runtime changes", () => {
     expect(runs).toHaveLength(1);
   });
 });
+
+describe("adopting env values", () => {
+  const ENV = { SECRETS_KEY: KEY, TIMEZONE: "Asia/Kuwait", ANTHROPIC_API_KEY: CLAUDE_KEY, SPOTIFY_CLIENT_ID: "test-client" };
+  const WITHOUT_ENV = { SECRETS_KEY: KEY, TIMEZONE: "", SPOTIFY_CLIENT_ID: "" };
+
+  test("stores the env values while env keeps precedence, so nothing effective changes", () => {
+    const { settings } = store(ENV);
+    const heard: string[][] = [];
+    settings.subscribe((changed) => heard.push(changed));
+    const before = settings.get();
+
+    const result = settings.adoptEnv();
+
+    expect(result.adopted).toEqual(expect.arrayContaining(["spotifyClientId", "timezone", "claudeApiKey"]));
+    expect(result).toMatchObject({ replaced: [], skipped: [] });
+    expect(settings.entry("timezone")).toMatchObject({ value: "Asia/Kuwait", source: "env", stored: true });
+    expect(settings.get()).toEqual(before);
+    expect(heard).toEqual([]);
+  });
+
+  test("after the env vars are removed, the same values come from the table and the Spotify grant still matches", () => {
+    const db = testDb();
+    const withEnv = testSettings(db, testConfig(ENV));
+    connectSpotify(db);
+    withEnv.adoptEnv();
+
+    const config = testConfig(WITHOUT_ENV);
+    const settings = testSettings(db, config);
+
+    expect(JSON.stringify(db.select().from(settingsTable).all())).not.toContain(CLAUDE_KEY);
+    for (const [key, value] of [["timezone", "Asia/Kuwait"], ["claudeApiKey", CLAUDE_KEY], ["spotifyClientId", "test-client"]] as const)
+      expect(settings.entry(key)).toMatchObject({ value, source: "db", stored: true });
+    expect(settings.get().llm.apiKey).toBe(CLAUDE_KEY);
+    expect(new SpotifyAuth(db, config, settings).status().connected).toBe(true);
+  });
+
+  test("a second adopt writes nothing", () => {
+    const db = testDb();
+    let now = 1;
+    const settings = testSettings(db, testConfig(ENV), () => now);
+    settings.adoptEnv();
+    const rows = db.select().from(settingsTable).all();
+    now = 2;
+
+    expect(settings.adoptEnv()).toEqual({ adopted: [], replaced: [], skipped: [] });
+    expect(db.select().from(settingsTable).all()).toEqual(rows);
+  });
+
+  test("replaces a stored value that differs from env and reports it", () => {
+    const { db, settings } = store(ENV);
+    db.insert(settingsTable).values({ key: "timezone", value: "Europe/London", updatedAt: 0 }).run();
+
+    const result = settings.adoptEnv();
+
+    expect(result.replaced).toEqual(["timezone"]);
+    expect(testSettings(db, testConfig(WITHOUT_ENV)).entry("timezone")).toMatchObject({ value: "Asia/Kuwait", source: "db" });
+  });
+
+  test("without SECRETS_KEY, skips secrets and still adopts the rest", () => {
+    const { settings } = store({ ...ENV, SECRETS_KEY: "" });
+
+    const result = settings.adoptEnv();
+
+    expect(result.skipped).toEqual([
+      { key: "claudeApiKey", reason: "secrets_key_missing" },
+      { key: "adminToken", reason: "secrets_key_missing" },
+    ]);
+    expect(result.adopted).toContain("timezone");
+    expect(settings.entry("claudeApiKey")).toMatchObject({ source: "env", stored: false });
+  });
+
+  test("skips an env value that does not validate", () => {
+    const db = testDb();
+    const config = testConfig(ENV);
+    const settings = testSettings(db, { ...config, envSettings: { ...config.envSettings, picksHour: 99 } });
+
+    const result = settings.adoptEnv();
+
+    expect(result.skipped).toEqual([{ key: "picksHour", reason: "invalid" }]);
+    expect(settings.entry("picksHour")!.stored).toBe(false);
+  });
+});
