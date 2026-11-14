@@ -46,10 +46,10 @@ The source of truth for paths, labels, icons and shortcuts is `web/src/app/nav.t
 | Patterns: Taste | Which genres, moods and energy over time? | Switch genres and moods | tag stats (`stats/tags/*`), `tags/pending`, `tags` | Placeholder |
 | Patterns: Skips | Where do songs get skipped, and in what context? | Pick a moment class | `stats/skips`, `stats/skips/split` | Placeholder |
 | Patterns: Places | Where and on what do I listen (trips, devices)? | Pick a trip | `stats/trips`, `stats/devices` | Placeholder |
-| For you: Picks | What did Claude pick for me this week? | Play the picks | `picks`, `picks/weeks`, picks run (stream), `blocks` | Placeholder |
-| For you: Releases | What did artists I play release? | Mark seen, play | `radar`, `radar/seen` | Placeholder |
-| Sets `/sets` | Make me a playlist from a prompt | Make a set | `sets`, `sets/:id`, set run (stream), `dj/start`, `dj`, `dj/stop` | Placeholder |
-| Ask `/ask` | Answer a question about my listening | Ask | `ask/threads`, `ask/threads/:id`, ask run (stream) | Placeholder |
+| For you: Picks | What did Claude pick for me this week? | Play the picks | `picks`, `picks/weeks`, picks run (stream), `blocks` | Built |
+| For you: Releases | What did artists I play release? | Mark seen, play | `radar`, `radar/seen` | Built |
+| Sets `/sets` | Make me a playlist from a prompt | Make a set | `sets`, `sets/:id`, set run (stream), `dj/start`, `dj`, `dj/stop` | Built |
+| Ask `/ask` | Answer a question about my listening | Ask | `ask/threads`, `ask/threads/:id`, ask run (stream) | Built |
 | Recaps `/recaps` | What happened this week or month? | Open the latest recap | `digests`, `digests/:id` | Placeholder |
 | Library `/library` | What in my saved songs and playlists should go? | Review proposals | `cleanup`, `cleanup/dismiss`, `cleanup/apply`, `cleanup/batches`, `cleanup/batches/:id/undo`, `blocks` | Placeholder |
 | Setup `/setup` | Is encore connected and fed? | Do the next missing step | `onboarding`, `spotify/authorize`, `import`, `settings` | Placeholder |
@@ -193,6 +193,7 @@ All in `web/src/ui/` unless noted. Props listed are the ones that matter.
 | `RangePicker` | `ui/RangePicker` | Reads and writes `from`/`to` in the URL |
 | `RunProgress` | `ui/RunProgress` | `run` (from `useRun`), `title`, `onCancel` |
 | `Composer` | `ui/Composer` | `value`, `onChange`, `onSubmit`, `onStop`, `running`, `label`, `notice`, `footer` |
+| `useClaudeGate`, `RunNotice` | `ui/ClaudeNotice` | Gate: `needsSpotify`; returns `ready`, `blocked` (no API key, monthly cap spent: disable the run and show it as the composer `notice`), `warning` (Spotify paused), `spend` (composer `footer`). RunNotice: `tone` warning or danger, `onRetry` |
 | `Kbd`, `MOD_KEY` | `ui/Kbd` | Hidden on touch screens |
 | `Icon` | `ui/Icon` | `icon`, `size`, `fill` |
 | `EncoreMark`, `Lockup` | `ui/Brand` | Mark at 16, 32 or 48 only. Lockup 16 or 32 |
@@ -200,7 +201,7 @@ All in `web/src/ui/` unless noted. Props listed are the ones that matter.
 | Paths | `app/paths` | `artistPath(name)`, `songPath(key)`, `albumPath(artist, album)` |
 | `Placeholder` | `surfaces/Placeholder` | For a surface not yet built: header, tabs and an honest "Not built yet" state |
 
-`/dev/kit` (dev builds only) shows every primitive in its states. Fixtures: add `?fixture=loading|error|empty|new|worst|off` or `?player=playing` to any dev URL (`web/src/dev/fixtures.ts`); the choice sticks for the tab until `off`.
+`/dev/kit` (dev builds only) shows every primitive in its states. Fixtures: add `?fixture=loading|error|empty|new|worst|off`, `?player=playing`, `?dj=active` or `?run=running|starting|done|failed|budget|unconfigured|paused` (Claude runs answered by the fixture, never the server) to any dev URL (`web/src/dev/fixtures.ts`); the choice sticks for the tab until `off`.
 
 ## 6. Charts
 

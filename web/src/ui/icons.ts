@@ -33,3 +33,8 @@ export { WarningIcon } from "@phosphor-icons/react/dist/csr/Warning";
 export { WaveformIcon } from "@phosphor-icons/react/dist/csr/Waveform";
 export { XIcon } from "@phosphor-icons/react/dist/csr/X";
 export { ArrowUpIcon } from "@phosphor-icons/react/dist/csr/ArrowUp";
+export { ArrowCounterClockwiseIcon } from "@phosphor-icons/react/dist/csr/ArrowCounterClockwise";
+export { HeartStraightIcon } from "@phosphor-icons/react/dist/csr/HeartStraight";
+export { ProhibitIcon } from "@phosphor-icons/react/dist/csr/Prohibit";
+export { PushPinIcon } from "@phosphor-icons/react/dist/csr/PushPin";
+export { TrashIcon } from "@phosphor-icons/react/dist/csr/Trash";

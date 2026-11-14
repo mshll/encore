@@ -4,7 +4,7 @@ import { useSession } from "../api/queries";
 import { ErrorState } from "../ui/States";
 import { Placeholder } from "../surfaces/Placeholder";
 import { RangePicker } from "../ui/RangePicker";
-import { FOR_YOU_TABS, PATTERN_TABS, SETTINGS_TABS } from "./nav";
+import { PATTERN_TABS, SETTINGS_TABS } from "./nav";
 import { paramValue } from "./paths";
 import { Shell } from "./Shell";
 
@@ -15,6 +15,11 @@ const Music = lazy(() => import("../surfaces/Music").then((m) => ({ default: m.M
 const ArtistPage = lazy(() => import("../surfaces/entity/ArtistPage").then((m) => ({ default: m.ArtistPage })));
 const AlbumPage = lazy(() => import("../surfaces/entity/AlbumPage").then((m) => ({ default: m.AlbumPage })));
 const SongPage = lazy(() => import("../surfaces/entity/SongPage").then((m) => ({ default: m.SongPage })));
+const Picks = lazy(() => import("../surfaces/Picks").then((m) => ({ default: m.Picks })));
+const Releases = lazy(() => import("../surfaces/Releases").then((m) => ({ default: m.Releases })));
+const Sets = lazy(() => import("../surfaces/Sets").then((m) => ({ default: m.Sets })));
+const SetPage = lazy(() => import("../surfaces/SetPage").then((m) => ({ default: m.SetPage })));
+const Ask = lazy(() => import("../surfaces/Ask").then((m) => ({ default: m.Ask })));
 const SignIn = lazy(() => import("../surfaces/SignIn").then((m) => ({ default: m.SignIn })));
 const Kit = import.meta.env.DEV ? lazy(() => import("../dev/Kit").then((m) => ({ default: m.Kit }))) : null;
 
@@ -66,19 +71,13 @@ export function App() {
           <Route path="/for-you">
             <Redirect to="/for-you/picks" replace />
           </Route>
-          <Route path="/for-you/:tab">
-            <Placeholder title="For you" description="This week's picks from Claude and new releases from artists you play." tabs={FOR_YOU_TABS} />
-          </Route>
+          <Route path="/for-you/picks" component={Picks} />
+          <Route path="/for-you/releases" component={Releases} />
 
-          <Route path="/sets/:id">{() => <Placeholder title="Set" description="One set: its tracks, the reasons, and a chat to change it." />}</Route>
-          <Route path="/sets">
-            <Placeholder title="Sets" description="Playlists Claude builds from a prompt and your history, played as a session that adapts to skips." />
-          </Route>
+          <Route path="/sets/:id">{(p) => <SetPage key={p.id} id={Number(p.id)} />}</Route>
+          <Route path="/sets" component={Sets} />
 
-          <Route path="/ask/:id">{() => <Placeholder title="Ask" description="A conversation about your listening." />}</Route>
-          <Route path="/ask">
-            <Placeholder title="Ask" description="Questions about your listening, answered from your history." />
-          </Route>
+          <Route path="/ask/:id?">{(p) => <Ask id={p.id} />}</Route>
 
           <Route path="/recaps/:id">{() => <Placeholder title="Recap" description="One weekly or monthly recap." />}</Route>
           <Route path="/recaps">

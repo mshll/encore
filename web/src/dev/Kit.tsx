@@ -5,6 +5,7 @@ import { showToast } from "../lib/toast";
 import type { RunState } from "../lib/useRun";
 import { EncoreMark, Lockup } from "../ui/Brand";
 import { Button, IconButton } from "../ui/Button";
+import { RunNotice } from "../ui/ClaudeNotice";
 import { Composer } from "../ui/Composer";
 import { Confirm, Dialog, DialogClose } from "../ui/Dialog";
 import { EntityHeader, EntityHeaderSkeleton } from "../ui/EntityHeader";
@@ -236,6 +237,11 @@ export function Kit() {
         <Section title="Runs">
           <RunProgress run={RUN} title="Making picks" onCancel={() => {}} />
           <Composer value={text} onChange={setText} onSubmit={() => setText("")} label="Ask about your listening" placeholder="What did I play most last winter?" />
+          <RunNotice>Spotify calls are paused until 14:30, so songs new to you cannot be checked.</RunNotice>
+          <RunNotice tone="danger" onRetry={() => {}}>
+            The Anthropic API did not answer. Try again in a minute.
+          </RunNotice>
+          <Composer value="" onChange={() => {}} onSubmit={() => {}} label="Describe a set" disabled notice="Claude is not set up." />
         </Section>
       </div>
     </Page>
