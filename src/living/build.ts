@@ -4,6 +4,7 @@ import { forgotten } from "../analytics/recall";
 import { topTracks } from "../analytics/top";
 import type { Db } from "../db/client";
 import { picks, releases, releaseTracks, type LivingTrack } from "../db/schema";
+import { definingSongs } from "../digest/songs";
 import { localTime } from "../plays/localTime";
 
 export type BuildContext = { now: number; timezone: string };
@@ -60,6 +61,16 @@ export function thisMonthTracks(db: Db, ctx: BuildContext): LivingTrack[] {
   return db
     .all<SongRow>(sql`select * from (${songStatsSql(where)}) where listens > 0 order by listens desc, ms desc, song_key limit ${CANDIDATES}`)
     .map((r) => ({ uri: r.uri, songKey: r.song_key, name: r.name, artist: r.artist, album: r.album, albumArtUrl: r.album_art_url }));
+}
+
+/** The songs that defined the year so far, by the recap playlist rule: most listens, then most time, at least two listens. */
+export function thisYearTracks(db: Db, ctx: BuildContext, cap: number): LivingTrack[] {
+  const today = localTime(ctx.now, ctx.timezone).day;
+  return yearTracks(db, { from: `${today.slice(0, 4)}-01-01`, to: today }, cap);
+}
+
+export function yearTracks(db: Db, span: { from: string; to: string }, cap: number): LivingTrack[] {
+  return definingSongs(db, "yearly", span, cap).map(fromSong);
 }
 
 /** Stored tracks of new releases from the last 90 days, newest release first, in album order. */

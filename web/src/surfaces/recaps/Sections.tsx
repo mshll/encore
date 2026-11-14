@@ -150,8 +150,9 @@ const SONGS_SHOWN = 10;
 export function Songs({ s, title, actions }: { s: Of<"songs">; title: string; actions?: ReactNode }) {
   const [all, setAll] = useState(false);
   return (
-    <Section title={title} actions={actions}>
+    <Section title={title}>
       <Take text={s.take} />
+      {actions}
       <RowList label={title}>
         {(all ? s.songs : s.songs.slice(0, SONGS_SHOWN)).map((t, i) => (
           <TrackRow

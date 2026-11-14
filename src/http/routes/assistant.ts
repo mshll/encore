@@ -2,7 +2,9 @@ import { Hono } from "hono";
 import { z } from "zod";
 import { ask, deleteAskThread, getAskThread, listAskThreads } from "../../ask/service";
 import { PICK_STATES } from "../../db/schema";
+import { recapCover, recapCoverSource } from "../../digest/cover";
 import { RECAP_KINDS, latestKey } from "../../digest/periods";
+import { recapPlaylistSongs, saveRecapPlaylist } from "../../digest/playlist";
 import { generateDigest, listDigests, recapPeriod, renderDigest } from "../../digest/service";
 import { localTime } from "../../plays/localTime";
 import { budgetStatus, spendDetail } from "../../llm/ledger";
@@ -156,6 +158,22 @@ export const digestRoutes = new Hono<Env>()
     const p = parse(z.object({ kind, key: z.string().max(10) }), c.req.param());
     const today = localTime(now(), settings.get().timezone).day;
     return c.json(await mapped(() => recapPeriod(db, p.kind, p.key, today)));
+  })
+  .get("/periods/:kind/:key/cover", async (c) => {
+    const { db, now, settings } = c.var.deps;
+    const p = parse(z.object({ kind, key: z.string().max(10) }), c.req.param());
+    const songs = await mapped(() => recapPlaylistSongs(db, p.kind, p.key, localTime(now(), settings.get().timezone).day));
+    if (songs.length === 0) throw new ApiError(404, "not_found", "Not found");
+    const source = recapCoverSource(p.kind, p.key, songs);
+    const headers = { etag: `"${source.key}"`, "cache-control": c.req.query("v") === source.key ? "private, max-age=31536000, immutable" : "private, no-cache" };
+    if (c.req.header("if-none-match") === headers.etag) return c.body(null, 304, headers);
+    return c.body(new Uint8Array(await recapCover(source)), 200, { ...headers, "content-type": "image/jpeg" });
+  })
+  .post("/periods/:kind/:key/playlist", async (c) => {
+    const { db, spotify, now, settings } = c.var.deps;
+    const p = parse(z.object({ kind, key: z.string().max(10) }), c.req.param());
+    const today = localTime(now(), settings.get().timezone).day;
+    return c.json(await mapped(() => saveRecapPlaylist({ db, spotify, now, today }, p.kind, p.key)));
   })
   .get("/latest/:kind", (c) => {
     const { now, settings } = c.var.deps;

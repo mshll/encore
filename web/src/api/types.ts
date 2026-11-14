@@ -234,7 +234,10 @@ export type RecapPeriod = {
   next: string | null;
   historyStart: string | null;
   recap: Digest | null;
+  playlist: RecapPlaylist | null;
 };
+/** The songs that defined a period as a Spotify playlist. Only an ended period can be saved. */
+export type RecapPlaylist = { songs: number; canSave: boolean; saved: { url: string; savedAt: string; source: "recap" | "living" } | null; coverUrl: string | null };
 
 export type JobStatus = {
   lastRunAt: string | null;
@@ -549,10 +552,10 @@ export type Cleanup = {
 
 export type CleanupBatch = { id: number; proposalIds: number[]; actions: number; appliedAt: string; undoneAt: string | null };
 
-export type LivingKind = "picks" | "forgotten" | "most-played" | "new-releases" | "this-month";
+export type LivingKind = "picks" | "forgotten" | "most-played" | "new-releases" | "this-month" | "this-year";
 export type LivingStatus = "refreshed" | "unchanged" | "empty" | "deferred" | "failed" | "removed";
-export type LivingSchedule = "daily" | "weekly" | "monthly" | "picks" | "releases";
-export type LivingTrigger = "enable" | "schedule" | "manual" | "picks";
+export type LivingSchedule = "daily" | "weekly" | "monthly" | "yearly-weekly" | "picks" | "releases";
+export type LivingTrigger = "enable" | "schedule" | "manual" | "picks" | "year-end";
 
 export type LivingSong = { uri: string; songKey: string; name: string; artist: string; album: string | null; albumArtUrl: string | null };
 

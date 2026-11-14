@@ -19,6 +19,7 @@ export function periodOf(schedule: LivingSchedule, ts: number, timezone: string)
   if (schedule === "daily") return localTime(ts, timezone).day;
   if (schedule === "weekly") return mondayOf(ts, timezone);
   if (schedule === "monthly") return localTime(ts, timezone).day.slice(0, 7);
+  if (schedule === "yearly-weekly") return `${localTime(ts, timezone).day.slice(0, 4)}:${mondayOf(ts, timezone)}`;
   return null;
 }
 
@@ -27,6 +28,11 @@ export function nextRefreshDay(schedule: LivingSchedule, checkedAt: number | nul
   const from = checkedAt ?? now;
   if (schedule === "daily") return addDays(localTime(from, timezone).day, 1);
   if (schedule === "weekly") return addDays(mondayOf(from, timezone), 7);
+  if (schedule === "yearly-weekly") {
+    const monday = addDays(mondayOf(from, timezone), 7);
+    const newYear = `${Number(localTime(from, timezone).day.slice(0, 4)) + 1}-01-01`;
+    return monday < newYear ? monday : newYear;
+  }
   if (schedule === "monthly") {
     const [y, m] = localTime(from, timezone).day.split("-").map(Number) as [number, number];
     return m === 12 ? `${y + 1}-01-01` : `${y}-${String(m + 1).padStart(2, "0")}-01`;

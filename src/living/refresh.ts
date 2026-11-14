@@ -13,6 +13,7 @@ import { livingCover, livingCoverKey } from "./cover";
 import { LIVING, LIVING_CAP, LIVING_ORDER } from "./kinds";
 import { currentContext } from "./playing";
 import { isDue, type LivingRow } from "./schedule";
+import { closeYear } from "./year";
 
 export type LivingDeps = { db: Db; spotify: SpotifyClient; settings: SettingsSource; now: () => number };
 export type CoverStatus = "uploaded" | "unchanged" | "missing_scope" | "failed";
@@ -147,15 +148,22 @@ export function refreshLiving(deps: LivingDeps, kind: LivingKind, trigger: Livin
 async function refresh(deps: LivingDeps, kind: LivingKind, trigger: LivingTrigger): Promise<RefreshOutcome> {
   const { db, spotify } = deps;
   const ctx = buildContext(deps);
-  const row = livingRow(db, kind, ctx.now);
+  let row = livingRow(db, kind, ctx.now);
   if (!row.enabled) return { kind, status: "off", calls: 0 };
   assertCanWrite(spotify);
+  const closed = await closeYear(deps, row);
+  if (closed !== null && closed !== "closed") return closed;
+  if (closed === "closed") row = livingRow(db, kind, ctx.now);
   const live = row.removedAt === null ? row.playlistId : null;
   const current = currentItems(db, kind, live);
   const next = nextItems(deps, row);
   const settle = (status: LivingStatus, patch: Partial<LivingRow> = {}) =>
     patchRow(db, kind, { status, error: null, attemptedAt: ctx.now, ...(status === "deferred" ? {} : { checkedAt: ctx.now }), ...patch }, ctx.now);
 
+  if (!live && next.length === 0 && LIVING[kind].waitForSongs) {
+    settle("empty");
+    return { kind, status: "empty", calls: 0 };
+  }
   if (live && next.length === 0) {
     settle("empty");
     return { kind, status: "empty", calls: 0 };

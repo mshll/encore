@@ -23,7 +23,7 @@ import { Switch } from "../ui/Switch";
 import { TabNav } from "../ui/TabNav";
 import { cx } from "../ui/cx";
 
-const KINDS: LivingKind[] = ["picks", "forgotten", "most-played", "new-releases", "this-month"];
+const KINDS: LivingKind[] = ["picks", "forgotten", "most-played", "new-releases", "this-month", "this-year"];
 const isKind = (value: string): value is LivingKind => (KINDS as string[]).includes(value);
 const playlistPath = (kind: LivingKind) => `/for-you/playlists/${kind}`;
 const songs = (n: number) => `${fmtInt(n)} ${n === 1 ? "song" : "songs"}`;
@@ -34,6 +34,7 @@ const NOTHING_YET: Record<LivingKind, string> = {
   "most-played": "Songs you play at least twice in four weeks appear here.",
   "new-releases": "Songs appear here when Releases finds something new from artists you play.",
   "this-month": "Songs you played this month in an earlier year appear here.",
+  "this-year": "Songs you play at least twice this year appear here.",
 };
 
 const EVENT_REFRESH: Partial<Record<LivingKind, string>> = {
@@ -44,7 +45,7 @@ const EVENT_REFRESH: Partial<Record<LivingKind, string>> = {
 type Gate = LivingList["spotify"];
 
 /** Kinds made of songs the owner has played, so each has a song page. */
-const PLAYED_KINDS: LivingKind[] = ["forgotten", "most-played", "this-month"];
+const PLAYED_KINDS: LivingKind[] = ["forgotten", "most-played", "this-month", "this-year"];
 
 /** A song in a living playlist: the shared row with play and the song menu. */
 function SongRow({ song, rank, kind }: { song: LivingSong; rank: number; kind: LivingKind }) {

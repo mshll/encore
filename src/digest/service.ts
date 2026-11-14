@@ -4,10 +4,12 @@ import { digests } from "../db/schema";
 import type { FeatureContext } from "../llm/context";
 import { LlmBudgetExceededError, LlmNotConfiguredError } from "../llm/errors";
 import { localTime } from "../plays/localTime";
+import { recapCoverSource, recapCoverUrl, recapPlaylistRow } from "./cover";
 import { historyStart, isRecapFacts, recapFacts, type RecapFacts } from "./facts";
 import { writeLines } from "./lines";
 import { recapPage, type RecapLines } from "./page";
-import { baselineSpan, coveredSpan, humanDatesIn, isRecapKey, latestKey, periodLabel, periodSpan, shiftKey, type RecapKind } from "./periods";
+import { baselineSpan, coveredSpan, humanDatesIn, isRecapKey, latestKey, periodLabel, periodSpan, shiftKey, type RecapKind, type Span } from "./periods";
+import { definingSongs } from "./songs";
 import { recapText } from "./text";
 
 export type DigestKind = RecapKind;
@@ -136,6 +138,18 @@ export function renderDigest(db: Db, id: number) {
   return { ...v, rendered: `${v.title}\n\n${v.text}` };
 }
 
+/** The period's playlist: how many songs it holds, whether it is in Spotify, and its cover. Only an ended period can be saved. */
+function playlistOf(db: Db, kind: RecapKind, key: string, covered: Span & { inProgress: boolean }) {
+  const songs = definingSongs(db, kind, covered);
+  const saved = recapPlaylistRow(db, kind, key);
+  return {
+    songs: songs.length,
+    canSave: !covered.inProgress && songs.length > 0,
+    saved: saved ? { url: saved.playlistUrl, savedAt: new Date(saved.savedAt).toISOString(), source: saved.source } : null,
+    coverUrl: songs.length && !covered.inProgress ? recapCoverUrl(kind, key, recapCoverSource(kind, key, songs).key) : null,
+  };
+}
+
 /**
  * One period on the timeline: what it covers today, its neighbours, and its recap when one is stored.
  * `available` says whether a recap can be made for it now.
@@ -161,6 +175,7 @@ export function recapPeriod(db: Db, kind: RecapKind, key: string, today: string)
     next: coveredSpan(kind, next, today) ? next : null,
     historyStart: start,
     recap: stored ? view(db, stored) : null,
+    playlist: covered && reaches(key) ? playlistOf(db, kind, key, covered) : null,
   };
 }
 

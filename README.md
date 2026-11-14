@@ -25,11 +25,11 @@ One instance serves one person. Your data stays in a single SQLite file on your 
 
 **Playlists in Spotify** (in For you)
 
-- Five private playlists encore keeps refilling: Weekly picks, Forgotten favourites, Most played lately, New from your artists, and This month in past years. Each is off until you switch it on; only Weekly picks needs the Anthropic key.
+- Six private playlists encore keeps refilling: Weekly picks, Forgotten favourites, Most played lately, New from your artists, This month in past years, and This year so far (which becomes that year's playlist when the year ends). Each is off until you switch it on; only Weekly picks needs the Anthropic key.
 
 **Upkeep**
 
-- **Recaps**: each week, month and year as a page of what changed: totals against the period before, artists up and down, genre and mood shifts, new songs that stuck, the busiest day and hour, with small inline charts. Claude adds a headline and one line per section; without Claude the page shows the numbers alone.
+- **Recaps**: each week, month and year as a page of what changed: totals against the period before, artists up and down, genre and mood shifts, new songs that stuck, the busiest day and hour, with small inline charts. Claude adds a headline and one line per section; without Claude the page shows the numbers alone. Each recap has its playlist, the songs that defined the period, playable from the page and saved to Spotify with a cover titled with the period when you tap Save.
 - **Library**: proposals to tidy saved songs and playlists. Nothing is removed until you approve it, and every applied batch can be undone.
 
 | | |

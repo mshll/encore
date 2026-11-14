@@ -742,7 +742,7 @@ For the weekly digest: `newReleasesSince(db, sinceMs)` in `src/radar/radar.ts` r
 
 ## Living playlists
 
-Five private playlists in the owner's Spotify account that encore keeps refilling. Each kind has one Spotify playlist for good: made the first time it is switched on, then always updated in place. Off by default. Switching off stops refreshes and leaves the playlist in Spotify; encore never deletes or unfollows it.
+Six private playlists in the owner's Spotify account that encore keeps refilling. Each kind has one Spotify playlist for good: made the first time it is switched on, then always updated in place. Off by default. Switching off stops refreshes and leaves the playlist in Spotify; encore never deletes or unfollows it.
 
 | Kind | Name | Holds | Refresh | Mode |
 | --- | --- | --- | --- | --- |
@@ -751,6 +751,7 @@ Five private playlists in the owner's Spotify account that encore keeps refillin
 | `most-played` | Most played lately | Most listens in the last 28 local days, at least 2 | Daily (local) | replace |
 | `new-releases` | New from your artists | The first 3 tracks of each new release (radar) from the last 90 days, newest first | Every job tick | rolling |
 | `this-month` | This month in past years | Most listens in this calendar month of earlier years | Monthly (the 1st, local) | replace |
+| `this-year` | This year so far | The songs that defined the year so far, by the recap playlist rule (most listens, then most time, at least 2) | Weekly (from Monday, local), and on 1 January | replace |
 
 - At most 50 songs, distinct by song key. Replace rebuilds the list. Rolling puts new songs on top and drops the oldest past 50; it fills an empty playlist to 50, then adds at most its per-refresh count, and never adds a song that playlist already had.
 - A refresh writes nothing when the list is unchanged, when the new list is empty (the playlist keeps its songs), or while the playlist is the playback context the player watcher last saw (`deferred`, retried on the next tick). A skip never removes a song or moves it down: rankings count listens, and rolling lists drop songs only at the cap.
@@ -759,6 +760,7 @@ Five private playlists in the owner's Spotify account that encore keeps refillin
 - A playlist deleted in Spotify is found without a call of its own: a write that answers 404, or a library pass (`library` job) that lists the owner's playlists without it. It is switched off with `removedAt` set; switching on again makes a new playlist.
 - The `living` job ticks every 10 minutes (`JOBS_DISABLED=living` turns it off) and refreshes the kinds that are due. A failed refresh is retried after an hour.
 - Writing needs the `playlist-modify-private` scope, the cover `ugc-image-upload`.
+- This year so far makes no playlist while the year has no song listened to twice. At its first refresh in a new year it closes the year it holds: the songs are set to that whole year, the playlist is renamed after the year ("2026") with the year's recap cover and description, recorded as that year's recap playlist (`source: "living"`, see Digests), and a change with trigger `year-end` is added to its history. The same refresh then starts a new This year so far for the new year once it has songs. Closing waits while the playlist is playing. When the year already has a recap playlist saved from its page, nothing is closed and the playlist carries on into the new year. Calls: 2 (details, items) plus the cover.
 
 Living playlist shape:
 
@@ -774,7 +776,7 @@ Living playlist shape:
 }
 ```
 
-`schedule` is `daily`, `weekly`, `monthly`, `picks` or `releases`. `checkedAt` is the last refresh that reached a result (refreshed, unchanged, empty); `changedAt` the last one that changed the playlist. `nextRefresh` is the local day of the next scheduled refresh, `null` while off and for `picks` and `releases`. `count` is the number of songs encore last put in the playlist; `available` what a refresh now would put in it.
+`schedule` is `daily`, `weekly`, `monthly`, `yearly-weekly` (weekly, and when the year turns), `picks` or `releases`. `checkedAt` is the last refresh that reached a result (refreshed, unchanged, empty); `changedAt` the last one that changed the playlist. `nextRefresh` is the local day of the next scheduled refresh, `null` while off and for `picks` and `releases`. `count` is the number of songs encore last put in the playlist; `available` what a refresh now would put in it.
 
 ### `GET /api/living`
 
@@ -782,7 +784,7 @@ Living playlist shape:
 
 ### `GET /api/living/:kind`
 
-`LivingPlaylist` plus `items` (the songs in it now, in order, as `{ uri, songKey, name, artist, album, albumArtUrl, artistImageUrl }`), `preview` (while `items` is empty: what a refresh would put in it) and `history` (the last 30 changes, newest first: `{ id, at, trigger: "enable" | "schedule" | "manual" | "picks", count, added: [Song], removed: [Song], current }`; `current` is false for changes to a playlist since deleted in Spotify).
+`LivingPlaylist` plus `items` (the songs in it now, in order, as `{ uri, songKey, name, artist, album, albumArtUrl, artistImageUrl }`), `preview` (while `items` is empty: what a refresh would put in it) and `history` (the last 30 changes, newest first: `{ id, at, trigger: "enable" | "schedule" | "manual" | "picks" | "year-end", count, added: [Song], removed: [Song], current }`; `current` is false for changes to a playlist since deleted in Spotify).
 
 ### `GET /api/living/:kind/refreshes/:id`
 
@@ -924,6 +926,7 @@ Claude-backed features: sets, weekly picks, ask, liner notes, digests, and the o
 | 409 | `set_empty` | Saving a set with no tracks |
 | 404 | `not_found` | Unknown set, pick, thread, digest, block or note |
 | 409 | `period_unavailable` | A recap period that has not ended or that the history does not reach |
+| 409 | `playlist_empty` | A recap period with no song listened to twice, so no playlist to save |
 
 ### Streaming
 
@@ -1144,7 +1147,15 @@ The list item plus `text` (plain text for a chat message, dates written out), `f
 
 #### `GET /api/digests/periods/:kind/:key`
 
-One period on the timeline. `{ "kind", "key", "label", "from", "to", "inProgress", "available", "reason": null | "before_history" | "not_ended", "previous": "2026-09" | null, "next": "2026-11" | null, "historyStart": "2024-11-24", "recap": <GET /api/digests/:id body without rendered> | null }`. `from`/`to` are what the period covers today. `previous` is null before the history starts, `next` once the next period has not started covering. `available: false` means `generate` would refuse this period. An invalid key is `404`.
+One period on the timeline. `{ "kind", "key", "label", "from", "to", "inProgress", "available", "reason": null | "before_history" | "not_ended", "previous": "2026-09" | null, "next": "2026-11" | null, "historyStart": "2024-11-24", "recap": <GET /api/digests/:id body without rendered> | null, "playlist": { "songs": 25, "canSave": true, "saved": { "url": "https://open.spotify.com/playlist/...", "savedAt": "...", "source": "recap" | "living" } | null, "coverUrl": "/api/digests/periods/monthly/2026-10/cover?v=..." | null } | null }`. `playlist` describes the period's songs as a Spotify playlist (the `songs` section rule); `null` before the history or before the period starts. `canSave` is false while the period is still going (the current year lives in Spotify as the This year so far living playlist instead) and when no song was listened to twice; `coverUrl` is null then too. `from`/`to` are what the period covers today. `previous` is null before the history starts, `next` once the next period has not started covering. `available: false` means `generate` would refuse this period. An invalid key is `404`.
+
+#### `GET /api/digests/periods/:kind/:key/cover`
+
+The cover JPEG the period's playlist gets in Spotify: the period's name ("October 2026") over the album art of its songs, in the dithered `field` style. Drawn on first request from Spotify's image CDN (no Web API call) and kept in memory. Cached for good at the versioned `coverUrl`. `404` when the period has no songs, `409 period_unavailable` while it is still going.
+
+#### `POST /api/digests/periods/:kind/:key/playlist`
+
+Saves the period's songs as a private playlist in the owner's account, only on the owner's tap: named after the period ("October 2026"), described "The songs that defined October 2026, from your encore recap.", with the cover above. The first save makes the playlist (3 calls: create, items, cover); saving again updates the same playlist in place (2 calls, the cover only when it changed), or makes a new one when it was deleted in Spotify. Library cleanup never proposes changes to these playlists. `{ "playlistId", "playlistUrl", "tracks": 25, "cover": { "status": "uploaded" | "unchanged" | "missing_scope" | "failed" } }`. `409 period_unavailable` (still going), `409 playlist_empty` (no song listened to twice), `409 spotify_not_connected`, `409 missing_scope`.
 
 #### `GET /api/digests/latest/:kind`
 

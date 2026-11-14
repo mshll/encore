@@ -1,6 +1,7 @@
 import type { Config } from "../config";
 import type { Db } from "../db/client";
 import { refreshProposals } from "../cleanup/proposals";
+import { recapPlaylistIds } from "../digest/playlist";
 import { enrich, fetchAlbumArt } from "../ingest/live/enrich";
 import { pollRecentlyPlayed } from "../ingest/live/poller";
 import { WATCH_JOB } from "../ingest/live/watcher";
@@ -46,7 +47,7 @@ export function createJobs(db: Db, settings: SettingsSource, spotifyAuth: Spotif
             db,
             spotify,
             spotifyAuth,
-            appPlaylistIds: () => [...services.playlists.ids(), ...livingPlaylistIds(db)],
+            appPlaylistIds: () => [...services.playlists.ids(), ...livingPlaylistIds(db), ...recapPlaylistIds(db)],
             appPlaylistsListed: (listed, startedAt) => markRemovedPlaylists(db, listed, startedAt, now()),
           },
           cursor,

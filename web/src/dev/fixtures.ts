@@ -44,6 +44,8 @@
     ?recap=facts      every recap has the numbers alone: no Claude lines
     ?recap=first      the history starts inside the period: nothing earlier to compare with
     ?recap=quiet      almost no listening in the period
+    ?recap=spotify    Spotify connected: the period's songs can be played and saved (saving answers itself, nothing is sent)
+    ?recap=saved      Spotify connected and the period's playlist already saved
     Recap fixtures bend real periods from the database; ?fixture=worst bends them to long, non-Latin names and broken art.
     With a ?run= fixture, Write the recap answers itself: no Claude call.
 
@@ -580,8 +582,17 @@ function bendRecapPage(page: Json, state: string): Json {
   return { ...page, headline: `${LONG_ARTIST} took over the month, with 坂本龍一 close behind and almost nothing else`, sections: bent };
 }
 
+const RECAP_CONNECTED = ["spotify", "saved"];
+
 async function recapAnswer(path: string, method: string): Promise<Response | null> {
+  const playlistSave = path.match(/^\/api\/digests\/periods\/[a-z]+\/[\d-]+\/playlist$/);
+  if (playlistSave && method === "POST" && RECAP_CONNECTED.includes(recapFixture ?? ""))
+    return json({ playlistId: "fixture", playlistUrl: "https://open.spotify.com/playlist/fixture", tracks: 25, cover: { status: "uploaded" } });
   if (method !== "GET") return null;
+  if (path === "/api/status" && RECAP_CONNECTED.includes(recapFixture ?? "")) {
+    const status = (await realFetch(path).then((r) => r.json())) as { spotify: Json };
+    return json({ ...status, spotify: { ...status.spotify, connected: true, missingScopes: [] } });
+  }
   const periodPath = /^\/api\/digests\/periods\//.test(path);
   if (!periodPath && !/^\/api\/digests\/\d+$/.test(path)) return null;
   const state = fixture === "worst" ? "worst" : recapFixture;
@@ -592,7 +603,9 @@ async function recapAnswer(path: string, method: string): Promise<Response | nul
   const bend = (d: Json | null) => (d ? { ...d, ...(state === "facts" ? { lines: null } : {}), page: bendRecapPage(d.page as Json, state) } : d);
   if (!periodPath) return json(bend(body));
   if (state === "none") return json({ ...body, recap: null });
-  return json({ ...body, recap: bend(body.recap as Json | null) });
+  const playlist = body.playlist as Json | null;
+  const saved = state === "saved" && playlist?.canSave ? { ...playlist, saved: { url: "https://open.spotify.com/playlist/fixture", savedAt: "2026-11-02T08:00:00.000Z", source: "recap" } } : playlist;
+  return json({ ...body, playlist: saved, recap: bend(body.recap as Json | null) });
 }
 
 window.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {

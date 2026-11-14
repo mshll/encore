@@ -16,6 +16,7 @@ import { dimWhile, Page, Section, SECTIONS, useDocumentTitle } from "../ui/Page"
 import { Segmented } from "../ui/Segmented";
 import { Skeleton } from "../ui/Skeleton";
 import { EmptyState, ErrorState, FirstUseState } from "../ui/States";
+import { RecapPlaylistActions } from "./recaps/Playlist";
 import { RecapSections } from "./recaps/Sections";
 
 const SLUGS = { weekly: "week", monthly: "month", yearly: "year" } as const satisfies Record<RecapKind, string>;
@@ -221,7 +222,7 @@ function Recap({ period, recap }: { period: RecapPeriod; recap: Digest }) {
         {writer.problem && <Notice tone="danger">{writer.problem}</Notice>}
       </header>
       {page.quiet && <p className="text-secondary">Almost no listening this {NOUN[page.kind]}, so there is little to show.</p>}
-      <RecapSections page={page} />
+      <RecapSections page={page} songsActions={<RecapPlaylistActions period={period} songs={page.sections.find((s) => s.id === "songs")?.songs ?? []} />} />
       {page.legacyText && (
         <Section title="As written then">
           <div className="max-w-[60ch] text-body whitespace-pre-line text-pretty text-secondary">{page.legacyText}</div>

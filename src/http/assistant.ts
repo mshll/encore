@@ -1,6 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import type { Context } from "hono";
 import { streamSSE } from "hono/streaming";
+import { EmptyRecapPlaylistError } from "../digest/playlist";
 import { DigestNotFoundError, RecapPeriodError } from "../digest/service";
 import { ThreadNotFoundError } from "../ask/service";
 import type { AgentEvent } from "../llm/agent";
@@ -34,6 +35,7 @@ export function toApiError(error: unknown): unknown {
   if (error instanceof PicksExistError) return new ApiError(409, "picks_exist", error.message, { week: error.week });
   if (error instanceof EmptySetError) return new ApiError(409, "set_empty", error.message);
   if (error instanceof RecapPeriodError) return new ApiError(409, "period_unavailable", error.message);
+  if (error instanceof EmptyRecapPlaylistError) return new ApiError(409, "playlist_empty", error.message);
   return error;
 }
 
