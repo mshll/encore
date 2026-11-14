@@ -4,6 +4,7 @@ import { openDb } from "./db/client";
 import { createDiscord, registerCommands } from "./discord";
 import { publishAssistantPosts } from "./discord/posts";
 import { createApp } from "./http/app";
+import { IMPORT_BODY_BYTES } from "./http/bodyLimits";
 import { createAssistantJobs } from "./jobs/assistant";
 import { createJobs, enabledJobs } from "./jobs/definitions";
 import { startScheduler } from "./jobs/scheduler";
@@ -23,7 +24,7 @@ const publish = discord?.config.botToken && discord.config.channelId ? () => pub
 const assistantJobs = createAssistantJobs(services.assistant, spotifyAuth, publish);
 const app = createApp({ db, config, passkeys: new Passkeys(db, config), spotifyAuth, spotify, jobs, services, discord, now: Date.now });
 
-const server = Bun.serve({ hostname: config.host, port: config.port, fetch: app.fetch, maxRequestBodySize: 512 * 1024 * 1024 });
+const server = Bun.serve({ hostname: config.host, port: config.port, fetch: app.fetch, maxRequestBodySize: IMPORT_BODY_BYTES });
 const stopJobs = config.jobsEnabled ? startScheduler(db, [...enabledJobs(jobs, config), assistantJobs.picks, assistantJobs.digest, assistantJobs.outcomes]) : () => {};
 console.log(`encore listening on http://${server.hostname}:${server.port} (public ${config.publicBaseUrl})`);
 if (discord?.config.botToken && discord.config.guildId) {

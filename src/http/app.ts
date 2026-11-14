@@ -2,6 +2,7 @@ import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { Hono } from "hono";
 import { serveStatic } from "hono/bun";
+import { API_BODY_BYTES, limitBody, PRE_AUTH_BODY_BYTES } from "./bodyLimits";
 import type { Deps, Env } from "./context";
 import { ApiError, errorResponse } from "./errors";
 import { guardWrites, requireSession, requireSessionOrAdmin } from "./middleware";
@@ -27,6 +28,14 @@ export function createApp(deps: Deps) {
     await next();
   });
   app.onError((error, c) => errorResponse(c, error));
+
+  const preAuthLimit = limitBody(PRE_AUTH_BODY_BYTES);
+  const apiLimit = limitBody(API_BODY_BYTES);
+  app.use("/mcp", preAuthLimit);
+  app.use("/api/*", (c, next) => {
+    if (c.req.path === "/api/import") return next();
+    return (c.req.path.startsWith("/api/auth/") || c.req.path.startsWith("/api/discord/") ? preAuthLimit : apiLimit)(c, next);
+  });
 
   app.get("/api/health", (c) => c.json({ ok: true }));
   app.route("/api/discord", discordRoutes);
