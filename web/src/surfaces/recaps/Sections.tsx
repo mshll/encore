@@ -22,7 +22,7 @@ const dayLong = (day: string) => `${weekday(day)} ${new Intl.DateTimeFormat("en-
 const tagName = (tag: string) => tag.charAt(0).toUpperCase() + tag.slice(1).replace(/-/g, " ");
 
 function Take({ text }: { text: string | null }) {
-  return text ? <p className="max-w-[60ch] text-body text-pretty text-primary">{text}</p> : null;
+  return text ? <p className="text-body text-pretty text-primary">{text}</p> : null;
 }
 
 /** A line of figures and the small charts that draw them. */
@@ -115,7 +115,7 @@ function Artists({ s, page }: { s: Of<"artists">; page: RecapPage }) {
   return (
     <Section title="Artists">
       <Take text={s.take} />
-      <ol className="flex max-w-xl flex-col">
+      <ol className="flex flex-col">
         {s.top.map((a, i) => (
           <li key={a.artist} className="grid min-h-(--row-h-compact) grid-cols-[1.25rem_minmax(0,1fr)_auto_3.5rem] items-center gap-x-3 py-1">
             <span className="text-right text-caption text-tertiary tabular">{i + 1}</span>

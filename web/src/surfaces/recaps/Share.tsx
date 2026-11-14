@@ -37,9 +37,8 @@ function LinkRow({ link, onRevoke }: { link: ShareLink; onRevoke: () => void }) 
 }
 
 /** The recap's card to download, and public links to a frozen copy of the page: made, listed and revoked here. */
-export function ShareRecap({ recap }: { recap: Digest }) {
+export function ShareRecap({ recap, open, onOpenChange }: { recap: Digest; open: boolean; onOpenChange: (open: boolean) => void }) {
   const queryClient = useQueryClient();
-  const [open, setOpen] = useState(false);
   const [expiry, setExpiry] = useState<Expiry>("never");
   const [busy, setBusy] = useState(false);
   const [made, setMade] = useState<string | null>(null);
@@ -75,13 +74,10 @@ export function ShareRecap({ recap }: { recap: Digest }) {
 
   return (
     <>
-      <Button size="sm" onClick={() => setOpen(true)}>
-        Share
-      </Button>
       <Dialog
         open={open}
         onOpenChange={(o) => {
-          setOpen(o);
+          onOpenChange(o);
           if (!o) setMade(null);
         }}
         title={`Share ${recap.label}`}
