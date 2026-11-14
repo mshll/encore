@@ -47,8 +47,12 @@ export class SpotifyClient {
     return body.thumbnail_url ?? null;
   }
 
+  request<T>(method: "GET" | "POST" | "PUT" | "DELETE", path: string, body?: unknown): Promise<T> {
+    return this.call<T>(async (refresh) => this.send(path, await this.auth.accessToken(refresh), method, body), true);
+  }
+
   private get<T>(path: string): Promise<T> {
-    return this.call<T>(async (refresh) => this.send(path, await this.auth.accessToken(refresh)), true);
+    return this.request<T>("GET", path);
   }
 
   private async call<T>(send: (refresh: boolean) => Promise<Response>, retryUnauthorized = false): Promise<T> {
@@ -58,14 +62,18 @@ export class SpotifyClient {
     if (res.status === 401 && retryUnauthorized) res = await send(true);
     if (res.status === 429) throw await this.block(res);
     if (!res.ok) {
-      const body = (await res.json().catch(() => ({}))) as { error?: { message?: string } };
-      throw new SpotifyApiError(res.status, body.error?.message ?? res.statusText);
+      const body = (await res.json().catch(() => ({}))) as { error?: { message?: string; reason?: string } };
+      throw new SpotifyApiError(res.status, body.error?.message ?? res.statusText, body.error?.reason);
     }
-    return (await res.json()) as T;
+    const text = await res.text();
+    return (text ? JSON.parse(text) : null) as T;
   }
 
-  private send(path: string, token: string) {
-    return this.fetchFn(`${apiUrl}${path}`, { headers: { authorization: `Bearer ${token}` } });
+  private send(path: string, token: string, method: string, body: unknown) {
+    const headers: Record<string, string> = { authorization: `Bearer ${token}` };
+    if (body === undefined) return this.fetchFn(`${apiUrl}${path}`, method === "GET" ? { headers } : { method, headers });
+    headers["content-type"] = "application/json";
+    return this.fetchFn(`${apiUrl}${path}`, { method, headers, body: JSON.stringify(body) });
   }
 
   private async block(res: Response): Promise<SpotifyBlockedError> {
