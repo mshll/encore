@@ -30,7 +30,7 @@ Contract between the server and the web UI. All routes are JSON over HTTP on the
 
 ## Assistant runs
 
-A request sent with `Accept: text/event-stream` to `POST /api/sets`, `POST /api/sets/:id/messages`, `POST /api/picks/generate` or `POST /api/ask` starts a run on the server. Closing the stream does not stop it. The stream starts with `event: run` (`{ "id", "startedAt" }`), then `text` and `tool` events, then one `done` or `error`.
+A request sent with `Accept: text/event-stream` to `POST /api/sets`, `POST /api/sets/:id/messages`, `POST /api/picks/generate`, `POST /api/ask` or `POST /api/library/conversations` starts a run on the server. Closing the stream does not stop it. The stream starts with `event: run` (`{ "id", "startedAt" }`), then `text` and `tool` events, then one `done` or `error`.
 
 - `GET /api/runs?key=<request path>`: `{ "run": { "id", "startedAt" } | null }`, the run still working for that path.
 - `GET /api/runs/:id/events`: the same stream again from its first event. Finished runs stay readable for 10 minutes.
@@ -165,7 +165,7 @@ Artist rows (top artists, eras, skips, search, the artist page, the overview's `
 - `tags`: `songs` known (distinct song keys in `tracks`), `tagged` songs with tags, `coverage` = tagged / songs (0..1, not rounded).
 - `plays`: stored rows: all kinds, music only, and rows by source `api` and `live` (the rest are `export`).
 - `live`: the `watch`, `radar` and `library` jobs, same shape as `poll`. `watch.lastResult` is `{ "current": Observation | null, "inserted", "replacedApi", "coveredByExport", "playing" }` for the last tick, or `{ "current", "skipped": "spotify_not_connected" | "spotify_paused", "until"? }`.
-- `llm`: Claude spend for the current local month against `MONTHLY_BUDGET_USD`. `exhausted: true` means every LLM endpoint returns `402` and scheduled LLM jobs skip until the next month. `configured: false` means no Claude key (`claudeApiKey` setting or `ANTHROPIC_API_KEY`). `schedule`: when the weekly picks and digest jobs run (ISO weekday 1-7 and local hour, from `PICKS_WEEKDAY`/`PICKS_HOUR` and `DIGEST_WEEKDAY`/`DIGEST_HOUR`); `enabled` is `JOBS_ENABLED`. `byFeature` features: `sets`, `picks`, `ask`, `notes`, `digest`, `dj`. Job `lastResult` may be `{ "skipped": "not_due" | "budget_exceeded" | "llm_not_configured" | "spotify_not_connected" | "attempts_exhausted" }`. When Discord posting is configured, `picks` and `digest` results also carry `publish: { "posted": ["picks:2026-11-09"] }` or `publish: { "error": "..." }` (see Discord). `outcomes.lastResult` has set and pick outcome refresh counts and, once a day, `library` (pick library state).
+- `llm`: Claude spend for the current local month against `MONTHLY_BUDGET_USD`. `exhausted: true` means every LLM endpoint returns `402` and scheduled LLM jobs skip until the next month. `configured: false` means no Claude key (`claudeApiKey` setting or `ANTHROPIC_API_KEY`). `schedule`: when the weekly picks and digest jobs run (ISO weekday 1-7 and local hour, from `PICKS_WEEKDAY`/`PICKS_HOUR` and `DIGEST_WEEKDAY`/`DIGEST_HOUR`); `enabled` is `JOBS_ENABLED`. `byFeature` features: `sets`, `picks`, `ask`, `notes`, `digest`, `dj`, `library`. Job `lastResult` may be `{ "skipped": "not_due" | "budget_exceeded" | "llm_not_configured" | "spotify_not_connected" | "attempts_exhausted" }`. When Discord posting is configured, `picks` and `digest` results also carry `publish: { "posted": ["picks:2026-11-09"] }` or `publish: { "error": "..." }` (see Discord). `outcomes.lastResult` has set and pick outcome refresh counts and, once a day, `library` (pick library state).
 
 
 ## Auth (passkeys)
@@ -781,7 +781,7 @@ The songs behind a figure. Params: `kind` = `songs` (default) | `duplicates` | `
 
 A plan is a named batch of proposed library actions. Nothing reaches Spotify until the owner applies a plan here, and every applied batch can be undone. The `library` job syncs saved songs (`GET /me/tracks`) and the items of playlists the owner owns (`GET /me/playlists`, then `GET /playlists/{id}/items` for playlists whose snapshot changed), one page call every `LIBRARY_PAGE_SECONDS` (20), a full pass every `LIBRARY_SYNC_HOURS` (24). The cursor is stored, so a restart resumes the pass. App-owned playlists are skipped.
 
-Sources (`source`): `rule` (four ready-made plans, rebuilt after each sync pass), `analysis` (made from a group of songs, `POST /api/library/plans`), `claude`.
+Sources (`source`): `rule` (four ready-made plans, rebuilt after each sync pass), `analysis` (made from a group of songs, `POST /api/library/plans`), `claude` (from a conversation, `POST /api/library/conversations`), `standing` (from a standing instruction run by the `library_plans` job).
 
 **Actions** (`action`), each on `where` = the liked songs or one owned playlist:
 
@@ -806,12 +806,12 @@ Rule plans stay `open`; their dismissed and applied items keep their status acro
 
 ```json
 { "items": [{ "id": 3, "source": "rule", "ruleKind": "saved_never_played", "title": "Liked songs never played",
-              "summary": "Liked more than 30 days ago and never played past 30 seconds.", "status": "open",
+              "summary": "Liked more than 30 days ago and never played past 30 seconds.", "request": null, "threadId": null, "standingId": null, "status": "open",
               "counts": { "open": 135, "selected": 130, "dismissed": 2, "applied": 0, "skipped": 0 },
               "runningBatchId": null, "createdAt": "...", "updatedAt": "..." }] }
 ```
 
-`status`: `open`, `applied` (every ticked item applied; rule plans never), `dismissed`. `selected` counts open items that are ticked.
+`status`: `open`, `applied` (every ticked item applied; rule plans never), `dismissed`. `selected` counts open items that are ticked. Claude plans carry the owner's first message in `request` and their conversation in `threadId` (see `GET /api/library/conversations/:threadId`); standing plans also `standingId`.
 
 ### `POST /api/library/plans`
 
@@ -863,6 +863,30 @@ The batch records each write and its undo entry as Spotify accepts it, so a stop
 ```
 
 Progress while running: `applied + skipped.length` of `selected`. `notApplied` is filled once the batch stops.
+
+### `POST /api/library/conversations`
+
+Body `{ "message": "clean up what I don't listen to anymore", "threadId"?: 12 }` (message 1-2000 characters). Without `threadId` it starts a conversation; with one it continues it. Claude (feature `library`, effort medium, at most 20 model calls) reads the library with tools and submits a plan; later messages change the same plan, keeping the owner's unticks and archive/remove switches on songs that stay. Supports `Accept: text/event-stream` (see [Assistant runs](#assistant-runs)). Response (or the `done` event):
+
+```json
+{ "planId": 9, "threadId": 12, "reply": null, "songs": 214 }
+```
+
+`planId` is `null` and `reply` holds Claude's question when the first turn asks before planning. `502 llm_incomplete` when Claude finished with neither a plan nor a reply. `503 llm_not_configured`, `402 llm_budget_exceeded` as for every Claude route.
+
+Tools Claude gets: `library_overview` (counts by when last played, playlists, overlaps, history start), `find_library_songs` (filter by place, when last played, artists, text, month added, listens; sort; at most 100), `played_not_liked`, `submit_plan` (groups by filter and single songs; at most 3,000 songs). Tool results use plain words ("over 6 months ago", "never") and opaque song references (`#123`, the tracks row id); a title, summary or reason containing a reference, a snake_case id or a field name is sent back as an error, so none reaches the owner. Only the owner's playlists, never app-owned ones, can be named.
+
+### `GET /api/library/conversations/:threadId`
+
+`{ "threadId": 12, "planId": 9, "turns": [{ "role": "owner" | "assistant", "text": "..." }] }`.
+
+### Standing instructions
+
+A saved instruction with a schedule. The `library_plans` job (hourly, only with `JOBS_ENABLED`) starts a conversation for each switched-on instruction that is due (weekly: 7 days after the last run, monthly: 30), counted in the ledger and the monthly cap like any Claude call. The plan waits as an open plan with `source: "standing"`; the previous open plan from the same instruction is dismissed. It never applies anything. At the cap the run stops with `lastError` "The monthly Claude budget is spent".
+
+- `GET /api/library/standing`: `{ "items": [{ "id": 1, "instruction": "...", "cadence": "weekly" | "monthly", "enabled": false, "lastRunAt": null, "nextRunAt": null, "lastPlanId": null, "lastError": null }] }`. `nextRunAt` is `null` while switched off.
+- `POST /api/library/standing`: body `{ "instruction", "cadence", "enabled"?: false }`, `201` with the item. Off by default.
+- `PATCH /api/library/standing/:id`: any of the same fields. `DELETE /api/library/standing/:id`: `{ "deleted": true }`.
 
 ### `GET /api/library/batches` and `GET /api/library/batches/:id`
 

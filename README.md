@@ -26,7 +26,7 @@ One instance serves one person. Your data stays in a single SQLite file on your 
 **Upkeep**
 
 - **Recaps**: a weekly and a monthly write-up.
-- **Library**: how much of your liked songs and playlists you still play, and where the dead weight sits. Plans to tidy them, ready-made or from a group of songs: archive (the default) or remove, keep one copy of duplicates, like what you play a lot. Nothing changes in Spotify until you approve a plan, and every applied plan can be undone.
+- **Library**: how much of your liked songs and playlists you still play, and where the dead weight sits. Plans to tidy them, ready-made, from a group of songs, or by telling Claude what you want ("clean up what I don't listen to anymore") and talking it through; a standing instruction can make one on a schedule: archive (the default) or remove, keep one copy of duplicates, like what you play a lot. Nothing changes in Spotify until you approve a plan, and every applied plan can be undone.
 
 | | |
 | --- | --- |

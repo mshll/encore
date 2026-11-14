@@ -266,7 +266,7 @@ function SpotifyTab({ status }: { status: Status }) {
   );
 }
 
-const FEATURE_LABELS: Record<LlmFeature, string> = { sets: "Sets", picks: "Picks", ask: "Ask", notes: "Liner notes", digest: "Recaps", dj: "Session re-plans" };
+const FEATURE_LABELS: Record<LlmFeature, string> = { sets: "Sets", picks: "Picks", ask: "Ask", notes: "Liner notes", digest: "Recaps", dj: "Session re-plans", library: "Library plans" };
 
 function Spend() {
   const q = useSpend();

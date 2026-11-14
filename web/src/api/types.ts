@@ -62,7 +62,7 @@ export type Status = {
   llm: LlmStatus;
 };
 
-export type LlmFeature = "sets" | "picks" | "ask" | "notes" | "digest" | "dj";
+export type LlmFeature = "sets" | "picks" | "ask" | "notes" | "digest" | "dj" | "library";
 
 export type Budget = { month: string; spentUsd: number; capUsd: number; remainingUsd: number; exhausted: boolean };
 

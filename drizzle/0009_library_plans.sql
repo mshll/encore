@@ -4,12 +4,27 @@ CREATE TABLE `library_plans` (
 	`rule_kind` text,
 	`title` text NOT NULL,
 	`summary` text DEFAULT '' NOT NULL,
+	`request` text,
+	`thread_id` integer,
+	`standing_id` integer,
 	`status` text NOT NULL,
 	`created_at` integer NOT NULL,
 	`updated_at` integer NOT NULL
 );
 --> statement-breakpoint
 CREATE UNIQUE INDEX `library_plans_rule_kind_unique` ON `library_plans` (`rule_kind`);--> statement-breakpoint
+CREATE TABLE `library_standing` (
+	`id` integer PRIMARY KEY AUTOINCREMENT NOT NULL,
+	`instruction` text NOT NULL,
+	`cadence` text NOT NULL,
+	`enabled` integer DEFAULT false NOT NULL,
+	`last_run_at` integer,
+	`last_plan_id` integer,
+	`last_error` text,
+	`created_at` integer NOT NULL,
+	`updated_at` integer NOT NULL
+);
+--> statement-breakpoint
 ALTER TABLE `cleanup_batches` ADD `plan_id` integer;--> statement-breakpoint
 ALTER TABLE `cleanup_batches` ADD `selected_ids` text DEFAULT '[]' NOT NULL;--> statement-breakpoint
 ALTER TABLE `cleanup_batches` ADD `skipped` text DEFAULT '[]' NOT NULL;--> statement-breakpoint

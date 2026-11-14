@@ -231,7 +231,7 @@ export type RuleKind = (typeof RULE_KINDS)[number];
 export type CleanupKind = (typeof CLEANUP_KINDS)[number];
 export type PlanAction = (typeof PLAN_ACTIONS)[number];
 
-export const PLAN_SOURCES = ["rule", "analysis", "claude"] as const;
+export const PLAN_SOURCES = ["rule", "analysis", "claude", "standing"] as const;
 export const PLAN_STATUSES = ["open", "applied", "dismissed"] as const;
 export type PlanSource = (typeof PLAN_SOURCES)[number];
 
@@ -242,7 +242,26 @@ export const libraryPlans = sqliteTable("library_plans", {
   ruleKind: text("rule_kind", { enum: RULE_KINDS }).unique(),
   title: text("title").notNull(),
   summary: text("summary").notNull().default(""),
+  /** The owner's instruction, for plans Claude made. */
+  request: text("request"),
+  threadId: integer("thread_id"),
+  standingId: integer("standing_id"),
   status: text("status", { enum: PLAN_STATUSES }).notNull(),
+  createdAt: integer("created_at").notNull(),
+  updatedAt: integer("updated_at").notNull(),
+});
+
+export const STANDING_CADENCES = ["weekly", "monthly"] as const;
+
+/** A saved instruction a job hands to Claude on a schedule. The plan it makes waits for the owner; nothing applies by itself. */
+export const libraryStanding = sqliteTable("library_standing", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  instruction: text("instruction").notNull(),
+  cadence: text("cadence", { enum: STANDING_CADENCES }).notNull(),
+  enabled: integer("enabled", { mode: "boolean" }).notNull().default(false),
+  lastRunAt: integer("last_run_at"),
+  lastPlanId: integer("last_plan_id"),
+  lastError: text("last_error"),
   createdAt: integer("created_at").notNull(),
   updatedAt: integer("updated_at").notNull(),
 });

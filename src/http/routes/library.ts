@@ -1,14 +1,16 @@
-import { count } from "drizzle-orm";
 import { Hono } from "hono";
 import { z } from "zod";
 import type { Context } from "hono";
-import { ownedPlaylists, savedTracks } from "../../db/schema";
+import { count, eq } from "drizzle-orm";
+import { libraryPlans, ownedPlaylists, savedTracks, STANDING_CADENCES } from "../../db/schema";
 import { libraryCursor } from "../../jobs/definitions";
 import { entryEvidence, groupEntries, libraryAnalysis, loadLibrary, plainReason, PLAY_CLASSES, songGroup } from "../../library/analysis";
 import { BatchBusyError, BatchNotFoundError, getBatch, listBatches, startApply, startUndo, type Started } from "../../library/apply";
 import { dismissPlan, getPlan, ITEM_STATUSES, listPlans, PlanNotFoundError, PlanSelectionError, planFromGroup, restorePlan, updateItems } from "../../library/plans";
 import { ensureRulePlans } from "../../library/rules";
-import { toApiError } from "../assistant";
+import { continuePlanConversation, planConversation, startPlanConversation } from "../../library/planner";
+import { createStanding, deleteStanding, listStanding, StandingNotFoundError, updateStanding } from "../../library/standing";
+import { respond, toApiError } from "../assistant";
 import type { Env } from "../context";
 import { ApiError, jsonBody, parse } from "../errors";
 
@@ -33,6 +35,7 @@ function planError(error: unknown): never {
   if (error instanceof PlanNotFoundError || error instanceof BatchNotFoundError) throw new ApiError(404, "not_found", "Not found");
   if (error instanceof PlanSelectionError) throw new ApiError(400, "invalid_selection", error.message, error.ids.length ? { ids: error.ids } : undefined);
   if (error instanceof BatchBusyError) throw new ApiError(409, "batch_running", error.message);
+  if (error instanceof StandingNotFoundError) throw new ApiError(404, "not_found", "Not found");
   throw toApiError(error);
 }
 
@@ -92,6 +95,40 @@ export const planRoutes = new Hono<Env>()
     return background(c, () => startApply({ db, spotify, now }, planId));
   });
 
+const message = z.string().trim().min(1).max(2000);
+
+export const conversationRoutes = new Hono<Env>()
+  .post("/", async (c) => {
+    const body = parse(z.strictObject({ message, threadId: z.number().int().positive().optional() }), await jsonBody(c));
+    return respond(c, (ctx, onEvent) => (body.threadId ? continuePlanConversation(ctx, body.threadId, body.message, onEvent) : startPlanConversation(ctx, body.message, onEvent)));
+  })
+  .get("/:id", (c) => {
+    const { db } = c.var.deps;
+    const threadId = parse(id, c.req.param("id"));
+    const turns = planConversation(db, threadId);
+    if (turns.length === 0) throw new ApiError(404, "not_found", "Not found");
+    const plan = db.select({ id: libraryPlans.id }).from(libraryPlans).where(eq(libraryPlans.threadId, threadId)).get();
+    return c.json({ threadId, planId: plan?.id ?? null, turns });
+  });
+
+const standingBody = z.strictObject({ instruction: z.string().trim().min(1).max(1000), cadence: z.enum(STANDING_CADENCES), enabled: z.boolean().optional() });
+
+export const standingRoutes = new Hono<Env>()
+  .get("/", (c) => c.json({ items: listStanding(c.var.deps.db, c.var.deps.now()) }))
+  .post("/", async (c) => {
+    const body = parse(standingBody, await jsonBody(c));
+    return c.json(createStanding(c.var.deps.db, body, c.var.deps.now()), 201);
+  })
+  .patch("/:id", async (c) => {
+    const body = parse(standingBody.partial(), await jsonBody(c));
+    const { db, now } = c.var.deps;
+    return c.json(guarded(() => updateStanding(db, parse(id, c.req.param("id")), body, now())));
+  })
+  .delete("/:id", (c) => {
+    guarded(() => deleteStanding(c.var.deps.db, parse(id, c.req.param("id"))));
+    return c.json({ deleted: true });
+  });
+
 export const batchRoutes = new Hono<Env>()
   .get("/", (c) => c.json({ items: listBatches(c.var.deps.db, 50) }))
   .get("/:id", (c) => c.json({ batch: guarded(() => getBatch(c.var.deps.db, parse(id, c.req.param("id")))) }))
@@ -104,6 +141,8 @@ export const batchRoutes = new Hono<Env>()
 export const libraryRoutes = new Hono<Env>()
   .route("/plans", planRoutes)
   .route("/batches", batchRoutes)
+  .route("/conversations", conversationRoutes)
+  .route("/standing", standingRoutes)
   .get("/analysis", (c) => {
     const { db, settings, now } = c.var.deps;
     const cursor = libraryCursor(db);

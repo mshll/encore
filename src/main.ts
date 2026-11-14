@@ -34,7 +34,7 @@ const assistantJobs = createAssistantJobs(services.assistant, spotifyAuth, publi
 const app = createApp({ db, config, settings, passkeys: new Passkeys(db, config), spotifyAuth, spotify, jobs, services, discord, now: Date.now });
 
 const server = Bun.serve({ hostname: config.host, port: config.port, fetch: app.fetch, maxRequestBodySize: IMPORT_BODY_BYTES });
-const scheduler = config.jobsEnabled ? startScheduler(db, [...enabledJobs(jobs, config), assistantJobs.picks, assistantJobs.digest, assistantJobs.outcomes]) : null;
+const scheduler = config.jobsEnabled ? startScheduler(db, [...enabledJobs(jobs, config), assistantJobs.picks, assistantJobs.digest, assistantJobs.outcomes, assistantJobs.library]) : null;
 settings.subscribe(() => scheduler?.reschedule());
 console.log(`encore listening on http://${server.hostname}:${server.port} (public ${config.publicBaseUrl})`);
 const startupDiscord = discord.current();
