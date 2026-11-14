@@ -83,6 +83,13 @@ describe("top lists", () => {
     expect(c).toMatchObject({ uri: C, plays: 2, listens: 1, skipRate: 1, quickSkips: 1 });
   });
 
+  test("tracks and artists narrow to a local weekday and hour", () => {
+    const db = baseFixture();
+    expect(topTracks(db, { range: {}, limit: 10, weekday: 1, hour: 13 }).map((t) => t.plays)).toEqual([1]);
+    expect(topArtists(db, { range: {}, limit: 10, weekday: 1, hour: 15 }).map((a) => a.artist)).toEqual(["Artist Y"]);
+    expect(topArtists(db, { range: {}, limit: 10, hour: 4 })).toEqual([]);
+  });
+
   test("artists and albums, sortable", () => {
     const db = baseFixture();
     expect(topArtists(db, { range: {}, limit: 10 }).map((a) => [a.artist, a.plays, a.songs])).toEqual([

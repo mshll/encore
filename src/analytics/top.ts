@@ -4,19 +4,24 @@ import { hours, iso, MUSIC, musicWhere, type Range, songStatsSql, songWithStats,
 
 export type TopSort = "hours" | "listens" | "plays";
 export type TopParams = { range: Range; limit: number; offset?: number; sort?: TopSort };
+export type TopAtParams = TopParams & { weekday?: number; hour?: number };
 
 const sortColumn = { hours: "ms", listens: "listens", plays: "plays" } as const;
 const orderBy = (sort: TopSort = "hours") => sql.raw(`${sortColumn[sort]} desc`);
+const where = ({ range, weekday, hour }: TopAtParams) =>
+  musicWhere(range, weekday === undefined ? undefined : sql`p.weekday = ${weekday}`, hour === undefined ? undefined : sql`p.hour = ${hour}`);
 
-export function topTracks(db: Db, { range, limit, offset = 0, sort }: TopParams) {
-  const rows = db.all<SongRow>(sql`select * from (${songStatsSql(musicWhere(range))}) order by ${orderBy(sort)}, song_key limit ${limit} offset ${offset}`);
+export function topTracks(db: Db, params: TopAtParams) {
+  const { limit, offset = 0, sort } = params;
+  const rows = db.all<SongRow>(sql`select * from (${songStatsSql(where(params))}) order by ${orderBy(sort)}, song_key limit ${limit} offset ${offset}`);
   return rows.map(songWithStats);
 }
 
-export function topArtists(db: Db, { range, limit, offset = 0, sort }: TopParams) {
+export function topArtists(db: Db, params: TopAtParams) {
+  const { limit, offset = 0, sort } = params;
   const rows = db.all<StatsRow & { artist: string; songs: number }>(sql`
     select t.artist, count(distinct t.song_key) as songs, ${STATS}
-    from ${MUSIC} where ${musicWhere(range)}
+    from ${MUSIC} where ${where(params)}
     group by t.artist order by ${orderBy(sort)}, t.artist limit ${limit} offset ${offset}`);
   return rows.map((r) => ({ artist: r.artist, songs: r.songs, ...stats(r) }));
 }

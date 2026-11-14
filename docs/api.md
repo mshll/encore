@@ -216,7 +216,7 @@ Params: `period`. Only buckets with plays are returned (fill gaps on the client)
 
 ### `GET /api/stats/top/artists` | `/top/tracks` | `/top/albums`
 
-Params: `limit` (1-200, default 50), `offset` (default 0), `sort` = `hours` (default) | `listens` | `plays`.
+Params: `limit` (1-200, default 50), `offset` (default 0), `sort` = `hours` (default) | `listens` | `plays`. `top/artists` and `top/tracks` also take `weekday` (1-7) and `hour` (0-23) to count only plays in that local weekday and/or hour (one `clock` cell).
 
 - artists: `{ "items": [{ "artist": "Mac Miller", "songs": 120, ...Stats }] }`
 - tracks: `{ "items": [Song] }`

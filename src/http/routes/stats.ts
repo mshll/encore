@@ -25,6 +25,7 @@ function range(q: { from?: string; to?: string }) {
 }
 const period = z.enum(["day", "week", "month", "year"]).default("month");
 const top = ranged({ limit: int(1, 200, 50), offset: int(0, 1_000_000, 0), sort: z.enum(["hours", "listens", "plays"]).default("hours") });
+const topAt = top.extend({ weekday: z.coerce.number().int().min(1).max(7).optional(), hour: z.coerce.number().int().min(0).max(23).optional() });
 
 function found<T>(value: T | null): T {
   if (value === null) throw new ApiError(404, "not_found", "No plays found");
@@ -38,11 +39,11 @@ export const statsRoutes = new Hono<Env>()
     return c.json(timeSeries(c.var.deps.db, { range: range(q), period: q.period }));
   })
   .get("/top/artists", (c) => {
-    const q = parse(top, c.req.query());
+    const q = parse(topAt, c.req.query());
     return c.json({ items: topArtists(c.var.deps.db, { ...q, range: range(q) }) });
   })
   .get("/top/tracks", (c) => {
-    const q = parse(top, c.req.query());
+    const q = parse(topAt, c.req.query());
     return c.json({ items: topTracks(c.var.deps.db, { ...q, range: range(q) }) });
   })
   .get("/top/albums", (c) => {
