@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "86de5522-dd43-42a3-9932-b1389203f915",
+  "id": "f6c0dc75-73b8-42e4-b3a7-f46ef9542cac",
   "prevId": "63d34ccb-3a25-4d8d-9dc4-735a14023c41",
   "tables": {
     "artists": {
@@ -1151,11 +1151,32 @@
           "notNull": false,
           "autoincrement": false
         },
+        "album_art_url": {
+          "name": "album_art_url",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
         "reason": {
           "name": "reason",
           "type": "text",
           "primaryKey": false,
           "notNull": true,
+          "autoincrement": false
+        },
+        "source_url": {
+          "name": "source_url",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "source_title": {
+          "name": "source_title",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
           "autoincrement": false
         },
         "distance": {
@@ -1309,6 +1330,13 @@
         },
         "album": {
           "name": "album",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "album_art_url": {
+          "name": "album_art_url",
           "type": "text",
           "primaryKey": false,
           "notNull": false,
@@ -1557,6 +1585,13 @@
           "type": "text",
           "primaryKey": false,
           "notNull": true,
+          "autoincrement": false
+        },
+        "album_art_url": {
+          "name": "album_art_url",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
           "autoincrement": false
         },
         "text": {
