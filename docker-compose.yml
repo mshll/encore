@@ -4,7 +4,7 @@ services:
     restart: unless-stopped
     expose:
       - "3000"
-    # Every app variable is passed through; an empty value means the app default (see README).
+    # Every app variable is passed through; an empty value means the app default (see docs/configuration.md).
     environment:
       SPOTIFY_CLIENT_ID: ${SPOTIFY_CLIENT_ID:-}
       PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:?PUBLIC_BASE_URL is required}

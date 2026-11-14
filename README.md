@@ -1,125 +1,118 @@
 # encore
 
-Self-hosted, single-user Spotify dashboard. Imports the Spotify extended streaming history export, keeps logging new plays from the Spotify API, stores LLM-produced tags per song, serves analytics as JSON, and adds Claude features (sets, weekly picks, ask, liner notes, digests) on the web and in Discord. API contract: [docs/api.md](docs/api.md).
+A self-hosted dashboard for your own Spotify listening. It imports your full streaming history, keeps logging new plays, and shows what you listen to, when, and how that changes. With an Anthropic API key it also builds playlists from a prompt, picks new songs each week, and answers questions about your history.
 
-Stack: Bun, TypeScript, Hono, SQLite (bun:sqlite + Drizzle), passkeys via @simplewebauthn/server.
+One instance serves one person. Your data stays in a single SQLite file on your server.
+
+## What it does
+
+**Listening**
+
+- **Overview**: time listened, plays and listens for any range, with top artists, songs and albums.
+- **Plays**: the full log, searchable and filterable by device and source.
+- **Music**: every artist, album and song you have played, each with its own page, plus favourites you stopped playing.
+- **Patterns**: when in the week you listen, which artists defined which months, genres and moods over time, where songs get skipped, and trips and devices.
+
+**Play** (needs an Anthropic API key)
+
+- **Sets**: describe a playlist; Claude builds it from your history plus songs you have never played, with a reason for each. Refine it by chat, save it to Spotify, or play it as a session that adapts as you skip.
+- **For you**: a few new songs picked each week, and new releases from artists you play.
+- **Ask**: questions about your listening, answered from your history.
+
+**Upkeep**
+
+- **Recaps**: a weekly and a monthly write-up.
+- **Library**: proposals to tidy saved songs and playlists. Nothing is removed until you approve it, and every applied batch can be undone.
+
+Optional integrations: Discord commands and channel posts, and an MCP server over your analytics and playback.
 
 ## What you need
 
-- A Spotify account and your extended streaming history: request it under Account, Privacy settings, "Extended streaming history". Spotify emails it within about 30 days.
-- A Spotify app from [developer.spotify.com/dashboard](https://developer.spotify.com/dashboard): Web API, development mode. Add your redirect URIs (`http://127.0.0.1:8888/callback` for local, `https://your-domain/callback` for a server) and enter its client id in Settings (or set `SPOTIFY_CLIENT_ID`). No client secret is used.
-- Optional: an Anthropic API key for the Claude features, a Discord application for commands and posts, and an MCP client.
+- A Spotify account. Playback control needs Spotify Premium.
+- Your extended streaming history: request it in your Spotify account under Privacy settings, "Extended streaming history". Spotify sends it within about 30 days. encore works without it, but then starts from the day you connect.
+- A Spotify app from [developer.spotify.com/dashboard](https://developer.spotify.com/dashboard): Web API, development mode. No client secret is used.
+- Optional: an [Anthropic API key](https://console.anthropic.com/) for Sets, picks, Ask, liner notes and recaps. A monthly spend cap applies (default 100 USD, change it in Settings).
 
-Spotify limits development-mode apps. Some endpoints have a daily quota, counted per Spotify account across all your apps. When Spotify answers `QUOTA_EXCEEDED`, encore pauses only that endpoint until the time Spotify gives.
+Spotify limits development-mode apps: some endpoints have a daily quota per Spotify account. When Spotify answers `QUOTA_EXCEEDED`, encore pauses only that endpoint until the time Spotify gives, and fills in the missing track and artist details later.
 
-## Run locally
+## Run it
 
-```sh
-bun install
-cp .env.example .env          # set SETUP_TOKEN and SECRETS_KEY (openssl rand -hex 24 / 32)
-bun run import "/path/to/Spotify Extended Streaming History"
-bun run dev                   # http://localhost:8888
-```
-
-Open the app on `http://localhost:8888`, not `127.0.0.1`: passkeys need a domain name, and `localhost` is one. Spotify only allows a loopback IP for local redirect URIs, so the OAuth callback goes to `http://127.0.0.1:8888/callback`. The callback does not need the session cookie; it redirects back to `PUBLIC_BASE_URL` when done.
-
-First login: open the app and enter `SETUP_TOKEN` to create a passkey. After that, only a signed-in session can add passkeys.
-
-Checks: `bun test`, `bun run typecheck`, and `cd web && bun run typecheck`.
-
-### Web UI
-
-The UI lives in `web/` (Vite, React, TypeScript, Tailwind, Base UI). For UI work run the API on another port and let Vite own 8888, so the URLs above stay the same:
+### Docker
 
 ```sh
-PORT=8889 bun run dev                       # API, jobs included
-cd web && bun install && bun run dev        # http://localhost:8888, proxies /api and /callback to 8889
+git clone https://github.com/mshll/encore.git && cd encore
+export SETUP_TOKEN=$(openssl rand -hex 24)
+export SECRETS_KEY=$(openssl rand -hex 32)
+echo "Setup token: $SETUP_TOKEN"
+docker compose -f docker-compose.yml -f docker-compose.local.yml up --build
 ```
 
-`cd web && bun run build` writes `web/dist`; `bun run start` then serves it on 8888 with the API. The Docker image builds it the same way.
+Open `http://localhost:8888`. Use `localhost`, not `127.0.0.1`: passkeys need a domain name.
+
+Keep `SECRETS_KEY`. It encrypts the keys and tokens you save in Settings; if it changes, they must be entered again.
+
+### On a server
+
+`docker-compose.yml` builds one image and keeps the database in the named volume `encore-data` (mounted at `/data`). It exposes port 3000 without publishing it; put a reverse proxy with HTTPS in front (for example a Dokploy domain on service `encore`, port 3000).
+
+Set three environment variables:
+
+| Variable | Value |
+| --- | --- |
+| `PUBLIC_BASE_URL` | The address you open in the browser, such as `https://encore.example.com` |
+| `SETUP_TOKEN` | At least 24 characters. Needed once, to create the first passkey |
+| `SECRETS_KEY` | At least 32 characters. Encrypts secrets saved from the dashboard |
+
+Everything else is set in the dashboard. Do not delete or rename the `encore-data` volume: track and artist details in it take days of Spotify quota to fetch again.
+
+### First run
+
+The app walks you through setup:
+
+1. Enter the setup token and create a passkey. After that, sign-in is by passkey only.
+2. Paste your Spotify app's client id. Setup shows the redirect URI to register in the Spotify app (`PUBLIC_BASE_URL/callback`; locally `http://127.0.0.1:8888/callback`).
+3. Connect Spotify.
+4. Choose your time zone, home country and weekend days. Do this before the import: the time zone applies only to plays stored after it is set.
+5. Upload the `Streaming_History_Audio_*.json` and `Streaming_History_Video_*.json` files from the export. Importing again is safe; rows already stored are skipped.
+6. Optional: add a Claude key, Discord and an MCP token.
 
 ## Configuration
 
-Two kinds of configuration:
+Settings live in the database and are edited in the dashboard; a change applies without a restart. Only boot values (address, port, database path, the three variables above) come from the environment. An environment variable with a setting's name overrides the dashboard and locks that field, which is useful for managed deployments.
 
-- Boot config is env only, read once at start: `HOST`, `PORT`, `DATABASE_PATH`, `WEB_DIST`, `PUBLIC_BASE_URL`, `SPOTIFY_REDIRECT_URI`, `SETUP_TOKEN`, `SECRETS_KEY`, `JOBS_ENABLED`, `JOBS_DISABLED`, `LLM_PRICES`.
-- Every other variable below is a setting. Settings live in the `settings` table and are edited in the dashboard (`GET`/`PATCH /api/settings`); services read them on each use, so a change applies without a restart. An env var of the same name, when set, overrides the stored value and locks the field in the dashboard. With no env var and nothing stored, the default applies.
+The full list, with defaults: [docs/configuration.md](docs/configuration.md). The HTTP API: [docs/api.md](docs/api.md).
 
-To move settings from env vars to the dashboard, use Save them here in Settings (`POST /api/settings/adopt-env`): it stores the current env values without changing them. Then remove those env vars and restart; the stored values apply from then on.
+## Privacy and safety
 
-Secrets set from the dashboard (Claude key, Discord bot token, MCP token, admin token) are encrypted with `SECRETS_KEY` before they are stored. Without `SECRETS_KEY` they can only come from env vars. Changing `SECRETS_KEY` makes stored secrets unreadable; save them again.
+- The `ip_addr` field in the Spotify export is never stored.
+- Secrets saved from the dashboard are encrypted at rest and never returned by the API.
+- encore never starts playback, removes saved songs or edits playlists without an action from you.
+- A skipped song is treated as context (time, device, position), never as a dislike on its own.
 
-All env values are validated at boot (the process exits on invalid values). See [.env.example](.env.example).
+## Development
 
-| Var | Default | Notes |
-| --- | --- | --- |
-| `PUBLIC_BASE_URL` | `http://localhost:8888` | Browser origin. Sets passkey RP ID, cookie `Secure` (https), and post-OAuth redirect |
-| `SPOTIFY_REDIRECT_URI` | `PUBLIC_BASE_URL/callback` | Must be registered in the Spotify app |
-| `SETUP_TOKEN` | unset | Min 24 chars. Needed to register the first passkey |
-| `SECRETS_KEY` | unset | Min 32 chars. Encrypts secrets stored from the dashboard |
-| `HOST`, `PORT` | `127.0.0.1`, `8888` | Docker image uses `0.0.0.0`, `3000` |
-| `DATABASE_PATH` | `./data/encore.db` | Docker image uses `/data/encore.db` |
-| `WEB_DIST` | `./web/dist` | Served with SPA fallback when `index.html` exists |
-| `SPOTIFY_CLIENT_ID` | unset | Setting. PKCE client, no secret. Changing it disconnects Spotify |
-| `ADMIN_TOKEN` | unset | Setting, secret. Min 24 chars. Bearer token for `/api/tags/*` and `POST /api/import` only |
-| `TIMEZONE` | `UTC` | IANA zone for day/hour buckets, applied at insert time. Set it before the first import |
-| `HOME_COUNTRY` | most-played country | Two-letter code; trips are runs of plays outside it |
-| `WEEKEND_DAYS` | `5,6` | ISO weekdays (1 = Monday) that count as the weekend in analytics, picks, sets and DJ plans |
-| `JOBS_ENABLED` | `true` | Poller and enrichment |
-| `POLL_INTERVAL_SECONDS` | `300` | Min 60 |
-| `ENRICH_INTERVAL_SECONDS`, `ENRICH_BATCH_SIZE` | `120`, `1` | Seconds between enrichment runs, Web API calls per run (track or artist, most listened first) |
-| `ART_INTERVAL_SECONDS` | `4` | Seconds between album-art lookups through Spotify's public oEmbed endpoint |
-| `SPOTIFY_MIN_INTERVAL_MS` | `2000` | Minimum spacing between Spotify Web API calls. All calls share one queue; calls made for a request go before calls made by jobs |
-| `QUOTA_BACKOFF_HOURS` | `12` | Pause after a Spotify `QUOTA_EXCEEDED` 429 |
-| `JOBS_DISABLED` | empty | Comma-separated job names to skip: `poll`, `enrich`, `art`, `watch`, `radar`, `library` |
-| `WATCHER_ACTIVE_SECONDS`, `WATCHER_IDLE_SECONDS`, `WATCHER_BACKOFF_MAX_SECONDS` | `15`, `60`, `900` | Player watcher cadence while playing, while idle, and the longest back-off after a 429 |
-| `DJ_SKIP_TRIGGER` | `2` | Consecutive skips in a DJ session that trigger a re-plan |
-| `DJ_REPLANNER`, `DJ_REPLAN_TIMEOUT_SECONDS` | `deterministic`, `20` | `llm` re-plans with Claude; any error, refusal, spent budget or timeout falls back to the deterministic plan |
-| `RADAR_MIN_LISTENS`, `RADAR_INTERVAL_MINUTES`, `RADAR_ARTISTS_PER_RUN`, `RADAR_RECHECK_DAYS`, `RADAR_BASELINE_DAYS` | `20`, `60`, `2`, `7`, `30` | Release radar: which artists, how often it runs, Web API calls per run, days between checks of one artist, look-back on an artist's first check |
-| `LIBRARY_SYNC_HOURS`, `LIBRARY_PAGE_SECONDS` | `24`, `20` | Saved songs and own playlists: hours between full passes, seconds between page calls |
-| `DISCORD_APPLICATION_ID`, `DISCORD_PUBLIC_KEY`, `DISCORD_OWNER_ID` | unset | Enable `POST /api/discord/interactions`. Only `DISCORD_OWNER_ID` may use commands |
-| `DISCORD_BOT_TOKEN`, `DISCORD_GUILD_ID` | unset | Guild command registration (at startup, or `bun run discord:register`) |
-| `DISCORD_CHANNEL_ID` | unset | With `DISCORD_BOT_TOKEN`: channel for weekly picks, the weekly digest (with new releases) and the monthly recap, each posted once |
-| `MCP_TOKEN` | unset | Min 24 chars. Bearer token for `/mcp`; unset disables it |
-| `ANTHROPIC_API_KEY` | unset | Enables the Claude features; without it they return `503 llm_not_configured` |
-| `LLM_MODEL` | `claude-opus-5-5` | |
-| `LLM_PRICES` | built in | JSON overrides, USD per million tokens, keyed by model |
-| `MONTHLY_BUDGET_USD` | `100` | Claude spend cap per local month. At the cap, LLM endpoints return `402` and LLM jobs skip |
-| `PICKS_PER_WEEK`, `PICKS_FAR_OUT` | `5`, `1` | Weekly picks, and how many of them are far from the owner's taste |
-| `PICKS_WEEKDAY`, `PICKS_HOUR` | `5`, `10` | When weekly picks run (ISO weekday, local hour) |
-| `PICKS_PLAYLIST` | `false` | Mirror the week's picks into one private playlist |
-| `DIGEST_WEEKDAY`, `DIGEST_HOUR` | `5`, `9` | Weekly digest slot; the monthly recap runs on the 1st at `DIGEST_HOUR` |
+Stack: Bun, TypeScript, Hono, SQLite (bun:sqlite with Drizzle), passkeys through SimpleWebAuthn. The UI in `web/` is Vite, React, Tailwind, Base UI and Phosphor icons, with halftone charts drawn by a vendored dither kit.
 
-## Import
+```sh
+bun install
+cp .env.example .env          # set SETUP_TOKEN and SECRETS_KEY
+bun run dev                   # API, jobs and the built UI on http://localhost:8888
+```
 
-- CLI: `bun run import <dir>` reads every `Streaming_History_Audio_*.json` and `Streaming_History_Video_*.json` in the folder.
-- HTTP: `POST /api/import` with the same files as multipart `files`.
+For UI work, run the API on another port and let Vite own 8888:
 
-Re-importing is safe: rows already stored are skipped. Export rows replace API-logged plays inside the export's time range. `ip_addr` is never stored.
+```sh
+PORT=8889 bun run dev
+cd web && bun install && bun run dev
+```
 
-## Deploy (Dokploy)
+In a dev build, `/dev/kit` shows every UI primitive, and `?fixture=loading|error|empty|new|worst` on any page shows that state.
 
-`docker-compose.yml` builds one image and keeps SQLite in the named volume `encore-data` (mounted at `/data`). It exposes port 3000 without publishing it; point a Dokploy domain at service `encore`, port 3000. Every variable in the Environment table is passed through from Dokploy's environment; an empty or missing value means the default. Set `PUBLIC_BASE_URL` to the domain and register `PUBLIC_BASE_URL/callback` in the Spotify app.
+Checks before a commit: `bun test`, `bun run typecheck`, and `cd web && bun run typecheck && bun run build`.
 
-Production variables:
+Other commands: `bun run import <dir>` imports an export folder from the command line, `bun run discord:register` registers the Discord commands, and `bun run db:generate` writes a migration after a schema change.
 
-| Need | Variables |
-| --- | --- |
-| Required | `SPOTIFY_CLIENT_ID`, `PUBLIC_BASE_URL` (compose refuses to start without them); `TIMEZONE` (or set it in Settings) |
-| Required for first login | `SETUP_TOKEN` (can be removed after the first passkey) |
-| Required if the callback differs from `PUBLIC_BASE_URL/callback` | `SPOTIFY_REDIRECT_URI` |
-| Optional: dashboard-stored secrets | `SECRETS_KEY` (not yet passed through by `docker-compose.yml`) |
-| Optional: bearer import and tagging | `ADMIN_TOKEN` |
-| Optional: Claude features | `ANTHROPIC_API_KEY`; `MONTHLY_BUDGET_USD` (default 100) caps spend; `DJ_REPLANNER=llm` to re-plan DJ sessions with Claude |
-| Optional: Discord commands | `DISCORD_APPLICATION_ID`, `DISCORD_PUBLIC_KEY`, `DISCORD_OWNER_ID`; Interactions Endpoint URL `PUBLIC_BASE_URL/api/discord/interactions` |
-| Optional: command registration at startup | `DISCORD_BOT_TOKEN`, `DISCORD_GUILD_ID` |
-| Optional: channel posts | `DISCORD_BOT_TOKEN`, `DISCORD_CHANNEL_ID` |
-| Optional: MCP | `MCP_TOKEN` |
-| Optional: tuning | every other variable in the Environment table; defaults suit one user |
-
-Local container: `docker compose -f docker-compose.yml -f docker-compose.local.yml up --build` (publishes `127.0.0.1:8888`).
-
-Upload the export with `curl` or the UI after signing in; the CLI also works inside the container: `docker compose exec encore bun run import /path/in/container`.
+Design rules, tokens and the sitemap are in [DESIGN.md](DESIGN.md). Product and Spotify rules for contributors and coding agents are in [CLAUDE.md](CLAUDE.md).
 
 ## Layout
 
@@ -152,8 +145,8 @@ src/http/                Hono app and routes
 web/                     UI (Vite + React), built into web/dist; dither-kit charts vendored in web/src/components/dither-kit
 ```
 
-Weekend days are a setting (`WEEKEND_DAYS`, default Friday and Saturday). Unlike the timezone, a change applies to all stored plays at once: the weekday is stored, the weekend is decided at query time.
-
 ## License
 
 MIT. See [LICENSE](LICENSE).
+
+encore is not affiliated with or endorsed by Spotify.

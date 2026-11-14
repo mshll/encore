@@ -249,7 +249,7 @@ Fields by group (env var in brackets; `*` = secret):
 | `access` | `adminToken`* [ADMIN_TOKEN] |
 | `jobs` | `pollIntervalSeconds`, `enrichIntervalSeconds`, `enrichBatchSize`, `artIntervalSeconds`, `spotifyMinIntervalMs`, `quotaBackoffHours`, `watcherActiveSeconds`, `watcherIdleSeconds`, `watcherBackoffMaxSeconds`, `radarMinListens`, `radarIntervalMinutes`, `radarArtistsPerRun`, `radarRecheckDays`, `radarBaselineDays`, `librarySyncHours`, `libraryPageSeconds` |
 
-Defaults and bounds match the README's environment table.
+Defaults and bounds match the table in [configuration.md](configuration.md).
 
 ### `PATCH /api/settings`
 
