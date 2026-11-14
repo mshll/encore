@@ -155,6 +155,18 @@ export function Kit() {
             <Lockup size={32} />
           </Row>
         </Section>
+        <Section title="Page header">
+          <PageHeader
+            title="Bùi Thị Xuân Hương and the Extraordinarily Long-Named Orchestra of Hồ Chí Minh City: the complete recordings"
+            actions={<Button variant="primary">New question</Button>}
+            secondary={[
+              { label: "Rename", onClick: () => showToast("Rename") },
+              { label: "Delete", danger: true, onClick: () => showToast("Delete") },
+            ]}
+          />
+          <PageHeader title="One action" actions={<Button>Open setup</Button>} />
+          <PageHeader title="No action" />
+        </Section>
         <Section title="Colour">
           <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
             {[...SURFACES, ...FILLS].map((n) => (

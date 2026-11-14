@@ -159,6 +159,15 @@ describe("ask", () => {
     expect(thread.turns.map((t) => t.role)).toEqual(["owner", "assistant", "owner", "assistant"]);
   });
 
+  test("a thread is titled by its first question", async () => {
+    const { ctx, db } = featureCtx(scripted(message([text("Woods.")])).transport);
+    const first = await ask(ctx, "Who did I play most?", null);
+
+    const thread = getAskThread(db, first.threadId);
+
+    expect(thread.title).toBe("Who did I play most?");
+  });
+
   test("a thread from another feature cannot be continued", async () => {
     const { ctx, db } = featureCtx(scripted().transport);
     const setThread = createThread(db, "sets", ["s"], [], 0);

@@ -54,32 +54,33 @@ export function useDocumentTitle(title: string | undefined) {
 /** A header action that gives way to the overflow menu on a phone. */
 export type HeaderAction = { label: string; icon?: IconGlyph; to?: string; onClick?: () => void; danger?: boolean };
 
-function SecondaryActions({ items }: { items: HeaderAction[] }) {
+function SecondaryButtons({ items }: { items: HeaderAction[] }) {
+  return items.map((a) =>
+    a.to ? (
+      <AppLink key={a.label} to={a.to} className={buttonClass({ variant: a.danger ? "danger" : "secondary", className: "phone:hidden" })}>
+        {a.label}
+      </AppLink>
+    ) : (
+      <Button key={a.label} variant={a.danger ? "danger" : "secondary"} icon={a.icon} onClick={a.onClick} className="phone:hidden">
+        {a.label}
+      </Button>
+    ),
+  );
+}
+
+function SecondaryMenu({ items }: { items: HeaderAction[] }) {
   const [, navigate] = useLocation();
   return (
-    <>
-      {items.map((a) =>
-        a.to ? (
-          <AppLink key={a.label} to={a.to} className={buttonClass({ variant: a.danger ? "danger" : "secondary", className: "phone:hidden" })}>
+    <MenuRoot>
+      <MoreTrigger label="More actions" size="md" className="md:hidden" />
+      <MenuPopup>
+        {items.map((a) => (
+          <MenuItem key={a.label} icon={a.icon} danger={a.danger} onClick={a.to ? () => navigate(a.to!) : a.onClick}>
             {a.label}
-          </AppLink>
-        ) : (
-          <Button key={a.label} variant={a.danger ? "danger" : "secondary"} icon={a.icon} onClick={a.onClick} className="phone:hidden">
-            {a.label}
-          </Button>
-        ),
-      )}
-      <MenuRoot>
-        <MoreTrigger label="More actions" size="md" className="md:hidden" />
-        <MenuPopup>
-          {items.map((a) => (
-            <MenuItem key={a.label} icon={a.icon} danger={a.danger} onClick={a.to ? () => navigate(a.to!) : a.onClick}>
-              {a.label}
-            </MenuItem>
-          ))}
-        </MenuPopup>
-      </MenuRoot>
-    </>
+          </MenuItem>
+        ))}
+      </MenuPopup>
+    </MenuRoot>
   );
 }
 
@@ -114,8 +115,9 @@ export function PageHeader({
         </div>
         {hasActions && (
           <div className="-mt-1.5 flex shrink-0 items-center gap-2 self-start md:mt-0 md:self-end">
-            {secondary && secondary.length > 0 && <SecondaryActions items={secondary} />}
+            {secondary && secondary.length > 0 && <SecondaryButtons items={secondary} />}
             {actions}
+            {secondary && secondary.length > 0 && <SecondaryMenu items={secondary} />}
           </div>
         )}
       </div>

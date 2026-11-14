@@ -37,7 +37,8 @@ export function Composer({
     const el = ref.current;
     if (!el) return;
     el.style.height = "auto";
-    el.style.height = `${Math.min(el.scrollHeight, 280)}px`;
+    // Hidden (a closed sheet kept mounted) it measures 0: leave it at its rows until it is shown and typed in.
+    if (el.scrollHeight > 0) el.style.height = `${Math.min(el.scrollHeight, 280)}px`;
   }, [value]);
   const ready = value.trim().length > 0 && !disabled && !running;
   return (

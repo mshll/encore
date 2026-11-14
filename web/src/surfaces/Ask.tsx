@@ -13,7 +13,7 @@ import { AppLink } from "../ui/AppLink";
 import { buttonClass } from "../ui/Button";
 import { useClaudeGate } from "../ui/ClaudeNotice";
 import { Composer } from "../ui/Composer";
-import { Conversation } from "../ui/Conversation";
+import { ConversationPanel, DOCKED, useDocked } from "../ui/Conversation";
 import { cx } from "../ui/cx";
 import { Confirm } from "../ui/Dialog";
 import { Icon } from "../ui/Icon";
@@ -25,7 +25,6 @@ import { RunProgress } from "../ui/RunProgress";
 import { Skeleton } from "../ui/Skeleton";
 import { EmptyState, ErrorState, FirstUseState } from "../ui/States";
 import { Notice } from "../ui/Notice";
-import { useDesktop } from "../lib/useMedia";
 
 /** Splits an answer into paragraphs and its closing "Based on:" line. */
 function splitAnswer(text: string) {
@@ -171,7 +170,7 @@ export function Ask({ id }: { id?: string }) {
   const threadId = id ? Number(id) : null;
   const [params, setParams] = useSearchParams();
   const [, navigate] = useLocation();
-  const desktop = useDesktop();
+  const docked = useDocked();
   const thread = useAskThread(threadId);
   const lifetime = useLifetime();
   const starters = useAskStarters();
@@ -298,6 +297,7 @@ export function Ask({ id }: { id?: string }) {
     </ul>
   );
 
+  const panelTitle = threadId === null ? "New question" : (thread.data?.title ?? "Question");
   const main = missing ? (
     <EmptyState
       icon={ChatCircleTextIcon}
@@ -309,7 +309,11 @@ export function Ask({ id }: { id?: string }) {
       }
     />
   ) : (
-    <Conversation
+    <ConversationPanel
+      title={panelTitle}
+      actions={threadId !== null && thread.data && <DeleteThread id={threadId} title={thread.data.title} />}
+      flatHeader={threadId !== null}
+      className={DOCKED}
       messages={messages}
       composer={composer}
       follow={turns.length + (pending ? 1 : 0)}
@@ -318,7 +322,7 @@ export function Ask({ id }: { id?: string }) {
       empty={
         <>
           {starterList}
-          {!desktop && (
+          {!docked && (
             <nav aria-label="Your questions" className="mt-10 flex flex-col gap-2">
               <h2 className="text-heading font-medium">Your questions</h2>
               <ThreadList activeId={null} />
@@ -334,19 +338,16 @@ export function Ask({ id }: { id?: string }) {
       title="Ask"
       actions={
         threadId !== null && (
-          <>
-            {thread.data && <DeleteThread id={threadId} title={thread.data.title} />}
-            <AppLink to="/ask" className={buttonClass({ className: "phone:flex-1" })}>
-              <Icon icon={PlusIcon} />
-              New question
-            </AppLink>
-          </>
+          <AppLink to="/ask" className={buttonClass()}>
+            <Icon icon={PlusIcon} />
+            New question
+          </AppLink>
         )
       }
     />
   );
 
-  const crumb = thread.data?.title ?? (thread.isError ? null : undefined);
+  const crumb = threadId === null ? undefined : (thread.data?.title ?? (thread.isError ? null : undefined));
 
   if (firstUse)
     return (
@@ -356,16 +357,18 @@ export function Ask({ id }: { id?: string }) {
       </Page>
     );
 
-  if (desktop)
+  if (docked)
     return (
-      <Page crumb={crumb} className={cx("min-h-full", messages && !missing && "pb-0!")}>
-        {header}
-        <div className="grid flex-1 grid-cols-[220px_minmax(0,1fr)] gap-12">
-          <nav aria-label="Your questions" className="flex min-w-0 flex-col gap-2 pb-16">
-            <h2 className="text-caption text-secondary">Your questions</h2>
-            <ThreadList activeId={threadId} />
-          </nav>
-          <div className="flex max-w-[720px] flex-col">{main}</div>
+      <Page crumb={crumb}>
+        <div className="grid grid-cols-[280px_minmax(0,1fr)] gap-12">
+          <div className="flex min-w-0 flex-col gap-10">
+            {header}
+            <nav aria-label="Your questions" className="flex min-w-0 flex-col gap-2">
+              <h2 className="text-caption text-secondary">Your questions</h2>
+              <ThreadList activeId={threadId} />
+            </nav>
+          </div>
+          {main}
         </div>
       </Page>
     );

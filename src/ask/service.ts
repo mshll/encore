@@ -61,6 +61,9 @@ export async function ask(ctx: FeatureContext, question: string, threadId: numbe
   return { threadId: id, answer, toolCalls };
 }
 
+/** A thread is named by its first question. */
+const threadTitle = (turns: { role: string; text: string }[]) => turns.find((m) => m.role === "owner")?.text.slice(0, 120) ?? "";
+
 export function listAskThreads(db: Db, limit: number) {
   return db
     .select()
@@ -71,7 +74,7 @@ export function listAskThreads(db: Db, limit: number) {
     .all()
     .map((t) => ({
       id: t.id,
-      title: transcript(t.messages as MessageParam[]).find((m) => m.role === "owner")?.text.slice(0, 120) ?? "",
+      title: threadTitle(transcript(t.messages as MessageParam[])),
       createdAt: new Date(t.createdAt).toISOString(),
       updatedAt: new Date(t.updatedAt).toISOString(),
     }));
@@ -80,7 +83,8 @@ export function listAskThreads(db: Db, limit: number) {
 export function getAskThread(db: Db, id: number) {
   const thread = getThread(db, id);
   if (!thread || thread.feature !== "ask") throw new ThreadNotFoundError();
-  return { id, createdAt: new Date(thread.createdAt).toISOString(), updatedAt: new Date(thread.updatedAt).toISOString(), turns: transcript(thread.messages) };
+  const turns = transcript(thread.messages);
+  return { id, title: threadTitle(turns), createdAt: new Date(thread.createdAt).toISOString(), updatedAt: new Date(thread.updatedAt).toISOString(), turns };
 }
 
 export function deleteAskThread(db: Db, id: number) {
