@@ -114,9 +114,44 @@ describe("streaming", () => {
         return { event: lines.event, data: JSON.parse(lines.data!) };
       });
     expect(events).toEqual([
+      { event: "run", data: { id: expect.any(String), startedAt: expect.any(String) } },
       { event: "text", data: { delta: "You played Woods 20 times." } },
       { event: "done", data: { threadId: 1, answer: "You played Woods 20 times.", toolCalls: [] } },
     ]);
+  });
+
+  test("a run keeps working after its client leaves; a later request follows it, and only DELETE stops it", async () => {
+    let release!: () => void;
+    const held = new Promise<void>((resolve) => (release = resolve));
+    let signal: AbortSignal | undefined;
+    const { post, get, db, request, cookie } = signedIn(async (_params, onText, s) => {
+      signal = s;
+      await held;
+      onText("Done.");
+      return message([text("Done.")]);
+    });
+    seedLibrary(db);
+    const first = await post("/api/ask", { question: "top song?" }, { accept: "text/event-stream" });
+    const reader = first.body!.getReader();
+    const opening = new TextDecoder().decode((await reader.read()).value);
+    const id = JSON.parse(/data: (.*)/.exec(opening)![1]!).id as string;
+    await reader.cancel();
+    await Bun.sleep(5);
+    expect(signal?.aborted).toBe(false);
+    expect(await (await get("/api/runs?key=/api/ask")).json()).toEqual({ run: { id, startedAt: expect.any(String) } });
+
+    const followed = get(`/api/runs/${id}/events`);
+    release();
+    const body = await (await followed).text();
+    expect(body).toContain('event: text\ndata: {"delta":"Done."}');
+    expect(body).toContain("event: done");
+    expect(await (await get("/api/runs?key=/api/ask")).json()).toEqual({ run: null });
+
+    const second = await post("/api/ask", { question: "again?" }, { accept: "text/event-stream" });
+    const secondId = JSON.parse(/data: (.*)/.exec(new TextDecoder().decode((await second.body!.getReader().read()).value))![1]!).id as string;
+    expect((await request(`/api/runs/${secondId}`, { method: "DELETE", headers: { cookie } })).status).toBe(200);
+    expect(await (await get("/api/runs?key=/api/ask")).json()).toEqual({ run: null });
+    expect((await request("/api/runs/nope", { method: "DELETE", headers: { cookie } })).status).toBe(404);
   });
 });
 
@@ -182,7 +217,7 @@ describe("SSE keep-alive", () => {
     const app = new Hono<Env>()
       .use(async (c, next) => {
         const llm = { assertAvailable: () => {}, withSignal: () => llm };
-        c.set("deps", { services: { llm, assistant: { llm } } } as unknown as Env["Variables"]["deps"]);
+        c.set("deps", { now: Date.now, services: { llm, assistant: { llm } } } as unknown as Env["Variables"]["deps"]);
         await next();
       })
       .post("/", (c) => respond(c, () => new Promise((resolve) => setTimeout(() => resolve({ ok: true }), 60)), 200, 20));

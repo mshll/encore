@@ -14,6 +14,7 @@ import { SetItemNotFoundError, SetNotBuiltError, SetNotFoundError } from "../set
 import { SpotifyApiError, SpotifyBlockedError, SpotifyNotConnectedError } from "../spotify/errors";
 import type { Env } from "./context";
 import { ApiError } from "./errors";
+import { runs, type Run } from "./runs";
 
 export function toApiError(error: unknown): unknown {
   if (error instanceof ApiError) return error;
@@ -49,38 +50,56 @@ export function featureContext(c: Context<Env>): FeatureContext {
 
 const wantsStream = (c: Context) => c.req.header("accept")?.includes("text/event-stream") ?? false;
 
-/**
- * JSON by default. With `Accept: text/event-stream` the response is SSE: `text` and `tool` events while
- * Claude works, then one `done` event with the same body the JSON response would have, or one `error` event.
- */
-export async function respond<T>(c: Context<Env>, run: (ctx: FeatureContext, onEvent?: (e: AgentEvent) => void) => Promise<T>, status: 200 | 201 = 200, keepAliveMs = 5_000) {
-  const base = featureContext(c);
-  if (!wantsStream(c)) return c.json((await mapped(() => run(base))) as object, status);
-  await mapped(() => c.var.deps.services.llm.assertAvailable());
+const errorBody = (error: unknown) => {
+  const api = toApiError(error);
+  if (!(api instanceof ApiError)) console.error(error);
+  return { error: api instanceof ApiError ? { code: api.code, message: api.message, ...(api.details ? { details: api.details } : {}) } : { code: "internal", message: "Internal server error" } };
+};
+
+/** Streams a run as SSE: a `run` event with its id, everything it has emitted so far, then what follows. Closing the stream leaves the run working. */
+export function followRun(c: Context<Env>, run: Run, keepAliveMs = 5_000) {
   return streamSSE(c, async (stream) => {
-    const cancel = new AbortController();
-    stream.onAbort(() => cancel.abort());
     let chain = Promise.resolve();
-    const send = (event: string, data: unknown) => {
-      chain = chain.then(() => stream.writeSSE({ event, data: JSON.stringify(data) }));
+    const write = (event: string, data: unknown) => {
+      chain = chain.then(() => stream.writeSSE({ event, data: JSON.stringify(data) })).catch(() => {});
     };
+    write("run", { id: run.id, startedAt: new Date(run.startedAt).toISOString() });
     // Bun closes a response that sends nothing for 10 s, and a tool call can take longer, so a comment line keeps the stream open.
     const keepAlive = setInterval(() => {
-      chain = chain.then(async () => {
-        await stream.write(": keep-alive\n\n");
-      });
+      chain = chain.then(async () => void (await stream.write(": keep-alive\n\n"))).catch(() => {});
     }, keepAliveMs);
-    try {
-      const result = await run({ ...base, llm: base.llm.withSignal(cancel.signal) }, (e) => (e.type === "text" ? send("text", { delta: e.delta }) : send("tool", { name: e.name, input: e.input })));
-      send("done", result);
-    } catch (error) {
-      if (error instanceof LlmAbortedError) return;
-      const api = toApiError(error);
-      if (!(api instanceof ApiError)) console.error(error);
-      send("error", { error: api instanceof ApiError ? { code: api.code, message: api.message, ...(api.details ? { details: api.details } : {}) } : { code: "internal", message: "Internal server error" } });
-    } finally {
-      clearInterval(keepAlive);
-    }
+    await new Promise<void>((resolve) => {
+      const unfollow = run.follow((e) => {
+        write(e.event, e.data);
+        if (e.event === "done" || e.event === "error") resolve();
+      });
+      stream.onAbort(() => {
+        unfollow();
+        resolve();
+      });
+      if (run.finishedAt !== null) resolve();
+    });
+    clearInterval(keepAlive);
     await chain;
   });
+}
+
+/**
+ * JSON by default. With `Accept: text/event-stream` the work becomes a run that continues when the client
+ * disconnects: `text` and `tool` events while Claude works, then one `done` event with the same body the JSON
+ * response would have, or one `error` event. Only `DELETE /api/runs/:id` stops it.
+ */
+export async function respond<T>(c: Context<Env>, work: (ctx: FeatureContext, onEvent?: (e: AgentEvent) => void) => Promise<T>, status: 200 | 201 = 200, keepAliveMs = 5_000) {
+  const base = featureContext(c);
+  if (!wantsStream(c)) return c.json((await mapped(() => work(base))) as object, status);
+  await mapped(() => c.var.deps.services.llm.assertAvailable());
+  const now = c.var.deps.now;
+  const run = runs.start(c.req.path, now());
+  void work({ ...base, llm: base.llm.withSignal(run.signal) }, (e) => run.emit(e.type === "text" ? { event: "text", data: { delta: e.delta } } : { event: "tool", data: { name: e.name, input: e.input } }, now())).then(
+    (result) => run.emit({ event: "done", data: result }, now()),
+    (error) => {
+      if (!(error instanceof LlmAbortedError)) run.emit({ event: "error", data: errorBody(error) }, now());
+    },
+  );
+  return followRun(c, run, keepAliveMs);
 }

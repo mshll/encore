@@ -17,6 +17,7 @@ import { importRoutes } from "./routes/imports";
 import { mcpRoutes } from "./routes/mcp";
 import { playerRoutes } from "./routes/player";
 import { radarRoutes } from "./routes/radar";
+import { runRoutes } from "./routes/runs";
 import { callbackRoute, spotifyRoutes } from "./routes/spotify";
 import { entityRoutes, historyRoutes, searchRoutes, statsRoutes } from "./routes/stats";
 import { statusRoutes } from "./routes/status";
@@ -89,6 +90,7 @@ export function createApp(deps: Deps) {
   app.route("/api/notes", noteRoutes);
   app.route("/api/digests", digestRoutes);
   app.route("/api/llm", llmRoutes);
+  app.route("/api/runs", runRoutes);
   app.route("/api/player", playerRoutes);
   app.route("/api/tracks", trackRoutes);
   app.route("/api/dj", djRoutes);
