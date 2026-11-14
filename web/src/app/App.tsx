@@ -15,6 +15,8 @@ const AlbumPage = lazy(() => import("../surfaces/entity/AlbumPage").then((m) => 
 const SongPage = lazy(() => import("../surfaces/entity/SongPage").then((m) => ({ default: m.SongPage })));
 const Picks = lazy(() => import("../surfaces/Picks").then((m) => ({ default: m.Picks })));
 const Releases = lazy(() => import("../surfaces/Releases").then((m) => ({ default: m.Releases })));
+const Playlists = lazy(() => import("../surfaces/Playlists").then((m) => ({ default: m.Playlists })));
+const PlaylistPage = lazy(() => import("../surfaces/Playlists").then((m) => ({ default: m.PlaylistPage })));
 const Sets = lazy(() => import("../surfaces/Sets").then((m) => ({ default: m.Sets })));
 const SetPage = lazy(() => import("../surfaces/SetPage").then((m) => ({ default: m.SetPage })));
 const Ask = lazy(() => import("../surfaces/Ask").then((m) => ({ default: m.Ask })));
@@ -79,6 +81,8 @@ export function App() {
           </Route>
           <Route path="/for-you/picks" component={Picks} />
           <Route path="/for-you/releases" component={Releases} />
+          <Route path="/for-you/playlists" component={Playlists} />
+          <Route path="/for-you/playlists/:kind">{(p) => <PlaylistPage key={p.kind} kind={p.kind} />}</Route>
 
           <Route path="/sets/:id">{(p) => <SetPage key={p.id} id={Number(p.id)} />}</Route>
           <Route path="/sets" component={Sets} />
