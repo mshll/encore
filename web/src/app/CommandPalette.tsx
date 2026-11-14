@@ -37,7 +37,9 @@ export function CommandPalette({ open, onOpenChange }: { open: boolean; onOpenCh
     const pages = [...NAV, SETTINGS]
       .filter((n) => !q || n.label.toLowerCase().includes(q))
       .map((n) => ({ id: `page:${n.path}`, group: "Go to", label: n.label, path: n.path }));
-    if (!q || !search.data) return pages;
+    const askEntry = { id: "ask", group: "Ask", label: `Ask: ${deferred}`, path: `/ask?q=${encodeURIComponent(deferred)}` };
+    if (!q) return pages;
+    if (!search.data) return [...pages, askEntry];
     const { artists, songs, albums } = search.data;
     return [
       ...artists.map((a) => ({
@@ -66,6 +68,7 @@ export function CommandPalette({ open, onOpenChange }: { open: boolean; onOpenCh
         art: { src: a.albumArtUrl },
       })),
       ...pages,
+      askEntry,
     ];
   }, [deferred, search.data]);
 

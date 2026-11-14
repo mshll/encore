@@ -16,6 +16,10 @@ const Explore = lazy(() => import("../screens/Explore"));
 const Entity = lazy(() => import("../screens/Entity"));
 const Settings = lazy(() => import("../screens/Settings"));
 const Session = lazy(() => import("../screens/Session"));
+const Sets = lazy(() => import("../screens/Sets"));
+const SetPage = lazy(() => import("../screens/SetPage"));
+const Picks = lazy(() => import("../screens/Picks"));
+const Ask = lazy(() => import("../screens/Ask"));
 const Releases = lazy(() => import("../screens/Releases"));
 const Cleanup = lazy(() => import("../screens/Cleanup"));
 
@@ -44,6 +48,10 @@ export function App() {
           <Route path="/artist/:name">{(p) => <Entity kind="artist" artist={decodeURIComponent(p.name)} />}</Route>
           <Route path="/album/:artist/:album">{(p) => <Entity kind="album" artist={decodeURIComponent(p.artist)} album={decodeURIComponent(p.album)} />}</Route>
           <Route path="/song/:songKey">{(p) => <Entity kind="song" songKey={decodeURIComponent(p.songKey)} />}</Route>
+          <Route path="/sets" component={Sets} />
+          <Route path="/sets/:id">{(p) => <SetPage key={p.id} id={Number(p.id)} />}</Route>
+          <Route path="/picks" component={Picks} />
+          <Route path="/ask" component={Ask} />
           <Route path="/session" component={Session} />
           <Route path="/releases" component={Releases} />
           <Route path="/cleanup" component={Cleanup} />
