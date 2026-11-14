@@ -1,8 +1,11 @@
 import { browserSupportsWebAuthn, startAuthentication, startRegistration, WebAuthnError } from "@simplewebauthn/browser";
 import { useQueryClient } from "@tanstack/react-query";
 import { useState, type FormEvent } from "react";
-import { Lockup } from "../ui/Brand";
 import { ApiError, request } from "../api/client";
+import { Lockup } from "../ui/Brand";
+import { Button } from "../ui/Button";
+import { Field, Input } from "../ui/Field";
+import { useDocumentTitle } from "../ui/Page";
 
 function explain(error: unknown): string {
   if (error instanceof ApiError) {
@@ -25,6 +28,7 @@ export function SignIn({ setupRequired }: { setupRequired: boolean }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const supported = browserSupportsWebAuthn();
+  useDocumentTitle(setupRequired ? "Create your passkey" : "Sign in");
 
   const run = async (ceremony: () => Promise<void>) => {
     setBusy(true);
@@ -48,7 +52,7 @@ export function SignIn({ setupRequired }: { setupRequired: boolean }) {
 
   const register = (e: FormEvent) => {
     e.preventDefault();
-    return run(async () => {
+    void run(async () => {
       const optionsJSON = await request<Parameters<typeof startRegistration>[0]["optionsJSON"]>("/api/auth/register/options", { json: { setupToken: token } });
       const response = await startRegistration({ optionsJSON });
       await request("/api/auth/register/verify", { json: { setupToken: token, response } });
@@ -56,38 +60,33 @@ export function SignIn({ setupRequired }: { setupRequired: boolean }) {
   };
 
   return (
-    <main className="flex min-h-dvh items-center justify-center safe-x py-16">
+    <main className="flex min-h-dvh items-center justify-center bg-shell px-(--gutter) py-16">
       <div className="flex w-full max-w-sm flex-col gap-8">
+        <Lockup size={32} />
         <div className="flex flex-col gap-2">
-          <div className="mb-6">
-            <Lockup large />
-          </div>
-          <h1 className="text-heading-5 font-semibold">{setupRequired ? "Create your passkey" : "Sign in"}</h1>
-          {setupRequired && <p className="text-secondary">Enter the SETUP_TOKEN value from the server’s environment.</p>}
+          <h1 className="font-serif text-title">{setupRequired ? "Create your passkey" : "Sign in"}</h1>
+          {setupRequired && <p className="text-secondary text-pretty">Enter the SETUP_TOKEN value from the server’s environment.</p>}
         </div>
         {!supported ? (
           <p role="alert" className="text-danger">
             This browser does not support passkeys.
           </p>
         ) : setupRequired ? (
-          <form onSubmit={register} className="flex flex-col gap-3">
-            <label className="flex flex-col gap-1.5 text-body-sm font-medium text-secondary">
-              Setup token
-              <span className="field">
-                <input value={token} onChange={(e) => setToken(e.target.value)} autoComplete="off" spellCheck={false} required />
-              </span>
-            </label>
-            <button type="submit" className="btn btn-accent btn-lg w-full" disabled={busy || token.length === 0}>
-              {busy ? "Waiting for passkey" : "Create passkey"}
-            </button>
+          <form onSubmit={register} className="flex flex-col gap-4">
+            <Field label="Setup token">
+              {(props) => <Input {...props} value={token} onChange={(e) => setToken(e.target.value)} autoComplete="off" spellCheck={false} required />}
+            </Field>
+            <Button type="submit" variant="accent" size="lg" busy={busy} busyLabel="Waiting for passkey" disabled={token.length === 0}>
+              Create passkey
+            </Button>
           </form>
         ) : (
-          <button type="button" className="btn btn-accent btn-lg w-full" onClick={signIn} disabled={busy}>
-            {busy ? "Waiting for passkey" : "Sign in with passkey"}
-          </button>
+          <Button variant="accent" size="lg" busy={busy} busyLabel="Waiting for passkey" onClick={() => void signIn()}>
+            Sign in with passkey
+          </Button>
         )}
         {error && (
-          <p role="alert" className="text-danger">
+          <p role="alert" className="text-danger text-pretty">
             {error}
           </p>
         )}
