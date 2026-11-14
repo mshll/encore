@@ -9,7 +9,7 @@ import { createAssistantJobs } from "./jobs/assistant";
 import { createJobs, enabledJobs } from "./jobs/definitions";
 import { startScheduler } from "./jobs/scheduler";
 import { recoverInterrupted } from "./library/apply";
-import { ensureRulePlans } from "./library/rules";
+import { refreshProposals } from "./library/rules";
 import { createServices } from "./services";
 import { SettingsStore } from "./settings/store";
 import { SpotifyAuth } from "./spotify/auth";
@@ -19,7 +19,8 @@ const config = loadConfig();
 const db = openDb(config.databasePath);
 const settings = new SettingsStore(db, config);
 recoverInterrupted(db, Date.now());
-ensureRulePlans(db, Date.now());
+// Rule plans follow the current rules from the first load, not only after the next sync pass.
+refreshProposals(db, Date.now(), settings.get());
 const spotifyAuth = new SpotifyAuth(db, config, settings);
 const spotify = new SpotifyClient(db, spotifyAuth, settings);
 const services = createServices(db, config, settings, spotify);
