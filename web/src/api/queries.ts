@@ -19,6 +19,8 @@ import type {
   Block,
   Digest,
   DigestItem,
+  RecapKind,
+  RecapPeriod,
   Note,
   PicksWeek,
   SetDetail,
@@ -240,6 +242,11 @@ export const useNote = (songKey: string) =>
 export const useDigests = () => useQuery({ queryKey: ["digests"], queryFn: () => get<{ items: DigestItem[] }>("/api/digests", { limit: 30 }) });
 
 export const useDigest = (id: number) => useQuery({ queryKey: ["digests", id], queryFn: () => get<Digest>(`/api/digests/${id}`), staleTime: Infinity });
+
+export const useRecapPeriod = (kind: RecapKind, key: string) =>
+  useQuery({ queryKey: ["digests", "period", kind, key], queryFn: () => get<RecapPeriod>(`/api/digests/periods/${kind}/${key}`), placeholderData: keepPreviousData });
+
+export const useLatestRecapKey = (kind: RecapKind) => useQuery({ queryKey: ["digests", "latest", kind], queryFn: () => get<{ kind: RecapKind; key: string }>(`/api/digests/latest/${kind}`) });
 
 export const useSpend = () => useQuery({ queryKey: ["spend"], queryFn: () => get<Spend>("/api/llm/spend", { limit: 12 }) });
 

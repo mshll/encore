@@ -11,7 +11,7 @@ encore answers three jobs: **what have I been listening to**, **what should I pl
 ```
 Listening                      Play                        Secondary            Foot
 ├── Overview          /        ├── For you    /for-you     ├── Recaps  /recaps  └── Settings /settings
-├── Plays             /plays   │   ├── Picks     /picks     │   └── /recaps/:id        ├── general
+├── Plays             /plays   │   ├── Picks     /picks     │   └── /recaps/:kind/:key ├── general
 ├── Music             /music   │   ├── Releases  /releases  ├── Library /library        ├── spotify
 │   ├── Artists   /artists     │   └── Playlists /playlists └── Setup   /setup          ├── claude
 │   ├── Albums    /albums      │       └── /playlists/:kind                             ├── integrations
@@ -51,7 +51,7 @@ The source of truth for paths, labels, icons and shortcuts is `web/src/app/nav.t
 | For you: Playlists | Which encore playlists live in my Spotify account, and what is in them? | Switch a playlist on | `living`, `living/:kind`, `living/:kind/refresh`, `living/:kind/refreshes/:id`, `living/:kind/cover` | Built |
 | Sets `/sets` | Make me a playlist from a prompt | Make a set | `sets`, `sets/:id`, set run (stream), `dj/start`, `dj`, `dj/stop` | Built |
 | Ask `/ask` | Answer a question about my listening | Ask | `ask/threads`, `ask/threads/:id`, ask run (stream) | Built |
-| Recaps `/recaps` | What happened this week or month? | Open the latest recap | `digests`, `digests/:id` | Built |
+| Recaps `/recaps` | What changed in how I listen, and what was this week, month or year? | Write the recap of a period that has none | `digests`, `digests/periods/:kind/:key`, `digests/latest/:kind`, `digests/:id`, recap run (stream) | Built |
 | Library `/library` | What in my saved songs and playlists should go? | Review proposals | `cleanup`, `cleanup/dismiss`, `cleanup/apply`, `cleanup/batches`, `cleanup/batches/:id/undo`, `blocks` | Built |
 | Setup `/setup` | Is encore connected and fed? | Do the next missing step | `onboarding`, `spotify/authorize`, `import`, `settings` | Built |
 | Settings `/settings/*` | How does encore run? | Save a change | `settings`, `settings/claude/verify`, `settings/discord/register`, `spotify/disconnect`, `spotify/poll`, `llm/spend`, `auth/logout`, passkey routes | Built |
@@ -217,7 +217,7 @@ All in `web/src/ui/` unless noted. Props listed are the ones that matter.
 | `AppLink`, `useRangeHref` | `ui/AppLink` | A link that keeps the current range |
 | Paths | `app/paths` | `artistPath(name)`, `songPath(key)`, `albumPath(artist, album)` |
 
-`/dev/kit` (dev builds only) shows every primitive in its states. Fixtures: add `?fixture=loading|error|empty|new|worst|untagged|off`, `?player=playing`, `?dj=active` or `?run=running|starting|done|failed|budget|unconfigured|paused` (Claude runs answered by the fixture, never the server), `?history=before|none|slow|failed|env` (Settings, Ignore plays before; answered by the fixture, nothing deleted), `?living=connected|first|fresh|deferred|failed|empty|removed|scope|refreshing` (For you: Playlists; switches and refreshes answered by the fixture, nothing sent to Spotify) to any dev URL (`web/src/dev/fixtures.ts`); the choice sticks for the tab until `off`.
+`/dev/kit` (dev builds only) shows every primitive in its states. Fixtures: add `?fixture=loading|error|empty|new|worst|untagged|off`, `?player=playing`, `?dj=active` or `?run=running|starting|done|failed|budget|unconfigured|paused` (Claude runs answered by the fixture, never the server), `?history=before|none|slow|failed|env` (Settings, Ignore plays before; answered by the fixture, nothing deleted), `?living=connected|first|fresh|deferred|failed|empty|removed|scope|refreshing` (For you: Playlists; switches and refreshes answered by the fixture, nothing sent to Spotify), `?recap=none|facts|first|quiet` (Recaps: real periods bent to no recap yet, no Claude lines, history starting inside the period, almost no listening) to any dev URL (`web/src/dev/fixtures.ts`); the choice sticks for the tab until `off`.
 
 ## 6. Charts
 
@@ -232,8 +232,15 @@ One family: dithered halftone in Spotify green.
 | `RateMeter` | `charts/RateMeter` | A rate on a fixed 0 to 100% track, with an optional tick for a reference rate (skip rate by context, share by device). Next to a printed figure |
 | `DitherHeatmap`, `HeatLegend` | `charts/DitherHeatmap` | A grid of values (weekday by hour, artist by month). One tab stop, arrow keys move the selection. Column labels can be elements (artist avatars on phone) |
 | `BudgetBar` | `charts/BudgetBar` | Spend against a cap: `spent`, `cap`, `label`. Turns red with a cap mark once spent reaches the cap |
+| `InlinePair` | `charts/Inline` | This period over the one before as two short bars on one scale (dithered now, grey before). Inside a sentence, next to the figures |
+| `InlineChange` | `charts/Inline` | The change from before to now as an arrow and a percentage, in neutral ink ("new", "no change" when there is nothing to divide) |
+| `InlineColumns` | `charts/Inline` | A word-sized row of columns (each day, each hour) with one marked column. Sums long series into at most `bars` columns |
+| `InlineShare` | `charts/Inline` | A share of the whole on a short track, with a tick where it stood before |
+| `ArtChip` | `charts/Inline` | 20 px artwork beside a name, clamped to one line. The name is the label; the image is decoration |
 | `ditherTile(level)`, `levelFor(share)` | `charts/ditherTile` | The halftone as a CSS background for anything that is not a canvas |
 | `DataTable` | `charts/DataTable` | "View data": the accessible table behind every chart |
+
+Inline charts are sized for a line of text and sit next to the figure they draw, never in place of it. Each takes a `label`: the sentence a screen reader hears instead of the picture ("42 h, against 30 h in October"). Recaps use them first; they are built to be reused (Ask). `/dev/kit` shows each one.
 
 Rules: a chart answers one question and has a printed figure or sentence that states the answer ("Busiest: Fridays, 22:00 to 23:00"). Axis labels in `text-caption text-tertiary`. Every chart has a `DataTable`. Hover tooltips repeat data, they never hold it alone.
 

@@ -29,7 +29,7 @@ One instance serves one person. Your data stays in a single SQLite file on your 
 
 **Upkeep**
 
-- **Recaps**: a weekly and a monthly write-up.
+- **Recaps**: each week, month and year as a page of what changed: totals against the period before, artists up and down, genre and mood shifts, new songs that stuck, the busiest day and hour, with small inline charts. Claude adds a headline and one line per section; without Claude the page shows the numbers alone.
 - **Library**: proposals to tidy saved songs and playlists. Nothing is removed until you approve it, and every applied batch can be undone.
 
 | | |
@@ -153,7 +153,7 @@ src/taste/               cached taste profile given to Claude
 src/sets/ src/picks/     set building and weekly picks
 src/covers/              playlist cover drawing (Skia via @napi-rs/canvas); its fonts and their licences are in assets/fonts
 src/ask/ src/notes/      questions over the history, liner notes
-src/digest/              weekly and monthly digest facts and text
+src/digest/              recap periods, facts, pages and Claude lines
 src/assistant/           plain entry points for chat integrations
 src/jobs/                scheduler and persisted job state
 src/http/                Hono app and routes
