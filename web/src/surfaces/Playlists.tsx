@@ -24,7 +24,7 @@ import { usePlayback } from "../player/playback";
 import { WeeklyPicks } from "./Picks";
 import { ReleasesSection } from "./Releases";
 
-const KINDS: LivingKind[] = ["picks", "forgotten", "most-played", "new-releases", "this-month"];
+const KINDS: LivingKind[] = ["picks", "forgotten", "most-played", "new-releases", "this-month", "this-year"];
 const isKind = (value: string): value is LivingKind => (KINDS as string[]).includes(value);
 export const playlistPath = (kind: LivingKind) => `/for-you/${kind}`;
 const songs = (n: number) => `${fmtInt(n)} ${n === 1 ? "song" : "songs"}`;
@@ -35,6 +35,7 @@ const NOTHING_YET: Record<LivingKind, string> = {
   "most-played": "Songs you play at least twice in four weeks appear here.",
   "new-releases": "Songs appear here when an artist you play releases something new.",
   "this-month": "Songs you played this month in an earlier year appear here.",
+  "this-year": "Songs you play at least twice this year appear here.",
 };
 
 const EVENT_REFRESH: Partial<Record<LivingKind, string>> = {
@@ -45,7 +46,7 @@ const EVENT_REFRESH: Partial<Record<LivingKind, string>> = {
 type Gate = LivingList["spotify"];
 
 /** Kinds made of songs the owner has played, so each has a song page. */
-const PLAYED_KINDS: LivingKind[] = ["forgotten", "most-played", "this-month"];
+const PLAYED_KINDS: LivingKind[] = ["forgotten", "most-played", "this-month", "this-year"];
 
 /** A song in a living playlist: the shared row with play and the song menu. */
 function SongRow({ song, rank, kind }: { song: LivingSong; rank: number; kind: LivingKind }) {
@@ -219,7 +220,7 @@ export function CoversSkeleton() {
   );
 }
 
-const COVERS = "grid grid-cols-2 gap-x-4 gap-y-8 md:grid-cols-3 md:gap-x-6 lg:grid-cols-5";
+const COVERS = "grid grid-cols-2 gap-x-4 gap-y-8 md:grid-cols-3 md:gap-x-6 xl:grid-cols-6";
 
 /** What is new in a playlist that has its own source of news: this week's unopened picks, unseen releases. */
 function useNews(): Partial<Record<LivingKind, string>> {

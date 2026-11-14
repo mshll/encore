@@ -25,7 +25,9 @@ const Places = lazy(() => import("../surfaces/Places").then((m) => ({ default: m
 const Setup = lazy(() => import("../surfaces/Setup").then((m) => ({ default: m.Setup })));
 const Settings = lazy(() => import("../surfaces/Settings").then((m) => ({ default: m.Settings })));
 const Recaps = lazy(() => import("../surfaces/Recaps").then((m) => ({ default: m.Recaps })));
-const Recap = lazy(() => import("../surfaces/Recaps").then((m) => ({ default: m.Recap })));
+const RecapById = lazy(() => import("../surfaces/Recaps").then((m) => ({ default: m.RecapById })));
+const RecapKindLatest = lazy(() => import("../surfaces/Recaps").then((m) => ({ default: m.RecapKindLatest })));
+const RecapPeriodPage = lazy(() => import("../surfaces/Recaps").then((m) => ({ default: m.RecapPeriodPage })));
 const LibraryOverview = lazy(() => import("../surfaces/library/Overview").then((m) => ({ default: m.LibraryOverview })));
 const LibrarySongs = lazy(() => import("../surfaces/library/Songs").then((m) => ({ default: m.LibrarySongs })));
 const LibraryPlans = lazy(() => import("../surfaces/library/Plans").then((m) => ({ default: m.LibraryPlans })));
@@ -87,7 +89,8 @@ export function App() {
 
           <Route path="/ask/:id?">{(p) => <Ask id={p.id} />}</Route>
 
-          <Route path="/recaps/:id">{(p) => <Recap key={p.id} id={Number(p.id)} />}</Route>
+          <Route path="/recaps/:slug/:key">{(p) => <RecapPeriodPage slug={p.slug} periodKey={p.key} />}</Route>
+          <Route path="/recaps/:id">{(p) => (/^\d+$/.test(p.id) ? <RecapById key={p.id} id={Number(p.id)} /> : <RecapKindLatest key={p.id} slug={p.id} />)}</Route>
           <Route path="/recaps" component={Recaps} />
 
           <Route path="/library" component={LibraryOverview} />

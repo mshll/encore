@@ -51,6 +51,14 @@
     ?library=disconnected Spotify reads as not connected (applying answers 409 spotify_not_connected)
     ?library=unsynced    the library has never synced
     Library fixtures answer the batch routes and Apply/Undo themselves: no Spotify call, nothing written.
+    ?recap=none       Recaps: every period has no recap yet (Write the recap)
+    ?recap=facts      every recap has the numbers alone: no Claude lines
+    ?recap=first      the history starts inside the period: nothing earlier to compare with
+    ?recap=quiet      almost no listening in the period
+    ?recap=spotify    Spotify connected: the period's songs can be played and saved (saving answers itself, nothing is sent)
+    ?recap=saved      Spotify connected and the period's playlist already saved
+    Recap fixtures bend real periods from the database; ?fixture=worst bends them to long, non-Latin names and broken art.
+    With a ?run= fixture, Write the recap answers itself: no Claude call.
 
   The choice sticks for the tab (sessionStorage) so in-app navigation keeps it; ?fixture=off clears it.
 */
@@ -58,7 +66,7 @@
 type Json = Record<string, unknown>;
 
 const params = new URLSearchParams(location.search);
-for (const key of ["fixture", "player", "run", "dj", "settings", "history", "living", "library"]) {
+for (const key of ["fixture", "player", "run", "dj", "settings", "history", "living", "library", "recap"]) {
   const value = params.get(key);
   if (value === "off") sessionStorage.removeItem(`encore-${key}`);
   else if (value) sessionStorage.setItem(`encore-${key}`, value);
@@ -71,6 +79,7 @@ const settingsFixture = sessionStorage.getItem("encore-settings");
 const historyFixture = sessionStorage.getItem("encore-history");
 const livingFixture = sessionStorage.getItem("encore-living");
 const libraryFixture = sessionStorage.getItem("encore-library");
+const recapFixture = sessionStorage.getItem("encore-recap");
 
 const LONG_ARTIST = "Bùi Thị Xuân Hương and the Extraordinarily Long-Named Orchestra of Hồ Chí Minh City";
 const LONG_SONG = "Somewhere Only We Know (Live at the Royal Albert Hall, 14 February 2004) [2024 Remaster]";
@@ -274,12 +283,6 @@ function worsen(path: string, body: Json): unknown {
   }
   if (path === "/api/blocks") return { items: [{ id: 1, kind: "artist", key: "x", label: LONG_ARTIST, reason: "never on weekly pick 2026-11-09", createdAt: "2026-11-09T10:00:00.000Z" }] };
   if (path === "/api/digests") return { items: (body.items as Json[]).slice(0, 1) };
-  if (/^\/api\/digests\/\d+$/.test(path))
-    return {
-      ...body,
-      text: `${LONG_ARTIST} took ${"over ".repeat(30)}the week.\n\n${String(body.text)}`,
-      facts: { ...(body.facts as Json), topArtists: [{ artist: LONG_ARTIST, hours: 98765.4, baselineHours: 0 }] },
-    };
   if (path === "/api/onboarding") {
     const steps = Object.fromEntries(Object.entries(body.steps as Record<string, Json>).map(([k, v]) => [k, { ...v, done: true }]));
     return { ...body, complete: true, steps: { ...steps, spotifyConnect: { ...steps.spotifyConnect, userId: LONG_ARTIST }, import: { ...steps.import, exportPlays: 9876543 } } };
@@ -406,7 +409,7 @@ async function djSession() {
   };
 }
 
-const RUN_PATHS = [/^\/api\/picks\/generate$/, /^\/api\/sets$/, /^\/api\/sets\/\d+\/messages$/, /^\/api\/ask$/, /^\/api\/library\/conversations$/];
+const RUN_PATHS = [/^\/api\/digests\/generate$/, /^\/api\/picks\/generate$/, /^\/api\/sets$/, /^\/api\/sets\/\d+\/messages$/, /^\/api\/ask$/, /^\/api\/library\/conversations$/];
 
 const LIBRARY_STEPS: { name: string; input: Json }[] = [
   { name: "library_overview", input: {} },
@@ -452,6 +455,7 @@ function sse(frames: Frame[], signal: AbortSignal | null | undefined, endless: b
 }
 
 const stepFrames = (path: string, count: number): Frame[] => {
+  if (path.startsWith("/api/digests")) return [];
   const library = path.includes("library");
   const last = path.includes("picks") ? "submit_picks" : path.includes("sets") ? "submit_set" : library ? "submit_plan" : null;
   const steps = (library ? LIBRARY_STEPS : STEPS).slice(0, count).map((s): Frame => ["tool", s, 1200]);
@@ -466,6 +470,7 @@ async function doneBody(path: string): Promise<unknown> {
     const plan = plans.items.find((p) => p.source === "claude") ?? plans.items.find((p) => p.counts.open > 0);
     return { planId: plan?.id ?? null, threadId: plan?.threadId ?? 1, reply: plan ? null : "Over 6 months, or never played too?", songs: plan?.counts.open ?? 0 };
   }
+  if (path === "/api/digests/generate") return real<{ items: { id: number }[] }>("/api/digests").then((l) => (l.items[0] ? real(`/api/digests/${l.items[0].id}`) : {}));
   if (path === "/api/ask") {
     const threads = await real<{ items: { id: number }[] }>("/api/ask/threads");
     return { threadId: threads.items[0]?.id ?? 1, answer: ANSWER };
@@ -660,6 +665,75 @@ async function libraryFixtureAnswer(path: string, method: string): Promise<Respo
   return null;
 }
 
+const WORST_ARTISTS = [LONG_ARTIST, "坂本龍一", "عبد الحليم حافظ", "Фёдор Шаляпин", "Ólafur Arnalds & Nils Frahm with the Reykjavík Chamber Ensemble", "ณัฐวุฒิ สกิดใจ", "Χαΐνηδες", "이날치 LEENALCHI"];
+
+/** One recap page bent into a fixture state. `worst` keeps the numbers and swaps every name for the longest or least Latin one. */
+function bendRecapPage(page: Json, state: string): Json {
+  const sections = page.sections as Json[];
+  if (state === "facts") return { ...page, headlineBy: "facts", sections: sections.map((s) => ({ ...s, take: null })) };
+  if (state === "first")
+    return { ...page, compare: null, note: "Your history starts 3 Nov 2026, partway through November 2026, so there is nothing earlier to compare with.", sections: sections
+        .filter((s) => s.id !== "taste" && s.id !== "finds")
+        .map((s) => (s.id === "listening" ? { ...s, before: null, listensBefore: null } : s.id === "artists" ? { ...s, up: [], down: [], top: (s.top as Json[]).map((a) => ({ ...a, before: null })) } : s)),
+    };
+  if (state === "quiet") {
+    const listening = sections.find((s) => s.id === "listening");
+    return { ...page, quiet: true, headline: "Twenty minutes of music, most of it one song", headlineBy: "facts", sections: listening ? [{ ...listening, hours: 0.34, listens: 4, artists: 2, songs: 3, take: null }] : [] };
+  }
+  if (state !== "worst") return page;
+  const name = (i: number) => WORST_ARTISTS[i % WORST_ARTISTS.length]!;
+  const art = (i: number) => (i % 2 === 0 ? BROKEN_ART : null);
+  const bent = sections.map((s): Json => {
+    if (s.id === "artists")
+      return {
+        ...s,
+        top: (s.top as Json[]).map((a, i) => ({ ...a, artist: name(i), imageUrl: art(i) })),
+        up: (s.up as Json[]).map((a, i) => ({ ...a, artist: name(i + 1), imageUrl: art(i) })),
+        down: (s.down as Json[]).map((a, i) => ({ ...a, artist: name(i + 2), imageUrl: art(i + 1) })),
+      };
+    if (s.id === "songs") return { ...s, songs: (s.songs as Json[]).map((t, i) => ({ ...t, name: i === 0 ? LONG_SONG : t.name, artist: name(i), albumArtUrl: art(i) })) };
+    if (s.id === "months") return { ...s, months: (s.months as Json[]).map((m, i) => ({ ...m, artist: name(i), imageUrl: art(i), song: m.song ? { name: LONG_SONG, artist: name(i + 1) } : null })) };
+    if (s.id === "finds") {
+      const songs = s.songs as Json;
+      const artists = s.artists as Json;
+      return {
+        ...s,
+        songs: { ...songs, top: (songs.top as Json[]).map((t, i) => ({ ...t, name: i === 0 ? LONG_SONG : t.name, artist: name(i + 1), albumArtUrl: art(i) })) },
+        artists: { ...artists, top: (artists.top as Json[]).map((a, i) => ({ ...a, artist: name(i + 2), imageUrl: art(i) })) },
+      };
+    }
+    if (s.id === "taste") return { ...s, genres: (s.genres as Json[]).map((g, i) => (i === 0 ? { ...g, value: "traditional vietnamese ca trù with chamber orchestra" } : g)) };
+    return s;
+  });
+  return { ...page, headline: `${LONG_ARTIST} took over the month, with 坂本龍一 close behind and almost nothing else`, sections: bent };
+}
+
+const RECAP_CONNECTED = ["spotify", "saved"];
+
+async function recapAnswer(path: string, method: string): Promise<Response | null> {
+  const playlistSave = path.match(/^\/api\/digests\/periods\/[a-z]+\/[\d-]+\/playlist$/);
+  if (playlistSave && method === "POST" && RECAP_CONNECTED.includes(recapFixture ?? ""))
+    return json({ playlistId: "fixture", playlistUrl: "https://open.spotify.com/playlist/fixture", tracks: 25, cover: { status: "uploaded" } });
+  if (method !== "GET") return null;
+  if (path === "/api/status" && RECAP_CONNECTED.includes(recapFixture ?? "")) {
+    const status = (await realFetch(path).then((r) => r.json())) as { spotify: Json };
+    return json({ ...status, spotify: { ...status.spotify, connected: true, missingScopes: [] } });
+  }
+  const periodPath = /^\/api\/digests\/periods\//.test(path);
+  if (!periodPath && !/^\/api\/digests\/\d+$/.test(path)) return null;
+  const state = fixture === "worst" ? "worst" : recapFixture;
+  if (!state) return null;
+  const res = await realFetch(path);
+  if (!res.ok) return res;
+  const body = (await res.json()) as Json;
+  const bend = (d: Json | null) => (d ? { ...d, ...(state === "facts" ? { lines: null } : {}), page: bendRecapPage(d.page as Json, state) } : d);
+  if (!periodPath) return json(bend(body));
+  if (state === "none") return json({ ...body, recap: null });
+  const playlist = body.playlist as Json | null;
+  const saved = state === "saved" && playlist?.canSave ? { ...playlist, saved: { url: "https://open.spotify.com/playlist/fixture", savedAt: "2026-11-02T08:00:00.000Z", source: "recap" } } : playlist;
+  return json({ ...body, playlist: saved, recap: bend(body.recap as Json | null) });
+}
+
 window.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
   const url = new URL(typeof input === "string" ? input : input instanceof URL ? input.href : input.url, location.origin);
   const path = url.pathname;
@@ -697,6 +771,10 @@ window.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
   }
   if (libraryFixture) {
     const answer = await libraryFixtureAnswer(path, method);
+    if (answer) return answer;
+  }
+  if (recapFixture || fixture === "worst") {
+    const answer = await recapAnswer(path, method);
     if (answer) return answer;
   }
   if (!fixture || method !== "GET") return realFetch(input, init);

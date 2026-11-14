@@ -2,6 +2,7 @@ import { useState, type ReactNode } from "react";
 import { BudgetBar } from "../charts/BudgetBar";
 import { DitherMeter } from "../charts/DitherMeter";
 import { HeatLegend } from "../charts/DitherHeatmap";
+import { ArtChip, InlineChange, InlineColumns, InlinePair, InlineShare } from "../charts/Inline";
 import { RateMeter } from "../charts/RateMeter";
 import { showToast } from "../lib/toast";
 import type { RunState } from "../lib/useRun";
@@ -323,6 +324,44 @@ export function Kit() {
               <HeatLegend />
             </div>
           </StatStrip>
+        </Section>
+        <Section title="Inline charts">
+          <Row label="Pair and change">
+            <div className="flex flex-col gap-2">
+              <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-body">
+                <span>42 h</span>
+                <InlinePair now={42} before={30} label="42 hours against 30 hours" />
+                <InlineChange now={42} before={30} />
+                <span className="text-secondary">against 30 h in October</span>
+              </p>
+              <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-body">
+                <span>9 h</span>
+                <InlinePair now={9} before={30} label="9 hours against 30 hours" />
+                <InlineChange now={9} before={30} />
+                <InlineChange now={3} before={0} />
+                <InlineChange now={5} before={5} />
+              </p>
+            </div>
+          </Row>
+          <Row label="Columns">
+            <div className="flex flex-col gap-2">
+              <p className="flex flex-wrap items-center gap-x-2 text-body">
+                <span>Each day</span> <InlineColumns values={[2, 3, 0, 5, 8, 1, 4, 6, 2, 0, 3, 7, 9, 2]} mark={12} label="Hours each day, busiest on day 13" />
+              </p>
+              <p className="flex flex-wrap items-center gap-x-2 text-body">
+                <span>By hour</span> <InlineColumns values={Array.from({ length: 24 }, (_, h) => (h > 7 ? Math.sin(h / 4) + 1.2 : 0))} mark={21} label="Hours by hour of day, busiest at 21:00" />
+              </p>
+            </div>
+          </Row>
+          <Row label="Share">
+            <p className="flex flex-wrap items-center gap-x-2 text-body">
+              <span>Hip hop</span> <InlineShare share={0.56} before={0.73} label="56% from 73%" /> <span className="text-secondary">56% from 73%</span>
+            </p>
+          </Row>
+          <Row label="Artwork chip">
+            <ArtChip src={null} kind="artist">Frank Ocean</ArtChip>
+            <ArtChip src={BROKEN_ART} kind="artist" className="w-56">Bùi Thị Xuân Hương and the Extraordinarily Long-Named Orchestra</ArtChip>
+          </Row>
         </Section>
         <Section title="Artwork">
           {(["artist", "album", "song", "playlist"] as ArtKind[]).map((kind) => (

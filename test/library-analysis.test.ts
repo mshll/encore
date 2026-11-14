@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { createSession } from "../src/auth/sessions";
 import type { Db } from "../src/db/client";
-import { appPlaylists, livingPlaylists, llmThreads, ownedPlaylists, playlistItems, savedTracks, sets } from "../src/db/schema";
+import { appPlaylists, livingPlaylists, llmThreads, ownedPlaylists, playlistItems, recapPlaylists, savedTracks, sets } from "../src/db/schema";
 import { groupEntries, libraryAnalysis, loadLibrary, plainReason, playClass } from "../src/library/analysis";
 import { appOwnedPlaylistIds } from "../src/library/owned";
 import { play, seed, testApp, testDb, track, TZ, uri } from "./helpers";
@@ -97,6 +97,18 @@ describe("library analysis", () => {
     const ids = libraryAnalysis(snapshot(db)).playlists.map((p) => p.id);
 
     expect([ids, appOwnedPlaylistIds(db).sort()]).toEqual([["p1", "p2"], ["app", "living", "set"]]);
+  });
+
+  test("leaves out recap playlists and This year so far", () => {
+    const db = library();
+    playlist(db, "recap", ["a"]);
+    playlist(db, "year", ["b"]);
+    db.insert(recapPlaylists).values({ kind: "monthly", periodKey: "2026-10", playlistId: "recap", playlistUrl: "u", source: "recap", savedAt: NOW }).run();
+    db.insert(livingPlaylists).values({ kind: "this-year", enabled: true, playlistId: "year", createdAt: NOW, updatedAt: NOW }).run();
+
+    const ids = libraryAnalysis(snapshot(db)).playlists.map((p) => p.id);
+
+    expect(ids).toEqual(["p1", "p2"]);
   });
 
   test("describes each playlist: items, extra copies, classes, last play of any song in it, biggest overlap", () => {

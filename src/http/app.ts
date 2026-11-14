@@ -23,6 +23,7 @@ import { runRoutes } from "./routes/runs";
 import { callbackRoute, spotifyRoutes } from "./routes/spotify";
 import { entityRoutes, historyRoutes, searchRoutes, statsRoutes } from "./routes/stats";
 import { settingsRoutes } from "./routes/settings";
+import { PUBLIC_SHARE_HEADERS, publicShareRoutes, shareRoutes } from "./routes/share";
 import { statusRoutes } from "./routes/status";
 import { tagRoutes } from "./routes/tags";
 import { trackRoutes } from "./routes/tracks";
@@ -34,6 +35,10 @@ export function createApp(deps: Deps) {
     await next();
   });
   app.onError((error, c) => errorResponse(c, error));
+  app.use("/s/*", async (c, next) => {
+    await next();
+    for (const [k, v] of Object.entries(PUBLIC_SHARE_HEADERS)) c.res.headers.set(k, v);
+  });
   app.use(
     secureHeaders({
       contentSecurityPolicy: {
@@ -67,6 +72,7 @@ export function createApp(deps: Deps) {
   });
 
   app.get("/api/health", (c) => c.json({ ok: true }));
+  app.route("/s", publicShareRoutes());
   app.route("/api/discord", discordRoutes);
   app.use("/api/*", guardWrites(["/api/import"]));
   app.use("/api/auth/*", async (c, next) => (c.req.method === "GET" ? next() : authLimit(c, next)));
@@ -103,6 +109,7 @@ export function createApp(deps: Deps) {
   app.route("/api/radar", radarRoutes);
   app.route("/api/living", livingRoutes);
   app.route("/api/library", libraryRoutes);
+  app.route("/api/shares", shareRoutes);
   app.all("/api/*", () => {
     throw new ApiError(404, "not_found", "Unknown API route");
   });

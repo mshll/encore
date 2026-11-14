@@ -387,7 +387,7 @@ describe("schedule", () => {
 });
 
 describe("HTTP", () => {
-  test("lists the five playlists, all off at first", async () => {
+  test("lists every living playlist, all off at first", async () => {
     const app = testApp();
     const cookie = `encore_session=${createSession(app.db)}`;
 

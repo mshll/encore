@@ -192,8 +192,55 @@ export type Note = Artwork & {
   cached: boolean;
 };
 
-export type DigestItem = { id: number; kind: "weekly" | "monthly"; periodKey: string; from: string; to: string; title: string; createdAt: string };
-export type Digest = DigestItem & { text: string; facts: Record<string, unknown>; model: string };
+export type RecapKind = "weekly" | "monthly" | "yearly";
+export type DigestItem = { id: number; kind: RecapKind; periodKey: string; from: string; to: string; label: string; title: string; headline: string; inProgress: boolean; createdAt: string };
+export type RecapSectionId = "listening" | "months" | "artists" | "songs" | "taste" | "finds" | "rhythm";
+export type RecapLines = { headline: string | null; takes: Partial<Record<RecapSectionId, string>> };
+export type RecapShare = { value: string; share: number; before: number | null };
+export type RecapMover = { artist: string; imageUrl: string | null; hours: number; before: number };
+export type RecapSong = { songKey: string; uri: string | null; name: string; artist: string; albumArtUrl: string | null; listens: number };
+export type RecapSection =
+  | { id: "listening"; take: string | null; hours: number; before: number | null; listens: number; listensBefore: number | null; artists: number; songs: number; daily: number[] | null }
+  | { id: "months"; take: string | null; months: { month: string; hours: number; artist: string | null; imageUrl: string | null; song: { name: string; artist: string } | null }[] }
+  | { id: "artists"; take: string | null; top: { artist: string; imageUrl: string | null; hours: number; share: number; before: number | null }[]; up: RecapMover[]; down: RecapMover[] }
+  | { id: "songs"; take: string | null; songs: (RecapSong & { hours: number })[] }
+  | { id: "taste"; take: string | null; genres: RecapShare[]; moods: RecapShare[] }
+  | { id: "finds"; take: string | null; songs: { count: number; ofNew: number; top: RecapSong[] }; artists: { count: number; ofNew: number; top: { artist: string; imageUrl: string | null; listens: number }[] } }
+  | { id: "rhythm"; take: string | null; day: { day: string; hours: number }; hour: { hour: number; hours: number } | null; byHour: number[] | null };
+export type RecapPage = {
+  kind: RecapKind;
+  key: string;
+  label: string;
+  span: { from: string; to: string };
+  inProgress: boolean;
+  headline: string;
+  headlineBy: "claude" | "facts" | "text";
+  compare: { label: string; from: string; to: string; scaled: boolean } | null;
+  note: string | null;
+  quiet: boolean;
+  sections: RecapSection[];
+  legacyText: string | null;
+};
+export type Digest = DigestItem & { text: string; facts: Record<string, unknown>; lines: RecapLines | null; model: string; page: RecapPage };
+export type RecapPeriod = {
+  kind: RecapKind;
+  key: string;
+  label: string;
+  from: string;
+  to: string;
+  inProgress: boolean;
+  available: boolean;
+  reason: "before_history" | "not_ended" | null;
+  previous: string | null;
+  next: string | null;
+  historyStart: string | null;
+  recap: Digest | null;
+  playlist: RecapPlaylist | null;
+};
+/** A public link to a frozen copy of a recap. The link itself is shown only in the answer that made it. */
+export type ShareLink = { id: number; kind: "recap"; ref: number; createdAt: string; expiresAt: string | null; revokedAt: string | null; views: number; lastViewedAt: string | null; status: "active" | "expired" | "revoked" };
+/** The songs that defined a period as a Spotify playlist. Only an ended period can be saved. */
+export type RecapPlaylist = { songs: number; canSave: boolean; saved: { url: string; savedAt: string; source: "recap" | "living" } | null; coverUrl: string | null };
 
 export type JobStatus = {
   lastRunAt: string | null;
@@ -522,10 +569,10 @@ export type LibrarySongs = {
   items: (SongEvidence & { uri: string; where: LibraryPlace; positions: number[]; reason: string })[];
 };
 
-export type LivingKind = "picks" | "forgotten" | "most-played" | "new-releases" | "this-month";
+export type LivingKind = "picks" | "forgotten" | "most-played" | "new-releases" | "this-month" | "this-year";
 export type LivingStatus = "refreshed" | "unchanged" | "empty" | "deferred" | "failed" | "removed";
-export type LivingSchedule = "daily" | "weekly" | "monthly" | "picks" | "releases";
-export type LivingTrigger = "enable" | "schedule" | "manual" | "picks";
+export type LivingSchedule = "daily" | "weekly" | "monthly" | "yearly-weekly" | "picks" | "releases";
+export type LivingTrigger = "enable" | "schedule" | "manual" | "picks" | "year-end";
 
 export type LivingSong = { uri: string; songKey: string; name: string; artist: string; album: string | null; albumArtUrl: string | null };
 

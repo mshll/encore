@@ -336,11 +336,11 @@ export const cleanupBatches = sqliteTable("cleanup_batches", {
   undoneAt: integer("undone_at"),
 });
 
-export const LIVING_KINDS = ["picks", "forgotten", "most-played", "new-releases", "this-month"] as const;
+export const LIVING_KINDS = ["picks", "forgotten", "most-played", "new-releases", "this-month", "this-year"] as const;
 export type LivingKind = (typeof LIVING_KINDS)[number];
 export const LIVING_STATUSES = ["refreshed", "unchanged", "empty", "deferred", "failed", "removed"] as const;
 export type LivingStatus = (typeof LIVING_STATUSES)[number];
-export const LIVING_TRIGGERS = ["enable", "schedule", "manual", "picks"] as const;
+export const LIVING_TRIGGERS = ["enable", "schedule", "manual", "picks", "year-end"] as const;
 export type LivingTrigger = (typeof LIVING_TRIGGERS)[number];
 export type LivingTrack = { uri: string; songKey: string; name: string; artist: string; album: string | null; albumArtUrl: string | null };
 

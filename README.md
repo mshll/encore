@@ -25,11 +25,11 @@ One instance serves one person. Your data stays in a single SQLite file on your 
 
 **Playlists in Spotify** (in For you)
 
-- Five private playlists encore keeps refilling: Weekly picks, Forgotten favourites, Most played lately, New from your artists, and This month in past years. Each can be seen and played in encore; Keep in Spotify adds it to your account. Only Weekly picks needs the Anthropic key.
+- Six private playlists encore keeps refilling: Weekly picks, Forgotten favourites, Most played lately, New from your artists, This month in past years, and This year so far (which becomes that year's playlist when the year ends). Each can be seen and played in encore; Keep in Spotify adds it to your account. Only Weekly picks needs the Anthropic key.
 
 **Upkeep**
 
-- **Recaps**: a weekly and a monthly write-up.
+- **Recaps**: each week, month and year as a page of what changed: totals against the period before, artists up and down, genre and mood shifts, new songs that stuck, the busiest day and hour, with small inline charts. Claude adds a headline and one line per section; without Claude the page shows the numbers alone. Each recap has its playlist, the songs that defined the period, playable from the page and saved to Spotify with a cover titled with the period when you tap Save. A share card (wide or square) downloads from the page and goes with recaps posted to Discord, and a public link shows a frozen, read-only copy of one recap to anyone you give it to: made only when you ask, revocable, optionally expiring (see [docs/sharing.md](docs/sharing.md)).
 - **Library**: how much of your liked songs and playlists you still play, and where the dead weight sits. Plans to tidy them, ready-made, from a group of songs, or by telling Claude what you want ("clean up what I don't listen to anymore") and talking it through; a standing instruction can make one on a schedule: archive (the default) or remove, keep one copy of duplicates, like what you play a lot. Nothing changes in Spotify until you approve a plan, and every applied plan can be undone.
 
 | | |
@@ -151,9 +151,10 @@ src/analytics/           pure query functions
 src/llm/                 Claude client wrapper, cost ledger and budget, agent loop, threads
 src/taste/               cached taste profile given to Claude
 src/sets/ src/picks/     set building and weekly picks
-src/covers/              playlist cover drawing (Skia via @napi-rs/canvas); its fonts and their licences are in assets/fonts
+src/covers/              playlist cover and share card drawing (Skia via @napi-rs/canvas); its fonts and their licences are in assets/fonts
 src/ask/ src/notes/      questions over the history, liner notes
-src/digest/              weekly and monthly digest facts and text
+src/digest/              recap periods, facts, pages, Claude lines, playlists and cards
+src/share/               public share links: frozen snapshots, hashed tokens, the public page
 src/assistant/           plain entry points for chat integrations
 src/jobs/                scheduler and persisted job state
 src/http/                Hono app and routes
