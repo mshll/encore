@@ -142,24 +142,27 @@ Phosphor, regular weight; `fill` only for the active nav item and the playing st
 ## 4. Layout recipes
 
 - **Shell** (`app/Shell.tsx`). Desktop: `[sidebar | page panel | queue panel]` over the player bar; the page panel is the scroll container (`useScrollElement()`). Phone: page, mini player, tab bar; More and the now-playing sheet are bottom sheets.
-- **Page** (`ui/Page.tsx`). `Page width="data|read|form"` > `PageHeader title actions` (+ `TabNav` as children for a surface with tabs) > sections 40px apart. The range picker sits in the header actions of every ranged surface.
+- **Page** (`ui/Page.tsx`). `Page width="data|read|form"` > `PageHeader title actions` (+ `TabNav` as children for a surface with tabs) > sections 40px apart (48 from `md`; `SECTIONS` for a body under a shared header). The header is a two-column grid from `md`: title left, actions bottom-aligned right; on a phone the actions stack under the title. The range picker sits in the header actions of every ranged surface. One primary or accent button per surface: once a step is done, its repeat action (Connect again, import again) is secondary.
+- **Patterns tab** (`surfaces/PatternsFrame.tsx`). Every Patterns tab renders through `PatternsFrame`: header, `TabNav`, range picker, first-use state. A tab only supplies its body.
 - **Stat strip driving one chart.** At most three figures; the selected one draws the chart below it. Never a row of identical metric boxes.
-- **Ranked list.** `RowList` of `TrackRow`/`ArtistRow`/`AlbumRow`: rank, art, title over subtitle, dither meter (when the list is 512px or wider), figure. Whole row is the link; songs get play and menu on hover, a context menu on right click.
+- **Ranked list.** `RowList` of `TrackRow`/`ArtistRow`/`AlbumRow`: rank, art, title over subtitle, dither meter (when the list is 512px or wider), figure. Whole row is the link; songs get play and menu on hover, a context menu on right click. On desktop the actions overlay the figure (the figure hides while they show), so a row reserves no width for them; on a phone they sit in the row. Art: 32 in ranked lists and side columns (40 on a phone), 40 in rows with a second line of detail (skips, cleanup proposals, set songs, the queue), 48 in release and set lists, 64 for picks.
 - **Log table.** Plays: virtualised rows grouped by day headings, columns that drop by width (`useColumns`), a phone row layout. Toolbar above, count line, then the table.
 - **Entity page.** `EntityHeader` (artwork, title, credits, first and last play, Play plus secondary actions, range picker as `aside`) > stat strip driving the listening chart > main plus side column (ranked songs; albums, releases, versions) > skips in context, full width.
-- **Main plus side column.** `lg:grid-cols-[minmax(0,1fr)_minmax(0,320px)]`: the main answer left, small related lists right.
+- **Main plus side column.** `SIDE_COLUMNS` (`lg:grid-cols-[minmax(0,1fr)_minmax(0,320px)]`): the main answer left, small related lists right.
+- **Setting rows.** `SettingRows` separates rows with spacing only, no hairlines; a section heading groups them. A hairline is kept for selection or a table, never to divide settings.
+- **Start a session.** `StartSessionButton` (secondary, small) sits beside a list of songs worth a session (Overview top songs, Forgotten, an era, keepers in Skips, a trip). It opens the queue panel, where the session runs.
 
 ### State order
 
 Every data block resolves in this order, and builds each state with the shared components:
 
 1. **Error** (`ErrorState` with retry) before anything else.
-2. **Loading** (`Skeleton`, `RowSkeleton`) in the shape of the content.
-3. **First use** (`EmptyState size="page"` with the step that fixes it, usually "Set up encore").
+2. **Loading** (`Skeleton`, `RowSkeleton`, `ChartSkeleton`) in the shape of the content.
+3. **First use** (`FirstUseState`: "No listening yet" and "Set up encore").
 4. **Empty for this range or filter** (`EmptyState size="section"` with the control that widens it).
 5. **Content**, including worst case: long names truncate with the full value in the link label; 0, 1 and huge counts format with `fmtCompact`/`fmtInt`; missing or broken art falls back to the kind's placeholder glyph.
 
-Refetches keep the old data dimmed (`opacity-60`) instead of flashing a skeleton.
+Refetches keep the old data dimmed (`dimWhile(refetching)`, `opacity-60`) instead of flashing a skeleton. An unknown address renders `NotFound` ("This page does not exist", Open Overview); a missing recap, set, thread or entity says the same in its own page.
 
 ## 5. Components
 
@@ -175,40 +178,41 @@ All in `web/src/ui/` unless noted. Props listed are the ones that matter.
 | `Checkbox` | `ui/Checkbox` | `checked`, `indeterminate`, `onChange`, `label`, `id`. 44px hit area on a phone |
 | `Combobox`, `ComboboxOption` | `ui/Combobox` | Search a long list (timezones): `value`, `onChange`, `options { value, label, detail? }`, `placeholder`, `emptyText`, `invalid` |
 | `WeekdayPicker` | `ui/WeekdayPicker` | Several days, ISO 1 (Mon) to 7 (Sun): `value`, `onChange`, `label` |
-| `SettingRow`, `SettingRows` | `ui/SettingRow` | Label and hint left, control right (stacked on a phone). `label`, `hint`, `error` (replaces the hint), `wide`; render-prop child gets `id`, `aria-describedby`, `invalid` |
+| `SettingRow`, `SettingRows` | `ui/SettingRow` | Label and hint left, control right (stacked on a phone). Rows separated by spacing, no hairlines. `label`, `hint`, `error` (replaces the hint), `wide`; render-prop child gets `id`, `aria-describedby`, `invalid` |
 | `CopyField` | `ui/CopyField` | A read-only value to paste elsewhere (redirect URI, endpoint): `value`, `label` |
-| `Notice` | `ui/Notice` | One sentence that changes what the user does next: `tone` info, warning, danger; `action`. Full bleed on a phone |
+| `Notice` | `ui/Notice` | The one notice: gates, paused calls, failed runs, save effects. One sentence that changes what the user does next: `tone` info, warning, danger; `action`; `onRetry` adds Try again. Full bleed on a phone |
 | `DropZone` | `ui/DropZone` | `onFiles`, `accept`, `multiple`, `title`, `description`, `button`. Unpainted until a drag is over it |
-| `Segmented` | `ui/Segmented` | Two to four views of the same data: `value`, `onChange`, `options`, `label` |
+| `Segmented` | `ui/Segmented` | Two to four views of the same data: `value`, `onChange`, `options`, `label`. Full width on a phone |
 | `TabsRoot`, `TabList`, `TabPanel` | `ui/Segmented` | In-page tabs with an underline |
 | `TabNav` | `ui/TabNav` | Route tabs under a page header: `items`, `label` |
-| `MenuRoot`, `MenuTrigger`, `MenuPopup`, `MenuItem`, `MenuLinkItem`, `MenuSeparator`, `MenuLabel` | `ui/Menu` | Item: `icon`, `danger`, `hint` |
+| `MenuRoot`, `MenuTrigger`, `MoreTrigger`, `MenuPopup`, `MenuItem`, `MenuLinkItem`, `MenuSeparator`, `MenuLabel` | `ui/Menu` | Item: `icon`, `danger`, `hint`. MoreTrigger: the dots button, `label` ("More for Woods"), `size` sm or md |
 | `Dialog`, `DialogClose`, `Confirm` | `ui/Dialog` | Dialog: `open`, `onOpenChange`, `title`, `description`, `footer`, `width` 440, 560, 720 (bottom sheet on phone). Confirm: `action`, `danger`, `busy`, `onConfirm`. Prefer undo over confirm |
 | `PopoverRoot`, `PopoverTrigger`, `PopoverPopup` | `ui/Popover` | `align` |
 | `Tooltip` | `ui/Tooltip` | `label`, `side`. Never the only place information lives |
 | `showToast`, `Toaster` | `lib/toast`, `ui/Toast` | `showToast(message, "info" | "problem", { label, onClick })`. An action (Undo) keeps it open |
-| `Skeleton` | `ui/Skeleton` | `className` sets the shape |
-| `EmptyState` | `ui/States` | `icon`, `title`, `description`, `action`, `size` page, section, inline |
+| `Skeleton`, `ChartSkeleton` | `ui/Skeleton` | Skeleton: `className` sets the shape. ChartSkeleton: `shape` bars or grid, in the chart's box |
+| `EmptyState`, `FirstUseState` | `ui/States` | EmptyState: `icon`, `title`, `description`, `action`, `size` page, section, inline. FirstUseState: before any play is imported, `icon`, `description`, `title` (default "No listening yet"), action Set up encore |
 | `ErrorState` | `ui/States` | `error`, `onRetry`, `title`, `size` |
-| `Page`, `PageHeader`, `Section`, `useDocumentTitle` | `ui/Page` | PageHeader: `title`, `description`, `actions`, children. Section: `title`, `description`, `actions`, `labelledBy` |
+| `Page`, `PageHeader`, `Section`, `useDocumentTitle`, `SECTIONS`, `SIDE_COLUMNS`, `dimWhile` | `ui/Page` | PageHeader: `title`, `description`, `actions`, children. Section: `title`, `description`, `actions`, `labelledBy` |
 | `Stat`, `StatStrip`, `Delta` | `ui/Stat` | Items `{ id, label, value, unit?, delta?, compare? }`; StatStrip: `value`, `onChange`, `label`, children (the chart) |
 | `AnimatedNumber` | `ui/AnimatedNumber` | `value` (formatted string) |
 | `RowList`, `Row`, `TrackRow`, `ArtistRow`, `AlbumRow`, `RowSkeleton` | `ui/Rows` | `rank`, `value`, `share` (0 to 1, draws the meter), `subtitle`, `style` (position in a virtualised list). Set `--rank-w` on the list for ranks past 99 |
 | `TableHead`, `useColumns`, `cellClass`, `Column` | `ui/Table` | Columns `{ id, label, width, align, from, srLabel }` drop below their `from` breakpoint |
-| `EntityHeader`, `EntityHeaderSkeleton` | `ui/EntityHeader` | `title`, `art`, `round`, `credits`, `detail`, `actions`, `aside`. The head of an artist, album or song page; the page sets the document title |
+| `EntityHeader`, `EntityHeaderSkeleton` | `ui/EntityHeader` | `title`, `art`, `kind`, `credits`, `detail`, `actions`, `aside`. The head of an artist, album or song page; the page sets the document title |
 | `SearchField` | `ui/SearchField` | `value`, `onChange` (after a 250 ms pause), `label`, `placeholder` |
 | `Artwork` | `ui/Artwork` | `src`, `kind` artist, album, song, playlist, `box` 24 to 64 or fill. Kind sets the shape (artists round) and the placeholder glyph. Loading is the bare fill; missing and broken images show the kind's glyph (microphone, record, note, playlist) in `text-tertiary` on `bg-fill`. Decorative: the name sits beside it |
 | `SongMenu`, `SongContext` | `ui/SongMenu` | `song { uri, name, songKey?, artist? }` |
 | `RangePicker` | `ui/RangePicker` | Reads and writes `from`/`to` in the URL |
 | `RunProgress` | `ui/RunProgress` | `run` (from `useRun`), `title`, `onCancel` |
 | `Composer` | `ui/Composer` | `value`, `onChange`, `onSubmit`, `onStop`, `running`, `label`, `notice`, `footer` |
-| `useClaudeGate`, `RunNotice` | `ui/ClaudeNotice` | Gate: `needsSpotify`; returns `ready`, `blocked` (no API key, monthly cap spent: disable the run and show it as the composer `notice`), `warning` (Spotify paused), `spend` (composer `footer`). RunNotice: `tone` warning or danger, `onRetry` |
+| `useClaudeGate` | `ui/ClaudeNotice` | Gate: `needsSpotify`; returns `ready`, `blocked` (no API key, monthly cap spent: disable the run and show it as the composer `notice`), `warning` (Spotify paused, shown as a `Notice`), `spend` (composer `footer`) |
+| `StartSessionButton` | `ui/StartSessionButton` | Starts a DJ session and opens the queue panel |
+| `BlockedList` | `surfaces/BlockedList` | Songs and artists kept out of picks and sets, with Allow. Picks and Library |
 | `Kbd`, `MOD_KEY` | `ui/Kbd` | Hidden on touch screens |
 | `Icon` | `ui/Icon` | `icon`, `size`, `fill` |
 | `EncoreMark`, `Lockup` | `ui/Brand` | Mark at 16, 32 or 48 only. Lockup 16 or 32 |
 | `AppLink`, `useRangeHref` | `ui/AppLink` | A link that keeps the current range |
 | Paths | `app/paths` | `artistPath(name)`, `songPath(key)`, `albumPath(artist, album)` |
-| `Placeholder` | `surfaces/Placeholder` | For a surface not yet built: header, tabs and an honest "Not built yet" state |
 
 `/dev/kit` (dev builds only) shows every primitive in its states. Fixtures: add `?fixture=loading|error|empty|new|worst|untagged|off`, `?player=playing`, `?dj=active` or `?run=running|starting|done|failed|budget|unconfigured|paused` (Claude runs answered by the fixture, never the server) to any dev URL (`web/src/dev/fixtures.ts`); the choice sticks for the tab until `off`.
 
@@ -220,8 +224,8 @@ One family: dithered halftone in Spotify green.
 | --- | --- | --- |
 | `DitherArea` | `charts/Dither` | One series over time (the stat strip chart) |
 | `DitherBars`, `DitherStack`, `DitherLine`, `DitherRadar` | `charts/Dither` | Bars, stacked series, lines, radar. All draw through the vendored kit in `components/dither-kit/` |
-| `StackedArea`, `TagTrends`, `SegmentedBar`, `SkipProfileChart` | `charts/*` | Not used by any surface: Eras, Taste and Skips draw with `DitherHeatmap`, `DitherArea`, `DitherBars` and `RateMeter` |
 | `DitherMeter` | `charts/DitherMeter` | A share bar in a row, always next to a printed figure |
+| `ContextRates`, `contextRates()` | `charts/ContextRates` | Skip rate by context (weekday, hour, device, source) as `RateMeter` rows against the overall rate. Skips and the entity pages |
 | `RateMeter` | `charts/RateMeter` | A rate on a fixed 0 to 100% track, with an optional tick for a reference rate (skip rate by context, share by device). Next to a printed figure |
 | `DitherHeatmap`, `HeatLegend` | `charts/DitherHeatmap` | A grid of values (weekday by hour, artist by month). One tab stop, arrow keys move the selection. Column labels can be elements (artist avatars on phone) |
 | `BudgetBar` | `charts/BudgetBar` | Spend against a cap: `spent`, `cap`, `label`. Turns red with a cap mark once spent reaches the cap |
@@ -250,6 +254,8 @@ Apply the owner's ladder to every string: does it need to surface, does the labe
 | Accent only for play, selection and chart emphasis | Green for "positive"; gradients, glows, glass |
 | Serif for titles and figures, roman | Italic accent words, all-caps tracked eyebrows, monospace labels, numbered section labels |
 | Plain metadata in secondary text | Pills or badges for ordinary metadata |
+| Spacing between setting rows | Hairlines between setting rows |
+| One primary button per surface | A primary Continue beside an accent Connect again |
 | Missing art: the kind's glyph, muted, on the neutral fill | Identicons, dither or per-item colours as a placeholder; icons in coloured tiles |
 | `EmptyState` and `ErrorState` from `ui/States` | Hand-made empty or error blocks |
 | Tokens for every colour, radius, shadow, size | Literal values (`#…`, `text-[19px]`, `bg-white/10`) |
