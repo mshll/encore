@@ -4,7 +4,7 @@ import { Hono } from "hono";
 import { serveStatic } from "hono/bun";
 import type { Deps, Env } from "./context";
 import { ApiError, errorResponse } from "./errors";
-import { requireSession, requireSessionOrAdmin } from "./middleware";
+import { guardWrites, requireSession, requireSessionOrAdmin } from "./middleware";
 import { authRoutes } from "./routes/auth";
 import { askRoutes, blockRoutes, digestRoutes, llmRoutes, noteRoutes, pickRoutes, setRoutes } from "./routes/assistant";
 import { cleanupRoutes } from "./routes/cleanup";
@@ -29,9 +29,10 @@ export function createApp(deps: Deps) {
   app.onError((error, c) => errorResponse(c, error));
 
   app.get("/api/health", (c) => c.json({ ok: true }));
+  app.route("/api/discord", discordRoutes);
+  app.use("/api/*", guardWrites(["/api/import"]));
   app.route("/api/auth", authRoutes);
   app.route("/", callbackRoute);
-  app.route("/api/discord", discordRoutes);
   app.route("/mcp", mcpRoutes(deps));
 
   app.use("/api/tags/*", requireSessionOrAdmin);
