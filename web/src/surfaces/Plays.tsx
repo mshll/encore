@@ -258,7 +258,7 @@ export function Plays() {
           size="page"
           icon={ListBulletsIcon}
           title="No plays yet"
-          description="Every play you import or encore logs from Spotify lands here, newest first."
+          description="Every play you import or encore logs from Spotify lands here."
           action={
             <AppLink to="/setup" className={buttonClass({ variant: "primary" })}>
               Set up encore
