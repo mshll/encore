@@ -24,7 +24,7 @@ export function Select<T extends string>({
   return (
     <Base.Root items={options} value={value} onValueChange={(v) => v !== null && onChange(v as T)}>
       <Base.Trigger aria-label={label} className={buttonClass({ variant: "secondary", className: cx("justify-between gap-2", className) })}>
-        <Base.Value className="truncate" />
+        <Base.Value className="min-w-0 flex-1 truncate text-left" />
         <Base.Icon className="flex">
           <Icon icon={CaretDownIcon} className="text-tertiary" />
         </Base.Icon>

@@ -4,7 +4,7 @@ import { useSession } from "../api/queries";
 import { ErrorState } from "../ui/States";
 import { Placeholder } from "../surfaces/Placeholder";
 import { RangePicker } from "../ui/RangePicker";
-import { PATTERN_TABS, SETTINGS_TABS } from "./nav";
+import { PATTERN_TABS } from "./nav";
 import { paramValue } from "./paths";
 import { Shell } from "./Shell";
 
@@ -24,6 +24,11 @@ const Eras = lazy(() => import("../surfaces/Eras").then((m) => ({ default: m.Era
 const Taste = lazy(() => import("../surfaces/Taste").then((m) => ({ default: m.Taste })));
 const Skips = lazy(() => import("../surfaces/Skips").then((m) => ({ default: m.Skips })));
 const Places = lazy(() => import("../surfaces/Places").then((m) => ({ default: m.Places })));
+const Setup = lazy(() => import("../surfaces/Setup").then((m) => ({ default: m.Setup })));
+const Settings = lazy(() => import("../surfaces/Settings").then((m) => ({ default: m.Settings })));
+const Recaps = lazy(() => import("../surfaces/Recaps").then((m) => ({ default: m.Recaps })));
+const Recap = lazy(() => import("../surfaces/Recaps").then((m) => ({ default: m.Recap })));
+const Library = lazy(() => import("../surfaces/Library").then((m) => ({ default: m.Library })));
 const SignIn = lazy(() => import("../surfaces/SignIn").then((m) => ({ default: m.SignIn })));
 const Kit = import.meta.env.DEV ? lazy(() => import("../dev/Kit").then((m) => ({ default: m.Kit }))) : null;
 
@@ -41,7 +46,7 @@ export function App() {
   if (!session.data.authenticated)
     return (
       <Suspense fallback={null}>
-        <SignIn setupRequired={session.data.setupRequired} />
+        <SignIn />
       </Suspense>
     );
   return (
@@ -87,25 +92,17 @@ export function App() {
 
           <Route path="/ask/:id?">{(p) => <Ask id={p.id} />}</Route>
 
-          <Route path="/recaps/:id">{() => <Placeholder title="Recap" description="One weekly or monthly recap." />}</Route>
-          <Route path="/recaps">
-            <Placeholder title="Recaps" description="Weekly and monthly write-ups of your listening." />
-          </Route>
+          <Route path="/recaps/:id">{(p) => <Recap key={p.id} id={Number(p.id)} />}</Route>
+          <Route path="/recaps" component={Recaps} />
 
-          <Route path="/library">
-            <Placeholder title="Library" description="Proposals to tidy saved songs and playlists, what you applied and can undo, and what you blocked." />
-          </Route>
+          <Route path="/library" component={Library} />
 
-          <Route path="/setup">
-            <Placeholder title="Setup" description="Connect Spotify, import your history and turn on the optional integrations." />
-          </Route>
+          <Route path="/setup" component={Setup} />
 
           <Route path="/settings">
             <Redirect to="/settings/general" replace />
           </Route>
-          <Route path="/settings/:section">
-            <Placeholder title="Settings" description="How encore runs: time zone, Spotify, Claude and its budget, Discord and MCP, jobs, and your passkeys." tabs={SETTINGS_TABS} />
-          </Route>
+          <Route path="/settings/:section">{(p) => <Settings section={p.section} />}</Route>
 
           {Kit && <Route path="/dev/kit" component={Kit} />}
 

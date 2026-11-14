@@ -6,7 +6,9 @@
     ?fixture=error    every API read answers 500
     ?fixture=empty    a range with no plays
     ?fixture=new      a fresh install: nothing imported yet
-    ?fixture=worst    real data bent to the limits: long names, huge counts, one-row lists, broken art
+    ?fixture=worst    real data bent to the limits: long names, huge counts, one-row lists, broken art,
+                      a spent Claude budget, an unreadable stored key, applied and undone cleanup batches,
+                      a finished setup
     ?fixture=untagged plays but no tagged songs (Patterns: Taste)
     ?player=playing   a fake track and queue; player controls answer ok without calling Spotify
     ?dj=active        a DJ session playing from the newest set; starting and stopping one answer ok without calling Spotify
@@ -82,6 +84,7 @@ function emptyFor(path: string, isNew: boolean): unknown {
   if (path === "/api/stats/tags/genres" || path === "/api/stats/tags/moods") return { period: "month", coverage: { hoursTagged: 0, hoursTotal: 0, share: null }, totals: [], series: [] };
   if (path === "/api/stats/tags/energy") return { coverage: { hoursTagged: 0, hoursTotal: 0, share: null }, hours: Array.from({ length: 24 }, (_, hour) => ({ hour, energy: null, valence: null, listens: 0 })) };
   if (path === "/api/tags/pending") return { items: [], total: 0, limit: 1, offset: 0 };
+  if (path === "/api/cleanup/batches" || path === "/api/blocks") return { items: [] };
   if (path === "/api/cleanup") return { counts: { saved_never_played: 0, saved_dislike: 0, playlist_skipped: 0, playlist_duplicate: 0 }, library: { savedTracks: 0, playlists: 0, syncing: false, lastSyncAt: null }, total: 0, limit: 500, offset: 0, items: [] };
   return null;
 }
@@ -201,6 +204,38 @@ function worsen(path: string, body: Json): unknown {
     return { ...body, title: LONG_ALBUM, description: `${body.description as string} ${LONG_SONG}`, items };
   }
   if (path === "/api/ask/threads") return { items: (body.items as Json[]).slice(0, 1).map((t) => ({ ...t, title: `${LONG_SONG} ${LONG_ARTIST}?` })) };
+  if (path === "/api/cleanup") {
+    const items = (body.items as Json[]).slice(0, 2).map((it, i) => ({
+      ...it,
+      evidence: { ...(it.evidence as Json), name: i === 0 ? LONG_SONG : (it.evidence as Json).name, artist: LONG_ARTIST, albumArtUrl: i === 0 ? BROKEN_ART : null, plays: 98765, listens: 1, playlistName: LONG_ALBUM },
+    }));
+    return { ...body, counts: { saved_never_played: 1, saved_dislike: 123456, playlist_skipped: 0, playlist_duplicate: 2 }, total: items.length, items };
+  }
+  if (path === "/api/cleanup/batches")
+    return {
+      items: [
+        { id: 2, proposalIds: [1], actions: 1, appliedAt: new Date(Date.now() - 3_600_000).toISOString(), undoneAt: null },
+        { id: 1, proposalIds: [2, 3], actions: 123456, appliedAt: "2026-10-01T10:00:00.000Z", undoneAt: "2026-10-02T10:00:00.000Z" },
+      ],
+    };
+  if (path === "/api/blocks") return { items: [{ id: 1, kind: "artist", key: "x", label: LONG_ARTIST, reason: "never on weekly pick 2026-11-09", createdAt: "2026-11-09T10:00:00.000Z" }] };
+  if (path === "/api/digests") return { items: (body.items as Json[]).slice(0, 1) };
+  if (/^\/api\/digests\/\d+$/.test(path))
+    return {
+      ...body,
+      text: `${LONG_ARTIST} took ${"over ".repeat(30)}the week.\n\n${String(body.text)}`,
+      facts: { ...(body.facts as Json), topArtists: [{ artist: LONG_ARTIST, hours: 98765.4, baselineHours: 0 }] },
+    };
+  if (path === "/api/onboarding") {
+    const steps = Object.fromEntries(Object.entries(body.steps as Record<string, Json>).map(([k, v]) => [k, { ...v, done: true }]));
+    return { ...body, complete: true, steps: { ...steps, spotifyConnect: { ...steps.spotifyConnect, userId: LONG_ARTIST }, import: { ...steps.import, exportPlays: 9876543 } } };
+  }
+  if (path === "/api/llm/spend") return { ...body, budget: { month: "2026-11", spentUsd: 123.45, capUsd: 100, remainingUsd: 0, exhausted: true } };
+  if (path === "/api/settings")
+    return {
+      ...body,
+      groups: (body.groups as { fields: Json[] }[]).map((g) => ({ ...g, fields: g.fields.map((f) => (f.key === "claudeApiKey" ? { ...f, set: true, unreadable: true, source: "db" } : f)) })),
+    };
   return body;
 }
 

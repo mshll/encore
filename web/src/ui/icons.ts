@@ -39,3 +39,7 @@ export { HeartStraightIcon } from "@phosphor-icons/react/dist/csr/HeartStraight"
 export { ProhibitIcon } from "@phosphor-icons/react/dist/csr/Prohibit";
 export { PushPinIcon } from "@phosphor-icons/react/dist/csr/PushPin";
 export { TrashIcon } from "@phosphor-icons/react/dist/csr/Trash";
+export { MinusIcon } from "@phosphor-icons/react/dist/csr/Minus";
+export { CopyIcon } from "@phosphor-icons/react/dist/csr/Copy";
+export { FileTextIcon } from "@phosphor-icons/react/dist/csr/FileText";
+export { ArrowLeftIcon } from "@phosphor-icons/react/dist/csr/ArrowLeft";
