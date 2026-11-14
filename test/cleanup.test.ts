@@ -4,7 +4,8 @@ import { join, relative } from "node:path";
 import { sql } from "drizzle-orm";
 import { createSession } from "../src/auth/sessions";
 import { applyCleanup, undoCleanup } from "../src/cleanup/apply";
-import { computeProposals, listProposals, refreshProposals } from "../src/cleanup/proposals";
+import { CLEANUP_RULES, computeProposals, listProposals, refreshProposals } from "../src/cleanup/proposals";
+import { savedTracks } from "../src/db/schema";
 import { createDiscord } from "../src/discord";
 import { InteractionType } from "../src/discord/types";
 import { runJob } from "../src/jobs/scheduler";
@@ -117,6 +118,18 @@ describe("cleanup proposals", () => {
     expect(byKind("saved_dislike")[0]!.evidence).toMatchObject({ plays: 10, skips: 10, skipRate: 1, lastPlayed: new Date(NOW - DAY).toISOString() });
     expect(byKind("playlist_skipped").map((p) => [p.playlistId, p.uri])).toEqual([["mine", uri("skp")]]);
     expect(byKind("playlist_duplicate")[0]).toMatchObject({ playlistId: "mine", uri: uri("ok"), evidence: { keep: { position: 0 }, duplicates: [{ position: 2, uri: uri("ok") }] } });
+  });
+
+  test("saved_dislike needs a low listen ratio: songs skipped after long listens are kept", () => {
+    const db = testDb();
+    const longSkips = Array.from({ length: 8 }, (_, i) => play(new Date(NOW - (i + 1) * DAY).toISOString(), uri("lng"), i < 5 ? 180_000 : 3000, { skipped: true }));
+    const shortSkips = Array.from({ length: 10 }, (_, i) => play(new Date(NOW - (i + 1) * DAY).toISOString(), uri("sht"), i < 2 ? 40_000 : 3000, { skipped: true }));
+    seed(db, [track("lng", "Sinnerman", "Nina Simone", "Pastel Blues"), track("sht", "Short", "Artist", "A")], [...longSkips, ...shortSkips]);
+    db.insert(savedTracks).values([uri("lng"), uri("sht")].map((u) => ({ uri: u, addedAt: NOW - 400 * DAY, syncedAt: NOW }))).run();
+    const dislikes = computeProposals(db, NOW).filter((p) => p.kind === "saved_dislike");
+    expect(dislikes.map((p) => p.evidence.name)).toEqual(["Short"]);
+    expect(dislikes[0]!.evidence).toMatchObject({ plays: 10, listens: 2, listenRatio: 0.2 });
+    expect(CLEANUP_RULES.dislikeMaxListenRatio).toBe(0.2);
   });
 
   test("dismissed proposals stay dismissed across refreshes", async () => {
