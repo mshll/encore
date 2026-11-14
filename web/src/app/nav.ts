@@ -13,8 +13,8 @@ import {
   VinylRecordIcon,
 } from "../ui/icons";
 
-/** Where a surface sits in navigation: the short primary list, the More menu, or the foot of the sidebar. */
-export type NavPlace = "listening" | "play" | "more" | "foot";
+/** Where a surface sits in navigation: a sidebar group (the third sits under More on a phone), or the foot of the sidebar. */
+export type NavPlace = "listening" | "play" | "secondary" | "foot";
 
 export type Surface = {
   id: string;
@@ -39,9 +39,9 @@ export const SURFACES: Surface[] = [
   { id: "for-you", path: "/for-you", label: "For you", icon: SparkleIcon, place: "play", key: "f", match: under("/for-you") },
   { id: "sets", path: "/sets", label: "Sets", icon: PlaylistIcon, place: "play", key: "s", match: under("/sets") },
   { id: "ask", path: "/ask", label: "Ask", icon: ChatCircleTextIcon, place: "play", key: "a", match: under("/ask") },
-  { id: "recaps", path: "/recaps", label: "Recaps", icon: NewspaperIcon, place: "more", key: "r", match: under("/recaps") },
-  { id: "library", path: "/library", label: "Library", icon: BroomIcon, place: "more", key: "l", match: under("/library") },
-  { id: "setup", path: "/setup", label: "Setup", icon: RocketLaunchIcon, place: "more", match: under("/setup") },
+  { id: "recaps", path: "/recaps", label: "Recaps", icon: NewspaperIcon, place: "secondary", key: "r", match: under("/recaps") },
+  { id: "library", path: "/library", label: "Library", icon: BroomIcon, place: "secondary", key: "l", match: under("/library") },
+  { id: "setup", path: "/setup", label: "Setup", icon: RocketLaunchIcon, place: "secondary", match: under("/setup") },
   { id: "settings", path: "/settings", label: "Settings", icon: GearSixIcon, place: "foot", key: ",", match: under("/settings") },
 ];
 

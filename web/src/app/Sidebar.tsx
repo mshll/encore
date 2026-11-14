@@ -1,13 +1,11 @@
-import { Menu } from "@base-ui/react/menu";
 import { useLocation } from "wouter";
-import { useStatus } from "../api/queries";
+import { useOnboarding, useStatus } from "../api/queries";
 import { AppLink } from "../ui/AppLink";
 import { Lockup } from "../ui/Brand";
 import { cx } from "../ui/cx";
 import { Icon } from "../ui/Icon";
-import { DotsThreeIcon, MagnifyingGlassIcon } from "../ui/icons";
+import { MagnifyingGlassIcon } from "../ui/icons";
 import { Kbd, MOD_KEY } from "../ui/Kbd";
-import { MENU_ITEM, POPUP } from "../ui/surfaces";
 import { byPlace, type Surface } from "./nav";
 
 const ROW = "flex h-8 w-full items-center gap-2.5 rounded-md px-2 text-body-sm transition-colors duration-150";
@@ -40,11 +38,28 @@ function SpotifyStatus() {
   );
 }
 
-/** Linear-style: a short primary list in two quiet groups, the rest under More, Settings at the foot. */
+function NavGroup({ items, location }: { items: Surface[]; location: string }) {
+  return (
+    <ul className="flex flex-col gap-px">
+      {items.map((s) => (
+        <li key={s.id}>
+          <NavRow item={s} location={location} />
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+/** Setup leaves the sidebar once every step is done, unless it is open; Settings and the palette still reach it. */
+function useSecondary(location: string) {
+  const complete = useOnboarding().data?.complete;
+  return byPlace("secondary").filter((s) => s.id !== "setup" || complete === false || s.match(location));
+}
+
+/** Linear-style: every surface in three quiet groups, Settings at the foot. */
 export function Sidebar({ onSearch }: { onSearch: () => void }) {
-  const [location, navigate] = useLocation();
-  const more = byPlace("more");
-  const activeMore = more.find((m) => m.match(location));
+  const [location] = useLocation();
+  const secondary = useSecondary(location);
   return (
     <aside className="flex h-full w-(--sidebar-w) flex-col gap-4 px-3 pt-3 pb-2">
       <div className="flex h-8 items-center px-2">
@@ -61,45 +76,9 @@ export function Sidebar({ onSearch }: { onSearch: () => void }) {
         </span>
       </button>
       <nav aria-label="Main" data-crop className="flex flex-1 flex-col gap-5 overflow-y-auto">
-        <ul className="flex flex-col gap-px">
-          {byPlace("listening").map((s) => (
-            <li key={s.id}>
-              <NavRow item={s} location={location} />
-            </li>
-          ))}
-        </ul>
-        <ul className="flex flex-col gap-px">
-          {byPlace("play").map((s) => (
-            <li key={s.id}>
-              <NavRow item={s} location={location} />
-            </li>
-          ))}
-          {activeMore && (
-            <li>
-              <NavRow item={activeMore} location={location} />
-            </li>
-          )}
-          <li>
-            <Menu.Root>
-              <Menu.Trigger className={cx(ROW, "text-secondary hover:bg-fill hover:text-primary data-[popup-open]:bg-fill")}>
-                <Icon icon={DotsThreeIcon} className="text-tertiary" />
-                More
-              </Menu.Trigger>
-              <Menu.Portal>
-                <Menu.Positioner side="right" align="start" sideOffset={8} className="z-50">
-                  <Menu.Popup className={cx(POPUP, "min-w-48 p-1")}>
-                    {more.map((m) => (
-                      <Menu.Item key={m.id} className={MENU_ITEM} onClick={() => navigate(m.path)}>
-                        <Icon icon={m.icon} className="text-secondary" />
-                        {m.label}
-                      </Menu.Item>
-                    ))}
-                  </Menu.Popup>
-                </Menu.Positioner>
-              </Menu.Portal>
-            </Menu.Root>
-          </li>
-        </ul>
+        <NavGroup items={byPlace("listening")} location={location} />
+        <NavGroup items={byPlace("play")} location={location} />
+        <NavGroup items={secondary} location={location} />
       </nav>
       <div className="flex flex-col gap-px">
         <SpotifyStatus />

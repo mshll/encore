@@ -5,7 +5,7 @@
     ?fixture=loading  every API read hangs
     ?fixture=error    every API read answers 500
     ?fixture=empty    a range with no plays
-    ?fixture=new      a fresh install: nothing imported yet
+    ?fixture=new      a fresh install: nothing imported yet, setup not complete
     ?fixture=worst    real data bent to the limits: long names, huge counts, one-row lists, broken art,
                       a spent Claude budget, an unreadable stored key, applied and undone cleanup batches,
                       a finished setup
@@ -398,6 +398,10 @@ window.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
   if (fixture === "empty" && lifetime) return realFetch(input, init);
   if (fixture === "empty" || fixture === "new") {
     if (path.startsWith("/api/entities/")) return json({ error: { code: "not_found", message: "No music plays in this range." } }, 404);
+    if (fixture === "new" && path === "/api/onboarding") {
+      const body = (await (await realFetch(input, init)).json()) as { steps: Record<string, Json> };
+      return json({ ...body, complete: false, steps: { ...body.steps, import: { ...body.steps.import, done: false, plays: 0, exportPlays: 0, lastImportAt: null } } });
+    }
     const body = emptyFor(path, fixture === "new");
     if (body !== null) return json(body);
     return realFetch(input, init);

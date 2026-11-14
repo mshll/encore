@@ -9,7 +9,7 @@ encore answers three jobs: **what have I been listening to**, **what should I pl
 ### Sitemap
 
 ```
-Listening                      Play                        More (menu)          Foot
+Listening                      Play                        Secondary            Foot
 ├── Overview          /        ├── For you    /for-you     ├── Recaps  /recaps  └── Settings /settings
 ├── Plays             /plays   │   ├── Picks     /picks     │   └── /recaps/:id        ├── general
 ├── Music             /music   │   └── Releases  /releases  ├── Library /library        ├── spotify
@@ -31,7 +31,7 @@ Shell, on every surface: sidebar (desktop) or tab bar + More sheet (phone), comm
 docked player bar with the queue panel (desktop) or mini player + now-playing sheet (phone).
 ```
 
-The source of truth for paths, labels, icons and shortcuts is `web/src/app/nav.ts`. Phone tabs are the four Listening surfaces plus More.
+The source of truth for paths, labels, icons and shortcuts is `web/src/app/nav.ts`. The desktop sidebar shows every surface in its three groups (Listening, Play, Secondary) with Settings at the foot; there is no More menu. Setup leaves the sidebar once onboarding is complete (read from `/api/onboarding`, hidden until it loads), unless it is the open page; Settings (Open setup) and the palette still reach it. Phone tabs are the four Listening surfaces plus More, a sheet with search and the Play, Secondary and Foot surfaces.
 
 ### Surfaces
 
@@ -141,7 +141,7 @@ Phosphor, regular weight; `fill` only for the active nav item and the playing st
 
 ## 4. Layout recipes
 
-- **Shell** (`app/Shell.tsx`). Desktop: `[sidebar | page panel | queue panel]` over the player bar; the page panel is the scroll container (`useScrollElement()`). Phone: page, mini player, tab bar; More and the now-playing sheet are bottom sheets.
+- **Shell** (`app/Shell.tsx`). Desktop: `[sidebar | page panel | queue panel]` over the player bar; the sidebar lists every surface in three unlabelled groups, Settings at its foot. The page panel is the scroll container (`useScrollElement()`). Phone: page, mini player, tab bar; More and the now-playing sheet are bottom sheets.
 - **Page** (`ui/Page.tsx`). `Page width="data|read|form"` > `PageHeader title actions` (+ `TabNav` as children for a surface with tabs) > sections 40px apart (48 from `md`; `SECTIONS` for a body under a shared header). The header is a two-column grid from `md`: title left, actions bottom-aligned right; on a phone the actions stack under the title. The range picker sits in the header actions of every ranged surface. One primary or accent button per surface: once a step is done, its repeat action (Connect again, import again) is secondary.
 - **Patterns tab** (`surfaces/PatternsFrame.tsx`). Every Patterns tab renders through `PatternsFrame`: header, `TabNav`, range picker, first-use state. A tab only supplies its body.
 - **Stat strip driving one chart.** At most three figures; the selected one draws the chart below it. Never a row of identical metric boxes.

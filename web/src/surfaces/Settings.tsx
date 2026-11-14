@@ -11,7 +11,8 @@ import { passkeyProblem, registerPasskey } from "../lib/passkey";
 import { connectSpotify } from "../lib/spotifyConnect";
 import { useTheme, type ThemePref } from "../lib/theme";
 import { showToast } from "../lib/toast";
-import { Button } from "../ui/Button";
+import { AppLink } from "../ui/AppLink";
+import { Button, buttonClass } from "../ui/Button";
 import { CopyField } from "../ui/CopyField";
 import { Confirm } from "../ui/Dialog";
 import { Notice } from "../ui/Notice";
@@ -516,7 +517,14 @@ export function Settings({ section }: { section: string }) {
   const tab = (SETTINGS_TABS.some((t) => t.path === `/settings/${section}`) ? section : "general") as Tab;
   return (
     <Page width="read">
-      <PageHeader title="Settings">
+      <PageHeader
+        title="Settings"
+        actions={
+          <AppLink to="/setup" className={buttonClass()}>
+            Open setup
+          </AppLink>
+        }
+      >
         <TabNav items={SETTINGS_TABS} label="Settings" />
       </PageHeader>
       <TabBody key={tab} tab={tab} />
