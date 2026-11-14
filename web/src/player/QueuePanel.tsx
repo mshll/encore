@@ -23,7 +23,7 @@ function QueueRow({ track }: { track: TrackRef }) {
         <span className="truncate">{track.name}</span>
         <span className="truncate text-caption text-secondary">{track.artist}</span>
       </span>
-      <SongMenu song={{ uri: track.uri, name: track.name, artist: track.artist }} className="md:opacity-0 md:group-hover:opacity-100 md:focus-visible:opacity-100 md:data-[popup-open]:opacity-100" />
+      <SongMenu song={{ uri: track.uri, name: track.name, artist: track.artist }} className="md:can-hover:opacity-0 md:group-hover:opacity-100 md:focus-visible:opacity-100 md:data-[popup-open]:opacity-100" />
     </li>
   );
 }

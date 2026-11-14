@@ -6,6 +6,9 @@ import { ArrowDownIcon } from "./icons";
 
 const NEAR_END = 64;
 
+/** How long the thread stays at its end after the composer takes focus: the software keyboard resizes the view meanwhile. */
+const KEYBOARD_SETTLE_MS = 800;
+
 /** A CSS time token in milliseconds: the build writes 300ms as .3s. */
 const ms = (time: string) => parseFloat(time) * (time.trim().endsWith("ms") ? 1 : 1000);
 
@@ -48,6 +51,7 @@ export function Conversation({
   const content = useRef<HTMLDivElement>(null);
   const dock = useRef<HTMLDivElement>(null);
   const atEnd = useRef(true);
+  const holdEndUntil = useRef(0);
   const [showJump, setShowJump] = useState(false);
 
   const scroller = useCallback(() => (contained ? box.current : page.current), [contained, page]);
@@ -71,6 +75,11 @@ export function Conversation({
     const el = scroller();
     if (!el || !pinned) return;
     const onScroll = () => {
+      if (performance.now() < holdEndUntil.current) {
+        const gap = pastEnd();
+        if (gap > 1) el.scrollBy({ top: gap });
+        return;
+      }
       atEnd.current = pastEnd() < NEAR_END;
       setShowJump(!atEnd.current);
     };
@@ -86,6 +95,8 @@ export function Conversation({
     });
     observer.observe(content.current);
     observer.observe(dock.current);
+    const el = scroller();
+    if (el) observer.observe(el);
     return () => observer.disconnect();
   }, [scroller, pastEnd, pinned]);
 
@@ -134,6 +145,9 @@ export function Conversation({
       )}
       <div
         ref={dock}
+        onFocus={() => {
+          if (pinned && atEnd.current) holdEndUntil.current = performance.now() + KEYBOARD_SETTLE_MS;
+        }}
         className={cx(
           "flex flex-col gap-3",
           pinned && "relative pt-1",

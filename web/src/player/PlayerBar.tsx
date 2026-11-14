@@ -29,11 +29,17 @@ export function PlayerBar({ queueOpen, onToggleQueue }: { queueOpen: boolean; on
   const device = now.data?.device?.name;
   const links = useTrackLinks(track?.uri);
   return (
-    <section aria-label="Player" className="grid h-(--player-h) grid-cols-[minmax(0,1fr)_minmax(0,520px)_minmax(0,1fr)] items-center gap-6 px-4">
+    <section aria-label="Player" className="grid h-(--player-h) grid-cols-[minmax(0,1fr)_minmax(0,320px)_minmax(0,1fr)] items-center gap-6 px-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,520px)_minmax(0,1fr)]">
       <div className="flex min-w-0 items-center gap-3">
         {track ? (
           <>
-            <Artwork src={track.albumArtUrl} kind="song" box={48} />
+            {links ? (
+              <AppLink to={links.song} tabIndex={-1} aria-label={track.name} className="shrink-0">
+                <Artwork src={track.albumArtUrl} kind="song" box={48} />
+              </AppLink>
+            ) : (
+              <Artwork src={track.albumArtUrl} kind="song" box={48} />
+            )}
             <div className="flex min-w-0 flex-col">
               {links ? (
                 <AppLink to={links.song} className="truncate text-primary hover:underline">
@@ -42,7 +48,7 @@ export function PlayerBar({ queueOpen, onToggleQueue }: { queueOpen: boolean; on
               ) : (
                 <span className="truncate text-primary">{track.name}</span>
               )}
-              <span className="truncate text-caption text-secondary">
+              <span className="-my-1 truncate py-1 text-caption text-secondary">
                 {links ? (
                   <AppLink to={links.artist} className="-mx-1 px-1 py-1 hover:text-primary hover:underline">
                     {track.artist}

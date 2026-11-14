@@ -87,7 +87,7 @@ export function CommandPalette({ open, onOpenChange }: { open: boolean; onOpenCh
     <Dialog.Root open={open} onOpenChange={(next) => (next ? onOpenChange(true) : close())}>
       <Dialog.Portal>
         <Dialog.Backdrop className={BACKDROP} />
-        <Dialog.Popup className="fixed inset-0 z-50 flex flex-col overflow-hidden bg-overlay outline-none transition-[opacity,transform] duration-150 ease-out data-[ending-style]:opacity-0 data-[starting-style]:opacity-0 md:inset-auto md:top-[12vh] md:left-1/2 md:max-h-[min(560px,76vh)] md:w-[min(640px,calc(100vw-32px))] md:-translate-x-1/2 md:rounded-xl md:shadow-modal md:data-[ending-style]:scale-[0.98] md:data-[starting-style]:scale-[0.98] motion-reduce:md:data-[ending-style]:scale-100 motion-reduce:md:data-[starting-style]:scale-100">
+        <Dialog.Popup className="fixed inset-x-0 top-(--app-top,0px) bottom-(--keyboard-inset,0px) z-50 flex flex-col overflow-hidden bg-overlay outline-none transition-[opacity,transform] duration-150 ease-out data-[ending-style]:opacity-0 data-[starting-style]:opacity-0 md:inset-auto md:top-[12vh] md:left-1/2 md:max-h-[min(560px,76dvh)] md:w-[min(640px,calc(100vw-32px))] md:-translate-x-1/2 md:rounded-xl md:shadow-modal md:data-[ending-style]:scale-[0.98] md:data-[starting-style]:scale-[0.98] motion-reduce:md:data-[ending-style]:scale-100 motion-reduce:md:data-[starting-style]:scale-100">
           <Dialog.Title className="sr-only">Search and go to</Dialog.Title>
           <div className="flex h-12 shrink-0 items-center gap-2.5 px-4 hairline-b phone:h-14 phone:pt-[env(safe-area-inset-top)]">
             <Icon icon={MagnifyingGlassIcon} className="text-tertiary" />
@@ -118,11 +118,14 @@ export function CommandPalette({ open, onOpenChange }: { open: boolean; onOpenCh
               aria-label="Search"
               placeholder="Search artists, songs, albums or pages…"
               enterKeyHint="go"
+              autoCapitalize="none"
+              autoCorrect="off"
+              spellCheck={false}
               className="h-full min-w-0 flex-1 bg-transparent text-body outline-none placeholder:text-tertiary"
             />
             <Dialog.Close className="text-body-sm text-secondary md:hidden">Cancel</Dialog.Close>
           </div>
-          <div ref={listRef} id="palette-list" role="listbox" aria-label="Results" tabIndex={-1} data-crop className="flex-1 overflow-y-auto p-1.5">
+          <div ref={listRef} id="palette-list" role="listbox" aria-label="Results" tabIndex={-1} data-crop className="flex-1 overflow-y-auto overscroll-contain p-1.5">
             {entries.length === 0 && <p className="px-3 py-8 text-center text-secondary">{search.isFetching ? "Searching…" : `Nothing matches “${deferred}”.`}</p>}
             {entries.map((entry, i) => (
               <div key={entry.id}>

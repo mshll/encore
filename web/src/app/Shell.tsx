@@ -5,6 +5,7 @@ import { showToast } from "../lib/toast";
 import { MiniPlayer, PlayerBar } from "../player/PlayerBar";
 import { Toaster } from "../ui/Toast";
 import { TooltipProvider } from "../ui/Tooltip";
+import { useSoftKeyboard } from "./keyboard";
 import { PhoneNav } from "./PhoneNav";
 import { useShortcuts } from "./shortcuts";
 import { Sidebar } from "./Sidebar";
@@ -82,6 +83,7 @@ export function Shell({ children }: { children: ReactNode }) {
   const sheetLoaded = useOnceOpen(sheetOpen);
   useSpotifyNotice();
   useRouteReset(main);
+  useSoftKeyboard(!desktop, main);
   useShortcuts(useCallback(() => setPaletteOpen((o) => !o), []));
 
   return (
@@ -97,7 +99,7 @@ export function Shell({ children }: { children: ReactNode }) {
           {desktop ? (
             <div className="grid h-dvh grid-cols-[var(--sidebar-w)_minmax(0,1fr)_auto] grid-rows-[minmax(0,1fr)_var(--player-h)] pr-[env(safe-area-inset-right)] pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)]">
               <Sidebar onSearch={() => setPaletteOpen(true)} />
-              <main ref={main} id="main" tabIndex={-1} data-crop className="mt-(--inset) overflow-y-auto rounded-xl bg-page shadow-panel outline-none">
+              <main ref={main} id="main" tabIndex={-1} data-crop className="mt-(--inset) overflow-y-auto overscroll-contain rounded-xl bg-page shadow-panel outline-none">
                 <QueueOpener.Provider value={desktop ? () => setQueueOpen(true) : () => setSheetOpen(true)}>{children}</QueueOpener.Provider>
               </main>
               <div className={queueOpen ? "mt-(--inset) mr-(--inset) ml-(--inset) min-h-0" : "w-(--inset)"}>
@@ -112,11 +114,17 @@ export function Shell({ children }: { children: ReactNode }) {
               </div>
             </div>
           ) : (
-            <div className="flex h-dvh flex-col bg-page">
-              <main ref={main} id="main" tabIndex={-1} data-crop className="min-h-0 flex-1 overflow-y-auto pt-[env(safe-area-inset-top)] outline-none">
+            <div className="relative top-(--app-top,0px) flex h-(--app-h,100dvh) flex-col bg-page">
+              <main
+                ref={main}
+                id="main"
+                tabIndex={-1}
+                data-crop
+                className="min-h-0 flex-1 overflow-y-auto overscroll-contain pt-[env(safe-area-inset-top)] pr-[env(safe-area-inset-right)] pl-[env(safe-area-inset-left)] outline-none"
+              >
                 <QueueOpener.Provider value={desktop ? () => setQueueOpen(true) : () => setSheetOpen(true)}>{children}</QueueOpener.Provider>
               </main>
-              <div className="shrink-0 bg-shell pb-[env(safe-area-inset-bottom)]">
+              <div className="shrink-0 bg-shell pb-[env(safe-area-inset-bottom)] in-data-keyboard-open:hidden">
                 <div className="bg-page">
                   <MiniPlayer onOpen={() => setSheetOpen(true)} />
                 </div>

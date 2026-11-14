@@ -163,6 +163,9 @@
   :root:has([data-mini-player]) {
     --bottom-chrome: calc(var(--tabbar-h) + var(--mini-player-h) + env(safe-area-inset-bottom, 0px));
   }
+  :root[data-keyboard-open] {
+    --bottom-chrome: var(--keyboard-inset);
+  }
 }
 
 /* Tailwind theme: only encore's tokens. The default palette, radii and type scale are cleared. */

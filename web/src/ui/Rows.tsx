@@ -38,9 +38,9 @@ type RowProps = {
  * One row of a ranked list at Mercury density: rank, art, title over subtitle, an optional dither meter,
  * a right-aligned tabular figure, and hover actions (play, menu) for songs. Whole row is the link.
  */
-/** On desktop the song actions sit over the figure while they show, so hidden actions take no width from the title. */
+/** With a mouse the song actions sit over the figure while they show, so hidden actions take no width from the title. */
 const HIDE_ON_ACTIONS =
-  "md:transition-opacity md:duration-150 md:group-hover:opacity-0 md:group-focus-within:opacity-0 md:group-has-[[data-popup-open]]:opacity-0";
+  "md:transition-opacity md:duration-150 md:group-hover:opacity-0 md:can-hover:group-focus-within:opacity-0 md:can-hover:group-has-[[data-popup-open]]:opacity-0";
 
 export function Row({ to, title, subtitle, art, rank, value, share, song, style }: RowProps) {
   const playback = usePlayback();
@@ -61,8 +61,8 @@ export function Row({ to, title, subtitle, art, rank, value, share, song, style 
       {song && (
         <span
           className={cx(
-            "flex shrink-0 items-center md:opacity-0 md:transition-opacity md:duration-150 md:group-hover:opacity-100 md:group-focus-within:opacity-100 md:group-has-[[data-popup-open]]:opacity-100",
-            actionsOver ? "relative md:absolute md:top-1/2 md:right-2 md:-translate-y-1/2" : "relative",
+            "flex shrink-0 items-center md:transition-opacity md:duration-150 md:can-hover:opacity-0 md:group-hover:opacity-100 md:group-focus-within:opacity-100 md:group-has-[[data-popup-open]]:opacity-100",
+            actionsOver ? "relative md:can-hover:absolute md:can-hover:top-1/2 md:can-hover:right-2 md:can-hover:-translate-y-1/2" : "relative",
           )}
         >
           <IconButton icon={PlayIcon} label={`Play ${title}`} size="sm" className="max-md:hidden" onClick={() => playback.play([song.uri])} />

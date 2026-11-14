@@ -33,6 +33,8 @@ export function SearchField({
       onChange={(e) => setText(e.target.value)}
       placeholder={placeholder}
       enterKeyHint="search"
+      autoCapitalize="none"
+      autoCorrect="off"
       spellCheck={false}
       className={cx("w-full md:w-72", className)}
       end={text ? <IconButton icon={XIcon} label="Clear search" size="sm" onClick={() => setText("")} /> : undefined}

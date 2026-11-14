@@ -131,7 +131,7 @@ Weights: 400, 500 (labels, titles), 600 (the display face; otherwise rare). Numb
 - Spacing is Tailwind's 4px scale. Page gutter `--gutter` 32 (phone 20). Section gap 40 (`gap-10`), header to content 24–32, row internal gap 12.
 - Controls: `--control-h` 32 / `-sm` 28 / `-lg` 40; phone 44 / 44 / 48 (44 is the touch floor). Rows: `--row-h` 44, compact 36; phone 60 / 48.
 - Shell: `--sidebar-w` 232, `--panel-w` 360, `--player-h` 72, `--tabbar-h` 56, `--mini-player-h` 64, `--page-max` 1200, `--inset` 8 (0 on phone).
-- `--bottom-chrome` on `:root`: the height the shell pins to the foot of the screen, safe area included. Player bar on desktop; tab bar, plus the mini player while one shows, on a phone. Anything fixed to the bottom (toasts, sheets) sits above it. It lives on the root because overlays render in a portal outside the shell.
+- `--bottom-chrome` on `:root`: the height the shell pins to the foot of the screen, safe area included. Player bar on desktop; tab bar, plus the mini player while one shows, on a phone; the keyboard's height while the software keyboard is up. Anything fixed to the bottom (toasts, sheets) sits above it. It lives on the root because overlays render in a portal outside the shell.
 - Radius: `rounded-xs` 4, `sm` 6, `md` 8 (controls, rows), `lg` 10, `xl` 12 (page panel), `2xl` 16 (dialogs), `full`.
 - Shadows: `shadow-control`, `shadow-panel`, `shadow-overlay`, `shadow-modal`. Dark mode replaces drops with an inset hairline.
 - Motion: `--dur-hover` 150, `--dur-swap` 200, `--dur-modal` 240, `--dur-move` 300; eases `ease-out`, `ease-(--ease-move)`, `ease-(--ease-drawer)`. Every animation has a reduced-motion branch (the global rule in `app.css` makes them instant). No bounce, no spring overshoot.
@@ -153,6 +153,23 @@ Phosphor, regular weight; `fill` only for the active nav item and the playing st
 - **Setting rows.** `SettingRows` separates rows with spacing only, no hairlines; a section heading groups them. A hairline is kept for selection or a table, never to divide settings.
 - **Conversation** (`ui/Conversation`). Ask and the set page. With no messages the composer sits under the header with the starters below it. From the first message, or a starting run, the composer is pinned to the foot of the conversation column and the messages scroll above it: in the page panel it sticks to the bottom of the scroll area (so it clears the player bar, the mini player, the tab bar and the safe area, which sit outside that area; the viewport resizes for the on-screen keyboard); in a side column (`contained`, the set page from `lg`) the thread has its own scroll box. The view follows new messages and a streaming run while the reader is at the end; scrolled up, Jump to latest appears above the composer. Notices tied to the composer (a failed run, Claude not set up, the cap spent, Spotify paused) sit in the pinned block with it. During a run the send button is Stop, so `RunProgress` in a thread has no Cancel. The composer glides between the two places (`--dur-move`, `--ease-move`; instant with reduced motion).
 - **Start a session.** `StartSessionButton` (secondary, small) sits beside a list of songs worth a session (Overview top songs, Forgotten, an era, keepers in Skips, a trip). It opens the queue panel, where the session runs.
+
+### Phone and touch
+
+The platform layer lives in `styles/app.css`, `styles/tokens.css`, `app/Shell.tsx` and `app/keyboard.ts`; a surface does not repeat it.
+
+- **Hover only with a mouse.** `hover:` and `group-hover:` apply under `(hover: hover) and (pointer: fine)`. On a touch screen `hover:` styles show while pressed (`:active`), so every control answers a press within `--dur-hover`. Hand-written hover CSS goes in the same query. Actions revealed on hover hide only under `can-hover:`; on a touch screen they always show, in the row.
+- **Press, not release.** `press` (scale 0.97) on buttons and tabs; no feedback that waits for `click`. No tap highlight (`-webkit-tap-highlight-color: transparent` on the root).
+- **Controls are not text.** Buttons, tabs, menu items, options, switches, checkboxes and nav links take `user-select: none` and `-webkit-touch-callout: none`. Content (names, figures, errors, links in text) stays selectable. Controls and fields take `touch-action: manipulation`.
+- **Fields are 16px on a touch screen** (an unlayered rule beats the `text-*` utilities), so iOS never zooms. Never `maximum-scale` or `user-scalable=no`. Set the keyboard: `enterKeyHint` (send, search, go), `autoCapitalize="none"` and `autoCorrect="off"` on search and name fields.
+- **Heights.** The shell is `100dvh`. While the software keyboard is up on a phone, the shell fits the visible area above it, the tab bar and mini player hide, and `--bottom-chrome` becomes the keyboard's height (`app/keyboard.ts`; iOS pans the page under the keyboard otherwise). A pinned composer stays on the keyboard; a thread at its end stays at its end.
+- **Scroll.** The root does not bounce or pull to refresh (`overscroll-behavior: none`); the page panel, sheets, popups, the palette list and tab strips contain their own scroll (`overscroll-contain`, `overscroll-x-contain`). Never a `touchmove` listener to stop scrolling.
+- **Safe areas.** `viewport-fit=cover`. The page pads the top and sides, the tab bar and the desktop grid pad the sides and bottom, sheets pad the bottom, toasts keep 16px from the side insets. Use `env(safe-area-inset-*, 0px)` inside `calc()`.
+- **Sheets.** A bottom sheet's max height is the visible area minus the top inset and 24px. Opened by touch, a sheet focuses itself, not its first control (`focusSheetOnTouch`).
+- **Horizontal strips** (`TabNav`, `TabList`, filter rows) scroll natively under the gutter with no scrollbar; `TabNav` brings the current tab into view. A chart that scrubs on hover takes `touch-pan-y`: a sideways drag scrubs, a vertical one scrolls the page.
+- **Status bar.** On a phone the root paints `bg-page`, the colour at the top of the screen; `theme-color` follows the chosen theme, set before paint by `public/theme.js` and on change by `lib/theme.ts`.
+- **Targets.** 44px on a phone (`--control-h`), `touch-target` round a smaller mark. A link inside a truncated line cannot grow past the line's box: give the line the padding, or make a neighbouring element (the artwork) a second way in.
+- Emulation does not show sticky hover, tap delay, rubber banding, safe areas or the keyboard. Check those on an iPhone, in Safari and from the home screen.
 
 ### State order
 
