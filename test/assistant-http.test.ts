@@ -90,7 +90,6 @@ describe("LLM errors over HTTP", () => {
       ["/api/ask", { question: "x" }],
       ["/api/sets", { request: "x" }],
       ["/api/picks/generate", {}],
-      ["/api/digests/generate", { kind: "weekly" }],
     ] as const) {
       const res = await post(path, json, path === "/api/ask" ? { accept: "text/event-stream" } : {});
       expect(res.status).toBe(402);

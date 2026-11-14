@@ -1,4 +1,5 @@
 import { latestDigest } from "../assistant/api";
+import { humanDatesIn, RECAP_KINDS } from "../digest/periods";
 import type { DigestKind } from "../digest/service";
 import { getJobState, setJobState } from "../jobs/state";
 import { weekOf, weekPicks } from "../picks/service";
@@ -10,21 +11,21 @@ import { plain, type Embed, type Message } from "./types";
 
 const STATE = "discord_posts";
 const DAY_MS = 86_400_000;
-const FRESH_FOR_MS: Record<DigestKind, number> = { weekly: 8 * DAY_MS, monthly: 32 * DAY_MS };
+const FRESH_FOR_MS: Record<DigestKind, number> = { weekly: 8 * DAY_MS, monthly: 32 * DAY_MS, yearly: 32 * DAY_MS };
 const RELEASES_SHOWN = 10;
 
-type PostState = { picks?: string; weekly?: string; monthly?: string };
+type PostState = { picks?: string; weekly?: string; monthly?: string; yearly?: string };
 
 export function digestMessage(ctx: DiscordContext, kind: DigestKind): { key: string; message: Message } | null {
   const digest = latestDigest(ctx.db, kind);
-  if (!digest || Date.parse(digest.createdAt) < ctx.now() - FRESH_FOR_MS[kind]) return null;
+  if (!digest || digest.inProgress || Date.parse(digest.createdAt) < ctx.now() - FRESH_FOR_MS[kind]) return null;
   const embeds: Embed[] = [];
   if (kind === "weekly") {
     const releases = newReleasesSince(ctx.db, Date.parse(`${digest.from}T00:00:00Z`)).slice(0, RELEASES_SHOWN);
     if (releases.length)
       embeds.push({
         title: "New releases from artists you play",
-        description: releases.map((r) => `[${plain(r.name, 100)}](${r.url}) by ${plain(r.artist, 100)}, ${r.albumType} ${r.releaseDate}`).join("\n"),
+        description: releases.map((r) => `[${plain(r.name, 100)}](${r.url}) by ${plain(r.artist, 100)}, ${r.albumType} ${humanDatesIn(r.releaseDate)}`).join("\n"),
         ...(releases[0]!.imageUrl ? { thumbnail: { url: releases[0]!.imageUrl } } : {}),
       });
   }
@@ -51,7 +52,7 @@ export async function publishAssistantPosts(discord: Discord, ctx: DiscordContex
       posted.push(`picks:${week}`);
     }
   }
-  for (const kind of ["weekly", "monthly"] as const) {
+  for (const kind of RECAP_KINDS) {
     const digest = digestMessage(ctx, kind);
     if (!digest || state[kind] === digest.key) continue;
     await postToChannel(discord, digest.message);

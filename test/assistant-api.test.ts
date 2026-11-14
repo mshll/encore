@@ -40,11 +40,11 @@ describe("chat entry points", () => {
   });
 
   test("latestDigest returns the newest rendered digest, or null", async () => {
-    const { ctx, db } = featureCtx(scripted(message([text("A quiet week.")])).transport, [], {}, "2026-01-11T08:00:00Z");
+    const { ctx, db } = featureCtx(scripted(message([text(JSON.stringify({ headline: "A quiet week", takes: [] }))])).transport, [], {}, "2026-01-11T08:00:00Z");
     seedLibrary(db);
     expect(latestDigest(db)).toBeNull();
     await generateDigest(ctx, "weekly");
-    expect(latestDigest(db)?.rendered).toBe("Your week, 2026-01-04 to 2026-01-10\n\nA quiet week.");
+    expect(latestDigest(db)?.rendered.split("\n").slice(0, 3)).toEqual(["Your week, 2 – 8 Jan 2026", "", "A quiet week"]);
     expect(latestDigest(db, "monthly")).toBeNull();
   });
 });

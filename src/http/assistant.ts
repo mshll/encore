@@ -1,7 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import type { Context } from "hono";
 import { streamSSE } from "hono/streaming";
-import { DigestNotFoundError } from "../digest/service";
+import { DigestNotFoundError, RecapPeriodError } from "../digest/service";
 import { ThreadNotFoundError } from "../ask/service";
 import type { AgentEvent } from "../llm/agent";
 import type { FeatureContext } from "../llm/context";
@@ -33,6 +33,7 @@ export function toApiError(error: unknown): unknown {
   if (error instanceof NoteSubjectNotFoundError) return new ApiError(404, "not_found", error.message);
   if (error instanceof PicksExistError) return new ApiError(409, "picks_exist", error.message, { week: error.week });
   if (error instanceof EmptySetError) return new ApiError(409, "set_empty", error.message);
+  if (error instanceof RecapPeriodError) return new ApiError(409, "period_unavailable", error.message);
   return error;
 }
 

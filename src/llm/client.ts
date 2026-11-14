@@ -35,6 +35,8 @@ export type CallInput = {
   messages: MessageParam[];
   effort: Effort;
   maxTokens: number;
+  /** Constrains the reply to JSON matching this schema (structured outputs). */
+  jsonSchema?: Record<string, unknown>;
   onText?: (delta: string) => void;
 };
 
@@ -128,7 +130,7 @@ export class Llm {
       messages: input.messages,
       ...(input.tools?.length ? { tools: input.tools } : {}),
       thinking: { type: "adaptive", block_binding: { prefix_mismatch_behavior: "drop_block" } },
-      output_config: { effort: input.effort },
+      output_config: { effort: input.effort, ...(input.jsonSchema ? { format: { type: "json_schema", schema: input.jsonSchema } } : {}) },
       cache_control: { type: "ephemeral" },
       fallbacks: "default",
       betas: BETAS,

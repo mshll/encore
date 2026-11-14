@@ -2,7 +2,9 @@ import { Hono } from "hono";
 import { z } from "zod";
 import { ask, deleteAskThread, getAskThread, listAskThreads } from "../../ask/service";
 import { PICK_STATES } from "../../db/schema";
-import { generateDigest, listDigests, renderDigest } from "../../digest/service";
+import { RECAP_KINDS, latestKey } from "../../digest/periods";
+import { generateDigest, listDigests, recapPeriod, renderDigest } from "../../digest/service";
+import { localTime } from "../../plays/localTime";
 import { budgetStatus, spendDetail } from "../../llm/ledger";
 import { listBlocks, removeBlock } from "../../library/blocks";
 import { cachedNote, trackNote } from "../../notes/service";
@@ -142,17 +144,29 @@ export const noteRoutes = new Hono<Env>()
     return c.json(await mapped(() => trackNote(featureContext(c), body)));
   });
 
-const kind = z.enum(["weekly", "monthly"]);
+const kind = z.enum(RECAP_KINDS);
 
 export const digestRoutes = new Hono<Env>()
   .get("/", (c) => {
     const q = parse(z.object({ kind: kind.optional(), limit: z.coerce.number().int().min(1).max(100).default(20) }), c.req.query());
     return c.json({ items: listDigests(c.var.deps.db, q.kind, q.limit) });
   })
+  .get("/periods/:kind/:key", async (c) => {
+    const { db, now, settings } = c.var.deps;
+    const p = parse(z.object({ kind, key: z.string().max(10) }), c.req.param());
+    const today = localTime(now(), settings.get().timezone).day;
+    return c.json(await mapped(() => recapPeriod(db, p.kind, p.key, today)));
+  })
+  .get("/latest/:kind", (c) => {
+    const { now, settings } = c.var.deps;
+    const p = parse(z.object({ kind }), c.req.param());
+    const { timezone, llm } = settings.get();
+    return c.json({ kind: p.kind, key: latestKey(p.kind, localTime(now(), timezone).day, llm.digestSlot.weekday) });
+  })
   .get("/:id", async (c) => c.json(await mapped(() => renderDigest(c.var.deps.db, parse(id, c.req.param()).id))))
   .post("/generate", async (c) => {
-    const body = parse(z.object({ kind }), await jsonBody(c));
-    return c.json(await mapped(() => generateDigest(featureContext(c), body.kind)));
+    const body = parse(z.object({ kind, key: z.string().max(10).optional() }), await jsonBody(c));
+    return respond(c, (ctx) => generateDigest(ctx, body.kind, body.key));
   });
 
 export const llmRoutes = new Hono<Env>().get("/spend", (c) => {

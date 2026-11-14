@@ -140,8 +140,8 @@ describe("assistant on Discord", () => {
     const posts = discordCalls.filter((c) => c.method === "POST");
     expect(posts.map((p) => p.path)).toEqual(["/channels/7/messages", "/channels/7/messages"]);
     expect(posts[1]!.body).toMatchObject({
-      content: "Your week, 2026-01-25 to 2026-01-31\n\nA quiet week.",
-      embeds: [{ title: "New releases from artists you play", description: "[New EP](https://open.spotify.com/album/alb1) by Artist, single 2026-01-30" }],
+      content: "Your week, 25 – 31 Jan 2026\n\nA quiet week.",
+      embeds: [{ title: "New releases from artists you play", description: "[New EP](https://open.spotify.com/album/alb1) by Artist, single 30 Jan 2026" }],
       allowed_mentions: { parse: [] },
     });
   });

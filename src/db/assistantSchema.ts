@@ -1,5 +1,7 @@
-import { blob, index, integer, real, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
+import { blob, index, integer, primaryKey, real, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
 import { COVER_STYLES } from "../covers/style";
+import { RECAP_KINDS } from "../digest/periods";
+import type { RecapLines } from "../digest/page";
 
 export const LLM_FEATURES = ["sets", "picks", "ask", "notes", "digest", "dj"] as const;
 export type LlmFeature = (typeof LLM_FEATURES)[number];
@@ -189,16 +191,55 @@ export const digests = sqliteTable(
   "digests",
   {
     id: integer("id").primaryKey({ autoIncrement: true }),
-    kind: text("kind", { enum: ["weekly", "monthly"] }).notNull(),
+    kind: text("kind", { enum: RECAP_KINDS }).notNull(),
     periodKey: text("period_key").notNull(),
     fromDay: text("from_day").notNull(),
     toDay: text("to_day").notNull(),
     facts: text("facts", { mode: "json" }).$type<Record<string, unknown>>().notNull(),
     text: text("text").notNull(),
+    /** Claude's headline and section takes; null for recaps written before recaps were pages, or without Claude. */
+    lines: text("lines", { mode: "json" }).$type<RecapLines>(),
     model: text("model").notNull(),
     createdAt: integer("created_at").notNull(),
   },
   (t) => [uniqueIndex("digests_kind_period").on(t.kind, t.periodKey)],
+);
+
+/** The Spotify playlist of a period: saved from its recap, or the year's living playlist frozen when the year ended. */
+export const recapPlaylists = sqliteTable(
+  "recap_playlists",
+  {
+    kind: text("kind", { enum: RECAP_KINDS }).notNull(),
+    periodKey: text("period_key").notNull(),
+    playlistId: text("playlist_id").notNull(),
+    playlistUrl: text("playlist_url").notNull(),
+    source: text("source", { enum: ["recap", "living"] }).notNull(),
+    /** Cover key of the image last uploaded to the playlist. */
+    coverUploadKey: text("cover_upload_key"),
+    savedAt: integer("saved_at").notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.kind, t.periodKey] })],
+);
+
+export const SHARE_KINDS = ["recap"] as const;
+export type ShareKind = (typeof SHARE_KINDS)[number];
+
+/** A public link to a frozen copy of one thing. Only the token's hash is stored; the public page reads `snapshot` and nothing else. */
+export const shares = sqliteTable(
+  "shares",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    tokenHash: text("token_hash").notNull(),
+    kind: text("kind", { enum: SHARE_KINDS }).notNull(),
+    refId: integer("ref_id").notNull(),
+    snapshot: text("snapshot", { mode: "json" }).$type<Record<string, unknown>>().notNull(),
+    createdAt: integer("created_at").notNull(),
+    expiresAt: integer("expires_at"),
+    revokedAt: integer("revoked_at"),
+    views: integer("views").notNull().default(0),
+    lastViewedAt: integer("last_viewed_at"),
+  },
+  (t) => [uniqueIndex("shares_token").on(t.tokenHash), index("shares_ref").on(t.kind, t.refId)],
 );
 
 export const spotifyLookups = sqliteTable("spotify_lookups", {

@@ -18,7 +18,7 @@ import { EmptyState, ErrorState, FirstUseState } from "../ui/States";
 type Kind = DigestItem["kind"];
 
 export const recapPeriod = (d: DigestItem) => (d.kind === "monthly" ? fmtMonthLong(d.periodKey) : fmtDayRange(d.from, d.to));
-const KIND_LABEL: Record<Kind, string> = { weekly: "Weekly recap", monthly: "Monthly recap" };
+const KIND_LABEL: Record<Kind, string> = { weekly: "Weekly recap", monthly: "Monthly recap", yearly: "Yearly recap" };
 
 const paragraphs = (text: string) => text.split(/\n+/).map((p) => p.trim()).filter(Boolean);
 

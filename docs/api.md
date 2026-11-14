@@ -165,7 +165,7 @@ Artist rows (top artists, eras, skips, search, the artist page, the overview's `
 - `tags`: `songs` known (distinct song keys in `tracks`), `tagged` songs with tags, `coverage` = tagged / songs (0..1, not rounded).
 - `plays`: stored rows: all kinds, music only, and rows by source `api` and `live` (the rest are `export`).
 - `live`: the `watch`, `radar`, `library` and `living` jobs, same shape as `poll`. `watch.lastResult` is `{ "current": Observation | null, "inserted", "replacedApi", "coveredByExport", "playing" }` for the last tick, or `{ "current", "skipped": "spotify_not_connected" | "spotify_paused", "until"? }`.
-- `llm`: Claude spend for the current local month against `MONTHLY_BUDGET_USD`. `exhausted: true` means every LLM endpoint returns `402` and scheduled LLM jobs skip until the next month. `configured: false` means no Claude key (`claudeApiKey` setting or `ANTHROPIC_API_KEY`). `schedule`: when the weekly picks and digest jobs run (ISO weekday 1-7 and local hour, from `PICKS_WEEKDAY`/`PICKS_HOUR` and `DIGEST_WEEKDAY`/`DIGEST_HOUR`); `enabled` is `JOBS_ENABLED`. `byFeature` features: `sets`, `picks`, `ask`, `notes`, `digest`, `dj`. Job `lastResult` may be `{ "skipped": "not_due" | "budget_exceeded" | "llm_not_configured" | "spotify_not_connected" | "attempts_exhausted" }`. When Discord posting is configured, `picks` and `digest` results also carry `publish: { "posted": ["picks:2026-11-09"] }` or `publish: { "error": "..." }` (see Discord). `outcomes.lastResult` has set and pick outcome refresh counts and, once a day, `library` (pick library state).
+- `llm`: Claude spend for the current local month against `MONTHLY_BUDGET_USD`. `exhausted: true` means every LLM endpoint returns `402` and scheduled LLM jobs skip until the next month. `configured: false` means no Claude key (`claudeApiKey` setting or `ANTHROPIC_API_KEY`). `schedule`: when the weekly picks and digest jobs run (ISO weekday 1-7 and local hour, from `PICKS_WEEKDAY`/`PICKS_HOUR` and `DIGEST_WEEKDAY`/`DIGEST_HOUR`); `enabled` is `JOBS_ENABLED`. `byFeature` features: `sets`, `picks`, `ask`, `notes`, `digest`, `dj`. Job `lastResult` may be `{ "skipped": "not_due" | "budget_exceeded" | "llm_not_configured" | "spotify_not_connected" | "attempts_exhausted" }`; the `digest` job runs without Claude too and stores recaps with the numbers alone (`{ "generated": ["monthly:2026-10"] }`). When Discord posting is configured, `picks` and `digest` results also carry `publish: { "posted": ["picks:2026-11-09"] }` or `publish: { "error": "..." }` (see Discord). `outcomes.lastResult` has set and pick outcome refresh counts and, once a day, `library` (pick library state).
 
 
 ## Auth (passkeys)
@@ -881,7 +881,7 @@ Button custom ids are `prefix:arg`:
 
 Claude errors are shown as messages: not configured, budget used up (with the amounts), declined, stopped early; unknown sets and picks say "That no longer exists."
 
-Channel posts: with `DISCORD_BOT_TOKEN` and `DISCORD_CHANNEL_ID` set, the `picks` and `digest` jobs post to the channel after every hourly run: this week's picks (same message as `/picks`, once per week, as soon as picks exist), the newest weekly digest (once per period, while under 8 days old) with an embed of up to 10 radar releases flagged new and first seen since the digest's first day, and the newest monthly recap (once per month, while under 32 days old). What was posted is stored in job state `discord_posts` (`{ picks: week, weekly: periodKey, monthly: periodKey }`), so restarts and repeated runs do not post twice. A failed post is retried on the next run.
+Channel posts: with `DISCORD_BOT_TOKEN` and `DISCORD_CHANNEL_ID` set, the `picks` and `digest` jobs post to the channel after every hourly run: this week's picks (same message as `/picks`, once per week, as soon as picks exist), the newest weekly recap (once per period, while under 8 days old) with an embed of up to 10 radar releases flagged new and first seen since the recap's first day, the newest monthly recap (once per month, while under 32 days old) and the newest finished yearly recap (once per year, while under 32 days old). Dates in posts are written out ("22 Oct 2026"). What was posted is stored in job state `discord_posts` (`{ picks: week, weekly: periodKey, monthly: periodKey, yearly: periodKey }`), so restarts and repeated runs do not post twice. A failed post is retried on the next run.
 
 Seams for other modules (`src/discord/`): `DiscordRegistry.addCommand({ definition, defer, ephemeral?, handle })` and `addComponent({ prefix, defer, ephemeral?, handle })` on `discord.registry` (created in `src/main.ts` by `createDiscord`); handlers get `{ ctx: { db, config, services, now }, interaction, options | arg }` and return a message (`content`, `embeds`, `components`). Throw `UserFacingError` for a message the owner should see. Add commands before `registerCommands` runs. To post outside an interaction (a weekly digest), call `postToChannel(discord, message)` or `discord.rest.postMessage(channelId, message)`; `discord.rest.editMessage` edits it. All messages are sent with `allowed_mentions: { parse: [] }`; pass names through `plain()` (escapes markdown, breaks `@` mentions, truncates).
 
@@ -923,6 +923,7 @@ Claude-backed features: sets, weekly picks, ask, liner notes, digests, and the o
 | 409 | `picks_exist` | Picks for this week already exist. `details: { week }` |
 | 409 | `set_empty` | Saving a set with no tracks |
 | 404 | `not_found` | Unknown set, pick, thread, digest, block or note |
+| 409 | `period_unavailable` | A recap period that has not ended or that the history does not reach |
 
 ### Streaming
 
@@ -1106,19 +1107,52 @@ The cached note, or `404` if none yet. Never calls Claude.
 
 ### Digests
 
-Weekly digest (the 7 local days before the run, against the 28 before those) and monthly recap (previous calendar month, against the 3 before it). Numbers are computed in code; Claude only phrases them. Every number in Claude's text is checked against the facts: on a mismatch Claude rewrites once, and if the rewrite still fails the digest is written from the facts in code (`model: "code"`). Generated at `DIGEST_WEEKDAY`/`DIGEST_HOUR` local time (weekly) and on the 1st at `DIGEST_HOUR` (monthly), or on demand. One digest per kind and period.
+Recaps of a week, a month or a year, each a page of sections built from numbers computed in code (`src/digest/facts.ts`); Claude only writes the words around them. Kinds: `weekly` (the 7 local days ending the day before `DIGEST_WEEKDAY`; `periodKey` is the last day), `monthly` (a calendar month, `YYYY-MM`) and `yearly` (a calendar year, `YYYY`; the current year can be recapped while it runs, up to yesterday). Each period is compared with the same stretch of the period before (the week before, the month before, the year before up to the same day) when the history covers all of that stretch; otherwise there is no comparison and the page says so once. Generated by the `digest` job at `DIGEST_WEEKDAY`/`DIGEST_HOUR` local time (weekly), on the 1st at `DIGEST_HOUR` (monthly) and on 1 January at `DIGEST_HOUR` (the year before), or on demand. One recap per kind and period.
+
+Claude returns structured output (`output_config.format`, a JSON schema): `{ "headline": "...", "takes": [{ "section": "listening", "text": "..." }] }`. Its lines carry no digits: a reply with digits is sent back once, then any line that still has one is dropped and the page shows the numbers alone there. Without Claude (no API key, or the monthly cap spent) the recap is stored with the numbers alone (`model: "code"`, `lines: null`), and a later `generate` adds the words.
 
 #### `GET /api/digests`
 
-Params `kind` (`weekly` | `monthly`, optional), `limit` (1-100, default 20). `{ "items": [{ "id": 1, "kind": "weekly", "periodKey": "2026-11-13", "from": "2026-11-07", "to": "2026-11-13", "title": "Your week, 2026-11-07 to 2026-11-13", "createdAt": "..." }] }`. `periodKey` is the last day for weekly, `YYYY-MM` for monthly.
+Params `kind` (`weekly` | `monthly` | `yearly`, optional), `limit` (1-100, default 20). `{ "items": [{ "id": 1, "kind": "monthly", "periodKey": "2026-10", "from": "2026-10-01", "to": "2026-10-31", "label": "October 2026", "title": "Your month, October 2026", "headline": "...", "inProgress": false, "createdAt": "..." }] }`. `label` is the period's name ("7 – 13 Nov 2026", "October 2026", "2026"); `title` is "Your week, …", "Your month, …", "Your year, …" or "Your year so far, …"; `headline` is Claude's headline, else the first line of the text.
 
 #### `GET /api/digests/:id`
 
-The list item plus `text`, `facts` (the numbers given to Claude), `model`, and `rendered` (`title`, a blank line, then `text`: ready to post as one message).
+The list item plus `text` (plain text for a chat message, dates written out), `facts`, `lines` (`{ headline, takes: { [section]: text } }` or `null`), `model`, `page` and `rendered` (`title`, a blank line, then `text`).
+
+`page` is what the recap page draws:
+
+```json
+{ "kind": "monthly", "key": "2026-10", "label": "October 2026", "span": { "from": "2026-10-01", "to": "2026-10-31" }, "inProgress": false,
+  "headline": "...", "headlineBy": "claude" | "facts" | "text",
+  "compare": { "label": "September 2026", "from": "2026-09-01", "to": "2026-09-30", "scaled": false } | null,
+  "note": "Your history starts 24 Nov 2024, so there is nothing earlier to compare with." | null,
+  "quiet": false, "legacyText": null,
+  "sections": [
+    { "id": "listening", "take": "...", "hours": 36.4, "before": 40.1, "listens": 592, "listensBefore": 650, "artists": 399, "songs": 854, "daily": [1.2, 0.8] },
+    { "id": "months", "take": null, "months": [{ "month": "2026-01", "hours": 30.2, "artist": "Mac Miller", "imageUrl": "https://i.scdn.co/...", "song": { "name": "Woods", "artist": "Mac Miller" } }] },
+    { "id": "artists", "take": "...", "top": [{ "artist": "Mac Miller", "imageUrl": "...", "hours": 5.7, "share": 0.16, "before": 14.3 }], "up": [{ "artist": "...", "imageUrl": null, "hours": 4.1, "before": 2.7 }], "down": [] },
+    { "id": "songs", "take": null, "songs": [{ "songKey": "...", "uri": "spotify:track:...", "name": "Loser", "artist": "3 Doors Down", "albumArtUrl": "...", "listens": 8, "hours": 0.5 }] },
+    { "id": "taste", "take": "...", "genres": [{ "value": "rock", "share": 0.339, "before": 0.13 }], "moods": [] },
+    { "id": "finds", "take": null, "songs": { "count": 4, "ofNew": 166, "top": [{ "songKey": "...", "uri": "...", "name": "...", "artist": "...", "albumArtUrl": null, "listens": 8 }] }, "artists": { "count": 2, "ofNew": 60, "top": [{ "artist": "...", "imageUrl": null, "listens": 4 }] } },
+    { "id": "rhythm", "take": null, "day": { "day": "2026-10-22", "hours": 3.4 }, "hour": { "hour": 8, "hours": 6.3 }, "byHour": [0, 0.2] }
+  ] }
+```
+
+- Sections appear only when the numbers support them, in the order above: `listening` always; `months` for a year with two or more months of listening; `artists`, `songs` (the period's playlist: most listens, then most time, at least 2 listens, at most 15, 25 or 50 songs for a week, month or year; skips never lower a song), `taste` (only with a comparison, tags whose share moved 5 points or more), `finds` (songs and artists first played in the period and listened to again on another day of it; needs earlier history), `rhythm` (busiest day and hour). `quiet: true` (fewer than 5 listens or under half an hour) keeps only `listening`.
+- `before` values are the compared period's. `share` values are 0 to 1. `byHour` is hours per local hour 0-23; `daily` hours per day of the period.
+- Recaps stored before recaps were pages (`facts` without `version: 2`) open with the same sections from their stored numbers: `headlineBy: "text"`, `compare.scaled: true` (their comparison was a typical period, scaled), `daily` and `byHour` null, and `legacyText` holds the text Claude wrote then, ISO dates written out.
+
+#### `GET /api/digests/periods/:kind/:key`
+
+One period on the timeline. `{ "kind", "key", "label", "from", "to", "inProgress", "available", "reason": null | "before_history" | "not_ended", "previous": "2026-09" | null, "next": "2026-11" | null, "historyStart": "2024-11-24", "recap": <GET /api/digests/:id body without rendered> | null }`. `from`/`to` are what the period covers today. `previous` is null before the history starts, `next` once the next period has not started covering. `available: false` means `generate` would refuse this period. An invalid key is `404`.
+
+#### `GET /api/digests/latest/:kind`
+
+`{ "kind": "weekly", "key": "2026-11-12" }`: the newest period that has ended (the current year for `yearly`).
 
 #### `POST /api/digests/generate`
 
-`{ "kind": "weekly" | "monthly" }`. Returns the digest for the period that just ended (same shape as `GET /api/digests/:id` without `rendered`, plus `created`). `created: false` when it already existed; no Claude call is made then.
+`{ "kind": "weekly" | "monthly" | "yearly", "key"?: "2026-10" }`. Without `key`, the newest period that has ended (the current year for `yearly`). Returns the recap (same shape as `GET /api/digests/:id` without `rendered`, plus `created`). A stored recap is returned as is (`created: false`, no Claude call), except that one without Claude's lines gets them when Claude is available, and the current year is brought up to yesterday. With `Accept: text/event-stream` it runs as a run (see Runs) keyed `/api/digests/generate`; send that only when Claude is available, since a stream requires it. `409 period_unavailable` for a period that has not ended or that the history does not reach.
 
 ### Spend
 
