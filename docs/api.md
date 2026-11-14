@@ -5,8 +5,7 @@ Contract between the server and the web UI. All routes are JSON over HTTP on the
 ## Conventions
 
 - Base path `/api`. Only exception: `GET /callback` (Spotify OAuth redirect).
-- Auth: every `/api/*` route needs a session cookie, except `/api/health`, `/api/auth/*` and `/api/discord/interactions` (Discord signature instead). `/api/tags/*` also accepts `Authorization: Bearer <ADMIN_TOKEN>`. The admin token is rejected everywhere else. `/mcp` takes only `Authorization: Bearer <MCP_TOKEN>`.
-- Auth: every `/api/*` route needs a session cookie, except `/api/health` and `/api/auth/*`. `/api/tags/*` and `POST /api/import` also accept `Authorization: Bearer <ADMIN_TOKEN>`. The admin token is rejected everywhere else.
+- Auth: every `/api/*` route needs a session cookie, except `/api/health`, `/api/auth/*` and `/api/discord/interactions` (Discord signature instead). `/api/tags/*` and `POST /api/import` also accept `Authorization: Bearer <ADMIN_TOKEN>`. The admin token is rejected everywhere else. `/mcp` takes only `Authorization: Bearer <MCP_TOKEN>`.
 - Session cookie: `encore_session`, `HttpOnly`, `SameSite=Lax`, `Path=/`, 30 days, `Secure` when `PUBLIC_BASE_URL` is https. Send requests with `credentials: "same-origin"` (the default for same-origin `fetch`).
 - Errors: non-2xx responses have this body:
 
@@ -14,8 +13,7 @@ Contract between the server and the web UI. All routes are JSON over HTTP on the
   { "error": { "code": "invalid_request", "message": "Request validation failed", "details": [{ "path": "from", "message": "expected YYYY-MM-DD" }] } }
   ```
 
-  `details` is present only on some errors. Status codes: `400` validation, `401` not signed in, `403` setup token wrong or `premium_required`, `404` not found, `409` precondition (`spotify_not_connected`, `no_active_device`), `413` file too large, `415` wrong content type, `500` server error, `502` Spotify call failed (`spotify_failed`), `503` Spotify calls paused (`spotify_paused`, `details: { reason, until }`).
-  `details` is present only on some errors. Status codes: `400` validation, `401` not signed in, `402` monthly LLM budget spent, `403` setup token wrong, `404` not found, `409` precondition (Spotify not connected), `413` file too large, `415` wrong content type, `422` Claude declined, `500` server error, `502` Spotify or Claude call failed, `503` LLM not configured or Spotify paused. Assistant error codes are listed under [Assistant](#assistant-claude).
+  `details` is present only on some errors. Status codes: `400` validation, `401` not signed in, `402` monthly LLM budget spent, `403` setup token wrong or `premium_required`, `404` not found, `409` precondition (`spotify_not_connected`, `no_active_device`), `413` file too large, `415` wrong content type, `422` Claude declined, `500` server error, `502` Spotify or Claude call failed (`spotify_failed`, `llm_failed`), `503` LLM not configured or Spotify calls paused (`spotify_paused`, `details: { reason, until }`). Assistant error codes are listed under [Assistant](#assistant-claude).
 - Timestamps (`ts`, `firstPlayed`, `lastPlayed`, `start`, `end`, ...) are ISO 8601 UTC strings.
 - Days, hours, weekdays, weeks, months are local time in `TIMEZONE` (default Asia/Kuwait). `day` is `YYYY-MM-DD`. `weekday` is ISO: 1 = Monday ... 7 = Sunday.
 - `hours` values are rounded to 2 decimals. Rates (`skipRate`, `shuffleRate`, `share`) are 0..1 rounded to 3 decimals, or `null` when the denominator is 0.
@@ -111,7 +109,8 @@ Artist rows (top artists, eras, skips, search, the artist page, the overview's `
     "userId": "abc123",
     "scopes": ["user-read-recently-played", "..."],
     "missingScopes": ["user-read-playback-state"],
-    "paused": null
+    "paused": null,
+    "pacing": { "minIntervalMs": 2000, "queued": { "interactive": 0, "background": 1 }, "calls": 4210 }
   },
   "poll": { "lastRunAt": "...", "lastSuccessAt": "...", "lastError": null,
             "lastResult": { "received": 50, "inserted": 2, "skippedCoveredByExport": 0 } },
@@ -123,8 +122,8 @@ Artist rows (top artists, eras, skips, search, the artist page, the overview's `
                            "lastResult": { "attempted": 1, "found": 1, "failed": 0 } } },
   "import": { "lastImportAt": "...", "result": { "...": "ImportResult, see POST /api/import" } },
   "tags": { "songs": 5055, "tagged": 0, "coverage": 0 },
-  "plays": { "plays": 39821, "music": 39338, "api": 10 },
-  "live": { "watch": { "lastRunAt": "...", "...": "same shape as poll" }, "radar": { "...": "..." }, "library": { "...": "..." } }
+  "plays": { "plays": 39821, "music": 39338, "api": 10, "live": 152 },
+  "live": { "watch": { "lastRunAt": "...", "...": "same shape as poll" }, "radar": { "...": "..." }, "library": { "...": "..." } },
   "llm": {
     "configured": true, "model": "claude-opus-5-5", "month": "2026-11",
     "spentUsd": 1.18, "capUsd": 100, "remainingUsd": 98.82, "exhausted": false,
@@ -138,11 +137,16 @@ Artist rows (top artists, eras, skips, search, the artist page, the overview's `
 - `timezone`: the `TIMEZONE` used for every local day, hour and weekday. Format `ts` values in it to match the buckets.
 - `spotify.paused` is `null` or `{ "reason": "rate_limited" | "quota_exceeded", "until": "...", "since": "..." }`. While paused, the server makes no Spotify calls. `quota_exceeded` means the developer-account quota was hit; the pause lasts `QUOTA_BACKOFF_HOURS` (default 12) and the UI should show it.
 - `missingScopes`: scopes the server asks for that the stored grant lacks. Reconnect to grant them.
+- `spotify.pacing`: every Web API call goes through one queue, one call at a time, at least `SPOTIFY_MIN_INTERVAL_MS` (default 2000) apart. Calls made for a request (HTTP, Discord, MCP) go before calls made by scheduled jobs. `queued` counts calls waiting now; `calls` counts calls since the process started. The oEmbed art lookup is not a Web API call and is not paced.
 - `poll.lastResult` also has `skippedCoveredByLive` (API plays the watcher already stored). It may be `{ "skipped": "spotify_not_connected" }`. `lastRunAt`/`lastSuccessAt` are `null` before the first run. `import` is `null` before the first import.
 - `enrichment.failed`: tracks given up on after 3 failed lookups. `withArt`: tracks with an `albumArtUrl`.
-- Enrichment makes one Web API call per run (`ENRICH_INTERVAL_SECONDS`, default 4): `GET /tracks/{id}` (metadata, 640 px art, artist ids) or `GET /artists/{id}` (image), whichever pending item has more listens. `enrichment.art` is the oEmbed job (`ART_INTERVAL_SECONDS`, default 4). Both stop while `spotify.paused` is set.
+- Enrichment makes one Web API call per run (`ENRICH_INTERVAL_SECONDS`, default 10): `GET /tracks/{id}` (metadata, 640 px art, artist ids) or `GET /artists/{id}` (image), whichever pending item has more listens. `enrichment.art` is the oEmbed job (`ART_INTERVAL_SECONDS`, default 4). Both stop while `spotify.paused` is set.
 - `enrichment.artists`: artists learned from enriched or polled tracks; `fetched` had their `GET /artists/{id}` lookup.
-- `llm`: Claude spend for the current local month against `MONTHLY_BUDGET_USD`. `exhausted: true` means every LLM endpoint returns `402` and scheduled LLM jobs skip until the next month. `configured: false` means no `ANTHROPIC_API_KEY`. Job `lastResult` may be `{ "skipped": "not_due" | "budget_exceeded" | "llm_not_configured" | "spotify_not_connected" | "attempts_exhausted" }`.
+- `tags`: `songs` known (distinct song keys in `tracks`), `tagged` songs with tags, `coverage` = tagged / songs (0..1, not rounded).
+- `plays`: stored rows: all kinds, music only, and rows by source `api` and `live` (the rest are `export`).
+- `live`: the `watch`, `radar` and `library` jobs, same shape as `poll`. `watch.lastResult` is `{ "current": Observation | null, "inserted", "replacedApi", "coveredByExport", "playing" }` for the last tick, or `{ "current", "skipped": "spotify_not_connected" | "spotify_paused", "until"? }`.
+- `llm`: Claude spend for the current local month against `MONTHLY_BUDGET_USD`. `exhausted: true` means every LLM endpoint returns `402` and scheduled LLM jobs skip until the next month. `configured: false` means no `ANTHROPIC_API_KEY`. `byFeature` features: `sets`, `picks`, `ask`, `notes`, `digest`, `dj`. Job `lastResult` may be `{ "skipped": "not_due" | "budget_exceeded" | "llm_not_configured" | "spotify_not_connected" | "attempts_exhausted" }`. When Discord posting is configured, `picks` and `digest` results also carry `publish: { "posted": ["picks:2026-11-09"] }` or `publish: { "error": "..." }` (see Discord). `outcomes.lastResult` has set and pick outcome refresh counts and, once a day, `library` (pick library state).
+
 
 ## Auth (passkeys)
 
@@ -510,6 +514,10 @@ Plays an ordered list of songs through the app-owned playlist "encore session" w
 
 Default re-planner (deterministic): keeps the remaining tail minus songs classed `dislike` and songs already skipped in the session, scores each by context fit for the current local hour bucket and day type (1 - skip rate, from plays with a known skip flag, needs 3 plays, else 0.5) plus tag similarity to finished songs minus tag similarity to skipped ones (genres, moods, energy, valence), and orders by score. Dropped songs are replaced from the owner's 300 most listened tagged songs that score above neutral.
 
+Claude re-planner: with `DJ_REPLANNER=llm` (default `deterministic`), the deterministic re-planner runs first, then Claude orders the remaining planned songs plus the deterministic list, given what was finished and skipped this session, the song playing now and the taste profile (feature `dj` in the ledger, effort low). Any failure falls back to the deterministic list: no API key, budget spent, refusal, no answer, or no answer within `DJ_REPLAN_TIMEOUT_SECONDS` (default 20).
+
+A re-plan reads the session again after the re-planner returns and cuts the tail at the position it finds then, so a song that became current while the re-plan ran is never removed.
+
 Seam: `DjService.setReplanner(fn)` with `fn(input: { finished, skipped, current, upcoming, exclude, now }) => Promise<string[]>` (track URIs). Returned URIs that are played, current or invalid are dropped.
 
 ### `POST /api/dj/start`
@@ -524,7 +532,9 @@ Body `{ "uris": [track URI] (1-500), "deviceId"? }`. Replaces any active session
 
 ### `GET /api/dj`
 
-`{ "session": Session | null }`: the active session, else the latest one. `status` is `active`, `stopped` or `ended`; `endReason` is `stopped`, `replaced` or `left_playlist`.
+`{ "session": Session | null }`: the active session, else the latest one. `status` is `active`, `stopped` or `ended`; `endReason` is `stopped`, `replaced` or `left_playlist`. `played[].outcome` is `finished` or `skipped`, from the watcher's live plays (inferred skip, see Live plays). `skipStreak` counts consecutive skips; `replans` counts re-plans this session.
+
+Start latency: starting a session makes about 4 Web API calls (playlist items, shuffle off, play), so with the default pacing it takes about 6 s (computed from `SPOTIFY_MIN_INTERVAL_MS`, not measured).
 
 ### `POST /api/dj/stop`
 
@@ -559,7 +569,7 @@ Proposals only; nothing is removed until the owner applies a selected batch here
 Kinds (stats are all-time over the song, merged by `songKey`):
 
 - `saved_never_played`: saved more than 30 days ago, no play of the song.
-- `saved_dislike`: saved song classed `dislike` by the skip split (8+ plays with a known skip flag).
+- `saved_dislike`: saved song classed `dislike` by the skip split (8+ plays with a known skip flag) AND a listen ratio of 0.2 or less. Listen ratio = listens / plays over all sources (a listen is 30 s or more, or any API row; see Metric definitions). The ratio rule keeps songs that are often skipped but still often listened through (for example 5 listens of 8 plays).
 - `playlist_skipped`: song in an own playlist with 8+ plays with a known skip flag and a skip rate of 0.9 or more.
 - `playlist_duplicate`: the same song more than once in one playlist; applying keeps the first.
 
@@ -573,7 +583,7 @@ Params: `kind`, `status` = `open` (default) | `dismissed` | `applied`, `limit` (
   "total": 210, "limit": 100, "offset": 0,
   "items": [{ "id": 17, "kind": "saved_dislike", "playlistId": null, "uri": "spotify:track:...", "status": "open", "updatedAt": "...",
               "evidence": { "name": "...", "artist": "...", "albumArtUrl": "...", "songKey": "...", "plays": 14, "listens": 2, "skips": 12, "skipRate": 0.857,
-                            "lastPlayed": "...", "savedAt": "...", "class": "dislike" } }] }
+                            "listenRatio": 0.143, "lastPlayed": "...", "savedAt": "...", "class": "dislike" } }] }
 ```
 
 `counts` are open proposals. Playlist kinds add `playlistId`, `playlistName` to `evidence`; `playlist_skipped` adds `positions` and `uris`; `playlist_duplicate` adds `keep: { position, uri }` and `duplicates: [{ position, uri }]`.
@@ -596,7 +606,7 @@ Saves removed songs back to the library and re-inserts removed playlist items at
 
 ## Discord
 
-No gateway connection. Set `DISCORD_APPLICATION_ID`, `DISCORD_PUBLIC_KEY` and `DISCORD_OWNER_ID` to enable the endpoint; point the Discord application's Interactions Endpoint URL at `PUBLIC_BASE_URL/api/discord/interactions`.
+No gateway connection. Set `DISCORD_APPLICATION_ID`, `DISCORD_PUBLIC_KEY` and `DISCORD_OWNER_ID` to enable the endpoint, and `DISCORD_BOT_TOKEN` plus `DISCORD_CHANNEL_ID` for channel posts; point the Discord application's Interactions Endpoint URL at `PUBLIC_BASE_URL/api/discord/interactions`.
 
 ### `POST /api/discord/interactions` (public)
 
@@ -616,8 +626,24 @@ Guild commands (registered with a bulk overwrite at startup when `DISCORD_BOT_TO
 | `/forgotten` | 5 forgotten favourites (90 days, 10+ listens), each with a Queue button |
 | `/releases` | Unseen new releases from the radar |
 | `/cleanup` | Open proposal counts and a link to the dashboard; never applies |
+| `/set moment` | Deferred. Builds a set with Claude (up to 1000 chars). Shows the title (links to the dashboard), track count, the first 4 tracks with album art and reasons, and buttons Save to Spotify, Play now, Open in dashboard. If Claude asks a question instead, the question is the message content |
+| `/picks` | This week's picks: one embed per pick with album art, reason and source link; per pick (first 5) buttons Save, Not now, Never. Never generates picks |
+| `/ask question` | Deferred. Plain-text answer from Claude (up to 1000 chars in, 2000 out) |
 
-Button custom ids are `prefix:arg`; built in: `queue:<track URI>`.
+Button custom ids are `prefix:arg`:
+
+| Custom id | Does (reply is ephemeral) |
+| --- | --- |
+| `queue:<track URI>` | Adds the song to the queue |
+| `setsave:<set id>` | Saves the set to its private Spotify playlist (same as `POST /api/sets/:id/playlist`) |
+| `setplay:<set id>` | Plays the set through a DJ session on the active device (same as `POST /api/sets/:id/play`) |
+| `pick:<pick id>:save` | Pick state `saved`, and saves the song to the Spotify library (`PUT /me/library`) |
+| `pick:<pick id>:notnow` | Pick state `not_now` |
+| `pick:<pick id>:never` | Pick state `never` (blocks as for `PATCH /api/picks/:id`) |
+
+Claude errors are shown as messages: not configured, budget used up (with the amounts), declined, stopped early; unknown sets and picks say "That no longer exists."
+
+Channel posts: with `DISCORD_BOT_TOKEN` and `DISCORD_CHANNEL_ID` set, the `picks` and `digest` jobs post to the channel after every hourly run: this week's picks (same message as `/picks`, once per week, as soon as picks exist), the newest weekly digest (once per period, while under 8 days old) with an embed of up to 10 radar releases flagged new and first seen since the digest's first day, and the newest monthly recap (once per month, while under 32 days old). What was posted is stored in job state `discord_posts` (`{ picks: week, weekly: periodKey, monthly: periodKey }`), so restarts and repeated runs do not post twice. A failed post is retried on the next run.
 
 Seams for other modules (`src/discord/`): `DiscordRegistry.addCommand({ definition, defer, ephemeral?, handle })` and `addComponent({ prefix, defer, ephemeral?, handle })` on `discord.registry` (created in `src/main.ts` by `createDiscord`); handlers get `{ ctx: { db, config, services, now }, interaction, options | arg }` and return a message (`content`, `embeds`, `components`). Throw `UserFacingError` for a message the owner should see. Add commands before `registerCommands` runs. To post outside an interaction (a weekly digest), call `postToChannel(discord, message)` or `discord.rest.postMessage(channelId, message)`; `discord.rest.editMessage` edits it. All messages are sent with `allowed_mentions: { parse: [] }`; pass names through `plain()` (escapes markdown, breaks `@` mentions, truncates).
 
@@ -639,9 +665,10 @@ Seams for other modules (`src/discord/`): `DiscordRegistry.addCommand({ definiti
 | `add_to_queue` | `uri` |
 
 There are no library or playlist removal tools.
+
 ## Assistant (Claude)
 
-Claude-backed features: sets, weekly picks, ask, liner notes, digests. Session only (the admin token is rejected). Every call is recorded in a ledger and priced; see `GET /api/llm/spend`.
+Claude-backed features: sets, weekly picks, ask, liner notes, digests, and the optional DJ re-planner. HTTP routes are session only (the admin token is rejected); the same features are in Discord (see Discord). Every call is recorded in a ledger and priced; see `GET /api/llm/spend`.
 
 ### Errors
 
@@ -689,8 +716,10 @@ Set shape (`GET /api/sets/:id`, and `set` in create/refine):
     "name": "Woods", "artist": "Mac Miller", "album": "Circles",
     "albumArtUrl": "https://i.scdn.co/image/...", "artistImageUrl": "https://i.scdn.co/image/...",
     "reason": "Finished 41 of 44 night plays.",
-    "outcome": { "plays": 3, "finished": 2, "skipped": 1, "firstPlayedAt": "..." }
+    "outcome": { "plays": 3, "finished": 2, "skipped": 1, "firstPlayedAt": "..." },
+    "dj": { "finished": 1, "skipped": 0 }
   }],
+  "djSessions": 1,
   "conversation": [{ "role": "owner", "text": "late drive, ..." }, { "role": "assistant", "text": "..." }]
 }
 ```
@@ -699,7 +728,8 @@ Set shape (`GET /api/sets/:id`, and `set` in create/refine):
 - `albumArtUrl`, `artistImageUrl`: artwork for the row, or `null` when not known yet. Album art comes from any known version of the song (or the Spotify search result for new songs); the artist image is the primary artist's. Picks and notes carry the same two fields.
 - A refinement that changes mood or direction ("less sad") is applied to every track: familiar songs whose tags conflict with it are rejected unless the owner asked to keep them.
 - `playlist` is `null` until saved. `outdated: true` when the set changed after the last save; saving again updates the same playlist.
-- `outcome` counts plays of the song after the set was saved (or created, if never saved). Refreshed hourly.
+- `outcome` counts plays of the song after the set was saved (or created, if never saved), from all sources: `finished` uses the skip flag and play time of export and live rows; API rows count as finished. Refreshed hourly.
+- `dj`: `{ finished, skipped }` for this track across the DJ sessions started from the set (`POST /api/sets/:id/play` or the Discord Play now button), from the watcher's live plays. `djSessions` on the set counts those sessions.
 
 #### `POST /api/sets`
 
@@ -716,6 +746,10 @@ Params `limit` (1-100, default 20), `offset`. `{ "items": [Set without items/con
 #### `POST /api/sets/:id/playlist`
 
 Saves the set to a private Spotify playlist: created on the first save, then renamed and its items replaced in place. `200 { "playlistId": "...", "playlistUrl": "...", "tracks": 16 }`. Does not start playback.
+
+#### `POST /api/sets/:id/play`
+
+Body `{ "deviceId"? }` or no body. Starts a DJ session with the set's tracks in order (replacing any active session) and links it to the set. `200 { "session": Session }` (see DJ session). `409 set_empty`, `409 no_active_device`, `403 premium_required`.
 
 #### `DELETE /api/sets/:id`
 
@@ -772,7 +806,7 @@ Generates this week's picks now. `201 { "week", "picks": [Pick], "stats" }`. `40
 
 ### Ask
 
-Natural-language questions about the listening history. Claude answers from read-only analytics tools and cites the numbers it used. Answers are plain text (short paragraphs, numbers inline, no markdown; any markdown the model adds is stripped), suitable for a panel or a chat message, and end with a "Based on:" line.
+Natural-language questions about the listening history. Claude answers from read-only analytics tools and cites the numbers it used. Answers are plain text (short paragraphs, numbers inline, no markdown; any markdown the model adds is stripped), suitable for a panel or a chat message, and end with a "Based on:" line. The tools follow the Metric definitions: skips and skip rates come from export and live rows, and API rows count as listens with no skip, device or country data.
 
 #### `POST /api/ask`
 
@@ -849,13 +883,17 @@ Params `month` (`YYYY-MM`, default current local month), `limit` (1-500, default
 
 ### Chat integrations
 
-Not HTTP: plain functions in `src/assistant/api.ts` for a chat bot running in the same process. They take the `FeatureContext` the routes use and throw the same typed errors.
+Not HTTP: plain functions in `src/assistant/api.ts` for a chat bot running in the same process (the Discord commands use them). They take `services.assistant` (the `FeatureContext` the routes use) and throw the same typed errors.
 
 | Function | Returns |
 | --- | --- |
 | `createSetFromText(ctx, text)` | `{ id, title, description, tracks, newTracks, lines: ["1. Woods - Mac Miller: reason"], reply }` |
 | `currentPicks(ctx, { generate? })` | Same body as `GET /api/picks` without `playlist`; generates this week's picks first when `generate` is set and none exist |
 | `updatePickState(ctx, pickId, state)` | Pick (blocks applied as for `PATCH /api/picks/:id`) |
+| `savePick(ctx, pickId)` | Pick, after state `saved` and `PUT /me/library` for its URI |
+| `setForChat(ctx, setId)` | Set (as `GET /api/sets/:id`) plus `dashboardUrl` |
+| `saveSetToSpotify(ctx, setId)` | Same body as `POST /api/sets/:id/playlist` |
+| `playSetNow(ctx, dj, setId)` | DJ session (as `POST /api/sets/:id/play`) |
 | `askText(ctx, question, threadId?)` | `{ threadId, text }` |
 | `latestDigest(db, kind?)` | Same body as `GET /api/digests/:id`, or `null` |
 
