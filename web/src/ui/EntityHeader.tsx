@@ -1,15 +1,15 @@
 import type { ReactNode } from "react";
-import { Artwork } from "./Artwork";
+import { Artwork, type ArtKind } from "./Artwork";
 import { Skeleton } from "./Skeleton";
 
 /**
- * The head of an artist, album or song page: artwork left, title over its credits and one line of detail,
+ * The head of an artist, album or song page (`kind`): artwork left, title over its credits and one line of detail,
  * the page's actions under them. `aside` (the range picker) sits top right on desktop, last on phone.
  */
 export function EntityHeader({
   title,
   art,
-  round = false,
+  kind,
   credits,
   detail,
   actions,
@@ -17,7 +17,7 @@ export function EntityHeader({
 }: {
   title: string;
   art: string | null | undefined;
-  round?: boolean;
+  kind: ArtKind;
   credits?: ReactNode;
   detail?: ReactNode;
   actions?: ReactNode;
@@ -26,7 +26,7 @@ export function EntityHeader({
   return (
     <header className="flex flex-col gap-5 md:flex-row md:items-end md:gap-6">
       <div className="w-28 shrink-0 md:w-40">
-        <Artwork src={art} name={title} box="fill" round={round} />
+        <Artwork src={art} kind={kind} box="fill" />
       </div>
       <div className="flex min-w-0 flex-1 flex-col gap-4">
         <div className="flex min-w-0 flex-col gap-1">

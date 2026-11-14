@@ -71,7 +71,7 @@ function TrackRow({ item, added, onPin, onRemove }: { item: SetTrack; added: boo
   return (
     <li className="group -mx-2 flex gap-3 rounded-md px-2 py-3 transition-colors duration-150 hover:bg-fill">
       <span className="w-5 shrink-0 pt-2.5 text-right text-caption text-tertiary tabular">{item.position}</span>
-      <Artwork src={item.albumArtUrl} name={item.name} box={40} />
+      <Artwork src={item.albumArtUrl} kind="song" box={40} />
       <div className="flex min-w-0 flex-1 flex-col">
         <span className="flex min-w-0 items-center gap-1.5">
           <span className="truncate text-primary">{item.name}</span>

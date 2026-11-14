@@ -63,6 +63,7 @@ export function SongPage({ songKey }: { songKey: string }) {
   return (
     <Page className={cx("transition-opacity duration-200", q.isPlaceholderData && "opacity-60")}>
       <EntityHeader
+        kind="song"
         title={d.name}
         art={d.albumArtUrl}
         credits={

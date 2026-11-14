@@ -83,7 +83,7 @@ function ErasChart({ eras, months, hours, pick, onPick }: { eras: Era[]; months:
       values={months.map((_, j) => hours.map((row) => row[j] ?? 0))}
       rowLabels={months.map((_, j) => tick.label(j))}
       showRow={tick.show}
-      colLabels={eras.map((e) => <Artwork key={e.artist} src={e.imageUrl} name={e.artist} box={24} round className="mx-auto" />)}
+      colLabels={eras.map((e) => <Artwork key={e.artist} src={e.imageUrl} kind="artist" box={24} className="mx-auto" />)}
       colLabelsAt="top"
       cellLabel={({ row, col }) => cellLabel({ artist: col, month: row })}
       selected={{ row: pick.month, col: pick.artist }}
@@ -216,7 +216,7 @@ function ErasView({ range }: { range: Range }) {
                 to={artistPath(e.artist)}
                 title={e.artist}
                 subtitle={`Peak ${fmtMonth(e.peakMonth)}`}
-                art={{ src: e.imageUrl, round: true }}
+                art={{ src: e.imageUrl, kind: "artist" }}
                 rank={i + 1}
                 value={fmtHours(e.hours)}
                 share={e.hours / top}

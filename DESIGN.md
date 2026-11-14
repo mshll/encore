@@ -157,7 +157,7 @@ Every data block resolves in this order, and builds each state with the shared c
 2. **Loading** (`Skeleton`, `RowSkeleton`) in the shape of the content.
 3. **First use** (`EmptyState size="page"` with the step that fixes it, usually "Set up encore").
 4. **Empty for this range or filter** (`EmptyState size="section"` with the control that widens it).
-5. **Content**, including worst case: long names truncate with the full value in the link label; 0, 1 and huge counts format with `fmtCompact`/`fmtInt`; missing art falls back to the dither avatar.
+5. **Content**, including worst case: long names truncate with the full value in the link label; 0, 1 and huge counts format with `fmtCompact`/`fmtInt`; missing or broken art falls back to the kind's placeholder glyph.
 
 Refetches keep the old data dimmed (`opacity-60`) instead of flashing a skeleton.
 
@@ -197,7 +197,7 @@ All in `web/src/ui/` unless noted. Props listed are the ones that matter.
 | `TableHead`, `useColumns`, `cellClass`, `Column` | `ui/Table` | Columns `{ id, label, width, align, from, srLabel }` drop below their `from` breakpoint |
 | `EntityHeader`, `EntityHeaderSkeleton` | `ui/EntityHeader` | `title`, `art`, `round`, `credits`, `detail`, `actions`, `aside`. The head of an artist, album or song page; the page sets the document title |
 | `SearchField` | `ui/SearchField` | `value`, `onChange` (after a 250 ms pause), `label`, `placeholder` |
-| `Artwork` | `ui/Artwork` | `src`, `name`, `box` 24 to 64 or fill, `round` |
+| `Artwork` | `ui/Artwork` | `src`, `kind` artist, album, song, playlist, `box` 24 to 64 or fill. Kind sets the shape (artists round) and the placeholder glyph. Loading is the bare fill; missing and broken images show the kind's glyph (microphone, record, note, playlist) in `text-tertiary` on `bg-fill`. Decorative: the name sits beside it |
 | `SongMenu`, `SongContext` | `ui/SongMenu` | `song { uri, name, songKey?, artist? }` |
 | `RangePicker` | `ui/RangePicker` | Reads and writes `from`/`to` in the URL |
 | `RunProgress` | `ui/RunProgress` | `run` (from `useRun`), `title`, `onCancel` |
@@ -250,6 +250,7 @@ Apply the owner's ladder to every string: does it need to surface, does the labe
 | Accent only for play, selection and chart emphasis | Green for "positive"; gradients, glows, glass |
 | Serif for titles and figures, roman | Italic accent words, all-caps tracked eyebrows, monospace labels, numbered section labels |
 | Plain metadata in secondary text | Pills or badges for ordinary metadata |
+| Missing art: the kind's glyph, muted, on the neutral fill | Identicons, dither or per-item colours as a placeholder; icons in coloured tiles |
 | `EmptyState` and `ErrorState` from `ui/States` | Hand-made empty or error blocks |
 | Tokens for every colour, radius, shadow, size | Literal values (`#…`, `text-[19px]`, `bg-white/10`) |
 | 44px targets on phone; 24px with space on desktop | Small muted grey text to make density fit |

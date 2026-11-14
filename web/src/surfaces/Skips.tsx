@@ -89,7 +89,7 @@ function SongRow({ song }: { song: SkipSplit["songs"][number] }) {
   return (
     <SongContext song={ref} render="li" className="group relative -mx-2 flex min-h-(--row-h) items-center gap-3 rounded-md px-2 py-2 transition-colors duration-150 hover:bg-fill">
       <AppLink to={songPath(song.songKey)} className="absolute inset-0 rounded-md" aria-label={`${song.name}, ${song.artist}`} />
-      <Artwork src={song.albumArtUrl} name={song.name} box={32} className="pointer-events-none self-start phone:size-10" />
+      <Artwork src={song.albumArtUrl} kind="song" box={32} className="pointer-events-none self-start phone:size-10" />
       <span className="pointer-events-none flex min-w-0 flex-1 flex-col">
         <span className="truncate text-primary">{song.name}</span>
         <span className="truncate text-caption text-secondary">{song.artist}</span>

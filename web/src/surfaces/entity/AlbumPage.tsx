@@ -35,6 +35,7 @@ export function AlbumPage({ artist, album }: { artist: string; album: string }) 
   return (
     <Page className={cx("transition-opacity duration-200", q.isPlaceholderData && "opacity-60")}>
       <EntityHeader
+        kind="album"
         title={d.album}
         art={d.albumArtUrl}
         credits={

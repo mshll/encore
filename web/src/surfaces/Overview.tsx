@@ -224,7 +224,7 @@ function OnThisDay() {
                 className="-mx-2 flex min-h-(--row-h) items-center gap-3 rounded-md px-2 transition-colors duration-150 hover:bg-fill"
               >
                 <span className="w-10 shrink-0 text-secondary tabular">{y.year}</span>
-                {top && <Artwork src={top.albumArtUrl} name={top.name} box={32} />}
+                {top && <Artwork src={top.albumArtUrl} kind="song" box={32} />}
                 <span className="flex min-w-0 flex-1 flex-col">
                   <span className="truncate">{top?.name ?? "Listening"}</span>
                   <span className="truncate text-caption text-secondary">{top?.artist}</span>

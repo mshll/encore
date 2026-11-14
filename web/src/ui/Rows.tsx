@@ -4,7 +4,7 @@ import { albumPath, artistPath, songPath } from "../app/paths";
 import { DitherMeter } from "../charts/DitherMeter";
 import { usePlayback } from "../player/playback";
 import { AppLink } from "./AppLink";
-import { Artwork } from "./Artwork";
+import { Artwork, type ArtKind } from "./Artwork";
 import { IconButton } from "./Button";
 import { cx } from "./cx";
 import { PlayIcon } from "./icons";
@@ -24,7 +24,7 @@ type RowProps = {
   to: string;
   title: string;
   subtitle?: ReactNode;
-  art: { src: string | null | undefined; round?: boolean };
+  art: { src: string | null | undefined; kind: ArtKind };
   rank?: number;
   value?: ReactNode;
   /** Share of the top row, 0 to 1; draws the dither meter when the list is 512px or wider. */
@@ -49,7 +49,7 @@ export function Row({ to, title, subtitle, art, rank, value, share, song, style 
     <>
       <AppLink to={to} className="absolute inset-0 rounded-md" aria-label={subtitle && typeof subtitle === "string" ? `${title}, ${subtitle}` : title} />
       {rank !== undefined && <span className="pointer-events-none w-[var(--rank-w,1.25rem)] shrink-0 text-right text-caption text-tertiary tabular">{rank}</span>}
-      <Artwork src={art.src} name={title} round={art.round} box={32} className="pointer-events-none phone:size-10" />
+      <Artwork src={art.src} kind={art.kind} box={32} className="pointer-events-none phone:size-10" />
       <span className="pointer-events-none flex min-w-0 flex-1 flex-col">
         <span className="truncate text-primary">{title}</span>
         {subtitle && <span className="truncate text-caption text-secondary">{subtitle}</span>}
@@ -91,7 +91,7 @@ export function TrackRow({ song, rank, value, share, style }: { song: Song; rank
       to={songPath(song.songKey)}
       title={song.name}
       subtitle={song.artist}
-      art={{ src: song.albumArtUrl }}
+      art={{ src: song.albumArtUrl, kind: "song" }}
       rank={rank}
       value={value}
       share={share}
@@ -116,12 +116,12 @@ export function ArtistRow({
   subtitle?: ReactNode;
   style?: CSSProperties;
 }) {
-  return <Row to={artistPath(artist.artist)} title={artist.artist} subtitle={subtitle} art={{ src: artist.imageUrl, round: true }} rank={rank} value={value} share={share} style={style} />;
+  return <Row to={artistPath(artist.artist)} title={artist.artist} subtitle={subtitle} art={{ src: artist.imageUrl, kind: "artist" }} rank={rank} value={value} share={share} style={style} />;
 }
 
 export function AlbumRow({ album, rank, value, share, style }: { album: AlbumStats; rank?: number; value?: ReactNode; share?: number; style?: CSSProperties }) {
   return (
-    <Row to={albumPath(album.artist, album.album)} title={album.album} subtitle={album.artist} art={{ src: album.albumArtUrl }} rank={rank} value={value} share={share} style={style} />
+    <Row to={albumPath(album.artist, album.album)} title={album.album} subtitle={album.artist} art={{ src: album.albumArtUrl, kind: "album" }} rank={rank} value={value} share={share} style={style} />
   );
 }
 

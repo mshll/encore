@@ -51,7 +51,7 @@ export function Forgotten() {
                 to={songPath(s.songKey)}
                 title={s.name}
                 subtitle={s.lastPlayed ? `${s.artist} · last played ${fmtAgo(s.lastPlayed)}` : s.artist}
-                art={{ src: s.albumArtUrl }}
+                art={{ src: s.albumArtUrl, kind: "song" }}
                 value={fmtInt(s.listens)}
                 song={{ uri: s.uri, name: s.name, songKey: s.songKey, artist: s.artist }}
               />

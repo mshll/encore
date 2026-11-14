@@ -33,7 +33,7 @@ export function PlayerBar({ queueOpen, onToggleQueue }: { queueOpen: boolean; on
       <div className="flex min-w-0 items-center gap-3">
         {track ? (
           <>
-            <Artwork src={track.albumArtUrl} name={track.name} box={48} />
+            <Artwork src={track.albumArtUrl} kind="song" box={48} />
             <div className="flex min-w-0 flex-col">
               {links ? (
                 <AppLink to={links.song} className="truncate text-primary hover:underline">
@@ -118,7 +118,7 @@ export function MiniPlayer({ onOpen }: { onOpen: () => void }) {
     <section aria-label="Player" className="relative mx-2 mb-2 overflow-hidden rounded-lg bg-overlay shadow-overlay">
       <div className="flex h-14 items-center gap-1 pr-1 pl-2">
         <button type="button" onClick={onOpen} className="flex h-full min-w-0 flex-1 items-center gap-3 text-left" aria-label={`Open player: ${track.name} by ${track.artist}`}>
-          <Artwork src={track.albumArtUrl} name={track.name} box={40} />
+          <Artwork src={track.albumArtUrl} kind="song" box={40} />
           <span className="flex min-w-0 flex-col">
             <span className="truncate">{track.name}</span>
             <span className="truncate text-caption text-secondary">{track.artist}</span>

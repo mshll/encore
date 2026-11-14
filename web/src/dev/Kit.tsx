@@ -5,6 +5,7 @@ import { HeatLegend } from "../charts/DitherHeatmap";
 import { RateMeter } from "../charts/RateMeter";
 import { showToast } from "../lib/toast";
 import type { RunState } from "../lib/useRun";
+import { Artwork, type ArtBox, type ArtKind } from "../ui/Artwork";
 import { EncoreMark, Lockup } from "../ui/Brand";
 import { Button, IconButton } from "../ui/Button";
 import { RunNotice } from "../ui/ClaudeNotice";
@@ -48,6 +49,9 @@ function Swatch({ name }: { name: string }) {
     </div>
   );
 }
+
+/** An image that fails to decode: the broken state. */
+const BROKEN_ART = "data:image/png;base64,AAAA";
 
 function Row({ label, children }: { label: string; children: ReactNode }) {
   return (
@@ -260,10 +264,26 @@ export function Kit() {
             </div>
           </StatStrip>
         </Section>
+        <Section title="Artwork">
+          {(["artist", "album", "song", "playlist"] as ArtKind[]).map((kind) => (
+            <Row key={kind} label={`${kind[0]!.toUpperCase()}${kind.slice(1)}`}>
+              <div className="flex flex-wrap items-end gap-4">
+                {([24, 32, 40, 48, 56, 64] as ArtBox[]).map((box) => (
+                  <Artwork key={box} src={null} kind={kind} box={box} />
+                ))}
+                <div className="w-40">
+                  <Artwork src={null} kind={kind} box="fill" />
+                </div>
+                <Artwork src={BROKEN_ART} kind={kind} box={48} />
+              </div>
+            </Row>
+          ))}
+        </Section>
         <Section title="Entity header">
           <EntityHeader
             title="Glimpse of Us"
             art={null}
+            kind="song"
             credits="Joji · SMITHEREENS"
             detail="First played 29 Dec 2024, last played 2 months ago"
             actions={

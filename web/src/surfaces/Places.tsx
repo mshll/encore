@@ -53,7 +53,7 @@ function TripDetail({ trip }: { trip: Trip }) {
                 to={songPath(s.songKey)}
                 title={s.name}
                 subtitle={s.artist}
-                art={{ src: s.albumArtUrl }}
+                art={{ src: s.albumArtUrl, kind: "song" }}
                 value={fmtCompact(s.plays)}
                 song={{ uri: s.uri, name: s.name, songKey: s.songKey, artist: s.artist }}
               />

@@ -18,7 +18,7 @@ import { useTrackLinks } from "./links";
 function QueueRow({ track }: { track: TrackRef }) {
   return (
     <li className="group flex min-h-12 items-center gap-3">
-      <Artwork src={track.albumArtUrl} name={track.name} box={40} />
+      <Artwork src={track.albumArtUrl} kind="song" box={40} />
       <span className="flex min-w-0 flex-1 flex-col">
         <span className="truncate">{track.name}</span>
         <span className="truncate text-caption text-secondary">{track.artist}</span>
@@ -93,7 +93,7 @@ export function QueueContent({ open }: { open: boolean }) {
         {track ? (
           <div className="flex flex-col gap-2">
             <div className="flex items-center gap-3">
-              <Artwork src={track.albumArtUrl} name={track.name} box={56} />
+              <Artwork src={track.albumArtUrl} kind="song" box={56} />
               <div className="flex min-w-0 flex-1 flex-col">
                 <span className="flex min-w-0 items-center gap-1.5">
                   {now.data?.playing && <Icon icon={WaveformIcon} fill className="text-accent-text" />}

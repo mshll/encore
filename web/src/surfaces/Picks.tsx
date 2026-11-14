@@ -79,7 +79,7 @@ function PickRow({ pick }: { pick: Pick }) {
   const outcome = outcomeLine(pick);
   return (
     <li className="group flex gap-4 py-5 first:pt-0 md:gap-5">
-      <Artwork src={pick.albumArtUrl} name={pick.name} box={64} className="phone:size-12" />
+      <Artwork src={pick.albumArtUrl} kind="song" box={64} className="phone:size-12" />
       <div className="flex min-w-0 flex-1 flex-col gap-2">
         <div className="flex items-start gap-3">
           <div className="flex min-w-0 flex-1 flex-col">

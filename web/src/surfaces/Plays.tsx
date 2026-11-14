@@ -96,7 +96,7 @@ function DesktopRow({ item, timezone, columns, style, home }: { item: HistoryIte
   const song = item.kind === "track" && item.uri && item.name ? { uri: item.uri, name: item.name, songKey: item.songKey, artist: item.artist } : null;
   const cells: Record<string, React.ReactNode> = {
     time: <span className="text-secondary tabular">{fmtTime(item.ts, timezone)}</span>,
-    art: <Artwork src={item.albumArtUrl} name={item.name ?? "Unknown"} box={32} />,
+    art: <Artwork src={item.albumArtUrl} kind="song" box={32} />,
     song: <SongTitle item={item} />,
     artist: <ArtistName item={item} />,
     album: <span className="truncate text-secondary">{item.album}</span>,
@@ -133,7 +133,7 @@ function PhoneRow({ item, timezone }: { item: HistoryItem; timezone: string }) {
   const body = (
     <div className="relative flex h-full items-center gap-3">
       {item.songKey && <AppLink to={songPath(item.songKey)} aria-label={`${item.name}, ${item.artist}`} className="absolute inset-0" />}
-      <Artwork src={item.albumArtUrl} name={item.name ?? "Unknown"} box={40} className="pointer-events-none" />
+      <Artwork src={item.albumArtUrl} kind="song" box={40} className="pointer-events-none" />
       <span className="pointer-events-none flex min-w-0 flex-1 flex-col">
         <span className="truncate">{item.name ?? "Unknown"}</span>
         <span className="truncate text-caption text-secondary">{item.artist}</span>

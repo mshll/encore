@@ -61,7 +61,7 @@ function ProposalRow({ p, checked, onToggle, timezone }: { p: CleanupProposal; c
   return (
     <li className={cx("-mx-2 flex min-h-(--row-h) items-center gap-3 rounded-md px-2 py-2 transition-colors duration-150", checked ? "bg-accent-subtle" : "hover:bg-fill")}>
       <Checkbox id={id} checked={checked} onChange={onToggle} label={`Select ${p.evidence.name}`} />
-      <Artwork src={p.evidence.albumArtUrl} name={p.evidence.name} box={40} />
+      <Artwork src={p.evidence.albumArtUrl} kind="song" box={40} />
       <div className="flex min-w-0 flex-1 flex-col">
         <label htmlFor={id} className="truncate text-primary" title={p.evidence.name}>
           {p.evidence.name}

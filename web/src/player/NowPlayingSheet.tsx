@@ -36,7 +36,7 @@ export function NowPlayingSheet({ open, onOpenChange }: { open: boolean; onOpenC
           </Dialog.Close>
           <div data-crop className="flex flex-col gap-6 overflow-y-auto px-5 pb-[max(24px,env(safe-area-inset-bottom))]">
             <div className="flex flex-col gap-5">
-              <Artwork src={track.albumArtUrl} name={track.name} box="fill" className="mx-auto max-w-[320px] rounded-lg" />
+              <Artwork src={track.albumArtUrl} kind="song" box="fill" className="mx-auto max-w-[320px] rounded-lg" />
               <div className="flex flex-col">
                 <Dialog.Title className="text-heading font-medium text-balance">
                   {links ? (

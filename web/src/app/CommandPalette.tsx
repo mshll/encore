@@ -5,7 +5,7 @@ import { useSearch } from "../api/queries";
 import { fmtHours } from "../lib/format";
 import { usePlayback } from "../player/playback";
 import { useRangeHref } from "../ui/AppLink";
-import { Artwork } from "../ui/Artwork";
+import { Artwork, type ArtKind } from "../ui/Artwork";
 import { cx } from "../ui/cx";
 import { Icon, type IconGlyph } from "../ui/Icon";
 import { ChatCircleTextIcon, MagnifyingGlassIcon } from "../ui/icons";
@@ -22,7 +22,7 @@ type Entry = {
   path: string;
   icon?: IconGlyph;
   keys?: string[];
-  art?: { src: string | null; round?: boolean };
+  art?: { src: string | null; kind: ArtKind };
   song?: { uri: string; name: string };
 };
 
@@ -51,17 +51,17 @@ export function CommandPalette({ open, onOpenChange }: { open: boolean; onOpenCh
     const found = search.data;
     if (!found) return [...pages, ask];
     return [
-      ...found.artists.map((a) => ({ id: `artist:${a.artist}`, group: "Artists", label: a.artist, detail: fmtHours(a.hours), path: artistPath(a.artist), art: { src: a.imageUrl, round: true } })),
+      ...found.artists.map((a) => ({ id: `artist:${a.artist}`, group: "Artists", label: a.artist, detail: fmtHours(a.hours), path: artistPath(a.artist), art: { src: a.imageUrl, kind: "artist" as const } })),
       ...found.songs.map((s) => ({
         id: `song:${s.songKey}`,
         group: "Songs",
         label: s.name,
         detail: s.artist,
         path: songPath(s.songKey),
-        art: { src: s.albumArtUrl },
+        art: { src: s.albumArtUrl, kind: "song" as const },
         song: { uri: s.uri, name: s.name },
       })),
-      ...found.albums.map((a) => ({ id: `album:${a.artist}|${a.album}`, group: "Albums", label: a.album, detail: a.artist, path: albumPath(a.artist, a.album), art: { src: a.albumArtUrl } })),
+      ...found.albums.map((a) => ({ id: `album:${a.artist}|${a.album}`, group: "Albums", label: a.album, detail: a.artist, path: albumPath(a.artist, a.album), art: { src: a.albumArtUrl, kind: "album" as const } })),
       ...pages,
       ask,
     ];
@@ -136,7 +136,7 @@ export function CommandPalette({ open, onOpenChange }: { open: boolean; onOpenCh
                   className={cx("flex min-h-9 items-center gap-3 rounded-md px-2.5 py-1 phone:min-h-12", i === active && "bg-fill")}
                 >
                   {entry.art ? (
-                    <Artwork src={entry.art.src} name={entry.label} round={entry.art.round} box={24} />
+                    <Artwork src={entry.art.src} kind={entry.art.kind} box={24} />
                   ) : entry.icon ? (
                     <Icon icon={entry.icon} className="text-secondary" />
                   ) : null}

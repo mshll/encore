@@ -20,13 +20,13 @@ import { EmptyState, ErrorState } from "../ui/States";
 
 type SetListItem = SetSummary & { tracks: number; covers: string[] };
 
-/** Four album covers in a square when the set has them, else the first one (or the dither fallback). */
-export function SetCover({ covers, title, box }: { covers: string[]; title: string; box: 48 | 64 }) {
-  if (covers.length < 4) return <Artwork src={covers[0]} name={title} box={box} />;
+/** Four album covers in a square when the set has them, else the first one, else the playlist placeholder. */
+export function SetCover({ covers, box }: { covers: string[]; box: 48 | 64 }) {
+  if (covers.length < 4) return <Artwork src={covers[0]} kind="playlist" box={box} />;
   return (
     <span aria-hidden className={cx("grid shrink-0 grid-cols-2 overflow-hidden", box === 48 ? "size-12 rounded-xs" : "size-16 rounded-md")}>
       {covers.slice(0, 4).map((src) => (
-        <Artwork key={src} src={src} name={title} box="fill" className="rounded-none" />
+        <Artwork key={src} src={src} kind="album" box="fill" className="rounded-none" />
       ))}
     </span>
   );
@@ -42,7 +42,7 @@ function SetRow({ set }: { set: SetListItem }) {
         to={`/sets/${set.id}`}
         className="-mx-2 flex min-h-(--row-h) items-center gap-3 rounded-md px-2 py-2 transition-colors duration-150 hover:bg-fill"
       >
-        <SetCover covers={set.covers} title={set.title} box={48} />
+        <SetCover covers={set.covers} box={48} />
         <span className="flex min-w-0 flex-1 flex-col">
           <span className="truncate text-primary">{set.title}</span>
           <span className="truncate text-caption text-secondary tabular">{detail}</span>

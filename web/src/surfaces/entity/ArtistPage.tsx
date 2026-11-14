@@ -37,7 +37,7 @@ function Releases({ artist }: { artist: string }) {
               rel="noreferrer"
               className="group -mx-2 flex min-h-(--row-h) items-center gap-3 rounded-md px-2 transition-colors duration-150 hover:bg-fill"
             >
-              <Artwork src={r.imageUrl} name={r.name} box={32} className="phone:size-10" />
+              <Artwork src={r.imageUrl} kind="album" box={32} className="phone:size-10" />
               <span className="flex min-w-0 flex-1 flex-col">
                 <span className="truncate">{r.name}</span>
                 <span className="truncate text-caption text-secondary">
@@ -68,7 +68,7 @@ function Albums({ artist, albums }: { artist: string; albums: ArtistData["albums
               to={albumPath(artist, a.album)}
               title={a.album}
               subtitle={`${fmtInt(a.plays)} ${a.plays === 1 ? "play" : "plays"}`}
-              art={{ src: a.albumArtUrl }}
+              art={{ src: a.albumArtUrl, kind: "album" }}
               value={fmtHours(a.hours)}
             />
           ))}
@@ -107,7 +107,7 @@ export function ArtistPage({ name }: { name: string }) {
       <EntityHeader
         title={d.artist}
         art={d.imageUrl}
-        round
+        kind="artist"
         detail={<FirstLast totals={d.totals} />}
         actions={
           <>

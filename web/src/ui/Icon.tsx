@@ -3,10 +3,11 @@ import { cx } from "./cx";
 
 export type IconGlyph = PhosphorIcon;
 
-const SIZES = { sm: 16, md: 20, lg: 24 } as const;
+const SIZES = { sm: 16, md: 20, lg: 24, fill: "100%" } as const;
 export type IconSize = keyof typeof SIZES;
 
-const BOX: Record<IconSize, string> = { sm: "size-4", md: "size-5", lg: "size-6" };
+/** `fill` draws the glyph at the size the caller's className gives the box (artwork placeholders). */
+const BOX: Record<IconSize, string> = { sm: "size-4", md: "size-5", lg: "size-6", fill: "" };
 
 /**
  * The only way to draw an icon. `fill` is for the active nav item and the playing state.
