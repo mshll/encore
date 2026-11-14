@@ -67,7 +67,13 @@ export default function Ask() {
   const thread = useAskThread(threadId);
   const starters = useAskStarters();
   const queryClient = useQueryClient();
-  const run = useRun<AskResult>();
+  const run = useRun<AskResult>({
+    key: "/api/ask",
+    onDone: (result) => {
+      void queryClient.invalidateQueries({ queryKey: ["ask"] });
+      open(result.threadId);
+    },
+  });
   const [text, setText] = useState("");
   const [pending, setPending] = useState<string | null>(null);
   const autoAsked = useRef(false);

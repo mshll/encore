@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { streamPost, type StreamEvent } from "../api/stream";
+import { get, request } from "../api/client";
+import { followRun, streamPost, type StreamEvent, type StreamHandlers } from "../api/stream";
 import { assistantProblem, progressLine } from "./assistant";
 
 export type RunState = {
@@ -14,18 +15,25 @@ export type RunState = {
 
 const IDLE: RunState = { running: false, steps: [], text: "", searches: 0, checked: 0, startedAt: null, problem: null };
 
-/** Runs one streamed assistant request, collecting progress lines and text. Cancel stops waiting; the server may still finish the run. */
-export function useRun<T>() {
+type ActiveRun = { run: { id: string; startedAt: string } | null };
+
+/**
+ * Runs one streamed assistant request, collecting progress lines and text. The run belongs to the server:
+ * leaving the page only stops listening, and `resume` picks a working run up again on return. Cancel stops it.
+ */
+export function useRun<T>(resume?: { key: string; onDone: (result: T) => void }) {
   const [state, setState] = useState<RunState>(IDLE);
-  const abort = useRef<AbortController | null>(null);
+  const listening = useRef<AbortController | null>(null);
+  const runId = useRef<string | null>(null);
+  const onDone = useRef(resume?.onDone);
+  onDone.current = resume?.onDone;
 
-  useEffect(() => () => abort.current?.abort(), []);
-
-  const start = useCallback(async (path: string, body: unknown): Promise<T | null> => {
-    abort.current?.abort();
+  const listen = useCallback(async (open: (handlers: StreamHandlers, signal: AbortSignal) => Promise<T>, startedAt: number): Promise<T | null> => {
+    listening.current?.abort();
     const controller = new AbortController();
-    abort.current = controller;
-    setState({ ...IDLE, running: true, startedAt: Date.now() });
+    listening.current = controller;
+    runId.current = null;
+    setState({ ...IDLE, running: true, startedAt });
     const onEvent = (e: StreamEvent) =>
       setState((s) => {
         if (e.type === "text") return { ...s, text: s.text + e.delta };
@@ -37,24 +45,46 @@ export function useRun<T>() {
           checked: s.checked + (e.name === "verify_new_song" ? 1 : 0),
         };
       });
+    const onRun = (run: { id: string; startedAt: string }) => {
+      runId.current = run.id;
+      setState((s) => ({ ...s, startedAt: Date.parse(run.startedAt) }));
+    };
     try {
-      const result = await streamPost<T>(path, body, onEvent, controller.signal);
+      const result = await open({ onEvent, onRun }, controller.signal);
       setState((s) => ({ ...s, running: false }));
       return result;
     } catch (error) {
-      if (controller.signal.aborted) {
-        setState(IDLE);
-        return null;
-      }
+      if (controller.signal.aborted) return null;
       setState((s) => ({ ...s, running: false, problem: assistantProblem(error) }));
       return null;
     } finally {
-      if (abort.current === controller) abort.current = null;
+      if (listening.current === controller) listening.current = null;
     }
   }, []);
 
+  const start = useCallback((path: string, body: unknown) => listen((handlers, signal) => streamPost<T>(path, body, handlers, signal), Date.now()), [listen]);
+
+  const resumeKey = resume?.key;
+  useEffect(() => {
+    let left = false;
+    if (resumeKey) {
+      void get<ActiveRun>("/api/runs", { key: resumeKey })
+        .then(async ({ run }) => {
+          if (!run || left || listening.current) return;
+          const result = await listen((handlers, signal) => followRun<T>(run.id, handlers, signal), Date.parse(run.startedAt));
+          if (result && !left) onDone.current?.(result);
+        })
+        .catch(() => {});
+    }
+    return () => {
+      left = true;
+      listening.current?.abort();
+    };
+  }, [resumeKey, listen]);
+
   const cancel = useCallback(() => {
-    abort.current?.abort();
+    if (runId.current) void request(`/api/runs/${runId.current}`, { method: "DELETE" }).catch(() => {});
+    listening.current?.abort();
     setState(IDLE);
   }, []);
 

@@ -46,17 +46,19 @@ function SetTile({ set }: { set: SetSummary & { tracks: number; covers: string[]
 
 function NewSet() {
   const [text, setText] = useState("");
-  const run = useRun<SetResult>();
   const starters = useSetStarters();
   const queryClient = useQueryClient();
   const [, navigate] = useLocation();
-
-  const build = async (request: string) => {
-    const result = await run.start("/api/sets", { request });
-    if (!result) return;
+  const show = async (result: SetResult) => {
     await queryClient.invalidateQueries({ queryKey: ["sets"] });
     queryClient.setQueryData(["sets", result.set.id], result.set);
     navigate(`/sets/${result.set.id}`);
+  };
+  const run = useRun<SetResult>({ key: "/api/sets", onDone: show });
+
+  const build = async (request: string) => {
+    const result = await run.start("/api/sets", { request });
+    if (result) await show(result);
   };
 
   if (run.running) return <RunProgress run={run} title="Building your set" onCancel={run.cancel} />;

@@ -2,14 +2,19 @@ import { parseError, toApiError } from "./client";
 
 export type StreamEvent = { type: "text"; delta: string } | { type: "tool"; name: string; input: Record<string, unknown> };
 
-/** POSTs to an assistant endpoint as Server-Sent Events and resolves with the `done` body. */
-export async function streamPost<T>(path: string, body: unknown, onEvent: (event: StreamEvent) => void, signal?: AbortSignal): Promise<T> {
-  const res = await fetch(path, {
-    method: "POST",
-    headers: { "content-type": "application/json", accept: "text/event-stream" },
-    body: JSON.stringify(body),
-    signal,
-  });
+export type StreamHandlers = { onEvent: (event: StreamEvent) => void; onRun?: (run: { id: string; startedAt: string }) => void };
+
+/** POSTs to an assistant endpoint as Server-Sent Events and resolves with the `done` body. Aborting only stops listening: the run continues on the server. */
+export async function streamPost<T>(path: string, body: unknown, handlers: StreamHandlers, signal?: AbortSignal): Promise<T> {
+  return readStream<T>(await fetch(path, { method: "POST", headers: { "content-type": "application/json", accept: "text/event-stream" }, body: JSON.stringify(body), signal }), handlers);
+}
+
+/** Follows a run that is already working: replays its events so far, then resolves with its `done` body. */
+export async function followRun<T>(id: string, handlers: StreamHandlers, signal?: AbortSignal): Promise<T> {
+  return readStream<T>(await fetch(`/api/runs/${id}/events`, { headers: { accept: "text/event-stream" }, signal }), handlers);
+}
+
+async function readStream<T>(res: Response, { onEvent, onRun }: StreamHandlers): Promise<T> {
   if (!res.ok || !res.body) throw await parseError(res);
   const reader = res.body.pipeThrough(new TextDecoderStream()).getReader();
   let buffer = "";
@@ -30,6 +35,7 @@ export async function streamPost<T>(path: string, body: unknown, onEvent: (event
         .join("\n");
       if (!event || !data) continue;
       const parsed = JSON.parse(data);
+      if (event === "run") onRun?.(parsed);
       if (event === "done") return parsed as T;
       if (event === "error") throw toApiError(500, parsed);
       if (event === "text") onEvent({ type: "text", delta: parsed.delta });

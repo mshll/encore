@@ -145,7 +145,7 @@ function TrackRow({
 
 function Conversation({ set, onRefined }: { set: SetDetail; onRefined: (result: SetResult) => void }) {
   const [text, setText] = useState("");
-  const run = useRun<SetResult>();
+  const run = useRun<SetResult>({ key: `/api/sets/${set.id}/messages`, onDone: onRefined });
   const entries = timeline(set);
   const send = async () => {
     const message = text.trim();

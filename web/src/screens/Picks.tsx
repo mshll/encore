@@ -116,10 +116,10 @@ function nextRun(slot: { weekday: number; hour: number }) {
 function ThisWeek({ week }: { week: PicksWeek }) {
   const status = useStatus();
   const queryClient = useQueryClient();
-  const run = useRun<PicksWeek>();
+  const refresh = () => queryClient.invalidateQueries({ queryKey: ["picks"] });
+  const run = useRun<PicksWeek>({ key: "/api/picks/generate", onDone: refresh });
   const generate = async () => {
-    const result = await run.start("/api/picks/generate", {});
-    if (result) await queryClient.invalidateQueries({ queryKey: ["picks"] });
+    if (await run.start("/api/picks/generate", {})) await refresh();
   };
   if (week.picks.length > 0)
     return (
