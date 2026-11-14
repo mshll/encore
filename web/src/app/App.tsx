@@ -5,6 +5,7 @@ import { ErrorState } from "../ui/States";
 import { Placeholder } from "../surfaces/Placeholder";
 import { RangePicker } from "../ui/RangePicker";
 import { FOR_YOU_TABS, PATTERN_TABS, SETTINGS_TABS } from "./nav";
+import { paramValue } from "./paths";
 import { Shell } from "./Shell";
 
 const Overview = lazy(() => import("../surfaces/Overview").then((m) => ({ default: m.Overview })));
@@ -44,11 +45,11 @@ export function App() {
           <Route path="/music">
             <Redirect to="/music/artists" replace />
           </Route>
-          <Route path="/music/artist/:name">{(p) => <ArtistPage key={p.name} name={decodeURIComponent(p.name)} />}</Route>
+          <Route path="/music/artist/:name">{(p) => <ArtistPage key={p.name} name={paramValue(p.name)} />}</Route>
           <Route path="/music/album/:artist/:album">
-            {(p) => <AlbumPage key={`${p.artist}/${p.album}`} artist={decodeURIComponent(p.artist)} album={decodeURIComponent(p.album)} />}
+            {(p) => <AlbumPage key={`${p.artist}/${p.album}`} artist={paramValue(p.artist)} album={paramValue(p.album)} />}
           </Route>
-          <Route path="/music/song/:songKey">{(p) => <SongPage key={p.songKey} songKey={decodeURIComponent(p.songKey)} />}</Route>
+          <Route path="/music/song/:songKey">{(p) => <SongPage key={p.songKey} songKey={paramValue(p.songKey)} />}</Route>
           <Route path="/music/artists">{() => <Music tab="artists" />}</Route>
           <Route path="/music/albums">{() => <Music tab="albums" />}</Route>
           <Route path="/music/songs">{() => <Music tab="songs" />}</Route>
