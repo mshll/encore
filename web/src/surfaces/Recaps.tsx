@@ -192,7 +192,7 @@ function Missing({ period }: { period: RecapPeriod }) {
         description={period.inProgress ? `It covers ${fmtDayShort(period.from)} to ${fmtDayShort(period.to)} so far.` : undefined}
         action={<WriteButton writer={writer} variant="primary" label="Write the recap" />}
       />
-      {writer.gate.blocked && <Notice tone="info">{writer.gate.blocked} Until then the recap shows the numbers alone.</Notice>}
+      {writer.gate.blocked && <Notice tone="info">The recap will show the numbers alone. {writer.gate.blocked}</Notice>}
       {writer.problem && <Notice tone="danger" onRetry={() => void writer.write()}>{writer.problem}</Notice>}
     </div>
   );
