@@ -39,8 +39,8 @@ The source of truth for paths, labels, icons and shortcuts is `web/src/app/nav.t
 | --- | --- | --- | --- | --- |
 | Overview `/` | How much did I listen in this range, to what, and what is waiting for me? | Change the range | `stats/overview` (range and the range before), `stats/timeseries`, `stats/top/*`, `stats/on-this-day`, `picks`, `radar`, `digests`, `status` | Built |
 | Plays `/plays` | What exactly did I play, when, where? | Search and filter the log | `history` (paged, `q`, `skipped`, `device`, `source`, `artist`, `songKey`), `status`, `stats/overview` (first use) | Built |
-| Music `/music/*` | Who and what do I play most, and which favourites did I drop? | Open an artist, album or song | `stats/top/*`, `stats/forgotten`, `search` | Placeholder |
-| Artist, album, song pages | Everything about one artist, album or song | Play it | `entities/artist`, `entities/album`, `entities/track`, `notes` (liner notes), `radar` (artist releases) | Placeholder |
+| Music `/music/*` | Who and what do I play most, and which favourites did I drop? | Open an artist, album or song | `stats/top/*` (paged, `sort`, `q`), `stats/forgotten`, `stats/overview` (counts) | Built |
+| Artist, album, song pages | Everything about one artist, album or song | Play it | `entities/artist`, `entities/album`, `entities/track`, `notes` (liner notes), `radar` (artist releases) | Built |
 | Patterns: When | When in the week do I listen? | Pick a weekday and hour to see what fills it | `stats/clock`, `stats/top/tracks` and `top/artists` with `weekday` and `hour` | Built |
 | Patterns: Eras | Which artists defined which months? | Pick an era | `stats/eras` | Placeholder |
 | Patterns: Taste | Which genres, moods and energy over time? | Switch genres and moods | tag stats (`stats/tags/*`), `tags/pending`, `tags` | Placeholder |
@@ -55,7 +55,7 @@ The source of truth for paths, labels, icons and shortcuts is `web/src/app/nav.t
 | Setup `/setup` | Is encore connected and fed? | Do the next missing step | `onboarding`, `spotify/authorize`, `import`, `settings` | Placeholder |
 | Settings `/settings/*` | How does encore run? | Save a change | `settings`, `settings/claude/verify`, `settings/discord/register`, `spotify/disconnect`, `spotify/poll`, `llm/spend`, `auth/logout`, passkey routes | Placeholder |
 
-Built surfaces are the reference implementations: Overview (home), Plays (list-led), Patterns: When (chart-led).
+Built surfaces are the reference implementations: Overview (home), Plays (list-led), Patterns: When (chart-led). Music lists and the entity pages (`surfaces/Music.tsx`, `surfaces/entity/*`) follow Plays and Overview.
 
 ### Where every old screen went
 
@@ -144,6 +144,7 @@ Phosphor, regular weight; `fill` only for the active nav item and the playing st
 - **Stat strip driving one chart.** At most three figures; the selected one draws the chart below it. Never a row of identical metric boxes.
 - **Ranked list.** `RowList` of `TrackRow`/`ArtistRow`/`AlbumRow`: rank, art, title over subtitle, dither meter (when the list is 512px or wider), figure. Whole row is the link; songs get play and menu on hover, a context menu on right click.
 - **Log table.** Plays: virtualised rows grouped by day headings, columns that drop by width (`useColumns`), a phone row layout. Toolbar above, count line, then the table.
+- **Entity page.** `EntityHeader` (artwork, title, credits, first and last play, Play plus secondary actions, range picker as `aside`) > stat strip driving the listening chart > main plus side column (ranked songs; albums, releases, versions) > skips in context, full width.
 - **Main plus side column.** `lg:grid-cols-[minmax(0,1fr)_minmax(0,320px)]`: the main answer left, small related lists right.
 
 ### State order
@@ -183,8 +184,10 @@ All in `web/src/ui/` unless noted. Props listed are the ones that matter.
 | `Page`, `PageHeader`, `Section`, `useDocumentTitle` | `ui/Page` | PageHeader: `title`, `description`, `actions`, children. Section: `title`, `description`, `actions`, `labelledBy` |
 | `Stat`, `StatStrip`, `Delta` | `ui/Stat` | Items `{ id, label, value, unit?, delta?, compare? }`; StatStrip: `value`, `onChange`, `label`, children (the chart) |
 | `AnimatedNumber` | `ui/AnimatedNumber` | `value` (formatted string) |
-| `RowList`, `Row`, `TrackRow`, `ArtistRow`, `AlbumRow`, `RowSkeleton` | `ui/Rows` | `rank`, `value`, `share` (0 to 1, draws the meter), `subtitle` |
+| `RowList`, `Row`, `TrackRow`, `ArtistRow`, `AlbumRow`, `RowSkeleton` | `ui/Rows` | `rank`, `value`, `share` (0 to 1, draws the meter), `subtitle`, `style` (position in a virtualised list). Set `--rank-w` on the list for ranks past 99 |
 | `TableHead`, `useColumns`, `cellClass`, `Column` | `ui/Table` | Columns `{ id, label, width, align, from, srLabel }` drop below their `from` breakpoint |
+| `EntityHeader`, `EntityHeaderSkeleton` | `ui/EntityHeader` | `title`, `art`, `round`, `credits`, `detail`, `actions`, `aside`. The head of an artist, album or song page; the page sets the document title |
+| `SearchField` | `ui/SearchField` | `value`, `onChange` (after a 250 ms pause), `label`, `placeholder` |
 | `Artwork` | `ui/Artwork` | `src`, `name`, `box` 24 to 64 or fill, `round` |
 | `SongMenu`, `SongContext` | `ui/SongMenu` | `song { uri, name, songKey?, artist? }` |
 | `RangePicker` | `ui/RangePicker` | Reads and writes `from`/`to` in the URL |

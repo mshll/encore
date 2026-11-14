@@ -41,6 +41,7 @@ function emptyFor(path: string, isNew: boolean): unknown {
   if (path === "/api/stats/clock") return { cells: Array.from({ length: 168 }, (_, i) => ({ weekday: Math.floor(i / 24) + 1, hour: i % 24, hours: 0, plays: 0 })) };
   if (path === "/api/stats/on-this-day") return { date: "2026-11-14", years: [] };
   if (path === "/api/history") return { total: 0, limit: 200, offset: 0, items: [] };
+  if (path === "/api/stats/forgotten") return { days: 180, minListens: 10, asOf: "2026-11-14T00:00:00.000Z", items: [] };
   if (path === "/api/search") return { artists: [], songs: [], albums: [] };
   if (path === "/api/radar") return { artists: 0, withId: 0, checkedRecently: 0, unseenNew: 0, lastRunAt: null, items: [] };
   if (path === "/api/digests") return { items: [] };
@@ -70,6 +71,27 @@ function worsen(path: string, body: Json): unknown {
   if (path === "/api/stats/clock") {
     const cells = (body.cells as Json[]).map((c, i) => ({ ...c, hours: i === 100 ? 4321.5 : i % 37 === 0 ? 0.01 : 0, plays: i === 100 ? 98765 : i % 37 === 0 ? 1 : 0 }));
     return { cells };
+  }
+  if (path.startsWith("/api/entities/")) {
+    const tracks = ((body.tracks as Json[] | undefined) ?? []).slice(0, 1).map((t) => ({ ...t, name: LONG_SONG, artist: LONG_ARTIST, album: LONG_ALBUM, albumArtUrl: BROKEN_ART, hours: 98765.4, plays: 1234567 }));
+    const totals = { ...(body.totals as Json), hours: 123456.7, plays: 9876543, listens: 8765432, skips: 4567890, quickSkips: 1234567 };
+    return {
+      ...body,
+      ...(body.artist ? { artist: LONG_ARTIST } : {}),
+      ...(body.album ? { album: LONG_ALBUM } : {}),
+      ...(body.name ? { name: LONG_SONG } : {}),
+      imageUrl: body.imageUrl === undefined ? undefined : BROKEN_ART,
+      albumArtUrl: body.albumArtUrl === undefined ? undefined : BROKEN_ART,
+      totals,
+      timeline: ((body.timeline as Json[]) ?? []).slice(-1),
+      tracks,
+      ...(body.albums ? { albums: (body.albums as Json[]).slice(0, 1).map((a) => ({ ...a, album: LONG_ALBUM, albumArtUrl: BROKEN_ART })) } : {}),
+      ...(body.uris ? { uris: (body.uris as Json[]).map((u) => ({ ...u, name: LONG_SONG, album: LONG_ALBUM })) } : {}),
+    };
+  }
+  if (path === "/api/stats/forgotten") {
+    const items = (body.items as Json[]).slice(0, 1).map((it) => ({ ...it, name: LONG_SONG, artist: LONG_ARTIST, albumArtUrl: BROKEN_ART, listens: 1234567 }));
+    return { ...body, items };
   }
   if (path === "/api/history") {
     const items = (body.items as Json[]).map((it, i) =>
@@ -111,6 +133,7 @@ window.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
   if (fixture === "loading") return new Promise<Response>(() => {});
   if (fixture === "error") return json({ error: { code: "internal", message: "The database is locked by another process." } }, 500);
   if (fixture === "empty" || fixture === "new") {
+    if (path.startsWith("/api/entities/")) return json({ error: { code: "not_found", message: "No music plays in this range." } }, 404);
     const body = emptyFor(path, fixture === "new");
     if (body !== null) return json(body);
     return realFetch(input, init);
