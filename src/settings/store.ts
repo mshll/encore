@@ -3,6 +3,7 @@ import { pricedModels, type Config } from "../config";
 import type { Db } from "../db/client";
 import { settings as settingsTable } from "../db/schema";
 import { settingFields, type SettingField, type SettingValue } from "./fields";
+import { localTime } from "../plays/localTime";
 import { SecretBox, SecretUnreadableError } from "./secretBox";
 import { resolveSettings, type RawSettings, type Settings, type SettingsSource } from "./settings";
 
@@ -81,6 +82,21 @@ export class SettingsStore implements SettingsSource {
 
   /** Validates every value first, then writes all or none. `null` or "" clears a stored value. Returns the keys whose effective value changed. */
   update(patch: Record<string, unknown>): string[] {
+    const writes = this.parsePatch(patch);
+    const before = this.load();
+    this.write(writes);
+    const after = this.load();
+    const changed = writes.map((w) => w.field.key).filter((key) => !sameValue(before.get(key)!.value, after.get(key)!.value));
+    if (changed.length) for (const listener of this.listeners) listener(changed);
+    return changed;
+  }
+
+  /** Throws the `SettingsValidationError` that `update` would throw for this patch, without writing. */
+  validate(patch: Record<string, unknown>): void {
+    this.parsePatch(patch);
+  }
+
+  private parsePatch(patch: Record<string, unknown>): { field: SettingField; value: SettingValue | null }[] {
     const issues: SettingIssue[] = [];
     const writes: { field: SettingField; value: SettingValue | null }[] = [];
     for (const [key, input] of Object.entries(patch)) {
@@ -108,14 +124,17 @@ export class SettingsStore implements SettingsSource {
       }
       writes.push({ field, value: parsed.data });
     }
+    const today = localTime(this.now(), this.timezoneAfter(writes)).day;
+    for (const { field, value } of writes) {
+      if (field.type === "date" && typeof value === "string" && value > today) issues.push({ key: field.key, reason: "invalid", message: "must not be in the future" });
+    }
     if (issues.length) throw new SettingsValidationError(issues);
+    return writes;
+  }
 
-    const before = this.load();
-    this.write(writes);
-    const after = this.load();
-    const changed = writes.map((w) => w.field.key).filter((key) => !sameValue(before.get(key)!.value, after.get(key)!.value));
-    if (changed.length) for (const listener of this.listeners) listener(changed);
-    return changed;
+  private timezoneAfter(writes: { field: SettingField; value: SettingValue | null }[]): string {
+    const write = writes.find((w) => w.field.key === "timezone");
+    return write ? String(write.value ?? write.field.default) : this.get().timezone;
   }
 
   /**

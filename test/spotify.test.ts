@@ -190,7 +190,7 @@ describe("poller", () => {
           ]),
         },
       ],
-      TZ,
+      { timezone: TZ },
     );
     expect(await pollRecentlyPlayed(db, client, config)).toEqual({ received: 2, inserted: 1, skippedCoveredByExport: 1, skippedCoveredByLive: 0 });
   });

@@ -24,6 +24,12 @@
     ?settings=stored  every setting is set by an env var and also saved in the dashboard
     ?settings=mixed   Spotify, locale and Claude settings are set by env vars, the rest are not; no SECRETS_KEY
     Settings fixtures answer POST /api/settings/adopt-env themselves: nothing is written.
+    ?history=before   "Ignore plays before": 269 plays before any date; applying answers success
+    ?history=none     no plays before any date; applying only saves
+    ?history=slow     the count of plays before a date never answers
+    ?history=failed   applying fails: the database snapshot could not be written
+    ?history=env      HISTORY_START sets 2024-01-01 and 269 plays before it are still stored
+    History fixtures answer GET and POST /api/settings/history-start and GET /api/settings themselves: nothing is written.
 
   The choice sticks for the tab (sessionStorage) so in-app navigation keeps it; ?fixture=off clears it.
 */
@@ -31,7 +37,7 @@
 type Json = Record<string, unknown>;
 
 const params = new URLSearchParams(location.search);
-for (const key of ["fixture", "player", "run", "dj", "settings"]) {
+for (const key of ["fixture", "player", "run", "dj", "settings", "history"]) {
   const value = params.get(key);
   if (value === "off") sessionStorage.removeItem(`encore-${key}`);
   else if (value) sessionStorage.setItem(`encore-${key}`, value);
@@ -41,6 +47,7 @@ const player = sessionStorage.getItem("encore-player");
 const run = sessionStorage.getItem("encore-run");
 const dj = sessionStorage.getItem("encore-dj");
 const settingsFixture = sessionStorage.getItem("encore-settings");
+const historyFixture = sessionStorage.getItem("encore-history");
 
 const LONG_ARTIST = "Bùi Thị Xuân Hương and the Extraordinarily Long-Named Orchestra of Hồ Chí Minh City";
 const LONG_SONG = "Somewhere Only We Know (Live at the Royal Albert Hall, 14 February 2004) [2024 Remaster]";
@@ -306,6 +313,42 @@ async function settingsFixtureAnswer(path: string, method: string): Promise<Resp
   });
 }
 
+const EARLY_PLAYS = { plays: 269, firstDay: "2021-05-16", lastDay: "2021-09-27", hours: 11.9 };
+let fixtureHistoryStart: string | null = historyFixture === "env" ? "2024-01-01" : null;
+let fixtureRemoved = false;
+
+async function historySettings(): Promise<Json> {
+  const body = (await realFetch("/api/settings").then((r) => r.json())) as Json & { groups: { id: string; fields: Json[] }[] };
+  const env = historyFixture === "env";
+  const groups = body.groups.map((g) => ({
+    ...g,
+    fields: g.fields.map((f) =>
+      f.key === "historyStart"
+        ? { ...f, value: fixtureHistoryStart, set: fixtureHistoryStart !== null, source: env ? "env" : fixtureHistoryStart ? "db" : "default", locked: env, stored: !env && fixtureHistoryStart !== null }
+        : f,
+    ),
+  }));
+  return { ...body, groups };
+}
+
+async function historyFixtureAnswer(path: string, method: string, init: RequestInit | undefined): Promise<Response | null> {
+  if (path === "/api/settings" && method === "GET") return json(await historySettings());
+  if (path === "/api/settings" && method === "PATCH") {
+    const patch = JSON.parse(String(init?.body ?? "{}")) as Json;
+    if (!("historyStart" in patch)) return null;
+    fixtureHistoryStart = (patch.historyStart as string | null) || null;
+    return json({ ...(await historySettings()), changed: ["historyStart"], effects: [] });
+  }
+  if (path !== "/api/settings/history-start") return null;
+  const before = historyFixture === "none" || fixtureRemoved ? { plays: 0, firstDay: null, lastDay: null, hours: 0 } : EARLY_PLAYS;
+  if (method === "GET") return historyFixture === "slow" ? new Promise<Response>(() => {}) : json(before);
+  if (historyFixture === "failed") return json({ error: { code: "snapshot_failed", message: "Could not write a snapshot of the database, so nothing was deleted" } }, 500);
+  await new Promise((resolve) => setTimeout(resolve, 600));
+  if (historyFixture !== "env") fixtureHistoryStart = (JSON.parse(String(init?.body ?? "{}")) as { historyStart: string }).historyStart;
+  fixtureRemoved = true;
+  return json({ ...(await historySettings()), removed: before, snapshot: before.plays > 0 ? "encore-2026-11-14T20-00-00Z.db" : null });
+}
+
 async function djSession() {
   const sets = (await realFetch("/api/sets").then((r) => r.json())) as { items: { id: number; title: string }[] };
   const set = sets.items[0];
@@ -447,6 +490,10 @@ window.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
   }
   if (settingsFixture) {
     const answer = await settingsFixtureAnswer(path, method);
+    if (answer) return answer;
+  }
+  if (historyFixture) {
+    const answer = await historyFixtureAnswer(path, method, init);
     if (answer) return answer;
   }
   if (!fixture || method !== "GET") return realFetch(input, init);

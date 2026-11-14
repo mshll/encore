@@ -2,7 +2,7 @@ import { sql } from "drizzle-orm";
 import type { Db, DbOrTx } from "../../db/client";
 import { plays } from "../../db/schema";
 import { deviceFromSpotify } from "../../plays/device";
-import { insertPlays, type PlayInput } from "../../plays/store";
+import { insertPlays, type HistoryWindow, type PlayInput } from "../../plays/store";
 import { exportCoveredUntil } from "../export/import";
 import type { FinishedPlay } from "./observe";
 
@@ -47,7 +47,7 @@ export function coveredByLive(db: DbOrTx, trackUri: string, apiTs: number): bool
   );
 }
 
-export function recordLivePlays(db: Db, finished: FinishedPlay[], timezone: string): LiveResult {
+export function recordLivePlays(db: Db, finished: FinishedPlay[], window: HistoryWindow): LiveResult {
   const cutoff = exportCoveredUntil(db) ?? -Infinity;
   const fresh = finished.filter((p) => p.endedAt > cutoff);
   return db.transaction((tx) => {
@@ -55,7 +55,7 @@ export function recordLivePlays(db: Db, finished: FinishedPlay[], timezone: stri
     let inserted = 0;
     for (const play of fresh) {
       const input = livePlayInput(play);
-      if (insertPlays(tx, [input], timezone) === 0) continue;
+      if (insertPlays(tx, [input], window) === 0) continue;
       inserted++;
       const match = nearestApiMatch(tx, play.trackUri, play.endedAt, play.msPlayed);
       if (match !== undefined) {

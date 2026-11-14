@@ -15,7 +15,7 @@ Contract between the server and the web UI. All routes are JSON over HTTP on the
   { "error": { "code": "invalid_request", "message": "Request validation failed", "details": [{ "path": "from", "message": "expected YYYY-MM-DD" }] } }
   ```
 
-  `details` is present only on some errors. Status codes: `400` validation (`invalid_request`, `invalid_settings`), `401` not signed in, `402` monthly LLM budget spent, `403` setup token wrong or `premium_required`, `404` not found, `409` precondition (`spotify_not_configured`, `spotify_not_connected`, `no_active_device`, `setup_complete`, `llm_not_configured` on key verify, `discord_not_configured`, `discord_registration_unavailable`), `413` file too large, `415` wrong content type, `422` Claude declined, `500` server error, `502` Spotify, Claude or Discord call failed (`spotify_failed`, `llm_failed`, `discord_failed`), `503` LLM not configured or Spotify calls paused (`spotify_paused`, `details: { reason, until }`). Assistant error codes are listed under [Assistant](#assistant-claude).
+  `details` is present only on some errors. Status codes: `400` validation (`invalid_request`, `invalid_settings`), `401` not signed in, `402` monthly LLM budget spent, `403` setup token wrong or `premium_required`, `404` not found, `409` precondition (`spotify_not_configured`, `spotify_not_connected`, `no_active_device`, `setup_complete`, `llm_not_configured` on key verify, `discord_not_configured`, `discord_registration_unavailable`), `413` file too large, `415` wrong content type, `422` Claude declined, `500` server error (`snapshot_failed`), `502` Spotify, Claude or Discord call failed (`spotify_failed`, `llm_failed`, `discord_failed`), `503` LLM not configured or Spotify calls paused (`spotify_paused`, `details: { reason, until }`). Assistant error codes are listed under [Assistant](#assistant-claude).
 - Timestamps (`ts`, `firstPlayed`, `lastPlayed`, `start`, `end`, ...) are ISO 8601 UTC strings.
 - Days, hours, weekdays, weeks, months are local time in `TIMEZONE` (default UTC). `day` is `YYYY-MM-DD`. `weekday` is ISO: 1 = Monday ... 7 = Sunday.
 - `hours` values are rounded to 2 decimals. Rates (`skipRate`, `shuffleRate`, `share`) are 0..1 rounded to 3 decimals, or `null` when the denominator is 0.
@@ -69,6 +69,7 @@ Runs live in memory: a restart ends them.
 - **Forgotten**: songs with at least `minListens` listens (all time) and no play of any kind in the last `days` days.
 - **Export vs API and live**: export rows are the source of truth. Importing an export deletes API and live rows from the export's first to last timestamp (plus 999 ms, since export timestamps have second precision), and the poller and the watcher ignore plays at or before the newest export row (+999 ms). `apiPlaysRemoved` counts both.
 - **Live plays** (`source: "live"`): the `watch` job polls `GET /me/player` and turns state changes into plays. `ms_played` is the progress it observed (pauses excluded, forward seeks capped at wall time). `skipped` is true when the track changed before 90% of its duration; stopping playback is not a skip. `reason_end` is `trackdone` (reached the last 5 s), `fwdbtn` (changed earlier) or `endplay` (playback stopped); `reason_start` is the previous play's `trackdone`/`fwdbtn`, else `null`. All three are inferred, not Spotify's values. A gap between polls over `2 x WATCHER_IDLE_SECONDS + 30 s` leaves the end unknown (`skipped`, `reason_end` null). `device` comes from the Spotify device name and type; `contextUri` is the playlist or album played from. A watcher that starts mid-track counts the part before its first poll as played.
+- **History start** (`historyStart` setting): plays on a local day before it are never stored, whichever path brings them (export import, recently-played poll, watcher). Saving the setting only filters what arrives from then on; plays already stored are removed only by `POST /api/settings/history-start`. Clearing it removes nothing and restores nothing: removed plays return only by importing the export again.
 - **One play, two sources**: recently-played reports the same play the watcher saw. An API play matches a live row of the same track when its `played_at` falls between the live row's `ts - ms_played - 15 s` and `ts + 60 s`. The live row wins: the poller skips a matched API play (`skippedCoveredByLive`), and a live row recorded after the API row replaces the nearest matching one.
 
 ### Enums
@@ -229,7 +230,7 @@ Runtime configuration, edited from the dashboard. Boot config (`HOST`, `PORT`, `
 }
 ```
 
-- `type`: `string`, `integer`, `number`, `boolean`, `enum` (pick from `options`), `timezone` (IANA, `options` lists the zones the server accepts), `weekdays` (array of ISO weekdays 1-7, no repeats, returned sorted).
+- `type`: `string`, `integer`, `number`, `boolean`, `enum` (pick from `options`), `timezone` (IANA, `options` lists the zones the server accepts), `weekdays` (array of ISO weekdays 1-7, no repeats, returned sorted), `date` (a local day `YYYY-MM-DD` in the configured timezone, not after today there).
 - `stored`: the settings table holds a valid value for this field, whatever the `source`. With `source: "env"`, it is the value that applies once the env var is removed and the server restarts.
 - `min`/`max` bound numbers (for `weekdays`, each day). `unit`: `ms`, `seconds`, `minutes`, `hours`, `days`, `usd`, `weekday` (ISO 1-7), `hour` (local 0-23).
 - `value` is `null` for secrets and for unset optional fields; `set` is false for the latter.
@@ -247,6 +248,7 @@ Fields by group (env var in brackets; `*` = secret):
 | `discord` | `discordApplicationId`, `discordPublicKey`, `discordOwnerId`, `discordBotToken`*, `discordGuildId`, `discordChannelId` [DISCORD_*] |
 | `mcp` | `mcpToken`* [MCP_TOKEN] |
 | `access` | `adminToken`* [ADMIN_TOKEN] |
+| `history` | `historyStart` [HISTORY_START, e.g. `2024-01-01`] |
 | `jobs` | `pollIntervalSeconds`, `enrichIntervalSeconds`, `enrichBatchSize`, `artIntervalSeconds`, `spotifyMinIntervalMs`, `quotaBackoffHours`, `watcherActiveSeconds`, `watcherIdleSeconds`, `watcherBackoffMaxSeconds`, `radarMinListens`, `radarIntervalMinutes`, `radarArtistsPerRun`, `radarRecheckDays`, `radarBaselineDays`, `librarySyncHours`, `libraryPageSeconds` |
 
 Defaults and bounds match the table in [configuration.md](configuration.md).
@@ -279,6 +281,29 @@ No body. Copies the current value of every env-provided field into the settings 
 - `skipped`: `[{ "key", "reason" }]`, `reason` `secrets_key_missing` (a secret, and `SECRETS_KEY` is not set) or `invalid` (the env value fails the field's validation).
 
 Secret values are never returned or logged.
+
+### `GET /api/settings/history-start`
+
+Query `before` (`YYYY-MM-DD`, required). What applying that date would delete: every stored play, of any kind, on a local day before it. Nothing changes.
+
+```json
+{ "plays": 269, "firstDay": "2021-05-16", "lastDay": "2021-09-27", "hours": 11.9 }
+```
+
+`firstDay` and `lastDay` are `null` when `plays` is 0. `hours` sums `ms_played` (API rows have none). `400 invalid_request` on a malformed date.
+
+### `POST /api/settings/history-start`
+
+Body `{ "historyStart": "2024-01-01" }`. In this order:
+
+1. Validates the date like `PATCH` would (`400 invalid_settings`: malformed, not a real day, after today in the configured timezone, or `locked` when `HISTORY_START` sets a different date).
+2. When plays would be deleted, writes a snapshot of the database with SQLite `VACUUM INTO` to `backups/encore-<UTC timestamp>.db` next to the database file. If it fails: `500 snapshot_failed`, nothing saved, nothing deleted.
+3. Saves the setting (skipped when `HISTORY_START` sets this same date).
+4. Deletes the plays on a local day before the date, in one transaction. Only `plays` rows: tracks, artists, tags, notes and every other table stay.
+
+`200`: the `GET /api/settings` shape plus `removed` (the `GET /api/settings/history-start` shape, counted inside the delete) and `snapshot` (the file name, or `null` when nothing was deleted). Running it again with the same date deletes nothing and writes no snapshot.
+
+Open cleanup proposals keep the play counts in their `evidence` until the next library pass refreshes them. Stored recaps (`/api/digests`) keep their text.
 
 ### `POST /api/settings/claude/verify`
 
@@ -352,10 +377,13 @@ Session or `Authorization: Bearer <ADMIN_TOKEN>`.
   "invalidRows": 0,
   "inserted": 39811,
   "alreadyPresent": 0,
+  "beforeHistoryStart": 0,
   "apiPlaysRemoved": 0,
   "range": { "from": "2021-05-16T06:56:32.000Z", "to": "2026-11-12T21:31:26.000Z" }
 }
 ```
+
+`beforeHistoryStart` counts rows on a local day before the `historyStart` setting; they are not stored. `alreadyPresent` counts the other rows that were already stored. `range` spans the rows inside the history start.
 
 Rows that fail validation are counted in `invalid` and skipped. A file that is not a JSON array is a `400 invalid_export` and nothing is written. `415 multipart_required`, `400 no_files`, `400 too_many_files`, `413 file_too_large`.
 

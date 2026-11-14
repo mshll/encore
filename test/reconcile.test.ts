@@ -58,7 +58,7 @@ function setup() {
 describe("watcher and recently-played reconciliation", () => {
   test("watcher first: the poller skips the same play", async () => {
     const { db, poll, rows } = setup();
-    recordLivePlays(db, [live(A, T0, 200_000)], TZ);
+    recordLivePlays(db, [live(A, T0, 200_000)], { timezone: TZ });
     expect(await poll([[A, T0 + 201_500]])).toMatchObject({ inserted: 0, skippedCoveredByLive: 1 });
     expect(rows()).toEqual([{ track_uri: A, source: "live", ts: T0 + 200_000, ms_played: 200_000 }]);
   });
@@ -66,14 +66,14 @@ describe("watcher and recently-played reconciliation", () => {
   test("poller first: the live row replaces the api row", async () => {
     const { db, poll, rows } = setup();
     await poll([[A, T0 + 199_000]]);
-    expect(recordLivePlays(db, [live(A, T0, 200_000)], TZ)).toEqual({ inserted: 1, replacedApi: 1, coveredByExport: 0 });
+    expect(recordLivePlays(db, [live(A, T0, 200_000)], { timezone: TZ })).toEqual({ inserted: 1, replacedApi: 1, coveredByExport: 0 });
     expect(rows().map((r) => r.source)).toEqual(["live"]);
   });
 
   test("a track repeated back to back stays two plays from both sources", async () => {
     const { db, poll, rows } = setup();
     await poll([[A, T0 + 200_000]]);
-    recordLivePlays(db, [live(A, T0, 200_000), live(A, T0 + 200_000, 200_000)], TZ);
+    recordLivePlays(db, [live(A, T0, 200_000), live(A, T0 + 200_000, 200_000)], { timezone: TZ });
     await poll([
       [A, T0 + 400_000],
       [A, T0 + 200_000],
@@ -86,7 +86,7 @@ describe("watcher and recently-played reconciliation", () => {
 
   test("short skips the api never reports and api plays the watcher missed are both kept", async () => {
     const { db, poll, rows } = setup();
-    recordLivePlays(db, [live(B, T0, 8_000)], TZ);
+    recordLivePlays(db, [live(B, T0, 8_000)], { timezone: TZ });
     await poll([[A, T0 + 600_000]]);
     expect(rows().map((r) => [r.track_uri, r.source])).toEqual([
       [B, "live"],
@@ -96,14 +96,14 @@ describe("watcher and recently-played reconciliation", () => {
 
   test("the same live play recorded twice is stored once", () => {
     const { db, rows } = setup();
-    recordLivePlays(db, [live(A, T0, 200_000)], TZ);
-    expect(recordLivePlays(db, [live(A, T0, 200_000)], TZ).inserted).toBe(0);
+    recordLivePlays(db, [live(A, T0, 200_000)], { timezone: TZ });
+    expect(recordLivePlays(db, [live(A, T0, 200_000)], { timezone: TZ }).inserted).toBe(0);
     expect(rows()).toHaveLength(1);
   });
 
   test("an export import supersedes live and api rows in its range, and later live plays inside it are ignored", async () => {
     const { db, poll, rows } = setup();
-    recordLivePlays(db, [live(A, T0, 200_000)], TZ);
+    recordLivePlays(db, [live(A, T0, 200_000)], { timezone: TZ });
     await poll([[B, T0 + 500_000]]);
     const exportRow = (ts: number, id: string) => ({
       ts: new Date(ts).toISOString().replace(/\.\d{3}Z$/, "Z"),
@@ -121,10 +121,19 @@ describe("watcher and recently-played reconciliation", () => {
       offline: false,
       incognito_mode: false,
     });
-    const result = importExport(db, [{ name: "Streaming_History_Audio_2026.json", content: JSON.stringify([exportRow(T0 - 1000, "a"), exportRow(T0 + 600_000, "b")]) }], TZ);
+    const result = importExport(db, [{ name: "Streaming_History_Audio_2026.json", content: JSON.stringify([exportRow(T0 - 1000, "a"), exportRow(T0 + 600_000, "b")]) }], { timezone: TZ });
     expect(result.apiPlaysRemoved).toBe(2);
     expect(rows().every((r) => r.source === "export")).toBe(true);
-    expect(recordLivePlays(db, [live(A, T0 + 100_000, 200_000)], TZ)).toMatchObject({ inserted: 0, coveredByExport: 1 });
-    expect(recordLivePlays(db, [live(A, T0 + 700_000, 200_000)], TZ)).toMatchObject({ inserted: 1 });
+    expect(recordLivePlays(db, [live(A, T0 + 100_000, 200_000)], { timezone: TZ })).toMatchObject({ inserted: 0, coveredByExport: 1 });
+    expect(recordLivePlays(db, [live(A, T0 + 700_000, 200_000)], { timezone: TZ })).toMatchObject({ inserted: 1 });
+  });
+
+  test("live plays before the history start are not stored", () => {
+    const { db, rows } = setup();
+
+    const result = recordLivePlays(db, [live(A, T0, 200_000)], { timezone: TZ, historyStart: "2026-11-15" });
+
+    expect(result.inserted).toBe(0);
+    expect(rows()).toEqual([]);
   });
 });

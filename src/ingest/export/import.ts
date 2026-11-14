@@ -2,7 +2,7 @@ import { and, between, eq, inArray, max } from "drizzle-orm";
 import type { Db } from "../../db/client";
 import { plays } from "../../db/schema";
 import { setJobState } from "../../jobs/state";
-import { insertPlays, upsertTracks, type PlayInput, type TrackInput } from "../../plays/store";
+import { beforeHistoryStart, insertPlays, upsertTracks, type HistoryWindow, type PlayInput, type TrackInput } from "../../plays/store";
 import { exportFileKind, parseExportFile } from "./parse";
 
 export type ExportFile = { name: string; content: string };
@@ -14,6 +14,7 @@ export type ImportResult = {
   invalidRows: number;
   inserted: number;
   alreadyPresent: number;
+  beforeHistoryStart: number;
   apiPlaysRemoved: number;
   range: { from: string; to: string } | null;
 };
@@ -42,7 +43,7 @@ function rangeOf(timestamps: number[]): Range | null {
  * the whole account and two uploaded files can be years apart, so one range over the upload would delete
  * plays the export does not contain.
  */
-export function importExport(db: Db, input: ExportFile[], timezone: string, now = Date.now()): ImportResult {
+export function importExport(db: Db, input: ExportFile[], window: HistoryWindow, now = Date.now()): ImportResult {
   const ignoredFiles = input.filter((f) => !exportFileKind(f.name)).map((f) => f.name);
   const parsedFiles = input.filter((f) => exportFileKind(f.name)).map((f) => ({ name: f.name, ...parseExportFile(f.name, f.content) }));
   if (parsedFiles.length === 0) throw new EmptyImportError("No Streaming_History_Audio_*.json or Streaming_History_Video_*.json files found");
@@ -63,7 +64,8 @@ export function importExport(db: Db, input: ExportFile[], timezone: string, now 
     }
   }
 
-  const range = rangeOf(playRows.map((p) => p.ts));
+  const kept = playRows.filter((p) => !beforeHistoryStart(p.ts, window));
+  const range = rangeOf(kept.map((p) => p.ts));
 
   const { inserted, apiPlaysRemoved } = db.transaction((tx) => {
     const removed = audioRanges.reduce(
@@ -77,7 +79,7 @@ export function importExport(db: Db, input: ExportFile[], timezone: string, now 
       0,
     );
     upsertTracks(tx, trackRows, now);
-    return { inserted: insertPlays(tx, playRows, timezone), apiPlaysRemoved: removed };
+    return { inserted: insertPlays(tx, kept, window), apiPlaysRemoved: removed };
   });
 
   const result: ImportResult = {
@@ -86,7 +88,8 @@ export function importExport(db: Db, input: ExportFile[], timezone: string, now 
     rowsParsed: playRows.length,
     invalidRows: parsedFiles.reduce((sum, f) => sum + f.invalid, 0),
     inserted,
-    alreadyPresent: playRows.length - inserted,
+    alreadyPresent: kept.length - inserted,
+    beforeHistoryStart: playRows.length - kept.length,
     apiPlaysRemoved,
     range: range && { from: new Date(range.from).toISOString(), to: new Date(range.to).toISOString() },
   };

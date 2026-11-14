@@ -23,6 +23,7 @@ import { Skeleton } from "../ui/Skeleton";
 import { describeError, ErrorState } from "../ui/States";
 import { TabNav } from "../ui/TabNav";
 import { SettingsBlock, useSettingsForm, type SettingsForm } from "./settings/form";
+import { HistoryStart } from "./settings/HistoryStart";
 
 type Tab = "general" | "spotify" | "claude" | "integrations" | "jobs" | "account";
 
@@ -148,6 +149,7 @@ function General() {
         form={form}
         hints={zoneChanging ? { timezone: "Plays already stored keep the old zone." } : undefined}
       />
+      <HistoryStart />
       <Section title="Appearance">
         <SettingRows>
           <SettingRow label="Theme">

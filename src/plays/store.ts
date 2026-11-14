@@ -69,12 +69,21 @@ export function linkArtists(db: DbOrTx, trackUri: string, input: ArtistInput[]) 
     .run();
 }
 
-export function insertPlays(db: DbOrTx, input: PlayInput[], timezone: string): number {
+/** Where stored history starts: plays are bucketed in `timezone`, and those on a local day before `historyStart` are never stored. */
+export type HistoryWindow = { timezone: string; historyStart?: string };
+
+export function beforeHistoryStart(ts: number, window: HistoryWindow): boolean {
+  return window.historyStart !== undefined && localTime(ts, window.timezone).day < window.historyStart;
+}
+
+/** Inserts the plays inside the window; returns how many rows were new. */
+export function insertPlays(db: DbOrTx, input: PlayInput[], window: HistoryWindow): number {
+  const inside = input.map((p) => ({ ...p, ...localTime(p.ts, window.timezone) })).filter((p) => window.historyStart === undefined || p.day >= window.historyStart);
   let inserted = 0;
-  for (const batch of chunks(input)) {
+  for (const batch of chunks(inside)) {
     const rows = db
       .insert(plays)
-      .values(batch.map((p) => ({ ...p, ...localTime(p.ts, timezone) })))
+      .values(batch)
       .onConflictDoNothing({ target: plays.dedupeKey })
       .returning({ id: plays.id })
       .all();

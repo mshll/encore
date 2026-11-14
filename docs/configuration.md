@@ -25,6 +25,7 @@ All env values are validated at boot (the process exits on invalid values). See 
 | `TIMEZONE` | `UTC` | IANA zone for day/hour buckets, applied at insert time. Set it before the first import |
 | `HOME_COUNTRY` | most-played country | Two-letter code; trips are runs of plays outside it |
 | `WEEKEND_DAYS` | `5,6` | ISO weekdays (1 = Monday) that count as the weekend in analytics, picks, sets and DJ plans |
+| `HISTORY_START` | unset | Local day `YYYY-MM-DD`, not in the future. Plays before it are never stored. Plays already stored are deleted only from Settings (`POST /api/settings/history-start`), after a snapshot to `backups/` next to the database |
 | `JOBS_ENABLED` | `true` | Poller and enrichment |
 | `POLL_INTERVAL_SECONDS` | `300` | Min 60 |
 | `ENRICH_INTERVAL_SECONDS`, `ENRICH_BATCH_SIZE` | `120`, `1` | Seconds between enrichment runs, Web API calls per run (track or artist, most listened first) |
