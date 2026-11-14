@@ -751,7 +751,7 @@ What state the liked songs and own playlists are in. Read only; changes go throu
 ```json
 { "library": { "savedTracks": 1979, "playlists": 23, "syncing": false, "lastSyncAt": "..." },
   "historyStart": "2024-11-01",
-  "rules": { "fadingAfterDays": 90, "dormantAfterDays": 180, "unsavedMinListens": 10, "finishedShare": 0.8 },
+  "rules": { "fadingAfterDays": 90, "dormantAfterDays": 180, "unsavedMinListens": 10 },
   "liked": { "total": 1979, "classes": { "active": 536, "fading": 210, "dormant": 1098, "never": 135 } },
   "savedMonths": [{ "month": "2024-12", "active": 12, "fading": 4, "dormant": 80, "never": 9 }],
   "artists": [{ "artist": "Kendrick Lamar", "total": 60, "active": 10, "fading": 6, "dormant": 40, "never": 4 }],

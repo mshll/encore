@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import { z } from "zod";
+import { FINISH_KNOWN, FINISHED, LISTEN, MUSIC } from "../analytics/common";
 import type { Db } from "../db/client";
 import { localTime } from "../plays/localTime";
 import { appOwnedPlaylistIds } from "./owned";
@@ -10,11 +11,11 @@ export const PLAY_CLASSES = ["active", "fading", "dormant", "never"] as const;
 export type PlayClass = (typeof PLAY_CLASSES)[number];
 
 /**
- * Classes rest on the last listen (a play of 30 seconds or more) and nothing else: a skip neither condemns a song
+ * Classes rest on the last listen (`LISTEN` in analytics/common) and nothing else: a skip neither condemns a song
  * nor keeps it active. Bounds measured on the owner's library: the 180-day bound sits in the trough of the
  * last-listen distribution (10 of 1,951 saved songs last listened 150 to 179 days ago).
  */
-export const CLASS_RULES = { fadingAfterDays: 90, dormantAfterDays: 180, unsavedMinListens: 10, finishedShare: 0.8 };
+export const CLASS_RULES = { fadingAfterDays: 90, dormantAfterDays: 180, unsavedMinListens: 10 };
 
 export function playClass(lastListen: number | null, now: number): PlayClass {
   if (lastListen === null) return "never";
@@ -71,12 +72,12 @@ export function loadLibrary(db: Db, now: number, { timezone, historyStart }: { t
   }>(sql`
     select t.song_key, max(t.uri) as uri, max(t.name) as name, max(t.artist) as artist, max(t.album) as album, max(t.album_art_url) as album_art_url,
       count(*) as plays,
-      sum(p.source = 'api' or p.ms_played >= 30000) as listens,
-      max(case when p.source = 'api' or p.ms_played >= 30000 then p.ts end) as last_listen,
+      sum(${LISTEN}) as listens,
+      max(case when ${LISTEN} then p.ts end) as last_listen,
       max(p.ts) as last_play,
-      sum(p.ms_played is not null and t.duration_ms > 0 and p.ms_played >= ${CLASS_RULES.finishedShare} * t.duration_ms) as finished,
-      sum(p.ms_played is not null and t.duration_ms > 0) as finish_known
-    from plays p join tracks t on t.uri = p.track_uri
+      sum(${FINISHED}) as finished,
+      sum(${FINISH_KNOWN}) as finish_known
+    from ${MUSIC}
     where p.kind = 'track'
     group by t.song_key`);
   for (const r of rows) {
