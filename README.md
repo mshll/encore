@@ -23,6 +23,10 @@ One instance serves one person. Your data stays in a single SQLite file on your 
 - **For you**: a few new songs picked each week, and new releases from artists you play.
 - **Ask**: questions about your listening, answered from your history.
 
+**Playlists in Spotify** (in For you)
+
+- Five private playlists encore keeps refilling: Weekly picks, Forgotten favourites, Most played lately, New from your artists, and This month in past years. Each is off until you switch it on; only Weekly picks needs the Anthropic key.
+
 **Upkeep**
 
 - **Recaps**: a weekly and a monthly write-up.
@@ -95,7 +99,7 @@ The full list, with defaults: [docs/configuration.md](docs/configuration.md). Th
 
 - The `ip_addr` field in the Spotify export is never stored.
 - Secrets saved from the dashboard are encrypted at rest and never returned by the API.
-- encore never starts playback, removes saved songs or edits playlists without an action from you.
+- encore never starts playback, removes saved songs or edits your playlists without an action from you. It refills only the playlists it made and you switched on, and never deletes one.
 - A skipped song is treated as context (time, device, position), never as a dislike on its own.
 
 ## Development
@@ -135,6 +139,7 @@ src/ingest/live/         recently-played poller, player watcher and its reconcil
 src/player/              typed Spotify playback API
 src/dj/                  DJ sessions on an app-owned playlist, deterministic and Claude re-planners
 src/radar/               release radar
+src/living/              living playlists: kinds, builders, schedule, refresh
 src/library/             saved songs and own playlists sync; song catalog, candidate verification, blocks, play outcomes, library tools
 src/cleanup/             cleanup proposals; apply and undo (only reachable from the HTTP route)
 src/discord/             interactions endpoint logic, REST client, command registry, built-in and assistant commands, channel posts

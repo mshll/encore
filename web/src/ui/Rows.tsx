@@ -21,7 +21,8 @@ export function RowList({ children, label, className }: { children: ReactNode; l
 }
 
 type RowProps = {
-  to: string;
+  /** Where the row leads; without it the row is not a link (a song the owner has not played has no page). */
+  to?: string;
   title: string;
   subtitle?: ReactNode;
   art: { src: string | null | undefined; kind: ArtKind };
@@ -47,7 +48,7 @@ export function Row({ to, title, subtitle, art, rank, value, share, song, style 
   const actionsOver = value !== undefined;
   const body = (
     <>
-      <AppLink to={to} className="absolute inset-0 rounded-md" aria-label={subtitle && typeof subtitle === "string" ? `${title}, ${subtitle}` : title} />
+      {to && <AppLink to={to} className="absolute inset-0 rounded-md" aria-label={subtitle && typeof subtitle === "string" ? `${title}, ${subtitle}` : title} />}
       {rank !== undefined && <span className="pointer-events-none w-[var(--rank-w,1.25rem)] shrink-0 text-right text-caption text-tertiary tabular">{rank}</span>}
       <Artwork src={art.src} kind={art.kind} box={32} className="pointer-events-none phone:size-10" />
       <span className="pointer-events-none flex min-w-0 flex-1 flex-col">

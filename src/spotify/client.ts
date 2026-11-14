@@ -4,7 +4,7 @@ import type { SettingsSource } from "../settings/settings";
 import type { SpotifyAuth } from "./auth";
 import { SpotifyPacer } from "./pacer";
 import { SpotifyApiError, SpotifyBlockedError, type BlockReason } from "./errors";
-import type { RecentlyPlayed, SpotifyArtist, SpotifyMe, SpotifyPlaylist, SpotifySearch, SpotifyTrack } from "./types";
+import type { Page, RecentlyPlayed, SimplifiedTrack, SpotifyArtist, SpotifyMe, SpotifyPlaylist, SpotifySearch, SpotifyTrack } from "./types";
 
 const apiUrl = "https://api.spotify.com/v1";
 const oembedUrl = "https://open.spotify.com/oembed";
@@ -95,6 +95,15 @@ export class SpotifyClient {
   /** Spotify takes the JPEG as base64 text, at most 256 KB of it. */
   uploadPlaylistCover(id: string, jpeg: Uint8Array) {
     return this.request<void>("PUT", `/playlists/${encodeURIComponent(id)}/images`, new RawBody(Buffer.from(jpeg).toString("base64"), "image/jpeg"));
+  }
+
+  /** One page of an album's tracks, in album order. */
+  albumTracks(id: string, limit: number) {
+    return this.get<Page<SimplifiedTrack>>(`/albums/${encodeURIComponent(id)}/tracks?limit=${limit}`);
+  }
+
+  connected(): boolean {
+    return this.auth.status().connected;
   }
 
   /** The stored grant includes `scope`. */

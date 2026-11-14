@@ -9,6 +9,10 @@ const getOrNull = <T>(path: string, query: Record<string, string>) =>
     throw error;
   });
 import type {
+  LivingDetail,
+  LivingKind,
+  LivingList,
+  LivingRefresh,
   AskThread,
   Devices,
   AskTurn,
@@ -190,6 +194,13 @@ export const useTracks = (uris: string[]) =>
 
 export const useRadar = (status: "new" | "recent", days = 30) =>
   useQuery({ queryKey: ["radar", status, days], queryFn: () => get<Radar>("/api/radar", { status, days, limit: 200 }) });
+
+export const useLiving = () => useQuery({ queryKey: ["living"], queryFn: () => get<LivingList>("/api/living") });
+
+export const useLivingPlaylist = (kind: LivingKind) => useQuery({ queryKey: ["living", kind], queryFn: () => get<LivingDetail>(`/api/living/${kind}`) });
+
+export const useLivingRefresh = (kind: LivingKind, id: number | null) =>
+  useQuery({ queryKey: ["living", kind, "refresh", id], queryFn: () => get<LivingRefresh>(`/api/living/${kind}/refreshes/${id}`), enabled: id !== null, staleTime: Infinity });
 
 export const useCleanup = (kind: CleanupKind | undefined, status: "open" | "dismissed" | "applied") =>
   useQuery({

@@ -12,13 +12,13 @@ encore answers three jobs: **what have I been listening to**, **what should I pl
 Listening                      Play                        Secondary            Foot
 ├── Overview          /        ├── For you    /for-you     ├── Recaps  /recaps  └── Settings /settings
 ├── Plays             /plays   │   ├── Picks     /picks     │   └── /recaps/:id        ├── general
-├── Music             /music   │   └── Releases  /releases  ├── Library /library        ├── spotify
-│   ├── Artists   /artists     ├── Sets       /sets         └── Setup   /setup          ├── claude
-│   ├── Albums    /albums      │   └── /sets/:id                                        ├── integrations
-│   ├── Songs     /songs       └── Ask        /ask                                      ├── jobs
-│   ├── Forgotten /forgotten       └── /ask/:id                                         └── account
-│   ├── /music/artist/:name
-│   ├── /music/album/:artist/:album
+├── Music             /music   │   ├── Releases  /releases  ├── Library /library        ├── spotify
+│   ├── Artists   /artists     │   └── Playlists /playlists └── Setup   /setup          ├── claude
+│   ├── Albums    /albums      │       └── /playlists/:kind                             ├── integrations
+│   ├── Songs     /songs       ├── Sets       /sets                                     ├── jobs
+│   ├── Forgotten /forgotten   │   └── /sets/:id                                        └── account
+│   ├── /music/artist/:name    └── Ask        /ask
+│   ├── /music/album/:artist/:album  └── /ask/:id
 │   └── /music/song/:songKey
 └── Patterns          /patterns
     ├── When   /when
@@ -48,6 +48,7 @@ The source of truth for paths, labels, icons and shortcuts is `web/src/app/nav.t
 | Patterns: Places | Where and on what do I listen (trips, devices)? | Pick a trip | `stats/trips`, `stats/devices` | Built |
 | For you: Picks | What did Claude pick for me this week? | Play the picks | `picks`, `picks/weeks`, picks run (stream), `blocks` | Built |
 | For you: Releases | What did artists I play release? | Mark seen, play | `radar`, `radar/seen` | Built |
+| For you: Playlists | Which encore playlists live in my Spotify account, and what is in them? | Switch a playlist on | `living`, `living/:kind`, `living/:kind/refresh`, `living/:kind/refreshes/:id`, `living/:kind/cover` | Built |
 | Sets `/sets` | Make me a playlist from a prompt | Make a set | `sets`, `sets/:id`, set run (stream), `dj/start`, `dj`, `dj/stop` | Built |
 | Ask `/ask` | Answer a question about my listening | Ask | `ask/threads`, `ask/threads/:id`, ask run (stream) | Built |
 | Recaps `/recaps` | What happened this week or month? | Open the latest recap | `digests`, `digests/:id` | Built |
@@ -145,7 +146,7 @@ Phosphor, regular weight; `fill` only for the active nav item and the playing st
 - **Page** (`ui/Page.tsx`). `Page width="data|read|form"` > `PageHeader title actions` (+ `TabNav` as children for a surface with tabs) > sections 40px apart (48 from `md`; `SECTIONS` for a body under a shared header). The header is a two-column grid from `md`: title left, actions bottom-aligned right; on a phone the actions stack under the title. The range picker sits in the header actions of every ranged surface. One primary or accent button per surface: once a step is done, its repeat action (Connect again, import again) is secondary.
 - **Patterns tab** (`surfaces/PatternsFrame.tsx`). Every Patterns tab renders through `PatternsFrame`: header, `TabNav`, range picker, first-use state. A tab only supplies its body.
 - **Stat strip driving one chart.** At most three figures; the selected one draws the chart below it. Never a row of identical metric boxes.
-- **Ranked list.** `RowList` of `TrackRow`/`ArtistRow`/`AlbumRow`: rank, art, title over subtitle, dither meter (when the list is 512px or wider), figure. Whole row is the link; songs get play and menu on hover, a context menu on right click. On desktop the actions overlay the figure (the figure hides while they show), so a row reserves no width for them; on a phone they sit in the row. Art: 32 in ranked lists and side columns (40 on a phone), 40 in rows with a second line of detail (skips, cleanup proposals, set songs, the queue), 48 in release and set lists, 64 for picks. A set's art is its generated cover (`coverUrl`, the image saved as the playlist cover), in the set list and the set page header.
+- **Ranked list.** `RowList` of `TrackRow`/`ArtistRow`/`AlbumRow`: rank, art, title over subtitle, dither meter (when the list is 512px or wider), figure. Whole row is the link; songs get play and menu on hover, a context menu on right click. On desktop the actions overlay the figure (the figure hides while they show), so a row reserves no width for them; on a phone they sit in the row. Art: 32 in ranked lists and side columns (40 on a phone), 40 in rows with a second line of detail (skips, cleanup proposals, set songs, the queue), 48 in release and set lists, 64 for picks and the playlist list (the fixed cover). A set's art is its generated cover (`coverUrl`, the image saved as the playlist cover), in the set list and the set page header.
 - **Log table.** Plays: virtualised rows grouped by day headings, columns that drop by width (`useColumns`), a phone row layout. Toolbar above, count line, then the table.
 - **Entity page.** `EntityHeader` (artwork, title, credits, first and last play, Play plus secondary actions, range picker as `aside`) > stat strip driving the listening chart > main plus side column (ranked songs; albums, releases, versions) > skips in context, full width.
 - **Main plus side column.** `SIDE_COLUMNS` (`lg:grid-cols-[minmax(0,1fr)_minmax(0,320px)]`): the main answer left, small related lists right.
@@ -175,7 +176,7 @@ All in `web/src/ui/` unless noted. Props listed are the ones that matter.
 | `IconButton`, `iconButtonClass` | `ui/Button` | `icon`, `label` (required), `variant`, `size`, `fill` |
 | `Input`, `Field` | `ui/Field` | Input: `icon`, `end`, `invalid`. Field: `label`, `hint`, `error`, render-prop child gets `id`, `aria-describedby`, `invalid` |
 | `Select` | `ui/Select` | `value`, `onChange`, `options`, `label` |
-| `Switch` | `ui/Switch` | `checked`, `onChange`, `label`, `disabled` |
+| `Switch` | `ui/Switch` | `checked`, `onChange`, `label`, `disabled`, `id` (pair with a visible `<label htmlFor>`). Hit area 24px tall on desktop |
 | `Checkbox` | `ui/Checkbox` | `checked`, `indeterminate`, `onChange`, `label`, `id`. 44px hit area on a phone |
 | `Combobox`, `ComboboxOption` | `ui/Combobox` | Search a long list (timezones): `value`, `onChange`, `options { value, label, detail? }`, `placeholder`, `emptyText`, `invalid` |
 | `WeekdayPicker` | `ui/WeekdayPicker` | Several days, ISO 1 (Mon) to 7 (Sun): `value`, `onChange`, `label` |
@@ -197,7 +198,7 @@ All in `web/src/ui/` unless noted. Props listed are the ones that matter.
 | `Page`, `PageHeader`, `Section`, `useDocumentTitle`, `SECTIONS`, `SIDE_COLUMNS`, `dimWhile` | `ui/Page` | PageHeader: `title`, `description`, `actions`, children. Section: `title`, `description`, `actions`, `labelledBy` |
 | `Stat`, `StatStrip`, `Delta` | `ui/Stat` | Items `{ id, label, value, unit?, delta?, compare? }`; StatStrip: `value`, `onChange`, `label`, children (the chart) |
 | `AnimatedNumber` | `ui/AnimatedNumber` | `value` (formatted string) |
-| `RowList`, `Row`, `TrackRow`, `ArtistRow`, `AlbumRow`, `RowSkeleton` | `ui/Rows` | `rank`, `value`, `share` (0 to 1, draws the meter), `subtitle`, `style` (position in a virtualised list). Set `--rank-w` on the list for ranks past 99 |
+| `RowList`, `Row`, `TrackRow`, `ArtistRow`, `AlbumRow`, `RowSkeleton` | `ui/Rows` | `rank`, `value`, `share` (0 to 1, draws the meter), `subtitle`, `style` (position in a virtualised list). `Row` links only when given `to` (a song with no page, such as an unheard pick, stays plain). Set `--rank-w` on the list for ranks past 99 |
 | `TableHead`, `useColumns`, `cellClass`, `Column` | `ui/Table` | Columns `{ id, label, width, align, from, srLabel }` drop below their `from` breakpoint |
 | `EntityHeader`, `EntityHeaderSkeleton` | `ui/EntityHeader` | `title`, `art`, `kind`, `credits`, `detail`, `actions`, `aside`. The head of an artist, album, song or set page; the page sets the document title |
 | `SearchField` | `ui/SearchField` | `value`, `onChange` (after a 250 ms pause), `label`, `placeholder` |
@@ -216,7 +217,7 @@ All in `web/src/ui/` unless noted. Props listed are the ones that matter.
 | `AppLink`, `useRangeHref` | `ui/AppLink` | A link that keeps the current range |
 | Paths | `app/paths` | `artistPath(name)`, `songPath(key)`, `albumPath(artist, album)` |
 
-`/dev/kit` (dev builds only) shows every primitive in its states. Fixtures: add `?fixture=loading|error|empty|new|worst|untagged|off`, `?player=playing`, `?dj=active` or `?run=running|starting|done|failed|budget|unconfigured|paused` (Claude runs answered by the fixture, never the server), `?history=before|none|slow|failed|env` (Settings, Ignore plays before; answered by the fixture, nothing deleted) to any dev URL (`web/src/dev/fixtures.ts`); the choice sticks for the tab until `off`.
+`/dev/kit` (dev builds only) shows every primitive in its states. Fixtures: add `?fixture=loading|error|empty|new|worst|untagged|off`, `?player=playing`, `?dj=active` or `?run=running|starting|done|failed|budget|unconfigured|paused` (Claude runs answered by the fixture, never the server), `?history=before|none|slow|failed|env` (Settings, Ignore plays before; answered by the fixture, nothing deleted), `?living=connected|first|fresh|deferred|failed|empty|removed|scope|refreshing` (For you: Playlists; switches and refreshes answered by the fixture, nothing sent to Spotify) to any dev URL (`web/src/dev/fixtures.ts`); the choice sticks for the tab until `off`.
 
 ## 6. Charts
 

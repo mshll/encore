@@ -12,8 +12,8 @@ describe("config", () => {
   });
 
   test("validates setting env vars at boot and keeps them as overrides in field units", () => {
-    const config = loadConfig({ SPOTIFY_CLIENT_ID: "id", TIMEZONE: "Asia/Kuwait", POLL_INTERVAL_SECONDS: "120", PICKS_PLAYLIST: "true", WEEKEND_DAYS: "6,7" });
-    expect(config.envSettings).toEqual({ spotifyClientId: "id", timezone: "Asia/Kuwait", pollIntervalSeconds: 120, picksPlaylist: true, weekendDays: [6, 7] });
+    const config = loadConfig({ SPOTIFY_CLIENT_ID: "id", TIMEZONE: "Asia/Kuwait", POLL_INTERVAL_SECONDS: "120", WEEKEND_DAYS: "6,7" });
+    expect(config.envSettings).toEqual({ spotifyClientId: "id", timezone: "Asia/Kuwait", pollIntervalSeconds: 120, weekendDays: [6, 7] });
   });
 
   test("fails fast on invalid values", () => {

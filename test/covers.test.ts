@@ -196,6 +196,28 @@ describe("rendering", () => {
     expect([both.style, both.partial, one.style, one.partial]).toEqual(["field", false, "rings", true]);
   });
 
+  test("the abstract styles draw without album art and keep their style", async () => {
+    const styles = ["orb", "waves", "rays", "tiles"] as const;
+
+    const drawn = await Promise.all(styles.map((style) => makeCover({ title: "x", covers: [], style })));
+
+    expect(drawn.map((c) => c.style)).toEqual([...styles]);
+  });
+
+  test("fixed colours replace the colours of the covers", async () => {
+    const red = await png("#c02020");
+    const blue = await png("#2040c0");
+
+    const cover = await makeCover({ title: "x", covers: [red, blue], style: "orb", colours: { lead: { h: 0.33, s: 0.7 }, second: { h: 0.33, s: 0.7 } } });
+
+    const image = await loadImage(Buffer.from(cover.jpeg));
+    const canvas = createCanvas(64, 64);
+    canvas.getContext("2d").drawImage(image, 0, 0, 64, 64);
+    const px = canvas.getContext("2d").getImageData(0, 0, 64, 32).data;
+    const pixels = Array.from({ length: px.length / 4 }, (_, i) => [px[i * 4]!, px[i * 4 + 1]!, px[i * 4 + 2]!] as const);
+    expect(dominantHue(pixels)!.h).toBeCloseTo(0.33, 1);
+  });
+
   test("a title in a script without a bundled font is left off", async () => {
     const cover = await makeCover({ title: "東京の夜", covers: [], style: "rings" });
 

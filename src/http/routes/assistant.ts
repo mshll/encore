@@ -6,7 +6,8 @@ import { generateDigest, listDigests, renderDigest } from "../../digest/service"
 import { budgetStatus, spendDetail } from "../../llm/ledger";
 import { listBlocks, removeBlock } from "../../library/blocks";
 import { cachedNote, trackNote } from "../../notes/service";
-import { generatePicks, pickWeeks, picksPlaylist, syncPicksPlaylist, weekOf, weekPicks } from "../../picks/service";
+import { livingPlaylistLink, refreshPicksPlaylist } from "../../living/refresh";
+import { generatePicks, pickWeeks, weekOf, weekPicks } from "../../picks/service";
 import { playSet } from "../../sets/play";
 import { savePick, updatePickState } from "../../assistant/api";
 import { ensureSetCover, setCoverSource } from "../../sets/cover";
@@ -84,7 +85,7 @@ export const pickRoutes = new Hono<Env>()
   .get("/", (c) => {
     const { db, settings, now } = c.var.deps;
     const q = parse(z.object({ week: week.optional() }), c.req.query());
-    return c.json({ ...weekPicks(db, q.week ?? weekOf(now(), settings.get().timezone), now()), playlist: picksPlaylist(db) });
+    return c.json({ ...weekPicks(db, q.week ?? weekOf(now(), settings.get().timezone), now()), playlist: livingPlaylistLink(db, "picks", now()) });
   })
   .get("/weeks", (c) => {
     const q = parse(z.object({ limit: z.coerce.number().int().min(1).max(104).default(12) }), c.req.query());
@@ -93,11 +94,10 @@ export const pickRoutes = new Hono<Env>()
   .post("/generate", (c) => respond(c, (ctx, onEvent) => generatePicks(ctx, onEvent), 201))
   .patch("/:id", async (c) => {
     const { db, settings, spotify, services, now } = c.var.deps;
-    const { timezone, llm } = settings.get();
     const pickId = parse(id, c.req.param()).id;
     const body = parse(z.object({ state: z.enum(PICK_STATES) }), await jsonBody(c));
     const pick = await mapped(async () => (body.state === "saved" ? savePick(services.assistant, pickId) : updatePickState(services.assistant, pickId, body.state)));
-    if (llm.picksPlaylist && picksPlaylist(db) && pick.week === weekOf(now(), timezone)) await mapped(() => syncPicksPlaylist(db, spotify, timezone, now()));
+    await refreshPicksPlaylist({ db, spotify, settings, now });
     return c.json(pick);
   });
 

@@ -1,21 +1,24 @@
 import { createCanvas, loadImage, type Image, type SKRSContext2D } from "@napi-rs/canvas";
 import { fetchArt } from "./art";
-import { CELL, COVER_SIZE, GRID, PAPER, INK, coverField, ditherIndices, floorFade, ringsField, type Rgb } from "./field";
+import { CELL, COVER_SIZE, GRID, PAPER, INK, coverField, ditherIndices, floorFade, orbField, raysField, ringsField, tilesField, wavesField, type Field, type Rgb } from "./field";
 import { coverFonts, TITLE_FONT_STACK } from "./fonts";
 import { MARK_RUNS } from "./mark";
-import type { CoverStyle } from "./style";
-import { DEFAULT_HUE, colourStops, dominantHue } from "./tint";
+import type { AbstractStyle, CoverStyle } from "./style";
+import { DEFAULT_HUE, colourStops, dominantHue, type Hue } from "./tint";
 import { cleanTitle, isRtl, layoutTitle, titleCovered } from "./title";
-
 
 export type CoverInput = {
   title: string;
   /** Album art in order of importance: image URLs on Spotify's CDN, or image bytes. The first 8 are used. */
   covers: (string | Uint8Array)[];
-  /** `field` needs 2 covers that load; with fewer the cover is drawn as `rings`. */
+  /** `field` needs 2 covers that load; with fewer the cover is drawn as `rings`. The other styles use no art. */
   style: CoverStyle;
+  /** Fixed tones instead of tones taken from the covers: `lead` for the mid tone, `second` for the dark tone. */
+  colours?: { lead: Hue; second: Hue };
   fetchFn?: typeof fetch;
 };
+
+const ABSTRACT_FIELDS: Record<AbstractStyle, () => Field> = { rings: ringsField, orb: orbField, waves: wavesField, rays: raysField, tiles: tilesField };
 
 export type Cover = {
   jpeg: Uint8Array;
@@ -122,14 +125,14 @@ function paintTitle(ctx: SKRSContext2D, text: string) {
   lines.forEach((line, i) => ctx.fillText(line, rtl ? COVER_SIZE - MARGIN : MARGIN, TITLE_BOTTOM - step * (lines.length - i) + ascent));
 }
 
-/** Draws a 640 x 640 playlist cover and encodes it as a JPEG small enough for Spotify's upload. Needs no network for `rings` or for covers passed as bytes. */
+/** Draws a 640 x 640 playlist cover and encodes it as a JPEG small enough for Spotify's upload. Needs no network for the abstract styles or for covers passed as bytes. */
 export async function makeCover(input: CoverInput): Promise<Cover> {
   const sources = input.covers.slice(0, MAX_COVERS);
   const images = (await Promise.all(sources.map((s) => decode(s, input.fetchFn ?? fetch)))).filter((i): i is Image => i !== null);
-  const style: CoverStyle = input.style === "field" && images.length >= 2 ? "field" : "rings";
+  const style: CoverStyle = input.style !== "field" ? input.style : images.length >= 2 ? "field" : "rings";
   const hues = images.map((i) => dominantHue(pixels(i)));
-  const [lead, second] = hues.length ? [hues[0]!, hues[Math.floor(hues.length / 2)]!] : [DEFAULT_HUE, DEFAULT_HUE];
-  const field = style === "field" ? coverField(images.map(luminance)) : ringsField();
+  const [lead, second] = input.colours ? [input.colours.lead, input.colours.second] : hues.length ? [hues[0]!, hues[Math.floor(hues.length / 2)]!] : [DEFAULT_HUE, DEFAULT_HUE];
+  const field = style === "field" ? coverField(images.map(luminance)) : ABSTRACT_FIELDS[style]();
   const stops = colourStops(lead, second);
   const title = cleanTitle(input.title);
   const titleDrawn = titleCovered(title, (cp) => coverFonts().has(cp));

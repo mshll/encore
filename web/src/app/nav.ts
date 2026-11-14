@@ -69,6 +69,7 @@ export const PATTERN_TABS = [
 export const FOR_YOU_TABS = [
   { path: "/for-you/picks", label: "Picks" },
   { path: "/for-you/releases", label: "Releases" },
+  { path: "/for-you/playlists", label: "Playlists" },
 ];
 
 export const SETTINGS_TABS = [

@@ -5,7 +5,7 @@ import { picks } from "../src/db/schema";
 import { blockedSets, listBlocks } from "../src/library/blocks";
 import { CandidateVerifier } from "../src/library/candidates";
 import { isHit, pickStats, refreshPickLibraryState, refreshPickOutcomes } from "../src/picks/outcomes";
-import { generatePicks, PicksExistError, syncPicksPlaylist, validatePicks, weekOf } from "../src/picks/service";
+import { generatePicks, PicksExistError, validatePicks, weekOf } from "../src/picks/service";
 import { setPickState } from "../src/picks/state";
 import { songKey } from "../src/plays/song";
 import { play, seed, track, TZ, uri } from "./helpers";
@@ -228,27 +228,6 @@ describe("pick outcomes", () => {
     const rows = db.select({ uri: picks.uri, inLibrary: picks.inLibrary }).from(picks).all();
     expect(new URLSearchParams(spotifyCalls[0]!.path.split("?")[1]).get("uris")).toBe(rows.map((r) => r.uri).join(","));
     for (const r of rows) expect(r.inLibrary).toBe(r.uri.endsWith("1"));
-  });
-});
-
-describe("picks playlist mirror", () => {
-  test("creates one private playlist, then updates it in place without never picks", async () => {
-    const { ctx, db, spotifyCalls } = featureCtx(null);
-    const week = weekOf(ctx.now(), TZ);
-    const keep = insertPick(db, { name: "Keep", artist: "K", week });
-    const drop = insertPick(db, { name: "Drop", artist: "D", week });
-    await syncPicksPlaylist(db, ctx.spotify, TZ, ctx.now());
-    setPickState(db, drop.id, "never", ctx.now());
-    await syncPicksPlaylist(db, ctx.spotify, TZ, ctx.now());
-    expect(spotifyCalls.map((c) => `${c.method} ${c.path}`)).toEqual([
-      "POST /v1/me/playlists",
-      "PUT /v1/playlists/pl1/items",
-      "PUT /v1/playlists/pl1",
-      "PUT /v1/playlists/pl1/items",
-    ]);
-    expect(spotifyCalls[0]!.body).toMatchObject({ public: false });
-    expect(spotifyCalls[1]!.body).toEqual({ uris: [keep.uri, drop.uri] });
-    expect(spotifyCalls[3]!.body).toEqual({ uris: [keep.uri] });
   });
 });
 

@@ -138,7 +138,7 @@ Artist rows (top artists, eras, skips, search, the artist page, the overview's `
   "import": { "lastImportAt": "...", "result": { "...": "ImportResult, see POST /api/import" } },
   "tags": { "songs": 5055, "tagged": 0, "coverage": 0 },
   "plays": { "plays": 39821, "music": 39338, "api": 10, "live": 152 },
-  "live": { "watch": { "lastRunAt": "...", "...": "same shape as poll" }, "radar": { "...": "..." }, "library": { "...": "..." } },
+  "live": { "watch": { "lastRunAt": "...", "...": "same shape as poll" }, "radar": { "...": "..." }, "library": { "...": "..." }, "living": { "...": "..." } },
   "integrations": { "discord": false, "mcp": true },
   "llm": {
     "configured": true, "model": "claude-opus-5-5", "month": "2026-11",
@@ -164,7 +164,7 @@ Artist rows (top artists, eras, skips, search, the artist page, the overview's `
 - `enrichment.artists`: artists learned from enriched or polled tracks; `fetched` had their `GET /artists/{id}` lookup.
 - `tags`: `songs` known (distinct song keys in `tracks`), `tagged` songs with tags, `coverage` = tagged / songs (0..1, not rounded).
 - `plays`: stored rows: all kinds, music only, and rows by source `api` and `live` (the rest are `export`).
-- `live`: the `watch`, `radar` and `library` jobs, same shape as `poll`. `watch.lastResult` is `{ "current": Observation | null, "inserted", "replacedApi", "coveredByExport", "playing" }` for the last tick, or `{ "current", "skipped": "spotify_not_connected" | "spotify_paused", "until"? }`.
+- `live`: the `watch`, `radar`, `library` and `living` jobs, same shape as `poll`. `watch.lastResult` is `{ "current": Observation | null, "inserted", "replacedApi", "coveredByExport", "playing" }` for the last tick, or `{ "current", "skipped": "spotify_not_connected" | "spotify_paused", "until"? }`.
 - `llm`: Claude spend for the current local month against `MONTHLY_BUDGET_USD`. `exhausted: true` means every LLM endpoint returns `402` and scheduled LLM jobs skip until the next month. `configured: false` means no Claude key (`claudeApiKey` setting or `ANTHROPIC_API_KEY`). `schedule`: when the weekly picks and digest jobs run (ISO weekday 1-7 and local hour, from `PICKS_WEEKDAY`/`PICKS_HOUR` and `DIGEST_WEEKDAY`/`DIGEST_HOUR`); `enabled` is `JOBS_ENABLED`. `byFeature` features: `sets`, `picks`, `ask`, `notes`, `digest`, `dj`. Job `lastResult` may be `{ "skipped": "not_due" | "budget_exceeded" | "llm_not_configured" | "spotify_not_connected" | "attempts_exhausted" }`. When Discord posting is configured, `picks` and `digest` results also carry `publish: { "posted": ["picks:2026-11-09"] }` or `publish: { "error": "..." }` (see Discord). `outcomes.lastResult` has set and pick outcome refresh counts and, once a day, `library` (pick library state).
 
 
@@ -242,7 +242,7 @@ Fields by group (env var in brackets; `*` = secret):
 | `spotify` | `spotifyClientId` [SPOTIFY_CLIENT_ID] |
 | `locale` | `timezone` [TIMEZONE], `homeCountry` [HOME_COUNTRY], `weekendDays` [WEEKEND_DAYS, e.g. `5,6`] |
 | `claude` | `claudeApiKey`* [ANTHROPIC_API_KEY], `claudeModel` [LLM_MODEL], `monthlyBudgetUsd` [MONTHLY_BUDGET_USD] |
-| `picks` | `picksPerWeek`, `picksFarOut`, `picksWeekday`, `picksHour`, `picksPlaylist` [PICKS_*] |
+| `picks` | `picksPerWeek`, `picksFarOut`, `picksWeekday`, `picksHour` [PICKS_*] |
 | `digest` | `digestWeekday`, `digestHour` [DIGEST_*] |
 | `dj` | `djReplanner`, `djReplanTimeoutSeconds`, `djSkipTrigger` [DJ_*] |
 | `discord` | `discordApplicationId`, `discordPublicKey`, `discordOwnerId`, `discordBotToken`*, `discordGuildId`, `discordChannelId` [DISCORD_*] |
@@ -740,6 +740,66 @@ Body `{ "ids"?: [release id] }`; without `ids`, marks every unseen new release. 
 
 For the weekly digest: `newReleasesSince(db, sinceMs)` in `src/radar/radar.ts` returns releases flagged new and first seen at or after `sinceMs`, seen or not.
 
+## Living playlists
+
+Five private playlists in the owner's Spotify account that encore keeps refilling. Each kind has one Spotify playlist for good: made the first time it is switched on, then always updated in place. Off by default. Switching off stops refreshes and leaves the playlist in Spotify; encore never deletes or unfollows it.
+
+| Kind | Name | Holds | Refresh | Mode |
+| --- | --- | --- | --- | --- |
+| `picks` | Weekly picks | The latest week of picks, without `never` picks | After a picks run, a pick state change, and every job tick | replace |
+| `forgotten` | Forgotten favourites | Songs with 10+ listens and none in 90 days (`stats/forgotten`), most listened first | Weekly (from Monday, local) | rolling, 10 per refresh |
+| `most-played` | Most played lately | Most listens in the last 28 local days, at least 2 | Daily (local) | replace |
+| `new-releases` | New from your artists | The first 3 tracks of each new release (radar) from the last 90 days, newest first | Every job tick | rolling |
+| `this-month` | This month in past years | Most listens in this calendar month of earlier years | Monthly (the 1st, local) | replace |
+
+- At most 50 songs, distinct by song key. Replace rebuilds the list. Rolling puts new songs on top and drops the oldest past 50; it fills an empty playlist to 50, then adds at most its per-refresh count, and never adds a song that playlist already had.
+- A refresh writes nothing when the list is unchanged, when the new list is empty (the playlist keeps its songs), or while the playlist is the playback context the player watcher last saw (`deferred`, retried on the next tick). A skip never removes a song or moves it down: rankings count listens, and rolling lists drop songs only at the cap.
+- Spotify calls: making the playlist is 3 (create, items, cover); a change is 2 (details, items); no change is 0. The cover is uploaded once, and again only when its drawing changes. New from your artists also costs one album tracks call (`GET /albums/{id}/tracks?limit=3`) per new release, once, at most 3 per tick. No single track or artist lookups.
+- The Spotify description says what the playlist holds and the local date it last changed: `Your most played songs of the last four weeks. Updated 14 Nov 2026 by encore.`
+- A playlist deleted in Spotify is found without a call of its own: a write that answers 404, or a library pass (`library` job) that lists the owner's playlists without it. It is switched off with `removedAt` set; switching on again makes a new playlist.
+- The `living` job ticks every 10 minutes (`JOBS_DISABLED=living` turns it off) and refreshes the kinds that are due. A failed refresh is retried after an hour.
+- Writing needs the `playlist-modify-private` scope, the cover `ugc-image-upload`.
+
+Living playlist shape:
+
+```json
+{
+  "kind": "most-played", "name": "Most played lately", "about": "Your most played songs of the last four weeks",
+  "mode": "replace", "schedule": "daily", "cap": 50, "enabled": true,
+  "playlist": { "id": "...", "url": "https://open.spotify.com/playlist/..." } | null,
+  "removedAt": null, "coverUrl": "/api/living/most-played/cover?v=...",
+  "status": "refreshed" | "unchanged" | "empty" | "deferred" | "failed" | "removed" | null, "error": null,
+  "attemptedAt": "...", "checkedAt": "...", "changedAt": "...", "nextRefresh": "2026-11-15" | null,
+  "count": 50, "available": 50
+}
+```
+
+`schedule` is `daily`, `weekly`, `monthly`, `picks` or `releases`. `checkedAt` is the last refresh that reached a result (refreshed, unchanged, empty); `changedAt` the last one that changed the playlist. `nextRefresh` is the local day of the next scheduled refresh, `null` while off and for `picks` and `releases`. `count` is the number of songs encore last put in the playlist; `available` what a refresh now would put in it.
+
+### `GET /api/living`
+
+`{ "spotify": { "connected": true, "canWrite": true, "canUploadCovers": true }, "items": [LivingPlaylist] }`, in the order of the table above.
+
+### `GET /api/living/:kind`
+
+`LivingPlaylist` plus `items` (the songs in it now, in order, as `{ uri, songKey, name, artist, album, albumArtUrl, artistImageUrl }`), `preview` (while `items` is empty: what a refresh would put in it) and `history` (the last 30 changes, newest first: `{ id, at, trigger: "enable" | "schedule" | "manual" | "picks", count, added: [Song], removed: [Song], current }`; `current` is false for changes to a playlist since deleted in Spotify).
+
+### `GET /api/living/:kind/refreshes/:id`
+
+The full contents a change left: `{ id, at, trigger, items, added, removed }`. `404` when unknown.
+
+### `GET /api/living/:kind/cover`
+
+The fixed cover JPEG, the same image the playlist has in Spotify. Cached for good at the versioned `coverUrl`.
+
+### `PATCH /api/living/:kind`
+
+Body `{ "enabled": boolean }`. Switching on makes the playlist when there is none (or it was deleted) and fills it. `{ "outcome": { "kind", "status": LivingStatus | "off", "calls": 3, "cover"?: "uploaded" | "unchanged" | "missing_scope" | "failed" }, "playlist": LivingPlaylist with items }`. `409 spotify_not_connected`, `409 missing_scope` (`details.scope`). A Spotify failure is not an error response: `outcome.status` is `failed` and `playlist.error` says why.
+
+### `POST /api/living/:kind/refresh`
+
+Refresh now, with the same rules and response as switching on. `outcome.status` is `off` when the kind is off.
+
 ## Cleanup
 
 Proposals only; nothing is removed until the owner applies a selected batch here. The `library` job syncs saved songs (`GET /me/tracks`) and the items of playlists the owner owns (`GET /me/playlists`, then `GET /playlists/{id}/items` for playlists whose snapshot changed), one page call every `LIBRARY_PAGE_SECONDS` (20), a full pass every `LIBRARY_SYNC_HOURS` (24). The cursor is stored, so a restart resumes the pass. App-owned playlists are skipped. Proposals are rebuilt after each pass; dismissed and applied ones keep their status.
@@ -981,7 +1041,7 @@ Pick shape:
 
 #### `GET /api/picks`
 
-Param `week` (`YYYY-MM-DD`, the Monday; default this week). `{ "week": "2026-11-09", "picks": [Pick], "stats": { "settled": 10, "played": 6, "hits": 3, "hitRate": 0.3 }, "playlist": { "playlistId": "...", "url": "..." } | null }`. `stats` covers picks older than 7 days. `playlist` is set when `PICKS_PLAYLIST=true` and the mirror exists.
+Param `week` (`YYYY-MM-DD`, the Monday; default this week). `{ "week": "2026-11-09", "picks": [Pick], "stats": { "settled": 10, "played": 6, "hits": 3, "hitRate": 0.3 }, "playlist": { "playlistId": "...", "url": "..." } | null }`. `stats` covers picks older than 7 days. `playlist` is the Weekly picks living playlist (see Living playlists) while it exists in Spotify, else `null`.
 
 #### `GET /api/picks/weeks`
 
@@ -993,7 +1053,7 @@ Generates this week's picks now. `201 { "week", "picks": [Pick], "stats" }`. `40
 
 #### `PATCH /api/picks/:id`
 
-`{ "state": "saved" | "not_now" | "never" | "new" }`. `200 Pick`.
+`{ "state": "saved" | "not_now" | "never" | "new" }`. `200 Pick`. When Weekly picks is on, it is refreshed afterwards (no call when its contents stay the same).
 
 ### Blocks
 

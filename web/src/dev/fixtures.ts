@@ -30,6 +30,16 @@
     ?history=failed   applying fails: the database snapshot could not be written
     ?history=env      HISTORY_START sets 2024-01-01 and 269 plays before it are still stored
     History fixtures answer GET and POST /api/settings/history-start and GET /api/settings themselves: nothing is written.
+    ?living=connected  For you, Playlists: Spotify connected with every permission, real playlists from the database
+    ?living=first      every playlist off (first use)
+    ?living=fresh      Most played lately is on but not in Spotify yet
+    ?living=deferred   Most played lately waits because it is playing
+    ?living=failed     Most played lately: the last refresh failed
+    ?living=empty      Most played lately has nothing new; This month in past years has nothing at all
+    ?living=removed    Forgotten favourites was deleted in Spotify
+    ?living=scope      Spotify connected without permission to change playlists
+    ?living=refreshing switching on or off and Refresh now never answer
+    Living fixtures answer PATCH /api/living/:kind and POST /api/living/:kind/refresh themselves: nothing is written, no Spotify call.
 
   The choice sticks for the tab (sessionStorage) so in-app navigation keeps it; ?fixture=off clears it.
 */
@@ -37,7 +47,7 @@
 type Json = Record<string, unknown>;
 
 const params = new URLSearchParams(location.search);
-for (const key of ["fixture", "player", "run", "dj", "settings", "history"]) {
+for (const key of ["fixture", "player", "run", "dj", "settings", "history", "living"]) {
   const value = params.get(key);
   if (value === "off") sessionStorage.removeItem(`encore-${key}`);
   else if (value) sessionStorage.setItem(`encore-${key}`, value);
@@ -48,6 +58,7 @@ const run = sessionStorage.getItem("encore-run");
 const dj = sessionStorage.getItem("encore-dj");
 const settingsFixture = sessionStorage.getItem("encore-settings");
 const historyFixture = sessionStorage.getItem("encore-history");
+const livingFixture = sessionStorage.getItem("encore-living");
 
 const LONG_ARTIST = "Bùi Thị Xuân Hương and the Extraordinarily Long-Named Orchestra of Hồ Chí Minh City";
 const LONG_SONG = "Somewhere Only We Know (Live at the Royal Albert Hall, 14 February 2004) [2024 Remaster]";
@@ -197,6 +208,12 @@ function worsen(path: string, body: Json): unknown {
     return { ...body, picks, stats: { settled: 123456, played: 98765, hits: 54321, hitRate: 0.44 } };
   }
   if (path === "/api/picks/weeks") return { items: (body.items as Json[]).concat({ week: "2026-11-02", picks: 1, played: 1 }) };
+  if (path === "/api/living") return { ...body, items: (body.items as Json[]).map((p, i) => (i === 1 ? { ...p, count: 1, available: 1 } : p)) };
+  if (/^\/api\/living\/[a-z-]+$/.test(path)) {
+    const items = (body.items as Json[]).slice(0, 2).map((s, i) => (i === 0 ? { ...s, name: LONG_SONG, artist: LONG_ARTIST, album: LONG_ALBUM, albumArtUrl: BROKEN_ART } : s));
+    const history = (body.history as Json[]).slice(0, 1).map((h) => ({ ...h, count: 1, added: Array.from({ length: 1284 }, () => ({})), removed: Array.from({ length: 999 }, () => ({})) }));
+    return { ...body, count: items.length, items, history };
+  }
   if (path === "/api/radar") {
     const items: Json[] = (body.items as Json[]).map((r) => ({ ...r, name: LONG_SONG, artist: LONG_ARTIST, imageUrl: BROKEN_ART, totalTracks: 1234 }));
     return {
@@ -465,6 +482,58 @@ async function runFixture(path: string, method: string, signal: AbortSignal | nu
   return sse([opened, ...stepFrames(path, STEPS.length), ...text, ["done", await doneBody(path), 600]], signal, false);
 }
 
+const LIVING_TARGET: Record<string, string> = { fresh: "most-played", deferred: "most-played", failed: "most-played", empty: "most-played", removed: "forgotten" };
+
+/** One living playlist bent into the fixture's state. Detail fields (items, preview, history) are bent when present. */
+function bendLiving(p: Json, state: string): Json {
+  const kind = p.kind as string;
+  const detail = "items" in p;
+  if (state === "first") return { ...p, enabled: false, playlist: null, status: null, count: 0, changedAt: null, checkedAt: null, nextRefresh: null, ...(detail ? { preview: (p.items as Json[]).length ? p.items : p.preview, items: [], history: [] } : {}) };
+  if (state === "empty" && kind === "this-month")
+    return { ...p, enabled: true, status: "empty", count: 0, available: 0, ...(detail ? { items: [], preview: [], history: [] } : {}) };
+  if (LIVING_TARGET[state] !== kind) return p;
+  if (state === "fresh") return { ...p, enabled: true, playlist: null, status: null, count: 0, changedAt: null, checkedAt: null, ...(detail ? { preview: p.items, items: [], history: [] } : {}) };
+  if (state === "deferred") return { ...p, status: "deferred" };
+  if (state === "failed") return { ...p, status: "failed", error: "Spotify API 502: Bad gateway", attemptedAt: new Date().toISOString() };
+  if (state === "empty") return { ...p, status: "empty", available: 0 };
+  if (state === "removed")
+    return {
+      ...p,
+      enabled: false,
+      playlist: null,
+      status: "removed",
+      removedAt: "2026-11-12T08:30:00.000Z",
+      nextRefresh: null,
+      count: 0,
+      changedAt: null,
+      ...(detail ? { preview: (p.items as Json[]).length ? p.items : p.preview, items: [], history: (p.history as Json[]).map((h) => ({ ...h, current: false })) } : {}),
+    };
+  return p;
+}
+
+const LIVING_OUTCOME: Record<string, string> = { deferred: "deferred", failed: "failed", empty: "unchanged" };
+
+async function livingAnswer(path: string, method: string, init: RequestInit | undefined): Promise<Response | null> {
+  if (!livingFixture || !path.startsWith("/api/living")) return null;
+  const state = livingFixture;
+  const spotify = { connected: true, canWrite: state !== "scope", canUploadCovers: state !== "scope" };
+  const write = path.match(/^\/api\/living\/([a-z-]+)(\/refresh)?$/);
+  if (write && method !== "GET") {
+    if (state === "refreshing") return new Promise<Response>(() => {});
+    const body = (await (await realFetch(`/api/living/${write[1]}`)).json()) as Json;
+    const enabled = write[2] ? true : (JSON.parse(String(init?.body ?? "{}")) as { enabled?: boolean }).enabled ?? true;
+    const playlist = { ...bendLiving(body, state), enabled };
+    return json({ outcome: { kind: write[1], status: enabled ? (LIVING_OUTCOME[state] ?? "refreshed") : "off", calls: 2 }, playlist });
+  }
+  if (method !== "GET" || path.endsWith("/cover") || path.includes("/refreshes/")) return null;
+  if (fixture) return null;
+  const res = await realFetch(path);
+  if (!res.ok) return res;
+  const body = (await res.json()) as Json;
+  if (path === "/api/living") return json({ spotify, items: (body.items as Json[]).map((p) => bendLiving(p, state)) });
+  return json(bendLiving(body, state));
+}
+
 window.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
   const url = new URL(typeof input === "string" ? input : input instanceof URL ? input.href : input.url, location.origin);
   const path = url.pathname;
@@ -494,6 +563,10 @@ window.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
   }
   if (historyFixture) {
     const answer = await historyFixtureAnswer(path, method, init);
+    if (answer) return answer;
+  }
+  if (livingFixture) {
+    const answer = await livingAnswer(path, method, init);
     if (answer) return answer;
   }
   if (!fixture || method !== "GET") return realFetch(input, init);

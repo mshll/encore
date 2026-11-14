@@ -9,6 +9,9 @@ export type SpotifyTrack = {
   album: { id: string; name: string; release_date?: string; images?: SpotifyImage[] };
 };
 
+/** A track inside an album listing: no album object. */
+export type SimplifiedTrack = { id: string; uri: string; name: string; track_number: number; artists: { id: string; name: string }[] };
+
 export type RecentlyPlayed = {
   items: { track: SpotifyTrack; played_at: string; context: { uri: string; type: string } | null }[];
 };

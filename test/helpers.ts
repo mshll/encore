@@ -92,7 +92,8 @@ export type FetchCall = { url: string; method: string; body: unknown };
 export function routeFetch(routes: (call: FetchCall) => Response | Promise<Response> | undefined) {
   const calls: FetchCall[] = [];
   const fn = (async (input: string | URL | Request, init?: RequestInit) => {
-    const call = { url: String(input), method: init?.method ?? "GET", body: typeof init?.body === "string" ? JSON.parse(init.body) : undefined };
+    const json = (init?.headers as Record<string, string> | undefined)?.["content-type"] === "application/json";
+    const call = { url: String(input), method: init?.method ?? "GET", body: typeof init?.body === "string" ? (json ? JSON.parse(init.body) : init.body) : undefined };
     calls.push(call);
     const res = await routes(call);
     if (!res) throw new Error(`Unexpected fetch ${call.method} ${call.url}`);
