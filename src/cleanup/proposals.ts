@@ -10,7 +10,11 @@ export const CLEANUP_RULES = {
   playlistSkipRateAtLeast: 0.9,
   dislikeMinPlays: 8,
   dislikeMinContextPlays: 5,
+  /** listens / plays at or below this. A skip flag after minutes of listening is not a dislike (Sinnerman: 5 listens of 8 plays, all flagged skipped). */
+  dislikeMaxListenRatio: 0.2,
 };
+
+export const listenRatio = (stats: SongRow | undefined) => (stats && stats.plays > 0 ? stats.listens / stats.plays : null);
 
 export type Proposal = { key: string; kind: CleanupKind; playlistId: string | null; uri: string; evidence: Record<string, unknown> };
 
@@ -52,7 +56,9 @@ export function computeProposals(db: Db, now: number): Proposal[] {
     const st = stats.get(s.song_key);
     const evidence = { ...evidenceFor(s, st), savedAt: iso(s.added_at) };
     if (!st && s.added_at < graceCutoff) proposals.push({ key: `saved_never_played:${s.uri}`, kind: "saved_never_played", playlistId: null, uri: s.uri, evidence });
-    if (dislikes.has(s.song_key)) proposals.push({ key: `saved_dislike:${s.uri}`, kind: "saved_dislike", playlistId: null, uri: s.uri, evidence: { ...evidence, class: "dislike" } });
+    const ratio = listenRatio(st);
+    if (dislikes.has(s.song_key) && ratio !== null && ratio <= CLEANUP_RULES.dislikeMaxListenRatio)
+      proposals.push({ key: `saved_dislike:${s.uri}`, kind: "saved_dislike", playlistId: null, uri: s.uri, evidence: { ...evidence, class: "dislike", listenRatio: rate(st!.listens, st!.plays) } });
   }
 
   const items = db.all<SongMeta & { playlist_id: string; playlist_name: string; position: number }>(sql`

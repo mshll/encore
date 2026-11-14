@@ -6,7 +6,7 @@ import { ApiError, jsonBody, parse } from "../errors";
 
 const iso = (ts: number | null) => (ts === null ? null : new Date(ts).toISOString());
 
-function view(s: DjSession | undefined) {
+export function djSessionView(s: DjSession | undefined) {
   if (!s) return null;
   return {
     id: s.id,
@@ -27,12 +27,12 @@ function view(s: DjSession | undefined) {
 export const djRoutes = new Hono<Env>()
   .get("/", (c) => {
     const { dj } = c.var.deps.services;
-    return c.json({ session: view(dj.active() ?? dj.latest()) });
+    return c.json({ session: djSessionView(dj.active() ?? dj.latest()) });
   })
   .post("/start", async (c) => {
     const body = parse(z.object({ uris: z.array(z.string()).min(1).max(MAX_SET_SIZE), deviceId: z.string().min(1).max(100).optional() }).strict(), await jsonBody(c));
     try {
-      return c.json({ session: view(await c.var.deps.services.dj.start(body.uris, body.deviceId)) });
+      return c.json({ session: djSessionView(await c.var.deps.services.dj.start(body.uris, body.deviceId)) });
     } catch (error) {
       if (error instanceof InvalidSetError) throw new ApiError(400, "invalid_set", error.message);
       throw error;
@@ -41,5 +41,5 @@ export const djRoutes = new Hono<Env>()
   .post("/stop", (c) => {
     const stopped = c.var.deps.services.dj.stop();
     if (!stopped) throw new ApiError(404, "not_found", "No active session");
-    return c.json({ session: view(stopped) });
+    return c.json({ session: djSessionView(stopped) });
   });

@@ -2,8 +2,9 @@ import type { Config } from "../config";
 import type { Db } from "../db/client";
 import { getJobState, setJobState } from "../jobs/state";
 import type { SpotifyAuth } from "./auth";
+import { SpotifyPacer } from "./pacer";
 import { SpotifyApiError, SpotifyBlockedError, type BlockReason } from "./errors";
-import type { RecentlyPlayed, SpotifyArtist, SpotifyMe, SpotifyTrack } from "./types";
+import type { RecentlyPlayed, SpotifyArtist, SpotifyMe, SpotifyPlaylist, SpotifySearch, SpotifyTrack } from "./types";
 
 const apiUrl = "https://api.spotify.com/v1";
 const oembedUrl = "https://open.spotify.com/oembed";
@@ -15,9 +16,10 @@ export class SpotifyClient {
   constructor(
     private readonly db: Db,
     private readonly auth: SpotifyAuth,
-    private readonly config: Pick<Config, "quotaBackoffMs">,
+    private readonly config: Pick<Config, "quotaBackoffMs" | "spotifyIntervalMs">,
     private readonly fetchFn: typeof fetch = fetch,
     private readonly now: () => number = Date.now,
+    readonly pacer: SpotifyPacer = new SpotifyPacer(config.spotifyIntervalMs, now),
   ) {}
 
   gate(): SpotifyGate | null {
@@ -47,8 +49,28 @@ export class SpotifyClient {
     return body.thumbnail_url ?? null;
   }
 
+  searchTracks(query: string, limit: number) {
+    return this.get<SpotifySearch>(`/search?${new URLSearchParams({ q: query, type: "track", limit: String(limit) })}`);
+  }
+
+  createPlaylist(input: { name: string; description: string; public: boolean }) {
+    return this.request<SpotifyPlaylist>("POST", "/me/playlists", input);
+  }
+
+  updatePlaylistDetails(id: string, input: { name: string; description: string }) {
+    return this.request<void>("PUT", `/playlists/${encodeURIComponent(id)}`, input);
+  }
+
+  replacePlaylistItems(id: string, uris: string[]) {
+    return this.request<{ snapshot_id: string }>("PUT", `/playlists/${encodeURIComponent(id)}/items`, { uris });
+  }
+
+  libraryContains(uris: string[]) {
+    return this.get<boolean[]>(`/me/library/contains?${new URLSearchParams({ uris: uris.join(",") })}`);
+  }
+
   request<T>(method: "GET" | "POST" | "PUT" | "DELETE", path: string, body?: unknown): Promise<T> {
-    return this.call<T>(async (refresh) => this.send(path, await this.auth.accessToken(refresh), method, body), true);
+    return this.pacer.run(() => this.call<T>(async (refresh) => this.send(path, await this.auth.accessToken(refresh), method, body), true));
   }
 
   private get<T>(path: string): Promise<T> {

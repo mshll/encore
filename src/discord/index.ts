@@ -1,4 +1,5 @@
 import type { DiscordConfig } from "../config";
+import { registerAssistantCommands } from "./commands/assistant";
 import { registerCoreCommands } from "./commands/core";
 import { InteractionHandler } from "./interactions";
 import { DiscordRegistry, type DiscordContext } from "./registry";
@@ -7,7 +8,7 @@ import { DiscordRest } from "./rest";
 export type Discord = { config: DiscordConfig; registry: DiscordRegistry; rest: DiscordRest; interactions: InteractionHandler };
 
 export function createDiscord(config: DiscordConfig, ctx: DiscordContext, fetchFn: typeof fetch = fetch): Discord {
-  const registry = registerCoreCommands(new DiscordRegistry());
+  const registry = registerAssistantCommands(registerCoreCommands(new DiscordRegistry()));
   const rest = new DiscordRest(config.applicationId, config.botToken, fetchFn);
   return { config, registry, rest, interactions: new InteractionHandler(registry, ctx, config, rest) };
 }

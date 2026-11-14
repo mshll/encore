@@ -6,6 +6,7 @@ import type { Deps, Env } from "./context";
 import { ApiError, errorResponse } from "./errors";
 import { requireSession, requireSessionOrAdmin } from "./middleware";
 import { authRoutes } from "./routes/auth";
+import { askRoutes, blockRoutes, digestRoutes, llmRoutes, noteRoutes, pickRoutes, setRoutes } from "./routes/assistant";
 import { cleanupRoutes } from "./routes/cleanup";
 import { discordRoutes } from "./routes/discord";
 import { djRoutes } from "./routes/dj";
@@ -35,15 +36,23 @@ export function createApp(deps: Deps) {
 
   app.use("/api/tags/*", requireSessionOrAdmin);
   app.route("/api/tags", tagRoutes);
+  app.use("/api/import", requireSessionOrAdmin);
+  app.route("/api/import", importRoutes);
 
   app.use("/api/*", requireSession);
   app.route("/api/status", statusRoutes);
   app.route("/api/spotify", spotifyRoutes);
-  app.route("/api/import", importRoutes);
   app.route("/api/stats", statsRoutes);
   app.route("/api/entities", entityRoutes);
   app.route("/api/history", historyRoutes);
   app.route("/api/search", searchRoutes);
+  app.route("/api/sets", setRoutes);
+  app.route("/api/picks", pickRoutes);
+  app.route("/api/blocks", blockRoutes);
+  app.route("/api/ask", askRoutes);
+  app.route("/api/notes", noteRoutes);
+  app.route("/api/digests", digestRoutes);
+  app.route("/api/llm", llmRoutes);
   app.route("/api/player", playerRoutes);
   app.route("/api/tracks", trackRoutes);
   app.route("/api/dj", djRoutes);

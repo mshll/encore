@@ -22,6 +22,13 @@
       "when": 1794624300000,
       "tag": "0002_live_radar_cleanup",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1794626342686,
+      "tag": "0003_assistant",
+      "breakpoints": true
     }
   ]
 }

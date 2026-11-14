@@ -138,10 +138,10 @@ describe("discord commands", () => {
 
   test("the registry rejects duplicate commands so other modules add their own", () => {
     const { discord } = setup();
-    expect(discord.registry.definitions().map((d) => d.name)).toEqual(["now", "play", "queue", "skip", "stats", "top", "onthisday", "forgotten", "releases", "cleanup"]);
-    expect(() => discord.registry.addCommand({ definition: { name: "now", description: "x" }, defer: false, handle: () => ({}) })).toThrow();
-    discord.registry.addCommand({ definition: { name: "picks", description: "Weekly picks" }, defer: false, handle: () => ({ content: "ok" }) });
-    expect(discord.registry.command("picks")).toBeDefined();
+    expect(discord.registry.definitions().map((d) => d.name)).toEqual(["now", "play", "queue", "skip", "stats", "top", "onthisday", "forgotten", "releases", "cleanup", "set", "picks", "ask"]);
+    expect(() => discord.registry.addCommand({ definition: { name: "picks", description: "x" }, defer: false, handle: () => ({}) })).toThrow();
+    discord.registry.addCommand({ definition: { name: "notes", description: "Notes" }, defer: false, handle: () => ({ content: "ok" }) });
+    expect(discord.registry.command("notes")).toBeDefined();
   });
 
   test("names are escaped and truncated", () => {

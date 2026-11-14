@@ -12,6 +12,7 @@
     "test": "bun test"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^1.8.0",
     "@modelcontextprotocol/server": "^2.4.0",
     "@simplewebauthn/server": "^14.1.0",
     "drizzle-orm": "^0.45.4",

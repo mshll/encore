@@ -244,3 +244,5 @@ export const cleanupBatches = sqliteTable("cleanup_batches", {
   appliedAt: integer("applied_at").notNull(),
   undoneAt: integer("undone_at"),
 });
+
+export * from "./assistantSchema";
