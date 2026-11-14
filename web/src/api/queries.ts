@@ -10,6 +10,7 @@ const getOrNull = <T>(path: string, query: Record<string, string>) =>
   });
 import type {
   AskThread,
+  Devices,
   AskTurn,
   Block,
   Digest,
@@ -39,6 +40,7 @@ import type {
   MomentClass,
   OnThisDay,
   Overview,
+  PendingTags,
   Period,
   SearchResult,
   Session,
@@ -92,6 +94,11 @@ export const useForgotten = (days: number) =>
 export const useOnThisDay = () => useQuery({ queryKey: ["on-this-day"], queryFn: () => get<OnThisDay>("/api/stats/on-this-day", { limit: 3 }) });
 
 export const useTrips = (range: Range) => useQuery(ranged<Trips>("/api/stats/trips", range, { topTracks: 5 }));
+
+export const useDevices = (range: Range) => useQuery(ranged<Devices>("/api/stats/devices", range, { period: "year" }));
+
+/** Only the count is read: how many played songs have no tags yet. */
+export const usePendingTags = () => useQuery({ queryKey: ["tags", "pending"], queryFn: () => get<PendingTags>("/api/tags/pending", { limit: 1 }) });
 
 export const useTagSeries = (kind: "genres" | "moods", range: Range, period: Period) =>
   useQuery(ranged<TagSeries>(`/api/stats/tags/${kind}`, range, { period }));

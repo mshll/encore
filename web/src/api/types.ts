@@ -295,6 +295,9 @@ export type Skips = {
   mostSkippedArtists: ArtistStats[];
   quickSkips: Song[];
   neverSkipped: Song[];
+  profile: SkipProfile;
+  /** Always 10: skipped plays by the share of the song played before the skip. */
+  positions: { start: number; end: number; skips: number }[];
 };
 
 export type ContextRef = { dimension: ContextDimension; value: string; plays: number; skips: number; skipRate: number };
@@ -326,6 +329,14 @@ export type Trip = {
 };
 
 export type Trips = { homeCountry: string | null; trips: Trip[] };
+
+export type Devices = {
+  period: Period;
+  totals: { device: Device; hours: number; plays: number; share: number | null }[];
+  series: { period: string; device: Device; hours: number; plays: number }[];
+};
+
+export type PendingTags = { items: { uri: string; name: string; artist: string; album: string | null; listens: number }[]; total: number; limit: number; offset: number };
 
 export type Energy = {
   coverage: { hoursTagged: number; hoursTotal: number; share: number | null };

@@ -48,7 +48,7 @@ function Figure({ item }: { item: StatItem<string> }) {
 
 /** A figure on its own: label, number, one line of context. */
 export function Stat({ item, className }: { item: StatItem<string>; className?: string }) {
-  return <div className={cx("flex min-w-0 flex-col gap-1", className)}>{<Figure item={item} />}</div>;
+  return <div className={cx("flex min-w-0 flex-col gap-0.5", className)}>{<Figure item={item} />}</div>;
 }
 
 /**
