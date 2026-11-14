@@ -128,7 +128,8 @@ export function fakeSpotifyFetch(catalog: FakeSpotifyTrack[]) {
   const fetchFn = (async (input: string | URL | Request, init?: RequestInit) => {
     const url = new URL(String(input));
     const method = init?.method ?? "GET";
-    const body = init?.body ? JSON.parse(String(init.body)) : undefined;
+    const isJson = new Headers(init?.headers).get("content-type") === "application/json";
+    const body = init?.body ? (isJson ? JSON.parse(String(init.body)) : String(init.body)) : undefined;
     calls.push({ method, path: url.pathname + url.search, body });
     const json = (data: unknown, status = 200) => new Response(JSON.stringify(data), { status, headers: { "content-type": "application/json" } });
     if (url.pathname === "/v1/search") {
@@ -165,5 +166,5 @@ export function featureCtx(transport: LlmTransport | null, catalog: FakeSpotifyT
   const spotify = new SpotifyClient(db, auth, settings, fake.fetchFn, time.now);
   const llm = new Llm(db, settings, () => transport, time.now);
   const ctx: FeatureContext = { db, config, settings, llm, spotify, now: time.now };
-  return { ctx, db, spotifyCalls: fake.calls, auth, time };
+  return { ctx, db, spotifyCalls: fake.calls, fetchFn: fake.fetchFn, auth, time };
 }

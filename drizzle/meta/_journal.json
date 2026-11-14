@@ -57,6 +57,13 @@
       "when": 1794660201856,
       "tag": "0007_settings",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "6",
+      "when": 1794687304835,
+      "tag": "0008_set_covers",
+      "breakpoints": true
     }
   ]
 }

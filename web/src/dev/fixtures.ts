@@ -206,7 +206,7 @@ function worsen(path: string, body: Json): unknown {
     };
   }
   if (path === "/api/sets") {
-    const items = (body.items as Json[]).slice(0, 1).map((it) => ({ ...it, title: LONG_ALBUM, tracks: 123456, covers: [BROKEN_ART] }));
+    const items = (body.items as Json[]).slice(0, 1).map((it) => ({ ...it, title: LONG_ALBUM, tracks: 123456, coverUrl: BROKEN_ART }));
     return { ...body, total: 1, items };
   }
   if (/^\/api\/sets\/\d+$/.test(path)) {

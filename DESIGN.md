@@ -111,20 +111,20 @@ Positive change uses neutral text (see Delta), not a green: the accent is reserv
 
 ### Type
 
-Geist Variable (`font-sans`) for everything; Instrument Serif roman (`font-serif`) for page titles, figures and the wordmark only. Never italic.
+Geist Variable (`font-sans`) for everything; Bricolage Grotesque Variable at 600 (`font-display`) for page titles, figures and the wordmark only, with tight tracking (the type styles below carry weight and tracking). Never italic. Scripts the display face lacks (Arabic) fall back to the system face.
 
 | Style | Desktop | Phone | Use |
 | --- | --- | --- | --- |
-| `text-display` | 44/48 | 36/40 | Reserved (a recap headline) |
-| `text-title` | 34/40 serif | 30/36 | Page title (`PageHeader`) |
-| `text-figure` | 32/40 serif | 28/36 | Stat figures |
+| `text-display` | 40/44 display | 32/36 | Reserved (a recap headline) |
+| `text-title` | 30/36 display | 28/32 | Page title (`PageHeader`) |
+| `text-figure` | 28/36 display | 24/30 | Stat figures, always `tabular` |
 | `text-heading` | 15/20 medium | 17/24 | Section titles |
 | `text-body` | 14/20 | 16/24 | Reading text, sentences |
 | `text-body-sm` | 13/18 | 15/20 | Default UI text (body) |
 | `text-caption` | 12/16 | 14/20 | Secondary lines, axes, metadata |
 | `text-label` | 11/14 | 12/16 | Key caps, tab bar labels |
 
-Weights: 400, 500 (labels, titles), 600 (rare). Numbers that line up use `tabular`.
+Weights: 400, 500 (labels, titles), 600 (the display face; otherwise rare). Numbers that line up use `tabular` (tabular, lining figures).
 
 ### Space, size, radius, shadow, motion
 
@@ -145,7 +145,7 @@ Phosphor, regular weight; `fill` only for the active nav item and the playing st
 - **Page** (`ui/Page.tsx`). `Page width="data|read|form"` > `PageHeader title actions` (+ `TabNav` as children for a surface with tabs) > sections 40px apart (48 from `md`; `SECTIONS` for a body under a shared header). The header is a two-column grid from `md`: title left, actions bottom-aligned right; on a phone the actions stack under the title. The range picker sits in the header actions of every ranged surface. One primary or accent button per surface: once a step is done, its repeat action (Connect again, import again) is secondary.
 - **Patterns tab** (`surfaces/PatternsFrame.tsx`). Every Patterns tab renders through `PatternsFrame`: header, `TabNav`, range picker, first-use state. A tab only supplies its body.
 - **Stat strip driving one chart.** At most three figures; the selected one draws the chart below it. Never a row of identical metric boxes.
-- **Ranked list.** `RowList` of `TrackRow`/`ArtistRow`/`AlbumRow`: rank, art, title over subtitle, dither meter (when the list is 512px or wider), figure. Whole row is the link; songs get play and menu on hover, a context menu on right click. On desktop the actions overlay the figure (the figure hides while they show), so a row reserves no width for them; on a phone they sit in the row. Art: 32 in ranked lists and side columns (40 on a phone), 40 in rows with a second line of detail (skips, cleanup proposals, set songs, the queue), 48 in release and set lists, 64 for picks.
+- **Ranked list.** `RowList` of `TrackRow`/`ArtistRow`/`AlbumRow`: rank, art, title over subtitle, dither meter (when the list is 512px or wider), figure. Whole row is the link; songs get play and menu on hover, a context menu on right click. On desktop the actions overlay the figure (the figure hides while they show), so a row reserves no width for them; on a phone they sit in the row. Art: 32 in ranked lists and side columns (40 on a phone), 40 in rows with a second line of detail (skips, cleanup proposals, set songs, the queue), 48 in release and set lists, 64 for picks. A set's art is its generated cover (`coverUrl`, the image saved as the playlist cover), in the set list and the set page header.
 - **Log table.** Plays: virtualised rows grouped by day headings, columns that drop by width (`useColumns`), a phone row layout. Toolbar above, count line, then the table.
 - **Entity page.** `EntityHeader` (artwork, title, credits, first and last play, Play plus secondary actions, range picker as `aside`) > stat strip driving the listening chart > main plus side column (ranked songs; albums, releases, versions) > skips in context, full width.
 - **Main plus side column.** `SIDE_COLUMNS` (`lg:grid-cols-[minmax(0,1fr)_minmax(0,320px)]`): the main answer left, small related lists right.
@@ -199,7 +199,7 @@ All in `web/src/ui/` unless noted. Props listed are the ones that matter.
 | `AnimatedNumber` | `ui/AnimatedNumber` | `value` (formatted string) |
 | `RowList`, `Row`, `TrackRow`, `ArtistRow`, `AlbumRow`, `RowSkeleton` | `ui/Rows` | `rank`, `value`, `share` (0 to 1, draws the meter), `subtitle`, `style` (position in a virtualised list). Set `--rank-w` on the list for ranks past 99 |
 | `TableHead`, `useColumns`, `cellClass`, `Column` | `ui/Table` | Columns `{ id, label, width, align, from, srLabel }` drop below their `from` breakpoint |
-| `EntityHeader`, `EntityHeaderSkeleton` | `ui/EntityHeader` | `title`, `art`, `kind`, `credits`, `detail`, `actions`, `aside`. The head of an artist, album or song page; the page sets the document title |
+| `EntityHeader`, `EntityHeaderSkeleton` | `ui/EntityHeader` | `title`, `art`, `kind`, `credits`, `detail`, `actions`, `aside`. The head of an artist, album, song or set page; the page sets the document title |
 | `SearchField` | `ui/SearchField` | `value`, `onChange` (after a 250 ms pause), `label`, `placeholder` |
 | `Artwork` | `ui/Artwork` | `src`, `kind` artist, album, song, playlist, `box` 24 to 64 or fill. Kind sets the shape (artists round) and the placeholder glyph. Loading is the bare fill; missing and broken images show the kind's glyph (microphone, record, note, playlist) in `text-tertiary` on `bg-fill`. Decorative: the name sits beside it |
 | `SongMenu`, `SongContext` | `ui/SongMenu` | `song { uri, name, songKey?, artist? }` |
@@ -254,7 +254,7 @@ Apply the owner's ladder to every string: does it need to surface, does the labe
 | Hierarchy from type size, weight and spacing | Borders or boxes to fix weak hierarchy; cards inside cards |
 | One stat strip driving one chart | Rows of identical metric boxes |
 | Accent only for play, selection and chart emphasis | Green for "positive"; gradients, glows, glass |
-| Serif for titles and figures, roman | Italic accent words, all-caps tracked eyebrows, monospace labels, numbered section labels |
+| Display face for titles and figures, roman | Italic accent words, all-caps tracked eyebrows, monospace labels, numbered section labels |
 | Plain metadata in secondary text | Pills or badges for ordinary metadata |
 | Spacing between setting rows | Hairlines between setting rows |
 | One primary button per surface | A primary Continue beside an accent Connect again |

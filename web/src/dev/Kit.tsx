@@ -163,9 +163,9 @@ export function Kit() {
           </div>
         </Section>
         <Section title="Type">
-          <p className="font-serif text-display">Display 44</p>
-          <p className="font-serif text-title">Title 34</p>
-          <p className="font-serif text-figure tabular">1,284 figure</p>
+          <p className="font-display text-display">Display 40</p>
+          <p className="font-display text-title">Title 30</p>
+          <p className="font-display text-figure tabular">1,284 figure</p>
           <p className="text-heading font-medium">Heading 15</p>
           <p className="text-body">Body 14 for reading text.</p>
           <p>Body small 13, the default.</p>

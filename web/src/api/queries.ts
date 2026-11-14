@@ -203,7 +203,7 @@ export const useCleanupBatches = () => useQuery({ queryKey: ["cleanup", "batches
 export const useSets = () =>
   useQuery({
     queryKey: ["sets"],
-    queryFn: () => get<{ items: (SetSummary & { tracks: number; covers: string[] })[]; total: number }>("/api/sets", { limit: 100 }),
+    queryFn: () => get<{ items: (SetSummary & { tracks: number })[]; total: number }>("/api/sets", { limit: 100 }),
   });
 
 export const useSet = (id: number) => useQuery({ queryKey: ["sets", id], queryFn: () => get<SetDetail>(`/api/sets/${id}`), retry: false });

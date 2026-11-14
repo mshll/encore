@@ -7,6 +7,8 @@ import { saveSetPlaylist } from "../src/sets/playlist";
 import { createSet, diffSets, directionConflict, getSet, listSets, pinSetItem, refineSet, removeSetItem, SetItemNotFoundError, SetNotBuiltError } from "../src/sets/service";
 import { upsertTags } from "../src/tags/service";
 import { sql } from "drizzle-orm";
+import { sets, spotifyAuth } from "../src/db/schema";
+import { SpotifyClient } from "../src/spotify/client";
 import { play, seed, track, uri } from "./helpers";
 import { featureCtx, message, scripted, seedLibrary, text, toolCall, toolResults, toolUse, type FakeSpotifyTrack } from "./llmFakes";
 
@@ -229,7 +231,7 @@ describe("save to playlist", () => {
     const id = env.result.set.id;
     env.spotifyCalls.length = 0;
     const first = await saveSetPlaylist(env.db, env.ctx.spotify, id, env.ctx.now());
-    expect(first).toEqual({ playlistId: "pl1", playlistUrl: "https://open.spotify.com/playlist/pl1", tracks: 2 });
+    expect(first).toEqual({ playlistId: "pl1", playlistUrl: "https://open.spotify.com/playlist/pl1", tracks: 2, cover: { status: "missing_scope" } });
     expect(env.spotifyCalls).toEqual([
       { method: "POST", path: "/v1/me/playlists", body: { name: "Late drive", description: "Night roads.", public: false } },
       { method: "PUT", path: "/v1/playlists/pl1/items", body: { uris: [uri("w1"), uri("g1")] } },
@@ -248,6 +250,73 @@ describe("save to playlist", () => {
       { method: "PUT", path: "/v1/playlists/pl1/items", body: { uris: [uri("s1")] } },
     ]);
     expect(getSet(env.db, id)!.playlist).toMatchObject({ savedVersion: 2, outdated: false });
+  });
+});
+
+describe("playlist cover", () => {
+  const grant = (db: Awaited<ReturnType<typeof builtSet>>["db"], scope: string) => db.update(spotifyAuth).set({ scope }).run();
+  const uploads = (calls: { method: string; path: string; body: unknown }[]) => calls.filter((c) => c.path === "/v1/playlists/pl1/images");
+
+  test("the first save uploads the cover as base64 JPEG through the Web API", async () => {
+    const env = await builtSet();
+    grant(env.db, "ugc-image-upload playlist-modify-private");
+
+    const result = await saveSetPlaylist(env.db, env.ctx.spotify, env.result.set.id, env.ctx.now());
+
+    const [upload] = uploads(env.spotifyCalls);
+    expect(result.cover).toEqual({ status: "uploaded" });
+    expect(upload!.method).toBe("PUT");
+    expect(Buffer.from(upload!.body as string, "base64").subarray(0, 2)).toEqual(Buffer.from([0xff, 0xd8]));
+  });
+
+  test("saving again with nothing that affects the cover changed does not upload it again", async () => {
+    const env = await builtSet();
+    grant(env.db, "ugc-image-upload");
+    await saveSetPlaylist(env.db, env.ctx.spotify, env.result.set.id, env.ctx.now());
+    env.spotifyCalls.length = 0;
+
+    const again = await saveSetPlaylist(env.db, env.ctx.spotify, env.result.set.id, env.ctx.now());
+
+    expect(again.cover).toEqual({ status: "unchanged" });
+    expect(uploads(env.spotifyCalls)).toEqual([]);
+  });
+
+  test("a new title uploads a new cover", async () => {
+    const env = await builtSet();
+    grant(env.db, "ugc-image-upload");
+    await saveSetPlaylist(env.db, env.ctx.spotify, env.result.set.id, env.ctx.now());
+    env.db.update(sets).set({ title: "Later drive" }).run();
+    env.spotifyCalls.length = 0;
+
+    const again = await saveSetPlaylist(env.db, env.ctx.spotify, env.result.set.id, env.ctx.now());
+
+    expect(again.cover).toEqual({ status: "uploaded" });
+    expect(uploads(env.spotifyCalls)).toHaveLength(1);
+  });
+
+  test("without the image upload scope the cover is skipped", async () => {
+    const env = await builtSet();
+    grant(env.db, "playlist-modify-private");
+
+    const result = await saveSetPlaylist(env.db, env.ctx.spotify, env.result.set.id, env.ctx.now());
+
+    expect(result.cover).toEqual({ status: "missing_scope" });
+    expect(uploads(env.spotifyCalls)).toEqual([]);
+  });
+
+  test("a failed upload is reported and the playlist save still stands", async () => {
+    const env = await builtSet();
+    grant(env.db, "ugc-image-upload");
+    const failing = (async (input: string | URL | Request, init?: RequestInit) =>
+      String(input).endsWith("/images") ? new Response(JSON.stringify({ error: { message: "Bad image" } }), { status: 400 }) : env.fetchFn(input, init)) as typeof fetch;
+    const spotify = new SpotifyClient(env.db, env.auth, env.ctx.settings, failing, env.time.now);
+
+    const result = await saveSetPlaylist(env.db, spotify, env.result.set.id, env.ctx.now());
+    const retry = await saveSetPlaylist(env.db, env.ctx.spotify, env.result.set.id, env.ctx.now());
+
+    expect(result).toMatchObject({ playlistId: "pl1", tracks: 2, cover: { status: "failed" } });
+    expect(getSet(env.db, env.result.set.id)!.playlist).toMatchObject({ savedVersion: 1, outdated: false });
+    expect(retry.cover).toEqual({ status: "uploaded" });
   });
 });
 

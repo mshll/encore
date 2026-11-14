@@ -19,7 +19,7 @@ function Card({ step, title, children, footer }: { step?: string; title: string;
     <div className="flex min-h-[340px] flex-col gap-6 rounded-xl bg-page p-6 shadow-panel phone:min-h-0 phone:flex-1 phone:bg-transparent phone:p-0 phone:[box-shadow:none]">
       <div className="flex flex-col gap-1">
         {step && <p className="text-caption text-secondary">{step}</p>}
-        <h1 className="font-serif text-title text-balance text-primary">{title}</h1>
+        <h1 className="font-display text-title text-balance text-primary">{title}</h1>
       </div>
       <div className="flex flex-1 flex-col gap-4">{children}</div>
       <div className="flex flex-col-reverse gap-2 md:flex-row md:items-center md:justify-between">{footer}</div>

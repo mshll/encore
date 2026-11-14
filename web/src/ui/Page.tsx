@@ -32,7 +32,7 @@ export function useDocumentTitle(title: string | undefined) {
   }, [title]);
 }
 
-/** Page title (serif), an optional one-line description, actions on the right, and a slot under it for tabs. */
+/** Page title (display face), an optional one-line description, actions on the right, and a slot under it for tabs. */
 export function PageHeader({
   title,
   description,
@@ -49,7 +49,7 @@ export function PageHeader({
     <header className="flex flex-col gap-4">
       <div className="flex flex-col gap-3 md:grid md:grid-cols-[minmax(0,1fr)_auto] md:items-end md:gap-x-6">
         <div className="flex min-w-0 flex-col gap-1">
-          <h1 className="font-serif text-title text-balance text-primary">{title}</h1>
+          <h1 className="font-display text-title text-balance text-primary">{title}</h1>
           {description && <p className="max-w-2xl text-secondary text-pretty">{description}</p>}
         </div>
         {actions && <div className="flex max-w-full shrink-0 items-center gap-2 phone:w-full">{actions}</div>}

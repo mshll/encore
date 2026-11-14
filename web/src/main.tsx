@@ -1,5 +1,5 @@
 import "@fontsource-variable/geist";
-import "@fontsource/instrument-serif/latin-400.css";
+import "@fontsource-variable/bricolage-grotesque";
 import "./styles/app.css";
 import "./lib/theme";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";

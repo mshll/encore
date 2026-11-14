@@ -3,7 +3,7 @@ import { useState } from "react";
 import { useLocation } from "wouter";
 import { ApiError, request } from "../api/client";
 import { useDj, useSet } from "../api/queries";
-import type { DjSession, SetChange, SetDetail, SetResult, SetTrack } from "../api/types";
+import type { DjSession, SavedPlaylist, SetChange, SetDetail, SetResult, SetTrack } from "../api/types";
 import { useOpenQueue } from "../app/Shell";
 import { artistPath, songPath } from "../app/paths";
 import { assistantProblem } from "../lib/assistant";
@@ -22,10 +22,10 @@ import { Confirm } from "../ui/Dialog";
 import { Icon } from "../ui/Icon";
 import { ArrowUpRightIcon, MicrophoneStageIcon, MusicNoteIcon, PlayIcon, PlaylistIcon, PushPinIcon, QueueIcon, TrashIcon } from "../ui/icons";
 import { MenuItem, MenuLinkItem, MenuPopup, MenuRoot, MenuSeparator, MoreTrigger } from "../ui/Menu";
-import { Page, PageHeader, Section } from "../ui/Page";
+import { EntityHeader, EntityHeaderSkeleton } from "../ui/EntityHeader";
+import { Page, PageHeader, Section, useDocumentTitle } from "../ui/Page";
 import { RowSkeleton } from "../ui/Rows";
 import { RunProgress } from "../ui/RunProgress";
-import { Skeleton } from "../ui/Skeleton";
 import { Notice } from "../ui/Notice";
 import { EmptyState, ErrorState } from "../ui/States";
 
@@ -239,6 +239,13 @@ function SessionLine({ session }: { session: DjSession }) {
   );
 }
 
+function savedMessage(updated: boolean, cover: SavedPlaylist["cover"]["status"]): string {
+  const base = updated ? "Playlist updated in Spotify" : "Saved to Spotify as a private playlist";
+  if (cover === "failed") return `${base}, without its cover.`;
+  if (cover === "missing_scope") return `${base}. Connect Spotify again in Settings to add its cover.`;
+  return `${base}.`;
+}
+
 function SetActions({ set, playing }: { set: SetDetail; playing: boolean }) {
   const queryClient = useQueryClient();
   const openQueue = useOpenQueue();
@@ -257,9 +264,9 @@ function SetActions({ set, playing }: { set: SetDetail; playing: boolean }) {
   };
   const save = () =>
     act("save", async () => {
-      await request(`/api/sets/${set.id}/playlist`, { method: "POST" });
+      const saved = await request<SavedPlaylist>(`/api/sets/${set.id}/playlist`, { method: "POST" });
       await queryClient.invalidateQueries({ queryKey: ["sets"] });
-      showToast(set.playlist ? "Playlist updated in Spotify." : "Saved to Spotify as a private playlist.");
+      showToast(savedMessage(Boolean(set.playlist), saved.cover.status));
     });
   const play = () =>
     act("play", async () => {
@@ -342,10 +349,7 @@ function summary(set: SetDetail): string {
 function SetSkeleton() {
   return (
     <Page>
-      <div aria-hidden className="flex flex-col gap-3">
-        <Skeleton className="h-9 w-64" />
-        <Skeleton className="h-4 w-full max-w-xl" />
-      </div>
+      <EntityHeaderSkeleton />
       <RowSkeleton rows={8} rank />
     </Page>
   );
@@ -358,6 +362,7 @@ export function SetPage({ id }: { id: number }) {
   const queryClient = useQueryClient();
   const [removing, setRemoving] = useState<SetTrack | null>(null);
   const wide = useMedia("(min-width: 1024px)");
+  useDocumentTitle(q.data?.title ?? "Set");
 
   const replace = (set: SetDetail) => {
     queryClient.setQueryData(["sets", id], set);
@@ -405,11 +410,17 @@ export function SetPage({ id }: { id: number }) {
     <Page>
       <div className="grid gap-10 md:gap-12 lg:grid-cols-[minmax(0,1fr)_minmax(0,360px)]">
         <div className="flex min-w-0 flex-col gap-10 md:gap-12">
-          <PageHeader title={set.title} description={set.description || undefined} actions={<SetActions set={set} playing={Boolean(playing)} />} />
-          {(set.items.length > 0 || playing) && (
-            <div className="-mt-6 flex flex-col gap-4 md:-mt-8">
-              {set.items.length > 0 && <p className="text-secondary tabular">{summary(set)}</p>}
-              {playing && <SessionLine session={playing} />}
+          <EntityHeader
+            title={set.title}
+            art={set.coverUrl}
+            kind="playlist"
+            credits={set.description || undefined}
+            detail={set.items.length > 0 ? summary(set) : undefined}
+            actions={<SetActions set={set} playing={Boolean(playing)} />}
+          />
+          {playing && (
+            <div className="-mt-6 md:-mt-8">
+              <SessionLine session={playing} />
             </div>
           )}
           <Section title="Songs">

@@ -146,6 +146,7 @@ src/analytics/           pure query functions
 src/llm/                 Claude client wrapper, cost ledger and budget, agent loop, threads
 src/taste/               cached taste profile given to Claude
 src/sets/ src/picks/     set building and weekly picks
+src/covers/              playlist cover drawing (Skia via @napi-rs/canvas); its fonts and their licences are in assets/fonts
 src/ask/ src/notes/      questions over the history, liner notes
 src/digest/              weekly and monthly digest facts and text
 src/assistant/           plain entry points for chat integrations
@@ -156,6 +157,6 @@ web/                     UI (Vite + React), built into web/dist; dither-kit char
 
 ## License
 
-MIT. See [LICENSE](LICENSE).
+MIT. See [LICENSE](LICENSE). The bundled cover fonts, Bricolage Grotesque and Noto Sans Arabic, are under the SIL Open Font License 1.1 (`assets/fonts`).
 
 encore is not affiliated with or endorsed by Spotify.

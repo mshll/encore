@@ -14,6 +14,7 @@ import { loadCatalog, type CatalogSong } from "../library/catalog";
 import { MOODS } from "../tags/vocabulary";
 import { libraryTools, verifyTool } from "../library/tools";
 import { tasteProfile } from "../taste/profile";
+import { coverUrl, setCoverSources } from "./cover";
 import { setDjOutcomes } from "./play";
 import { SETS_SYSTEM } from "./prompt";
 
@@ -375,7 +376,12 @@ export function listSets(db: Db, limit: number, offset: number) {
   const firsts = ids.length ? db.select().from(setItems).where(and(inArray(setItems.setId, ids), lte(setItems.position, 4))).orderBy(asc(setItems.position)).all() : [];
   const covers = new Map<number, string[]>();
   for (const item of withArtwork(db, firsts)) if (item.albumArtUrl) covers.set(item.setId, [...(covers.get(item.setId) ?? []), item.albumArtUrl]);
-  return { items: rows.map((r) => ({ ...summary(r), tracks: counts.get(r.id) ?? 0, covers: covers.get(r.id) ?? [] })), total, limit, offset };
+  const sources = setCoverSources(db, rows);
+  const cover = (id: number) => {
+    const source = sources.get(id);
+    return source ? coverUrl(id, source.key) : null;
+  };
+  return { items: rows.map((r) => ({ ...summary(r), coverUrl: cover(r.id), tracks: counts.get(r.id) ?? 0, covers: covers.get(r.id) ?? [] })), total, limit, offset };
 }
 
 export function getSet(db: Db, setId: number) {
@@ -390,8 +396,10 @@ export function getSet(db: Db, setId: number) {
     const song = stats.get(songKey);
     return song ? { listens: song.listens, lastPlayed: new Date(song.last_ts!).toISOString() } : null;
   };
+  const source = setCoverSources(db, [row]).get(setId);
   return {
     ...summary(row),
+    coverUrl: source ? coverUrl(setId, source.key) : null,
     djSessions: dj.sessions,
     items: withArtwork(
       db,

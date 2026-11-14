@@ -23,6 +23,14 @@ const routeOf = (method: string, path: string) =>
     .map((segment) => (/^[0-9A-Za-z]{22}$/.test(segment) ? ":id" : segment))
     .join("/")}`;
 
+/** A request body sent as is, instead of as JSON. */
+class RawBody {
+  constructor(
+    readonly text: string,
+    readonly contentType: string,
+  ) {}
+}
+
 export class SpotifyClient {
   constructor(
     private readonly db: Db,
@@ -84,6 +92,16 @@ export class SpotifyClient {
     return this.request<{ snapshot_id: string }>("PUT", `/playlists/${encodeURIComponent(id)}/items`, { uris });
   }
 
+  /** Spotify takes the JPEG as base64 text, at most 256 KB of it. */
+  uploadPlaylistCover(id: string, jpeg: Uint8Array) {
+    return this.request<void>("PUT", `/playlists/${encodeURIComponent(id)}/images`, new RawBody(Buffer.from(jpeg).toString("base64"), "image/jpeg"));
+  }
+
+  /** The stored grant includes `scope`. */
+  hasScope(scope: string): boolean {
+    return this.auth.status().scopes.includes(scope);
+  }
+
   libraryContains(uris: string[]) {
     return this.get<boolean[]>(`/me/library/contains?${new URLSearchParams({ uris: uris.join(",") })}`);
   }
@@ -127,6 +145,7 @@ export class SpotifyClient {
   private send(path: string, token: string, method: string, body: unknown) {
     const headers: Record<string, string> = { authorization: `Bearer ${token}` };
     if (body === undefined) return this.fetchFn(`${apiUrl}${path}`, method === "GET" ? { headers } : { method, headers });
+    if (body instanceof RawBody) return this.fetchFn(`${apiUrl}${path}`, { method, headers: { ...headers, "content-type": body.contentType }, body: body.text });
     headers["content-type"] = "application/json";
     return this.fetchFn(`${apiUrl}${path}`, { method, headers, body: JSON.stringify(body) });
   }

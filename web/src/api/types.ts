@@ -129,8 +129,17 @@ export type SetSummary = {
   request: string;
   version: number;
   playlist: { id: string; url: string; savedVersion: number; outdated: boolean } | null;
+  /** The generated cover; null while the set has no songs. */
+  coverUrl: string | null;
   createdAt: string;
   updatedAt: string;
+};
+
+export type SavedPlaylist = {
+  playlistId: string;
+  playlistUrl: string;
+  tracks: number;
+  cover: { status: "uploaded" | "unchanged" | "missing_scope" | "failed" };
 };
 
 export type SetDetail = SetSummary & {

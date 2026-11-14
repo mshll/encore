@@ -142,7 +142,7 @@ function Frame({ index, total, id, optional, children, actions }: { index: numbe
           Step {index + 1} of {total}
           {optional && ", optional"}
         </p>
-        <h2 id={`step-${id}`} className="font-serif text-figure text-primary">
+        <h2 id={`step-${id}`} className="font-display text-figure text-primary">
           {TITLES[id]}
         </h2>
       </div>

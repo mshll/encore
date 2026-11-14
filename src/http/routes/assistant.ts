@@ -9,6 +9,7 @@ import { cachedNote, trackNote } from "../../notes/service";
 import { generatePicks, pickWeeks, picksPlaylist, syncPicksPlaylist, weekOf, weekPicks } from "../../picks/service";
 import { playSet } from "../../sets/play";
 import { savePick, updatePickState } from "../../assistant/api";
+import { ensureSetCover, setCoverSource } from "../../sets/cover";
 import { saveSetPlaylist } from "../../sets/playlist";
 import { djSessionView } from "./dj";
 import { createSet, deleteSet, getSet, listSets, pinSetItem, refineSet, removeSetItem } from "../../sets/service";
@@ -34,6 +35,17 @@ export const setRoutes = new Hono<Env>()
     const set = getSet(c.var.deps.db, parse(id, c.req.param()).id);
     if (!set) throw new ApiError(404, "not_found", "Not found");
     return c.json(set);
+  })
+  .get("/:id/cover", async (c) => {
+    const { db, now } = c.var.deps;
+    const setId = parse(id, c.req.param()).id;
+    const source = setCoverSource(db, setId);
+    if (!source) throw new ApiError(404, "not_found", "Not found");
+    const cover = await ensureSetCover(db, setId, source, { now: now() });
+    const etag = cover.partial ? `"${source.key}.${cover.createdAt}"` : `"${source.key}"`;
+    const headers = { etag, "cache-control": c.req.query("v") === source.key && !cover.partial ? "private, max-age=31536000, immutable" : "private, no-cache" };
+    if (c.req.header("if-none-match") === etag) return c.body(null, 304, headers);
+    return c.body(new Uint8Array(cover.jpeg), 200, { ...headers, "content-type": "image/jpeg" });
   })
   .post("/:id/messages", async (c) => {
     const setId = parse(id, c.req.param()).id;

@@ -1,4 +1,5 @@
-import { index, integer, real, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
+import { blob, index, integer, real, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
+import { COVER_STYLES } from "../covers/style";
 
 export const LLM_FEATURES = ["sets", "picks", "ask", "notes", "digest", "dj"] as const;
 export type LlmFeature = (typeof LLM_FEATURES)[number];
@@ -50,8 +51,23 @@ export const sets = sqliteTable("sets", {
   playlistUrl: text("playlist_url"),
   savedVersion: integer("saved_version"),
   savedAt: integer("saved_at"),
+  /** Cover key of the image last uploaded to the playlist. */
+  coverUploadKey: text("cover_upload_key"),
   createdAt: integer("created_at").notNull(),
   updatedAt: integer("updated_at").notNull(),
+});
+
+/** The generated cover of each set, kept for the app and for the playlist upload. `key` covers everything the image is drawn from. */
+export const setCovers = sqliteTable("set_covers", {
+  setId: integer("set_id")
+    .primaryKey()
+    .references(() => sets.id, { onDelete: "cascade" }),
+  key: text("key").notNull(),
+  style: text("style", { enum: COVER_STYLES }).notNull(),
+  /** Some album art failed to load, so the image is redrawn when next needed after a while. */
+  partial: integer("partial", { mode: "boolean" }).notNull(),
+  jpeg: blob("jpeg", { mode: "buffer" }).notNull(),
+  createdAt: integer("created_at").notNull(),
 });
 
 export const setItems = sqliteTable(
