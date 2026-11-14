@@ -1,7 +1,8 @@
 import { useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
 import { request } from "../api/client";
+import { useSearchParams } from "wouter";
 import { useRadar } from "../api/queries";
+import { Digests } from "./Digests";
 import type { Release } from "../api/types";
 import { fmtAgo, fmtDay, fmtInt } from "../lib/format";
 import { showToast } from "../lib/toast";
@@ -13,7 +14,7 @@ import { Page } from "../ui/Page";
 import { Segmented } from "../ui/Segmented";
 import { Empty, ErrorState, Skeleton } from "../ui/states";
 
-type View = "new" | "recent";
+type View = "new" | "recent" | "digests";
 
 const TYPE_LABELS: Record<Release["albumType"], string> = { album: "Album", single: "Single", compilation: "Compilation" };
 
@@ -68,40 +69,24 @@ function ReleaseTile({ release, onSeen }: { release: Release; onSeen: () => void
   );
 }
 
-export default function Releases() {
-  const [view, setView] = useState<View>("new");
+function ReleaseGrid({ view }: { view: "new" | "recent" }) {
   const q = useRadar(view, 30);
   const markSeen = useMarkSeen();
   const d = q.data;
   return (
-    <Page
-      title="Releases"
-      actions={
-        view === "new" &&
-        d &&
-        d.unseenNew > 0 && (
-          <button type="button" className="btn btn-secondary" onClick={() => markSeen()}>
-            Mark all as seen
-          </button>
-        )
-      }
-    >
-      <div className="flex flex-col gap-3">
-        <Segmented
-          label="Releases"
-          value={view}
-          onChange={setView}
-          options={[
-            { value: "new", label: "New" },
-            { value: "recent", label: "Last 30 days" },
-          ]}
-        />
-        {d && (
+    <>
+      {d && (
+        <div className="-mt-6 flex flex-wrap items-center justify-between gap-3 md:-mt-10">
           <p className="text-body-sm text-secondary">
             Watching {fmtInt(d.artists)} artists you play often. {d.lastRunAt ? `Last checked ${fmtAgo(d.lastRunAt)}.` : "Not checked yet."}
           </p>
-        )}
-      </div>
+          {view === "new" && d.unseenNew > 0 && (
+            <button type="button" className="btn btn-secondary" onClick={() => markSeen()}>
+              Mark all as seen
+            </button>
+          )}
+        </div>
+      )}
       {q.isError ? (
         <ErrorState error={q.error} onRetry={() => q.refetch()} />
       ) : !d ? (
@@ -126,6 +111,27 @@ export default function Releases() {
           ))}
         </ul>
       )}
+    </>
+  );
+}
+
+export default function Releases() {
+  const [params, setParams] = useSearchParams();
+  const raw = params.get("view");
+  const view: View = raw === "recent" || raw === "digests" ? raw : "new";
+  return (
+    <Page title="Releases">
+      <Segmented
+        label="Releases"
+        value={view}
+        onChange={(v) => setParams(v === "new" ? {} : { view: v }, { replace: true })}
+        options={[
+          { value: "new", label: "New" },
+          { value: "recent", label: "Last 30 days" },
+          { value: "digests", label: "Digests" },
+        ]}
+      />
+      {view === "digests" ? <Digests /> : <ReleaseGrid view={view} />}
     </Page>
   );
 }

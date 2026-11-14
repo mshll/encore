@@ -12,6 +12,7 @@ import { fillPeriods } from "../lib/series";
 import { AppLink, albumPath, artistPath, songPath } from "../ui/AppLink";
 import { PlayButtons } from "../ui/SongMenu";
 import { EntityHero } from "../ui/Artwork";
+import { LinerNotes } from "../ui/LinerNotes";
 import { Page, Section } from "../ui/Page";
 import { MoreButton, Row, RowList } from "../ui/rows";
 import { Empty, ErrorState, Skeleton, SkeletonRows } from "../ui/states";
@@ -303,6 +304,7 @@ function SongView({ songKey }: { songKey: string }) {
       ) : (
         <div className={`flex flex-col gap-10 md:gap-14 ${q.isPlaceholderData ? "opacity-60" : ""}`}>
           <Totals totals={d.totals} />
+          <LinerNotes songKey={songKey} />
           <Timeline timeline={d.timeline} range={range} />
           <Section title="When it gets skipped">
             {d.class ? (
