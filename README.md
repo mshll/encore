@@ -26,7 +26,7 @@ One instance serves one person. Your data stays in a single SQLite file on your 
 **Upkeep**
 
 - **Recaps**: a weekly and a monthly write-up.
-- **Library**: proposals to tidy saved songs and playlists. Nothing is removed until you approve it, and every applied batch can be undone.
+- **Library**: how much of your liked songs and playlists you still play, and where the dead weight sits. Plans to tidy them, ready-made or from a group of songs: archive (the default) or remove, keep one copy of duplicates, like what you play a lot. Nothing changes in Spotify until you approve a plan, and every applied plan can be undone.
 
 | | |
 | --- | --- |
@@ -135,8 +135,8 @@ src/ingest/live/         recently-played poller, player watcher and its reconcil
 src/player/              typed Spotify playback API
 src/dj/                  DJ sessions on an app-owned playlist, deterministic and Claude re-planners
 src/radar/               release radar
-src/library/             saved songs and own playlists sync; song catalog, candidate verification, blocks, play outcomes, library tools
-src/cleanup/             cleanup proposals; apply and undo (only reachable from the HTTP route)
+src/library/             saved songs and own playlists sync, library analysis, plans and their rules; apply and undo (only reachable from the HTTP route);
+                         song catalog, candidate verification, blocks, play outcomes, library tools
 src/discord/             interactions endpoint logic, REST client, command registry, built-in and assistant commands, channel posts
 src/mcp/                 MCP server (tools over analytics and playback)
 src/spotify/             OAuth (PKCE, rotating refresh), API client, call pacing queue, rate-limit gate

@@ -35,7 +35,7 @@ describe("migrations", () => {
     const db = openDb(path);
     expect(tables(db.$client)).toContain("sets");
     expect(tables(db.$client)).toContain("settings");
-    expect(db.$client.query("select count(*) as n from __drizzle_migrations").get()).toEqual({ n: 9 });
+    expect(db.$client.query("select count(*) as n from __drizzle_migrations").get()).toEqual({ n: JSON.parse(readFileSync(join(folder, "meta/_journal.json"), "utf8")).entries.length });
     expect(db.$client.query("select name from artists").all()).toEqual([{ name: "Mac Miller" }]);
   });
 

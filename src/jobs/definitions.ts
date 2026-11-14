@@ -1,10 +1,10 @@
 import type { Config } from "../config";
 import type { Db } from "../db/client";
-import { refreshProposals } from "../cleanup/proposals";
 import { enrich, fetchAlbumArt } from "../ingest/live/enrich";
 import { pollRecentlyPlayed } from "../ingest/live/poller";
 import { WATCH_JOB } from "../ingest/live/watcher";
 import { appOwnedPlaylistIds } from "../library/owned";
+import { refreshProposals } from "../library/rules";
 import { syncDue, syncStep, type SyncCursor } from "../library/sync";
 import { runRadar } from "../radar/radar";
 import type { Services } from "../services";
@@ -40,7 +40,7 @@ export function createJobs(db: Db, settings: SettingsSource, spotifyAuth: Spotif
         if (!spotifyAuth.status().connected) return { cursor, skipped: "spotify_not_connected" };
         if (!syncDue(cursor, now(), current().librarySyncMs)) return { cursor };
         const step = await syncStep({ db, spotify, spotifyAuth, appPlaylistIds: () => appOwnedPlaylistIds(db) }, cursor, now());
-        return { cursor: step.cursor, calls: step.calls, ...(step.passCompleted ? { proposals: refreshProposals(db, now(), current().weekendDays) } : {}) };
+        return { cursor: step.cursor, calls: step.calls, ...(step.passCompleted ? { proposals: refreshProposals(db, now(), current()) } : {}) };
       },
       nextDelayMs: () => {
         const { libraryPageMs, librarySyncMs } = current();

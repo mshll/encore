@@ -270,7 +270,7 @@ export function groupEntries(snapshot: LibrarySnapshot, group: SongGroup): Libra
     .sort(BY_DORMANCY);
 }
 
-const monthYear = (ts: number, timezone: string) => new Intl.DateTimeFormat("en-GB", { month: "short", year: "numeric", timeZone: timezone }).format(ts);
+export const monthYear = (ts: number, timezone: string) => new Intl.DateTimeFormat("en-GB", { month: "short", year: "numeric", timeZone: timezone }).format(ts);
 const times = (n: number) => (n === 1 ? "once" : `${n} times`);
 
 /** The evidence behind an entry, in plain words. */

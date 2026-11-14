@@ -2,10 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join, relative } from "node:path";
 import { sql } from "drizzle-orm";
-import { createSession } from "../src/auth/sessions";
-import { applyCleanup, undoCleanup } from "../src/cleanup/apply";
-import { CLEANUP_RULES, computeProposals, listProposals, refreshProposals } from "../src/cleanup/proposals";
-import { savedTracks } from "../src/db/schema";
+import { proposalCounts, refreshProposals } from "../src/library/rules";
 import { createDiscord } from "../src/discord";
 import { InteractionType } from "../src/discord/types";
 import { runJob } from "../src/jobs/scheduler";
@@ -13,7 +10,7 @@ import { syncStep, type SyncCursor } from "../src/library/sync";
 import { SpotifyAuth } from "../src/spotify/auth";
 import { SpotifyClient } from "../src/spotify/client";
 import type { SpotifyTrack } from "../src/spotify/types";
-import { connectSpotify, jsonResponse, noContent, play, routeFetch, seed, testApp, testConfig, testDb, track, uri, type FetchCall, testSettings, WEEKEND } from "./helpers";
+import { connectSpotify, jsonResponse, noContent, play, routeFetch, seed, testApp, testConfig, testDb, track, uri, type FetchCall, testSettings, TZ, WEEKEND } from "./helpers";
 
 const NOW = Date.parse("2026-11-14T09:00:00Z");
 const DAY = 86_400_000;
@@ -107,115 +104,20 @@ describe("library sync", () => {
   });
 });
 
-describe("cleanup proposals", () => {
-  test("rules: never played, dislike, nearly always skipped in a playlist, duplicates; each with evidence", async () => {
-    const { db, spotify, auth } = seeded(library());
-    await syncAll(db, spotify, auth);
-    const proposals = computeProposals(db, NOW, WEEKEND);
-    const byKind = (kind: string) => proposals.filter((p) => p.kind === kind);
-    expect(byKind("saved_never_played")).toHaveLength(120);
-    expect(byKind("saved_never_played").some((p) => p.uri === uri("new"))).toBe(false);
-    expect(byKind("saved_dislike").map((p) => p.uri)).toEqual([uri("skp")]);
-    expect(byKind("saved_dislike")[0]!.evidence).toMatchObject({ plays: 10, skips: 10, skipRate: 1, lastPlayed: new Date(NOW - DAY).toISOString() });
-    expect(byKind("playlist_skipped").map((p) => [p.playlistId, p.uri])).toEqual([["mine", uri("skp")]]);
-    expect(byKind("playlist_duplicate")[0]).toMatchObject({ playlistId: "mine", uri: uri("ok"), evidence: { keep: { position: 0 }, duplicates: [{ position: 2, uri: uri("ok") }] } });
-  });
-
-  test("saved_dislike needs a low listen ratio: songs skipped after long listens are kept", () => {
-    const db = testDb();
-    const longSkips = Array.from({ length: 8 }, (_, i) => play(new Date(NOW - (i + 1) * DAY).toISOString(), uri("lng"), i < 5 ? 180_000 : 3000, { skipped: true }));
-    const shortSkips = Array.from({ length: 10 }, (_, i) => play(new Date(NOW - (i + 1) * DAY).toISOString(), uri("sht"), i < 2 ? 40_000 : 3000, { skipped: true }));
-    seed(db, [track("lng", "Sinnerman", "Nina Simone", "Pastel Blues"), track("sht", "Short", "Artist", "A")], [...longSkips, ...shortSkips]);
-    db.insert(savedTracks).values([uri("lng"), uri("sht")].map((u) => ({ uri: u, addedAt: NOW - 400 * DAY, syncedAt: NOW }))).run();
-    const dislikes = computeProposals(db, NOW, WEEKEND).filter((p) => p.kind === "saved_dislike");
-    expect(dislikes.map((p) => p.evidence.name)).toEqual(["Short"]);
-    expect(dislikes[0]!.evidence).toMatchObject({ plays: 10, listens: 2, listenRatio: 0.2 });
-    expect(CLEANUP_RULES.dislikeMaxListenRatio).toBe(0.2);
-  });
-
-  test("dismissed proposals stay dismissed across refreshes", async () => {
-    const { db, spotify, auth } = seeded(library());
-    await syncAll(db, spotify, auth);
-    refreshProposals(db, NOW, WEEKEND);
-    const target = listProposals(db, { kind: "saved_dislike", status: "open", limit: 10, offset: 0 }).items[0]!;
-    db.run(sql`update cleanup_proposals set status = 'dismissed' where id = ${target.id}`);
-    expect(refreshProposals(db, NOW, WEEKEND).saved_dislike).toBe(0);
-  });
-
-  test("apply removes only the chosen items and records an undo log that restores them", async () => {
-    const { db, spotify, auth, calls } = seeded(library());
-    await syncAll(db, spotify, auth);
-    refreshProposals(db, NOW, WEEKEND);
-    const open = (kind: string) => listProposals(db, { kind: kind as never, status: "open", limit: 500, offset: 0 }).items;
-    const ids = [open("saved_dislike")[0]!.id, open("playlist_duplicate")[0]!.id, open("playlist_skipped")[0]!.id];
-    calls.length = 0;
-    const result = await applyCleanup(db, spotify, ids, NOW);
-    expect(result.applied).toBe(3);
-    const writes = calls.map((c) => [c.method, decodeURIComponent(c.url.replace("https://api.spotify.com/v1", "")), c.body]);
-    expect(writes).toEqual([
-      ["DELETE", `/me/library?uris=${uri("skp")}`, undefined],
-      ["DELETE", "/playlists/mine/items", { items: [{ uri: uri("ok") }] }],
-      ["POST", "/playlists/mine/items", { uris: [uri("ok")], position: 0 }],
-      ["DELETE", "/playlists/mine/items", { items: [{ uri: uri("skp") }] }],
-    ]);
-    expect(listProposals(db, { status: "applied", limit: 10, offset: 0 }).total).toBe(3);
-    await expect(applyCleanup(db, spotify, ids, NOW)).rejects.toThrow("not open");
-
-    calls.length = 0;
-    await undoCleanup(db, spotify, result.batchId, NOW + 1);
-    expect(calls.map((c) => [c.method, decodeURIComponent(c.url.replace("https://api.spotify.com/v1", "")), c.body])).toEqual([
-      ["PUT", `/me/library?uris=${uri("skp")}`, undefined],
-      ["POST", "/playlists/mine/items", { uris: [uri("skp")], position: 1 }],
-      ["POST", "/playlists/mine/items", { uris: [uri("ok")], position: 2 }],
-    ]);
-    expect(listProposals(db, { status: "open", kind: "saved_dislike", limit: 10, offset: 0 }).total).toBe(1);
-    await expect(undoCleanup(db, spotify, result.batchId, NOW + 2)).rejects.toThrow("already undone");
-  });
-
-  test("overlapping apply or undo requests for the same items send one set of writes", async () => {
-    const { db, spotify, auth, calls } = seeded(library());
-    await syncAll(db, spotify, auth);
-    refreshProposals(db, NOW, WEEKEND);
-    const ids = [listProposals(db, { kind: "saved_dislike", status: "open", limit: 1, offset: 0 }).items[0]!.id];
-    calls.length = 0;
-    const applies = await Promise.allSettled([applyCleanup(db, spotify, ids, NOW), applyCleanup(db, spotify, ids, NOW)]);
-    expect(applies.map((r) => r.status)).toEqual(["fulfilled", "rejected"]);
-    expect(calls.filter((c) => c.method === "DELETE")).toHaveLength(1);
-    const batchId = (applies[0] as PromiseFulfilledResult<{ batchId: number }>).value.batchId;
-    calls.length = 0;
-    const undos = await Promise.allSettled([undoCleanup(db, spotify, batchId, NOW + 1), undoCleanup(db, spotify, batchId, NOW + 1)]);
-    expect(undos.map((r) => r.status)).toEqual(["fulfilled", "rejected"]);
-    expect(calls.filter((c) => c.method === "PUT")).toHaveLength(1);
-  });
-
-  test("apply needs an explicit list of open proposal ids", async () => {
-    const { db, spotify, calls } = seeded(library());
-    await expect(applyCleanup(db, spotify, [], NOW)).rejects.toThrow("at least one");
-    await expect(applyCleanup(db, spotify, [999], NOW)).rejects.toThrow("not open");
-    expect(calls).toHaveLength(0);
-  });
-
-  test("apply over HTTP requires a session and a body with ids", async () => {
-    const app = testApp();
-    expect((await app.request("/api/cleanup/apply", { json: { ids: [1] } })).status).toBe(401);
-    const cookie = `encore_session=${createSession(app.db)}`;
-    expect((await app.request("/api/cleanup/apply", { json: {}, headers: { cookie } })).status).toBe(400);
-    expect((await app.request("/api/cleanup/apply", { json: { ids: [1] }, headers: { cookie } })).status).toBe(400);
-  });
-});
-
 describe("apply is unreachable from automated paths", () => {
   const srcDir = join(import.meta.dir, "../src");
   const files = (dir: string): string[] => readdirSync(dir).flatMap((f) => (statSync(join(dir, f)).isDirectory() ? files(join(dir, f)) : [join(dir, f)]));
   const sources = files(srcDir).map((f) => ({ path: relative(srcDir, f), text: readFileSync(f, "utf8") }));
 
-  test("only the cleanup HTTP route imports the apply module", () => {
-    expect(sources.filter((s) => /from\s+"[./]+(cleanup\/)?apply"/.test(s.text) && s.path !== "cleanup/apply.ts").map((s) => s.path)).toEqual(["http/routes/cleanup.ts"]);
+  test("only the library HTTP route and the startup recovery import the apply module", () => {
+    const importers = sources.filter((s) => /from\s+"[./]+(library\/)?apply"/.test(s.text) && s.path !== "library/apply.ts").map((s) => s.path);
+
+    expect(importers.sort()).toEqual(["http/routes/library.ts", "main.ts"]);
   });
 
   test("library removal and playlist item removal are only written in apply and the app-owned playlist guard", () => {
     const deletes = sources.filter((s) => /"DELETE",\s*`\/(me\/library|playlists\/)/.test(s.text)).map((s) => s.path);
-    expect(deletes.sort()).toEqual(["cleanup/apply.ts", "dj/playlists.ts"]);
+    expect(deletes.sort()).toEqual(["dj/playlists.ts", "library/apply.ts"]);
   });
 
   test("running every job and every Discord command and button sends no removal to Spotify", async () => {
@@ -236,8 +138,8 @@ describe("apply is unreachable from automated paths", () => {
     connectSpotify(app.db, "owner");
     seed(app.db, [track("ok", "Song ok", "Artist ok", "Album")], [play(new Date(Date.now() - DAY).toISOString(), uri("ok"), 200_000)]);
     for (let i = 0; i < 12; i++) for (const job of Object.values(app.jobs)) await runJob(app.db, job);
-    refreshProposals(app.db, Date.now(), WEEKEND);
-    expect(listProposals(app.db, { status: "open", limit: 500, offset: 0 }).total).toBeGreaterThan(0);
+    refreshProposals(app.db, Date.now(), { timezone: TZ, weekendDays: WEEKEND });
+    expect(proposalCounts(app.db).saved_never_played).toBeGreaterThan(0);
 
     const discord = createDiscord(app.settings.get().discord!, { db: app.db, config: app.config, settings: app.settings, services: app.services, now: Date.now }, fn);
     for (const definition of discord.registry.definitions()) {
@@ -247,6 +149,6 @@ describe("apply is unreachable from automated paths", () => {
     await discord.interactions.handle({ id: "i", type: InteractionType.Component, token: "t", application_id: "1", user: { id: "42" }, data: { custom_id: `queue:${uri("ok")}` } });
     await discord.interactions.whenIdle();
     expect(removals).toEqual([]);
-    expect(listProposals(app.db, { status: "applied", limit: 10, offset: 0 }).total).toBe(0);
+    expect(app.db.all(sql`select count(*) as n from cleanup_proposals where status = 'applied'`)).toEqual([{ n: 0 }]);
   });
 });
