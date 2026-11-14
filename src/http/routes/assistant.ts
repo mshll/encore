@@ -6,9 +6,9 @@ import { generateDigest, listDigests, renderDigest } from "../../digest/service"
 import { budgetStatus, spendDetail } from "../../llm/ledger";
 import { listBlocks, removeBlock } from "../../library/blocks";
 import { cachedNote, trackNote } from "../../notes/service";
-import { generatePicks, pickViews, pickWeeks, picksPlaylist, syncPicksPlaylist, weekOf, weekPicks } from "../../picks/service";
-import { setPickState } from "../../picks/state";
+import { generatePicks, pickWeeks, picksPlaylist, syncPicksPlaylist, weekOf, weekPicks } from "../../picks/service";
 import { playSet } from "../../sets/play";
+import { savePick, updatePickState } from "../../assistant/api";
 import { saveSetPlaylist } from "../../sets/playlist";
 import { djSessionView } from "./dj";
 import { createSet, deleteSet, getSet, listSets, pinSetItem, refineSet, removeSetItem } from "../../sets/service";
@@ -80,12 +80,12 @@ export const pickRoutes = new Hono<Env>()
   })
   .post("/generate", (c) => respond(c, (ctx, onEvent) => generatePicks(ctx, onEvent), 201))
   .patch("/:id", async (c) => {
-    const { db, config, spotify, now } = c.var.deps;
+    const { db, config, spotify, services, now } = c.var.deps;
     const pickId = parse(id, c.req.param()).id;
     const body = parse(z.object({ state: z.enum(PICK_STATES) }), await jsonBody(c));
-    const pick = await mapped(() => setPickState(db, pickId, body.state, now()));
+    const pick = await mapped(async () => (body.state === "saved" ? savePick(services.assistant, pickId) : updatePickState(services.assistant, pickId, body.state)));
     if (config.llm.picksPlaylist && picksPlaylist(db) && pick.week === weekOf(now(), config.timezone)) await mapped(() => syncPicksPlaylist(db, spotify, config.timezone, now()));
-    return c.json(pickViews(db, [pick])[0]);
+    return c.json(pick);
   });
 
 export const blockRoutes = new Hono<Env>()

@@ -61,9 +61,9 @@ export function updatePickState(ctx: FeatureContext, pickId: number, state: Pick
 
 /** Marks the pick saved and saves the song to the owner's Spotify library (the one library write the assistant makes, on request). */
 export async function savePick(ctx: FeatureContext, pickId: number) {
-  const view = updatePickState(ctx, pickId, "saved");
-  await ctx.spotify.request("PUT", `/me/library?uris=${encodeURIComponent(view.uri)}`);
-  return view;
+  const pick = ctx.db.select({ uri: picks.uri }).from(picks).where(eq(picks.id, pickId)).get();
+  if (pick) await ctx.spotify.request("PUT", `/me/library?uris=${encodeURIComponent(pick.uri)}`);
+  return updatePickState(ctx, pickId, "saved");
 }
 
 /** A set with what a chat message needs: the summary, every item with artwork, and the dashboard link. */

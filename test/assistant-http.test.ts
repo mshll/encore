@@ -4,7 +4,7 @@ import { llmCalls, picks } from "../src/db/schema";
 import type { LlmTransport } from "../src/llm/client";
 import { monthOf } from "../src/llm/ledger";
 import type { Env } from "../src/http/context";
-import { testApp, TZ, uri } from "./helpers";
+import { connectSpotify, noContent, routeFetch, testApp, TZ, uri } from "./helpers";
 import { message, scripted, seedLibrary, text } from "./llmFakes";
 
 const ADMIN = { authorization: "Bearer admin-token-admin-token-123" };
@@ -121,6 +121,22 @@ describe("streaming", () => {
 });
 
 describe("picks and blocks over HTTP", () => {
+  test("saving a pick on the web also saves the song to the Spotify library", async () => {
+    const { fn, calls } = routeFetch((call) => (call.url.includes("/me/library") ? noContent() : undefined));
+    const app = testApp({}, fn);
+    connectSpotify(app.db);
+    const cookie = `encore_session=${createSession(app.db)}`;
+    const pick = app.db
+      .insert(picks)
+      .values({ week: "2026-01-05", position: 1, uri: uri("x1"), songKey: "song|artist", name: "Song", artist: "Artist", album: null, releaseDate: null, reason: "r", distance: "near", state: "new", stateAt: 0, createdAt: 0 })
+      .returning()
+      .get();
+    const res = await app.request(`/api/picks/${pick.id}`, { method: "PATCH", body: JSON.stringify({ state: "saved" }), headers: { cookie, "content-type": "application/json" } });
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({ id: pick.id, state: "saved" });
+    expect(calls.map((c) => `${c.method} ${decodeURIComponent(new URL(c.url).pathname + new URL(c.url).search)}`)).toEqual([`PUT /v1/me/library?uris=${uri("x1")}`]);
+  });
+
   test("marking a pick never adds a song block; deleting the block lifts it", async () => {
     const { request, cookie, db, get } = signedIn();
     const pick = db
