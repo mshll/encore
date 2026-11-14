@@ -15,7 +15,7 @@ const OWNER = "470266318785085440";
 const keyPair = (await crypto.subtle.generateKey({ name: "Ed25519" }, true, ["sign", "verify"])) as unknown as CryptoKeyPair;
 const publicKey = Buffer.from(await crypto.subtle.exportKey("raw", keyPair.publicKey)).toString("hex");
 
-async function sign(body: string, timestamp = "1700000000") {
+async function sign(body: string, timestamp = String(Math.floor(Date.now() / 1000))) {
   const sig = await crypto.subtle.sign({ name: "Ed25519" }, keyPair.privateKey, new TextEncoder().encode(timestamp + body));
   return { "x-signature-ed25519": Buffer.from(sig).toString("hex"), "x-signature-timestamp": timestamp };
 }
@@ -54,6 +54,14 @@ describe("discord interactions endpoint", () => {
     const signed = await sign(JSON.stringify({ id: "i1", token: "tok", application_id: "123456789012345678", type: 1 }));
     expect((await post({ type: 2 }, signed)).status).toBe(401);
     expect((await post({ type: 1 }, { ...(await sign("x")), "x-signature-timestamp": "1700000001" })).status).toBe(401);
+  });
+
+  test("rejects a validly signed request older than five minutes", async () => {
+    const { post } = setup();
+    const body = JSON.stringify({ id: "i1", token: "tok", application_id: "123456789012345678", type: 1 });
+    const age = (seconds: number) => String(Math.floor(Date.now() / 1000) - seconds);
+    expect((await post({ type: 1 }, await sign(body, age(301)))).status).toBe(401);
+    expect((await post({ type: 1 }, await sign(body, age(200)))).status).toBe(200);
   });
 
   test("anyone but the owner gets an ephemeral refusal and nothing runs", async () => {

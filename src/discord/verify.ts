@@ -11,8 +11,11 @@ function importKey(publicKeyHex: string): Promise<CryptoKey> {
   return key;
 }
 
-export async function verifyDiscordSignature(publicKeyHex: string, signature: string | undefined, timestamp: string | undefined, body: string): Promise<boolean> {
+const MAX_AGE_SECONDS = 300;
+
+export async function verifyDiscordSignature(publicKeyHex: string, signature: string | undefined, timestamp: string | undefined, body: string, nowMs: number): Promise<boolean> {
   const sig = signature ? hex(signature) : null;
   if (!sig || sig.length !== 64 || !timestamp) return false;
+  if (!(Math.abs(nowMs / 1000 - Number(timestamp)) <= MAX_AGE_SECONDS)) return false;
   return crypto.subtle.verify({ name: "Ed25519" }, await importKey(publicKeyHex), sig, new TextEncoder().encode(timestamp + body));
 }

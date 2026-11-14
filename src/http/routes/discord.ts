@@ -8,7 +8,7 @@ export const discordRoutes = new Hono<Env>().post("/interactions", async (c) => 
   const { discord } = c.var.deps;
   if (!discord) throw new ApiError(404, "not_found", "Discord is not configured");
   const body = await c.req.text();
-  const valid = await verifyDiscordSignature(discord.config.publicKey, c.req.header("x-signature-ed25519"), c.req.header("x-signature-timestamp"), body);
+  const valid = await verifyDiscordSignature(discord.config.publicKey, c.req.header("x-signature-ed25519"), c.req.header("x-signature-timestamp"), body, c.var.deps.now());
   if (!valid) throw new ApiError(401, "invalid_signature", "Invalid request signature");
   let interaction: Interaction;
   try {
