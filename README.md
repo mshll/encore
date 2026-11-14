@@ -51,6 +51,14 @@ All config is env vars, validated at boot (the process exits on invalid values).
 | `ENRICH_INTERVAL_SECONDS`, `ENRICH_BATCH_SIZE` | `4`, `1` | Seconds between enrichment runs, Web API calls per run (track or artist, most listened first) |
 | `ART_INTERVAL_SECONDS` | `4` | Seconds between album-art lookups through Spotify's public oEmbed endpoint |
 | `QUOTA_BACKOFF_HOURS` | `12` | Pause after a Spotify `QUOTA_EXCEEDED` 429 |
+| `JOBS_DISABLED` | empty | Comma-separated job names to skip: `poll`, `enrich`, `art`, `watch`, `radar`, `library` |
+| `WATCHER_ACTIVE_SECONDS`, `WATCHER_IDLE_SECONDS`, `WATCHER_BACKOFF_MAX_SECONDS` | `15`, `60`, `900` | Player watcher cadence while playing, while idle, and the longest back-off after a 429 |
+| `DJ_SKIP_TRIGGER` | `2` | Consecutive skips in a DJ session that trigger a re-plan |
+| `RADAR_MIN_LISTENS`, `RADAR_INTERVAL_MINUTES`, `RADAR_ARTISTS_PER_RUN`, `RADAR_RECHECK_DAYS`, `RADAR_BASELINE_DAYS` | `20`, `60`, `2`, `7`, `30` | Release radar: which artists, how often it runs, Web API calls per run, days between checks of one artist, look-back on an artist's first check |
+| `LIBRARY_SYNC_HOURS`, `LIBRARY_PAGE_SECONDS` | `24`, `20` | Saved songs and own playlists: hours between full passes, seconds between page calls |
+| `DISCORD_APPLICATION_ID`, `DISCORD_PUBLIC_KEY`, `DISCORD_OWNER_ID` | unset | Enable `POST /api/discord/interactions`. Only `DISCORD_OWNER_ID` may use commands |
+| `DISCORD_BOT_TOKEN`, `DISCORD_GUILD_ID`, `DISCORD_CHANNEL_ID` | unset | Posting to the channel and guild command registration (at startup, or `bun run discord:register`) |
+| `MCP_TOKEN` | unset | Min 24 chars. Bearer token for `/mcp`; unset disables it |
 
 ## Import
 
@@ -74,7 +82,14 @@ src/config.ts            env validation
 src/db/                  Drizzle schema, migrations runner (SQL in drizzle/)
 src/plays/               shared play model: song key, device enum, local time, inserts
 src/ingest/export/       export parsing, import, CLI
-src/ingest/live/         recently-played poller, track and artist enrichment, album art
+src/ingest/live/         recently-played poller, player watcher and its reconciliation, track and artist enrichment, album art
+src/player/              typed Spotify playback API
+src/dj/                  DJ sessions on an app-owned playlist, pluggable re-planner
+src/radar/               release radar
+src/library/             saved songs and own playlists sync
+src/cleanup/             cleanup proposals; apply and undo (only reachable from the HTTP route)
+src/discord/             interactions endpoint logic, REST client, command registry, built-in commands
+src/mcp/                 MCP server (tools over analytics and playback)
 src/spotify/             OAuth (PKCE, rotating refresh), API client, rate-limit gate
 src/auth/                passkeys, sessions
 src/tags/                tag vocabulary, validation, storage
