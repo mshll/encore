@@ -103,7 +103,7 @@ All in `web/src/styles/tokens.css`. Components use the Tailwind names in the rig
 | Fills | `bg-fill`, `-hover`, `-active`, `-raised`, `-raised-hover`, `-inverted`, `-inverted-hover`, `-on-standout` | Controls. Translucent, so they work on any surface |
 | Text | `text-primary`, `text-secondary`, `text-tertiary`, `text-disabled`, `text-inverted` | Opaque greys, so icons stay crisp |
 | Lines | `line`, `line-subtle`, `line-strong`, `focus` | Hairlines (0.5px) and the focus ring |
-| Accent | `bg-accent`, `-hover`, `text-on-accent`, `text-accent-text`, `bg-accent-subtle` | Spotify green: the primary play action, selection, playing state, chart emphasis. Nothing else |
+| Accent | `bg-accent`, `-hover`, `text-on-accent`, `text-accent-text`, `bg-accent-subtle` | Spotify green: the primary play action, selection, playing state, chart emphasis, the encore mark. Nothing else |
 | Status | `text-danger`, `bg-danger-subtle`, `text-warning`, `bg-warning-subtle` | Errors, destructive actions, notices |
 | Chart | `chart-key`, `chart-empty`, `chart-grid`, `chart-axis` | Around the dither canvases |
 
@@ -210,7 +210,7 @@ All in `web/src/ui/` unless noted. Props listed are the ones that matter.
 | `BlockedList` | `surfaces/BlockedList` | Songs and artists kept out of picks and sets, with Allow. Picks and Library |
 | `Kbd`, `MOD_KEY` | `ui/Kbd` | Hidden on touch screens |
 | `Icon` | `ui/Icon` | `icon`, `size`, `fill` |
-| `EncoreMark`, `Lockup` | `ui/Brand` | Mark at 16, 32 or 48 only. Lockup 16 or 32 |
+| `EncoreMark`, `Lockup` | `ui/Brand` | Mark at 16, 32 or 48 only, in `text-accent-text` (Spotify green on dark, the deeper green on light, where Spotify green is 1.7:1 on the shell). The wordmark stays `text-primary`. Lockup 16 or 32. `public/favicon.svg` and `logo.svg` follow the colour scheme the same way; the PNG app icons draw the mark in Spotify green on near-black |
 | `AppLink`, `useRangeHref` | `ui/AppLink` | A link that keeps the current range |
 | Paths | `app/paths` | `artistPath(name)`, `songPath(key)`, `albumPath(artist, album)` |
 
