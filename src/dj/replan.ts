@@ -1,8 +1,9 @@
 import { sql } from "drizzle-orm";
-import { HOUR_BUCKET, DAY_TYPE } from "../analytics/common";
+import { HOUR_BUCKET, dayTypeSql } from "../analytics/common";
 import { momentSplit, type MomentClass } from "../analytics/skips";
 import type { Db } from "../db/client";
-import { localTime } from "../plays/localTime";
+import { dayTypeOf } from "../library/catalog";
+import { localTime, type Locale } from "../plays/localTime";
 
 export type ReplanInput = {
   finished: string[];
@@ -60,10 +61,10 @@ export function similarity(song: SongInfo, p: Profile): number {
   return (tagScore + closeness(song.energy, p.energy) * 0.5 + closeness(song.valence, p.valence) * 0.5) / 2;
 }
 
-function contextFit(db: Db, songKeys: string[], hour: number, weekday: number): Map<string, number> {
+function contextFit(db: Db, songKeys: string[], hour: number, weekday: number, weekendDays: readonly number[]): Map<string, number> {
   if (songKeys.length === 0) return new Map();
   const bucket = hour < 6 ? "night" : hour < 12 ? "morning" : hour < 18 ? "afternoon" : "evening";
-  const dayType = weekday === 5 || weekday === 6 ? "weekend" : "weekday";
+  const dayType = dayTypeOf(weekday, weekendDays);
   const rows = db.all<{ song_key: string; dim: string; plays: number; skips: number }>(sql`
     select t.song_key, 'hour' as dim, count(*) as plays, sum(p.skipped = 1) as skips
     from plays p join tracks t on t.uri = p.track_uri
@@ -75,7 +76,7 @@ function contextFit(db: Db, songKeys: string[], hour: number, weekday: number): 
     union all
     select t.song_key, 'day' as dim, count(*) as plays, sum(p.skipped = 1) as skips
     from plays p join tracks t on t.uri = p.track_uri
-    where p.kind = 'track' and p.skipped is not null and ${DAY_TYPE} = ${dayType} and t.song_key in (${sql.join(
+    where p.kind = 'track' and p.skipped is not null and ${dayTypeSql(weekendDays)} = ${dayType} and t.song_key in (${sql.join(
       songKeys.map((k) => sql`${k}`),
       sql`, `,
     )})
@@ -101,10 +102,11 @@ function topUpCandidates(db: Db, exclude: Set<string>): string[] {
     .filter((uri) => !exclude.has(uri));
 }
 
-export function createDefaultReplanner(db: Db, timezone: string): Replanner {
+export function createDefaultReplanner(db: Db, locale: () => Locale): Replanner {
   return async (input) => {
+    const { timezone, weekendDays } = locale();
     const classes = new Map<string, MomentClass>(
-      momentSplit(db, { range: {}, minPlays: 8, minContextPlays: 5, limit: 100_000 }).songs.map((s) => [s.songKey, s.class]),
+      momentSplit(db, { range: {}, minPlays: 8, minContextPlays: 5, limit: 100_000, weekendDays }).songs.map((s) => [s.songKey, s.class]),
     );
     const exclude = new Set([...input.exclude, ...input.upcoming]);
     const known = songInfo(db, [...input.finished, ...input.skipped]);
@@ -113,7 +115,7 @@ export function createDefaultReplanner(db: Db, timezone: string): Replanner {
     const pool = [...input.upcoming, ...(liked.size > 0 ? topUpCandidates(db, exclude) : [])];
     const info = songInfo(db, pool);
     const { hour, weekday } = localTime(input.now, timezone);
-    const fit = contextFit(db, [...new Set([...info.values()].map((s) => s.songKey))], hour, weekday);
+    const fit = contextFit(db, [...new Set([...info.values()].map((s) => s.songKey))], hour, weekday, weekendDays);
     const skippedKeys = new Set(input.skipped.flatMap((u) => known.get(u)?.songKey ?? []));
     const scored = pool
       .map((uri, order) => {

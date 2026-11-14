@@ -1,16 +1,16 @@
 import { sql, type SQL } from "drizzle-orm";
 import type { Db } from "../db/client";
-import { DAY_TYPE, HOUR_BUCKET, MUSIC, musicWhere, rate, type Range, SHUFFLE, songStatsSql, songWithStats, START_MODE, STATS, stats, type SongRow, type StatsRow, withArtistImages } from "./common";
+import { dayTypeSql, HOUR_BUCKET, MUSIC, musicWhere, rate, type Range, SHUFFLE, songStatsSql, songWithStats, START_MODE, STATS, stats, type SongRow, type StatsRow, withArtistImages } from "./common";
 
-export const CONTEXT_DIMENSIONS = {
+export const contextDimensions = (weekendDays: readonly number[]) => ({
   hourBucket: HOUR_BUCKET,
-  dayType: DAY_TYPE,
+  dayType: dayTypeSql(weekendDays),
   shuffle: SHUFFLE,
   device: sql.raw("p.device"),
   startMode: START_MODE,
-} as const;
+});
 
-export type ContextDimension = keyof typeof CONTEXT_DIMENSIONS;
+export type ContextDimension = keyof ReturnType<typeof contextDimensions>;
 
 export const SPLIT_RULES = {
   keeperBelow: 0.25,
@@ -25,10 +25,10 @@ type ContextRow = { song_key: string; dimension: ContextDimension; value: string
 
 export type ContextStat = { dimension: ContextDimension; value: string; plays: number; skips: number; skipRate: number };
 
-export function skipProfile(db: Db, where: SQL) {
+export function skipProfile(db: Db, where: SQL, weekendDays: readonly number[]) {
   const known = sql`${where} and p.skipped is not null`;
   return Object.fromEntries(
-    Object.entries(CONTEXT_DIMENSIONS).map(([dimension, expr]) => {
+    Object.entries(contextDimensions(weekendDays)).map(([dimension, expr]) => {
       const rows = db.all<{ value: string; plays: number; skips: number }>(sql`
         select ${expr} as value, count(*) as plays, sum(p.skipped = 1) as skips
         from ${MUSIC} where ${known} and ${expr} is not null group by value order by plays desc`);
@@ -60,6 +60,23 @@ export function skips(db: Db, { range, minPlays, limit }: { range: Range; minPla
   };
 }
 
+const POSITION_BUCKETS = 10;
+
+/** Where skips land: skipped plays by the share of the song played, in tenths. Songs without a known duration are left out. */
+function skipPositions(db: Db, where: SQL) {
+  const rows = db.all<{ bucket: number; skips: number }>(sql`
+    select min(${POSITION_BUCKETS - 1}, cast(${POSITION_BUCKETS} * p.ms_played / t.duration_ms as integer)) as bucket, count(*) as skips
+    from ${MUSIC} where ${where} and p.skipped = 1 and t.duration_ms > 0 and p.ms_played is not null
+    group by bucket`);
+  const counts = new Map(rows.map((r) => [r.bucket, r.skips]));
+  return Array.from({ length: POSITION_BUCKETS }, (_, i) => ({ start: i / POSITION_BUCKETS, end: (i + 1) / POSITION_BUCKETS, skips: counts.get(i) ?? 0 }));
+}
+
+export function skipContext(db: Db, { range, weekendDays }: { range: Range; weekendDays: readonly number[] }) {
+  const where = musicWhere(range);
+  return { profile: skipProfile(db, where, weekendDays), positions: skipPositions(db, where) };
+}
+
 export function classify(skipRate: number, contexts: ContextStat[]): MomentClass {
   const works = contexts.some((c) => c.skipRate <= SPLIT_RULES.worksAtMost);
   const fails = contexts.some((c) => c.skipRate >= SPLIT_RULES.failsAtLeast);
@@ -71,14 +88,21 @@ export function classify(skipRate: number, contexts: ContextStat[]): MomentClass
 
 export function momentSplit(
   db: Db,
-  { range, minPlays, minContextPlays, limit, only }: { range: Range; minPlays: number; minContextPlays: number; limit: number; only?: MomentClass },
+  {
+    range,
+    minPlays,
+    minContextPlays,
+    limit,
+    only,
+    weekendDays,
+  }: { range: Range; minPlays: number; minContextPlays: number; limit: number; only?: MomentClass; weekendDays: readonly number[] },
 ) {
   const where = sql`${musicWhere(range)} and p.skipped is not null`;
   const songs = db.all<SongRow>(sql`select * from (${songStatsSql(where)}) where skip_known >= ${minPlays}`);
   const eligible = sql`t.song_key in (select song_key from (${songStatsSql(where)}) where skip_known >= ${minPlays})`;
   const contextRows = db.all<ContextRow>(
     sql.join(
-      Object.entries(CONTEXT_DIMENSIONS).map(
+      Object.entries(contextDimensions(weekendDays)).map(
         ([dimension, expr]) => sql`
           select t.song_key, ${dimension} as dimension, ${expr} as value, count(*) as plays, sum(p.skipped = 1) as skips
           from ${MUSIC} where ${where} and ${eligible} and ${expr} is not null

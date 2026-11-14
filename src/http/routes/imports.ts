@@ -13,7 +13,7 @@ const PART_HEADER_BYTES = 16 * 1024;
 export const importRoutes = new Hono<Env>()
   .post("/catalog", async (c) => c.json(seedCatalog(c.var.deps.db, parse(catalogBody, await jsonBody(c)))))
   .post("/", async (c) => {
-  const { db, config, now } = c.var.deps;
+  const { db, settings, now } = c.var.deps;
   if (!c.req.header("content-type")?.startsWith("multipart/form-data")) {
     throw new ApiError(415, "multipart_required", "Upload the export files as multipart/form-data in the 'files' field");
   }
@@ -31,7 +31,7 @@ export const importRoutes = new Hono<Env>()
   const contents: { name: string; content: string }[] = [];
   for (const f of files) contents.push({ name: f.name, content: await f.text() });
   try {
-    return c.json(importExport(db, contents, config.timezone, now()));
+    return c.json(importExport(db, contents, settings.get().timezone, now()));
   } catch (error) {
     if (error instanceof ExportFormatError || error instanceof EmptyImportError) throw new ApiError(400, "invalid_export", error.message);
     throw error;

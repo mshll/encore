@@ -35,5 +35,6 @@ export function usePlayback() {
     resume: () => send("/api/player/play", {}),
     pause: () => send("/api/player/pause", {}),
     next: () => send("/api/player/next", {}),
+    shuffle: (state: boolean) => send("/api/player/shuffle", { state }),
   };
 }

@@ -10,7 +10,14 @@ export const MUSIC = sql.raw("plays p join tracks t on t.uri = p.track_uri");
 export const HOUR_BUCKET = sql.raw(
   "case when p.hour < 6 then 'night' when p.hour < 12 then 'morning' when p.hour < 18 then 'afternoon' else 'evening' end",
 );
-export const DAY_TYPE = sql.raw("case when p.weekday in (5, 6) then 'weekend' else 'weekday' end");
+/** `weekend` on the owner's weekend days (ISO weekdays), else `weekday`. */
+export function dayTypeSql(weekendDays: readonly number[]): SQL {
+  if (weekendDays.length === 0) return sql.raw("'weekday'");
+  return sql`case when p.weekday in (${sql.join(
+    weekendDays.map((d) => sql`${d}`),
+    sql`, `,
+  )}) then 'weekend' else 'weekday' end`;
+}
 export const START_MODE = sql.raw(
   "case when p.reason_start in ('clickrow', 'playbtn', 'backbtn') then 'chosen' when p.reason_start in ('trackdone', 'fwdbtn') then 'auto' end",
 );

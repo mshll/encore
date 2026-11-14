@@ -20,8 +20,8 @@ const optionalBody = async (c: Context<Env>) => (c.req.header("content-type")?.i
 
 export const playerRoutes = new Hono<Env>()
   .get("/now", async (c) => {
-    const { services, config } = c.var.deps;
-    return c.json(await services.watcher.nowPlaying(config.watcherIdleMs + 5000));
+    const { services, settings } = c.var.deps;
+    return c.json(await services.watcher.nowPlaying(settings.get().watcherIdleMs + 5000));
   })
   .get("/devices", async (c) => {
     const devices = await c.var.deps.services.player.devices();

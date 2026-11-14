@@ -75,7 +75,7 @@ describe("playing a set through the DJ", () => {
     const { ctx, db, spotifyCalls } = featureCtx(fake.transport);
     seedLibrary(db);
     const { set } = await createSet(ctx, "night");
-    const dj = new DjService(db, new PlayerApi(ctx.spotify), new AppPlaylists(db, ctx.spotify), deterministic, { skipTrigger: 5 });
+    const dj = new DjService(db, new PlayerApi(ctx.spotify), new AppPlaylists(db, ctx.spotify), deterministic, () => 5);
     const session = await playSet(db, dj, set.id);
     expect(session.uris).toEqual([uri("w1"), uri("n1")]);
     expect(spotifyCalls.map((c) => `${c.method} ${c.path.split("?")[0]}`)).toContain("PUT /v1/me/player/play");

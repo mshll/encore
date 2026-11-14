@@ -6,7 +6,7 @@ import type { FeatureContext } from "../src/llm/context";
 import { SpotifyAuth } from "../src/spotify/auth";
 import { SpotifyClient } from "../src/spotify/client";
 import { upsertTags } from "../src/tags/service";
-import { play, seed, testConfig, testDb, track, uri } from "./helpers";
+import { play, seed, testConfig, testDb, track, uri, testSettings } from "./helpers";
 
 type Block = Anthropic.Beta.BetaContentBlock;
 
@@ -157,12 +157,13 @@ export function clock(start = "2026-02-01T12:00:00Z") {
 export function featureCtx(transport: LlmTransport | null, catalog: FakeSpotifyTrack[] = [], env: Record<string, string> = {}, start?: string) {
   const db = testDb();
   const config = testConfig(env);
+  const settings = testSettings(db, config);
   const time = clock(start);
   db.insert(spotifyAuth).values({ id: 1, accessToken: "tok", refreshToken: "ref", expiresAt: 9e15, scope: "", clientId: "test-client", updatedAt: 0 }).run();
-  const auth = new SpotifyAuth(db, config, fetch, time.now);
+  const auth = new SpotifyAuth(db, config, settings, fetch, time.now);
   const fake = fakeSpotifyFetch(catalog);
-  const spotify = new SpotifyClient(db, auth, config, fake.fetchFn, time.now);
-  const llm = new Llm(db, config, transport, time.now);
-  const ctx: FeatureContext = { db, config, llm, spotify, now: time.now };
+  const spotify = new SpotifyClient(db, auth, settings, fake.fetchFn, time.now);
+  const llm = new Llm(db, settings, () => transport, time.now);
+  const ctx: FeatureContext = { db, config, settings, llm, spotify, now: time.now };
   return { ctx, db, spotifyCalls: fake.calls, auth, time };
 }

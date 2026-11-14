@@ -1,4 +1,4 @@
-// Standalone pixel primitives for the non-chart Dither Kit pieces (avatar,
+// Standalone pixel primitives for the non-chart Dither Kit pieces (the
 // gradient). Deliberately free of the chart engine so those items install
 // without `core` — only palette.ts is shared. The Bayer matrix and bloom
 // presets mirror dither-paint.ts so everything reads as one texture.
@@ -15,29 +15,6 @@ export const BAYER4 = [
 ].map((row) => row.map((v) => (v + 0.5) / 16))
 
 export const clamp01 = (t: number) => (t < 0 ? 0 : t > 1 ? 1 : t)
-
-/** 32-bit FNV-1a hash — turns any string seed into a stable uint32. */
-export function fnv1a(str: string): number {
-  let h = 0x811c9dc5
-  for (let i = 0; i < str.length; i++) {
-    h ^= str.charCodeAt(i)
-    h = Math.imul(h, 0x01000193)
-  }
-  return h >>> 0
-}
-
-/** Tiny deterministic PRNG (xorshift32) — returns floats in [0, 1). */
-export function xorshift32(seed: number): () => number {
-  let s = seed || 0x9e3779b9
-  return () => {
-    s ^= s << 13
-    s >>>= 0
-    s ^= s >>> 17
-    s ^= s << 5
-    s >>>= 0
-    return s / 0x100000000
-  }
-}
 
 /** A named palette colour or a raw hue (0–360). */
 export type PixelColor = DitherColor | number
@@ -104,11 +81,4 @@ export function pixelBloomStyle(bloom: PixelBloom): PixelBloomStyle | null {
     mixBlendMode: "plus-lighter",
     imageRendering: "auto",
   }
-}
-
-/** Whether the OS asks for reduced motion (skip entrances). */
-export function pixelPrefersReducedMotion(): boolean {
-  return (
-    window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches ?? false
-  )
 }

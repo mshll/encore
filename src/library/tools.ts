@@ -30,7 +30,7 @@ export const findSongsInput = z.strictObject({
   minListens: z.number().int().min(0).optional(),
   notPlayedForDays: z.number().int().min(1).optional().describe("Only songs not played in the last N days."),
   hourBucket: z.enum(HOUR_BUCKETS).optional().describe("Report and sort by skip rate in this time of day: night 00-05, morning 06-11, afternoon 12-17, evening 18-23."),
-  dayType: z.enum(["weekday", "weekend"]).optional().describe("Report and sort by skip rate on weekdays or weekends (Friday and Saturday)."),
+  dayType: z.enum(["weekday", "weekend"]).optional().describe("Report and sort by skip rate on weekdays or weekends (the owner's weekend days)."),
   sort: z.enum(["listens", "recent", "least_recent", "context_fit", "lowest_skip_rate"]).optional(),
   limit: z.number().int().min(1).max(40).optional(),
 });
@@ -45,8 +45,8 @@ function windowStats(db: Db, from: string | undefined, to: string | undefined) {
   return new Map(rows.map((r) => [r.song_key, r]));
 }
 
-export function findSongs(db: Db, blocked: Blocked, input: FindSongsInput, now: number) {
-  const catalog = loadCatalog(db);
+export function findSongs(db: Db, blocked: Blocked, input: FindSongsInput, now: number, weekendDays: readonly number[]) {
+  const catalog = loadCatalog(db, weekendDays);
   const window = input.playedFrom || input.playedTo ? windowStats(db, input.playedFrom, input.playedTo) : null;
   const artists = input.artists?.map(artistKey);
   const text = input.text?.toLowerCase();
@@ -108,8 +108,8 @@ export function findSongs(db: Db, blocked: Blocked, input: FindSongsInput, now: 
   };
 }
 
-export function artistProfile(db: Db, name: string) {
-  const songs = [...loadCatalog(db).songs.values()].filter((s) => artistKey(s.artist) === artistKey(name));
+export function artistProfile(db: Db, name: string, weekendDays: readonly number[]) {
+  const songs = [...loadCatalog(db, weekendDays).songs.values()].filter((s) => artistKey(s.artist) === artistKey(name));
   if (songs.length === 0) {
     const similar = db.all<{ artist: string }>(sql`select distinct artist from tracks where artist like ${`%${name.replace(/[\\%_]/g, "")}%`} limit 5`);
     return { known: false, suggestions: similar.map((r) => r.artist) };
@@ -138,20 +138,20 @@ export function artistProfile(db: Db, name: string) {
   };
 }
 
-export function libraryTools(db: Db, blocked: Blocked, now: number): AgentTool[] {
+export function libraryTools(db: Db, blocked: Blocked, now: number, weekendDays: readonly number[]): AgentTool[] {
   return [
     tool({
       name: "find_songs",
       description:
         "Search the owner's own listening history (songs they have played). Use it to find songs that fit a request by tags, artist, era, moment class or time-of-day fit, and to check what the owner already knows. Filters combine with AND. Returns at most 40 songs plus the total match count.",
       schema: findSongsInput,
-      run: (input) => findSongs(db, blocked, input, now),
+      run: (input) => findSongs(db, blocked, input, now, weekendDays),
     }),
     tool({
       name: "artist_profile",
       description: "Summarise how the owner listens to one artist: songs played, listens, hours, skip rate, first and last play, top songs. Use it before leaning on an artist.",
       schema: z.strictObject({ artist: z.string().min(1) }),
-      run: ({ artist }) => artistProfile(db, artist),
+      run: ({ artist }) => artistProfile(db, artist, weekendDays),
     }),
   ];
 }

@@ -13,7 +13,7 @@ import { syncStep, type SyncCursor } from "../src/library/sync";
 import { SpotifyAuth } from "../src/spotify/auth";
 import { SpotifyClient } from "../src/spotify/client";
 import type { SpotifyTrack } from "../src/spotify/types";
-import { connectSpotify, jsonResponse, noContent, play, routeFetch, seed, testApp, testConfig, testDb, track, uri, type FetchCall } from "./helpers";
+import { connectSpotify, jsonResponse, noContent, play, routeFetch, seed, testApp, testConfig, testDb, track, uri, type FetchCall, testSettings, WEEKEND } from "./helpers";
 
 const NOW = Date.parse("2026-11-14T09:00:00Z");
 const DAY = 86_400_000;
@@ -60,12 +60,13 @@ async function syncAll(db: ReturnType<typeof testDb>, spotify: SpotifyClient, au
 function seeded(lib: Library, extra?: (call: FetchCall) => Response | undefined) {
   const db = testDb();
   const config = testConfig();
+  const settings = testSettings(db, config);
   connectSpotify(db, "owner");
   const skipped = (id: string, n: number) => Array.from({ length: n }, (_, i) => play(new Date(NOW - (i + 1) * DAY).toISOString(), uri(id), 3000, { skipped: true }));
   seed(db, ["skp", "ok"].map((id) => track(id, `Song ${id}`, `Artist ${id}`, "Album")), [...skipped("skp", 10), play(new Date(NOW - DAY).toISOString(), uri("ok"), 200_000)]);
   const { fn, calls } = libraryFetch(lib, extra);
-  const auth = new SpotifyAuth(db, config, fn);
-  const spotify = new SpotifyClient(db, auth, config, fn);
+  const auth = new SpotifyAuth(db, config, settings, fn);
+  const spotify = new SpotifyClient(db, auth, settings, fn);
   return { db, config, spotify, auth, calls };
 }
 
@@ -110,7 +111,7 @@ describe("cleanup proposals", () => {
   test("rules: never played, dislike, nearly always skipped in a playlist, duplicates; each with evidence", async () => {
     const { db, spotify, auth } = seeded(library());
     await syncAll(db, spotify, auth);
-    const proposals = computeProposals(db, NOW);
+    const proposals = computeProposals(db, NOW, WEEKEND);
     const byKind = (kind: string) => proposals.filter((p) => p.kind === kind);
     expect(byKind("saved_never_played")).toHaveLength(120);
     expect(byKind("saved_never_played").some((p) => p.uri === uri("new"))).toBe(false);
@@ -126,7 +127,7 @@ describe("cleanup proposals", () => {
     const shortSkips = Array.from({ length: 10 }, (_, i) => play(new Date(NOW - (i + 1) * DAY).toISOString(), uri("sht"), i < 2 ? 40_000 : 3000, { skipped: true }));
     seed(db, [track("lng", "Sinnerman", "Nina Simone", "Pastel Blues"), track("sht", "Short", "Artist", "A")], [...longSkips, ...shortSkips]);
     db.insert(savedTracks).values([uri("lng"), uri("sht")].map((u) => ({ uri: u, addedAt: NOW - 400 * DAY, syncedAt: NOW }))).run();
-    const dislikes = computeProposals(db, NOW).filter((p) => p.kind === "saved_dislike");
+    const dislikes = computeProposals(db, NOW, WEEKEND).filter((p) => p.kind === "saved_dislike");
     expect(dislikes.map((p) => p.evidence.name)).toEqual(["Short"]);
     expect(dislikes[0]!.evidence).toMatchObject({ plays: 10, listens: 2, listenRatio: 0.2 });
     expect(CLEANUP_RULES.dislikeMaxListenRatio).toBe(0.2);
@@ -135,16 +136,16 @@ describe("cleanup proposals", () => {
   test("dismissed proposals stay dismissed across refreshes", async () => {
     const { db, spotify, auth } = seeded(library());
     await syncAll(db, spotify, auth);
-    refreshProposals(db, NOW);
+    refreshProposals(db, NOW, WEEKEND);
     const target = listProposals(db, { kind: "saved_dislike", status: "open", limit: 10, offset: 0 }).items[0]!;
     db.run(sql`update cleanup_proposals set status = 'dismissed' where id = ${target.id}`);
-    expect(refreshProposals(db, NOW).saved_dislike).toBe(0);
+    expect(refreshProposals(db, NOW, WEEKEND).saved_dislike).toBe(0);
   });
 
   test("apply removes only the chosen items and records an undo log that restores them", async () => {
     const { db, spotify, auth, calls } = seeded(library());
     await syncAll(db, spotify, auth);
-    refreshProposals(db, NOW);
+    refreshProposals(db, NOW, WEEKEND);
     const open = (kind: string) => listProposals(db, { kind: kind as never, status: "open", limit: 500, offset: 0 }).items;
     const ids = [open("saved_dislike")[0]!.id, open("playlist_duplicate")[0]!.id, open("playlist_skipped")[0]!.id];
     calls.length = 0;
@@ -174,7 +175,7 @@ describe("cleanup proposals", () => {
   test("overlapping apply or undo requests for the same items send one set of writes", async () => {
     const { db, spotify, auth, calls } = seeded(library());
     await syncAll(db, spotify, auth);
-    refreshProposals(db, NOW);
+    refreshProposals(db, NOW, WEEKEND);
     const ids = [listProposals(db, { kind: "saved_dislike", status: "open", limit: 1, offset: 0 }).items[0]!.id];
     calls.length = 0;
     const applies = await Promise.allSettled([applyCleanup(db, spotify, ids, NOW), applyCleanup(db, spotify, ids, NOW)]);
@@ -235,10 +236,10 @@ describe("apply is unreachable from automated paths", () => {
     connectSpotify(app.db, "owner");
     seed(app.db, [track("ok", "Song ok", "Artist ok", "Album")], [play(new Date(Date.now() - DAY).toISOString(), uri("ok"), 200_000)]);
     for (let i = 0; i < 12; i++) for (const job of Object.values(app.jobs)) await runJob(app.db, job);
-    refreshProposals(app.db, Date.now());
+    refreshProposals(app.db, Date.now(), WEEKEND);
     expect(listProposals(app.db, { status: "open", limit: 500, offset: 0 }).total).toBeGreaterThan(0);
 
-    const discord = createDiscord(app.config.discord!, { db: app.db, config: app.config, services: app.services, now: Date.now }, fn);
+    const discord = createDiscord(app.settings.get().discord!, { db: app.db, config: app.config, settings: app.settings, services: app.services, now: Date.now }, fn);
     for (const definition of discord.registry.definitions()) {
       const options = definition.options?.filter((o) => o.required).map((o) => ({ name: o.name, value: "ok" }));
       await discord.interactions.handle({ id: "i", type: InteractionType.Command, token: "t", application_id: "1", member: { user: { id: "42" } }, data: { name: definition.name, options } });

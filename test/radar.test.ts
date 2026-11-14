@@ -3,7 +3,7 @@ import { linkArtists } from "../src/plays/store";
 import { listReleases, markReleasesSeen, newReleasesSince, radarCandidates, runRadar } from "../src/radar/radar";
 import { SpotifyAuth } from "../src/spotify/auth";
 import { SpotifyClient } from "../src/spotify/client";
-import { connectSpotify, jsonResponse, play, routeFetch, seed, testConfig, testDb, track, uri } from "./helpers";
+import { connectSpotify, jsonResponse, play, routeFetch, seed, testConfig, testDb, track, uri, testSettings } from "./helpers";
 
 const NOW = Date.parse("2026-11-14T09:00:00Z");
 const DAY = 86_400_000;
@@ -23,6 +23,7 @@ const album = (id: string, date: string, type = "single") => ({
 function setup(albums: Record<string, unknown[]>, env: Record<string, string> = {}) {
   const db = testDb();
   const config = testConfig({ RADAR_MIN_LISTENS: "3", RADAR_ARTISTS_PER_RUN: "2", ...env });
+  const settings = testSettings(db, config);
   connectSpotify(db);
   const listens = (id: string, n: number) => Array.from({ length: n }, (_, i) => play(new Date(NOW - (i + 1) * DAY).toISOString(), uri(id), 200_000));
   seed(db, [track("a1", "A one", "Artist A", "X"), track("b1", "B one", "Artist B", "Y"), track("c1", "C one", "Artist C", "Z")], [...listens("a1", 5), ...listens("b1", 4), ...listens("c1", 1)]);
@@ -39,8 +40,8 @@ function setup(albums: Record<string, unknown[]>, env: Record<string, string> = 
     }
     return undefined;
   });
-  const spotify = new SpotifyClient(db, new SpotifyAuth(db, config, fn), config, fn);
-  return { db, config, spotify, calls };
+  const spotify = new SpotifyClient(db, new SpotifyAuth(db, config, settings, fn), settings, fn);
+  return { db, config: settings.get(), spotify, calls };
 }
 
 describe("release radar", () => {

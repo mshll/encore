@@ -40,10 +40,10 @@ function evidenceFor(meta: SongMeta, stats: SongRow | undefined) {
   };
 }
 
-export function computeProposals(db: Db, now: number): Proposal[] {
+export function computeProposals(db: Db, now: number, weekendDays: readonly number[]): Proposal[] {
   const stats = songStats(db);
   const dislikes = new Set(
-    momentSplit(db, { range: {}, minPlays: CLEANUP_RULES.dislikeMinPlays, minContextPlays: CLEANUP_RULES.dislikeMinContextPlays, limit: 1_000_000, only: "dislike" }).songs.map(
+    momentSplit(db, { range: {}, minPlays: CLEANUP_RULES.dislikeMinPlays, minContextPlays: CLEANUP_RULES.dislikeMinContextPlays, limit: 1_000_000, only: "dislike", weekendDays }).songs.map(
       (s) => s.songKey,
     ),
   );
@@ -101,8 +101,8 @@ export function computeProposals(db: Db, now: number): Proposal[] {
   return proposals;
 }
 
-export function refreshProposals(db: Db, now: number) {
-  const proposals = computeProposals(db, now);
+export function refreshProposals(db: Db, now: number, weekendDays: readonly number[]) {
+  const proposals = computeProposals(db, now, weekendDays);
   db.transaction((tx) => {
     for (const p of proposals) {
       tx.insert(cleanupProposals)

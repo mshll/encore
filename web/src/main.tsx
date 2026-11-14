@@ -1,4 +1,5 @@
-import "@fontsource-variable/inter";
+import "@fontsource-variable/geist";
+import "@fontsource/instrument-serif/latin-400.css";
 import "./styles/app.css";
 import "./lib/theme";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -24,10 +25,14 @@ setUnauthenticatedHandler(() => {
   }));
 });
 
-createRoot(document.getElementById("root")!).render(
-  <StrictMode>
-    <QueryClientProvider client={queryClient}>
-      <App />
-    </QueryClientProvider>
-  </StrictMode>,
+const fixtures = import.meta.env.DEV ? import("./dev/fixtures") : Promise.resolve();
+
+void fixtures.then(() =>
+  createRoot(document.getElementById("root")!).render(
+    <StrictMode>
+      <QueryClientProvider client={queryClient}>
+        <App />
+      </QueryClientProvider>
+    </StrictMode>,
+  ),
 );

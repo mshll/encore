@@ -34,14 +34,14 @@ const songBrief = (s: { songKey: string; name: string; artist: string; album: st
 });
 
 /** Read-only tools over the play history. None of them reaches auth, session, passkey, token or ledger tables. */
-export function askTools(db: Db, homeCountry: string | undefined, now: number): AgentTool[] {
+export function askTools(db: Db, { homeCountry, weekendDays }: { homeCountry?: string; weekendDays: readonly number[] }, now: number): AgentTool[] {
   return [
     tool({
       name: "query_plays",
       description:
         "Flexible aggregate over music plays: filter, group by up to three keys, and choose metrics. Use it for any count, trend or comparison the other tools don't answer directly. Listens = plays of 30 s or more (all API rows count). hours = time played. skipRate covers export and live rows (API rows have no skip flag). All days and hours are local time.",
       schema: queryPlaysInput,
-      run: (input) => queryPlays(db, { ...input, ...checkRange(input) }),
+      run: (input) => queryPlays(db, { ...input, ...checkRange(input) }, weekendDays),
     }),
     tool({
       name: "overview",
@@ -72,7 +72,7 @@ export function askTools(db: Db, homeCountry: string | undefined, now: number): 
       description: "One artist over time: totals, a timeline by period, skip profile by context, top songs and albums.",
       schema: z.strictObject({ artist: z.string().min(1), ...range, period }),
       run: ({ artist, period: p, ...r }) => {
-        const page = artistPage(db, { artist, range: checkRange(r), period: p ?? "month" });
+        const page = artistPage(db, { artist, range: checkRange(r), period: p ?? "month", weekendDays });
         if (!page) return { found: false, hint: "No plays for that exact artist name in this range. Use search_library to find the exact name." };
         return { ...page, tracks: page.tracks.slice(0, 15).map(songBrief), albums: page.albums.slice(0, 10).map(({ albumArtUrl: _art, ...a }) => a) };
       },
@@ -82,7 +82,7 @@ export function askTools(db: Db, homeCountry: string | undefined, now: number): 
       description: "One song (by songKey from another tool) over time: totals, timeline, skip profile by context, and its moment class.",
       schema: z.strictObject({ songKey: z.string().min(1), ...range, period }),
       run: ({ songKey, period: p, ...r }) => {
-        const page = trackPage(db, { songKey, range: checkRange(r), period: p ?? "month" });
+        const page = trackPage(db, { songKey, range: checkRange(r), period: p ?? "month", weekendDays });
         if (!page) return { found: false };
         const { albumArtUrl: _art, ...rest } = page;
         return rest;
@@ -103,7 +103,7 @@ export function askTools(db: Db, homeCountry: string | undefined, now: number): 
         "Classify songs with 8+ plays with skip data as keeper, wrong_moment (finished in some contexts, skipped in others), dislike (skipped nearly everywhere) or mixed. A skip is not a dislike; use this before calling a song disliked.",
       schema: z.strictObject({ ...range, class: z.enum(["keeper", "wrong_moment", "dislike", "mixed"]).optional(), limit: z.number().int().min(1).max(50).optional() }),
       run: ({ class: only, limit, ...r }) => {
-        const split = momentSplit(db, { range: checkRange(r), minPlays: 8, minContextPlays: 5, limit: limit ?? 20, only });
+        const split = momentSplit(db, { range: checkRange(r), minPlays: 8, minContextPlays: 5, limit: limit ?? 20, only, weekendDays });
         return { ...split, songs: split.songs.map((s) => ({ ...songBrief(s), class: s.class, bestContext: s.bestContext, worstContext: s.worstContext })) };
       },
     }),

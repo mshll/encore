@@ -35,6 +35,7 @@ export type SkipProfile = Record<ContextDimension, ContextStat[]>;
 
 export type Status = {
   timezone: string;
+  weekendDays: number[];
   homeCountry: string | null;
   spotify: {
     connected: boolean;
@@ -202,7 +203,68 @@ export type ImportResult = {
   range: { from: string; to: string } | null;
 };
 
-export type Session = { authenticated: boolean; setupRequired: boolean };
+export type Session = { authenticated: boolean; setupRequired: boolean; setupTokenConfigured: boolean };
+
+export type SettingGroup = "spotify" | "locale" | "claude" | "picks" | "digest" | "dj" | "discord" | "mcp" | "access" | "jobs";
+export type SettingType = "string" | "integer" | "number" | "boolean" | "enum" | "timezone" | "weekdays";
+export type SettingUnit = "ms" | "seconds" | "minutes" | "hours" | "days" | "usd" | "weekday" | "hour";
+export type SettingValue = string | number | boolean | number[];
+export type SettingSource = "env" | "db" | "default";
+
+export type SettingField = {
+  key: string;
+  env: string;
+  type: SettingType;
+  secret: boolean;
+  value: SettingValue | null;
+  default: SettingValue | null;
+  source: SettingSource;
+  locked: boolean;
+  set: boolean;
+  hint: string | null;
+  unreadable: boolean;
+  stored: boolean;
+  min?: number;
+  max?: number;
+  unit?: SettingUnit;
+  options?: string[];
+};
+
+export type SecretStorage = { available: boolean; envVar: "SECRETS_KEY" };
+export type Settings = { groups: { id: SettingGroup; fields: SettingField[] }[]; secretStorage: SecretStorage };
+
+export type SettingsEffect =
+  | { type: "spotify_disconnected" }
+  | { type: "timezone_forward_only" }
+  | { type: "discord_commands_registered"; count: number }
+  | { type: "discord_registration_failed"; message: string };
+
+export type SettingsPatchResult = Settings & { changed: string[]; effects: SettingsEffect[] };
+export type SettingsAdoptResult = Settings & { adopted: string[]; replaced: string[]; skipped: { key: string; reason: "invalid" | "secrets_key_missing" }[] };
+export type SettingIssue = { key: string; reason: "unknown" | "locked" | "invalid" | "secrets_key_missing"; message: string };
+
+export type ClaudeKeyCheck = { valid: true; model: string } | { valid: false; model: string; message: string };
+export type DiscordRegistration = { registered: number; commands: string[] };
+
+type OnboardingStep = { required: boolean; done: boolean };
+type SourceInfo = { source: SettingSource; locked: boolean };
+export type OnboardingStepId = "passkey" | "spotifyApp" | "spotifyConnect" | "locale" | "import" | "claude" | "discord" | "mcp";
+
+export type Onboarding = {
+  complete: boolean;
+  order: OnboardingStepId[];
+  steps: {
+    passkey: OnboardingStep & { passkeys: number };
+    spotifyApp: OnboardingStep & SourceInfo & { redirectUri: string };
+    spotifyConnect: OnboardingStep & { userId: string | null; missingScopes: string[] };
+    locale: OnboardingStep & SourceInfo & { timezone: string; playsStored: number };
+    import: OnboardingStep & { plays: number; exportPlays: number; lastImportAt: string | null };
+    claude: OnboardingStep & SourceInfo;
+    discord: OnboardingStep & { interactionsUrl: string; commandsRegistrable: boolean };
+    mcp: OnboardingStep & SourceInfo & { url: string };
+  };
+  secretStorage: SecretStorage;
+};
 
 export type Overview = {
   hours: number;
@@ -235,6 +297,9 @@ export type Skips = {
   mostSkippedArtists: ArtistStats[];
   quickSkips: Song[];
   neverSkipped: Song[];
+  profile: SkipProfile;
+  /** Always 10: skipped plays by the share of the song played before the skip. */
+  positions: { start: number; end: number; skips: number }[];
 };
 
 export type ContextRef = { dimension: ContextDimension; value: string; plays: number; skips: number; skipRate: number };
@@ -266,6 +331,14 @@ export type Trip = {
 };
 
 export type Trips = { homeCountry: string | null; trips: Trip[] };
+
+export type Devices = {
+  period: Period;
+  totals: { device: Device; hours: number; plays: number; share: number | null }[];
+  series: { period: string; device: Device; hours: number; plays: number }[];
+};
+
+export type PendingTags = { items: { uri: string; name: string; artist: string; album: string | null; listens: number }[]; total: number; limit: number; offset: number };
 
 export type Energy = {
   coverage: { hoursTagged: number; hoursTotal: number; share: number | null };

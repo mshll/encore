@@ -3,7 +3,7 @@ import { useSyncExternalStore } from "react";
 export type ThemePref = "system" | "light" | "dark";
 
 const KEY = "encore-theme";
-const DARK_BG = "#0b0b0b";
+const DARK_BG = "#111111";
 const LIGHT_BG = "#ffffff";
 const media = window.matchMedia("(prefers-color-scheme: dark)");
 const listeners = new Set<() => void>();

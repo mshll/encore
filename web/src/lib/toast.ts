@@ -1,29 +1,29 @@
-import { useSyncExternalStore } from "react";
+import { Toast } from "@base-ui/react/toast";
 
-export type Toast = { id: number; message: string; tone: "info" | "problem" };
+export const toastManager = Toast.createToastManager();
 
-let toasts: Toast[] = [];
-let nextId = 1;
-const listeners = new Set<() => void>();
-const emit = () => listeners.forEach((l) => l());
+export type ToastTone = "info" | "problem";
+export type ToastAction = { label: string; onClick: () => void };
 
-export function dismissToast(id: number) {
-  toasts = toasts.filter((t) => t.id !== id);
-  emit();
+/**
+ * One result the user cannot otherwise see. A toast with an action (Undo) or a problem stays
+ * until dismissed or acted on; never use one for a successful copy.
+ */
+export function showToast(message: string, tone: ToastTone = "info", action?: ToastAction) {
+  const id = toastManager.add({
+    title: message,
+    type: tone,
+    priority: tone === "problem" ? "high" : "low",
+    timeout: action || tone === "problem" ? 0 : 4000,
+    actionProps: action
+      ? {
+          children: action.label,
+          onClick: () => {
+            toastManager.close(id);
+            action.onClick();
+          },
+        }
+      : undefined,
+  });
+  return id;
 }
-
-export function showToast(message: string, tone: Toast["tone"] = "info") {
-  const id = nextId++;
-  toasts = [...toasts.slice(-2), { id, message, tone }];
-  emit();
-  setTimeout(() => dismissToast(id), tone === "problem" ? 9000 : 4000);
-}
-
-export const useToasts = () =>
-  useSyncExternalStore(
-    (l) => {
-      listeners.add(l);
-      return () => listeners.delete(l);
-    },
-    () => toasts,
-  );

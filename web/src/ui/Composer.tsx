@@ -1,57 +1,64 @@
 import { useEffect, useRef, type ReactNode } from "react";
+import { IconButton } from "./Button";
+import { Notice } from "./Notice";
+import { ArrowUpIcon } from "./icons";
 
-/** A growing text box with a submit button. Enter sends; Shift+Enter adds a line. */
+/**
+ * The assistant input card: a growing text box, a footer row for context (budget, model) and one round send.
+ * Enter sends, Shift+Enter adds a line. While a run is going, the send turns into Stop.
+ */
 export function Composer({
   value,
   onChange,
   onSubmit,
+  onStop,
+  running = false,
   label,
   placeholder,
-  action,
   disabled = false,
-  autoFocus = false,
-  rows = 2,
+  footer,
+  notice,
   maxLength = 2000,
-  children,
 }: {
   value: string;
   onChange: (value: string) => void;
   onSubmit: () => void;
+  onStop?: () => void;
+  running?: boolean;
   label: string;
   placeholder?: string;
-  action: ReactNode;
   disabled?: boolean;
-  autoFocus?: boolean;
-  rows?: number;
+  footer?: ReactNode;
+  notice?: ReactNode;
   maxLength?: number;
-  children?: ReactNode;
 }) {
   const ref = useRef<HTMLTextAreaElement>(null);
   useEffect(() => {
     const el = ref.current;
     if (!el) return;
     el.style.height = "auto";
-    el.style.height = `${Math.min(el.scrollHeight, 320)}px`;
+    el.style.height = `${Math.min(el.scrollHeight, 280)}px`;
   }, [value]);
-  const ready = value.trim().length > 0 && !disabled;
+  const ready = value.trim().length > 0 && !disabled && !running;
   return (
     <form
-      className="flex flex-col gap-2 rounded-xl bg-component-strong p-3 shadow-default focus-within:ring-1 focus-within:ring-(--fg-primary)"
+      className="flex flex-col overflow-hidden rounded-xl bg-fill-raised shadow-control has-[textarea:focus-visible]:shadow-[0_0_0_1.5px_var(--focus-ring)]"
       onSubmit={(e) => {
         e.preventDefault();
         if (ready) onSubmit();
       }}
     >
-      <label className="sr-only" htmlFor={label}>
-        {label}
-      </label>
+      {notice && (
+        <Notice tone="warning" className="rounded-none phone:mx-0 phone:px-3">
+          {notice}
+        </Notice>
+      )}
       <textarea
-        id={label}
         ref={ref}
-        rows={rows}
+        rows={2}
         value={value}
+        aria-label={label}
         maxLength={maxLength}
-        autoFocus={autoFocus}
         disabled={disabled}
         placeholder={placeholder}
         onChange={(e) => onChange(e.target.value)}
@@ -61,13 +68,17 @@ export function Composer({
             if (ready) onSubmit();
           }
         }}
-        className="w-full resize-none bg-transparent px-1 text-body-base outline-none placeholder:text-tertiary disabled:opacity-60"
+        className="w-full resize-none bg-transparent px-3 pt-3 text-body outline-none placeholder:text-tertiary disabled:opacity-60"
       />
-      <div className="flex items-center justify-between gap-3">
-        <div className="min-w-0">{children}</div>
-        <button type="submit" className="btn btn-primary shrink-0" disabled={!ready}>
-          {action}
-        </button>
+      <div className="flex items-center justify-between gap-3 px-2 pt-2 pb-2">
+        <div className="min-w-0 pl-1 text-caption text-secondary">{footer}</div>
+        {running && onStop ? (
+          <button type="button" onClick={onStop} aria-label="Stop" className="touch-target flex size-8 items-center justify-center rounded-full bg-fill-inverted">
+            <span className="size-2.5 rounded-xs bg-page" />
+          </button>
+        ) : (
+          <IconButton type="submit" icon={ArrowUpIcon} label="Send" variant="primary" size="sm" disabled={!ready} className="rounded-full" />
+        )}
       </div>
     </form>
   );

@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { currentPriority, inBackground, SpotifyPacer } from "../src/spotify/pacer";
 import { runJob } from "../src/jobs/scheduler";
-import { connectSpotify, jsonResponse, routeFetch, testConfig, testDb } from "./helpers";
+import { connectSpotify, jsonResponse, routeFetch, testConfig, testDb, testSettings } from "./helpers";
 import { SpotifyAuth } from "../src/spotify/auth";
 import { SpotifyClient } from "../src/spotify/client";
 
@@ -14,7 +14,7 @@ function fakeClock() {
 describe("Spotify pacer", () => {
   test("runs one call at a time, starts spaced by the minimum interval", async () => {
     const clock = fakeClock();
-    const pacer = new SpotifyPacer(2000, clock.now, clock.sleep);
+    const pacer = new SpotifyPacer(() => 2000, clock.now, clock.sleep);
     const starts: number[] = [];
     let running = 0;
     let overlap = false;
@@ -34,7 +34,7 @@ describe("Spotify pacer", () => {
 
   test("an interactive call waiting with background calls goes first", async () => {
     const clock = fakeClock();
-    const pacer = new SpotifyPacer(2000, clock.now, clock.sleep);
+    const pacer = new SpotifyPacer(() => 2000, clock.now, clock.sleep);
     const order: string[] = [];
     const job = (name: string) => inBackground(() => pacer.run(async () => void order.push(name)));
     const all = [job("bg1"), job("bg2"), job("bg3"), pacer.run(async () => void order.push("ui"))];
@@ -43,7 +43,7 @@ describe("Spotify pacer", () => {
   });
 
   test("errors reach the caller and do not stop the queue", async () => {
-    const pacer = new SpotifyPacer(0);
+    const pacer = new SpotifyPacer(() => 0);
     const failed = pacer.run(async () => {
       throw new Error("boom");
     });
@@ -54,11 +54,12 @@ describe("Spotify pacer", () => {
   test("calls made by scheduled jobs are background; the client paces every Web API call", async () => {
     const db = testDb();
     const config = testConfig({ SPOTIFY_MIN_INTERVAL_MS: "0" });
+    const settings = testSettings(db, config);
     connectSpotify(db);
     const { fn } = routeFetch(() => jsonResponse({ id: "me", display_name: null }));
     const clock = fakeClock();
-    const pacer = new SpotifyPacer(1000, clock.now, clock.sleep);
-    const spotify = new SpotifyClient(db, new SpotifyAuth(db, config, fn), config, fn, Date.now, pacer);
+    const pacer = new SpotifyPacer(() => 1000, clock.now, clock.sleep);
+    const spotify = new SpotifyClient(db, new SpotifyAuth(db, config, settings, fn), settings, fn, Date.now, pacer);
     const seen: string[] = [];
     const original = pacer.run.bind(pacer);
     pacer.run = ((f: () => Promise<unknown>, as?: "interactive" | "background") => {
@@ -66,7 +67,7 @@ describe("Spotify pacer", () => {
       return original(f, as);
     }) as typeof pacer.run;
     await spotify.me();
-    await runJob(db, { name: "x", intervalMs: 1, run: async () => void (await spotify.me()) });
+    await runJob(db, { name: "x", intervalMs: () => 1, run: async () => void (await spotify.me()) });
     expect(seen).toEqual(["interactive", "background"]);
     expect(pacer.calls).toBe(2);
     expect(clock.sleeps).toEqual([1000]);

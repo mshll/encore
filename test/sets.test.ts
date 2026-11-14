@@ -124,7 +124,7 @@ describe("refine", () => {
         ],
       }),
     );
-    env.ctx.llm = new Llm(env.db, env.ctx.config, refine.transport, env.ctx.now);
+    env.ctx.llm = new Llm(env.db, env.ctx.settings, () => refine.transport, env.ctx.now);
     const result = await refineSet(env.ctx, env.result.set.id, "less sad");
     expect(result.changed).toBe(true);
     expect(result.set.version).toBe(2);
@@ -139,7 +139,7 @@ describe("refine", () => {
   test("a question back to the owner leaves the set unchanged", async () => {
     const env = await builtSet();
     const refine = scripted(message([text("Swap for something faster or something brighter?")]));
-    env.ctx.llm = new Llm(env.db, env.ctx.config, refine.transport, env.ctx.now);
+    env.ctx.llm = new Llm(env.db, env.ctx.settings, () => refine.transport, env.ctx.now);
     const result = await refineSet(env.ctx, env.result.set.id, "change track 2");
     expect(result).toMatchObject({ changed: false, reply: "Swap for something faster or something brighter?" });
     expect(result.set.version).toBe(1);
@@ -176,7 +176,7 @@ describe("refine applies a direction to the whole set", () => {
   test("a sad song the owner didn't name is rejected after 'less sad', and the set is rebuilt without it", async () => {
     const env = await sadSet();
     const refine = scripted(resubmit([WOODS, MISSED, SURF]), resubmit([SURF, WOODS]));
-    env.ctx.llm = new Llm(env.db, env.ctx.config, refine.transport, env.ctx.now);
+    env.ctx.llm = new Llm(env.db, env.ctx.settings, () => refine.transport, env.ctx.now);
     const result = await refineSet(env.ctx, env.set.id, "less sad");
     const [first] = toolResults(refine.requests[1]!);
     expect(first!.value).toMatchObject({ accepted: false });
@@ -188,7 +188,7 @@ describe("refine applies a direction to the whole set", () => {
   test("a song the owner asked to keep stays", async () => {
     const env = await sadSet();
     const refine = scripted(resubmit([WOODS, MISSED, SURF], { keep: [MISSED] }));
-    env.ctx.llm = new Llm(env.db, env.ctx.config, refine.transport, env.ctx.now);
+    env.ctx.llm = new Llm(env.db, env.ctx.settings, () => refine.transport, env.ctx.now);
     const result = await refineSet(env.ctx, env.set.id, "less sad, but keep Missed Calls");
     expect(result.set.items.map((i) => i.name)).toEqual(["Woods", "Missed Calls", "Surf"]);
   });
@@ -237,7 +237,7 @@ describe("save to playlist", () => {
     expect(getSet(env.db, id)!.playlist).toMatchObject({ id: "pl1", savedVersion: 1, outdated: false });
 
     const refine = scripted(toolCall("submit_set", { title: "Late drive 2", description: "d", items: [{ source: "library", songKey: SURF, reason: "r" }] }));
-    env.ctx.llm = new Llm(env.db, env.ctx.config, refine.transport, env.ctx.now);
+    env.ctx.llm = new Llm(env.db, env.ctx.settings, () => refine.transport, env.ctx.now);
     await refineSet(env.ctx, id, "only Surf");
     expect(getSet(env.db, id)!.playlist).toMatchObject({ savedVersion: 1, outdated: true });
 
@@ -311,7 +311,7 @@ describe("versions, pins and removal", () => {
         ],
       }),
     );
-    env.ctx.llm = new Llm(env.db, env.ctx.config, refine.transport, env.ctx.now);
+    env.ctx.llm = new Llm(env.db, env.ctx.settings, () => refine.transport, env.ctx.now);
     const { set } = await refineSet(env.ctx, env.result.set.id, "less sad");
     expect(set.changes).toEqual([
       {
@@ -335,7 +335,7 @@ describe("versions, pins and removal", () => {
       toolCall("submit_set", { title: "Late drive", description: "d", items: items([SURF]) }),
       toolCall("submit_set", { title: "Late drive", description: "d", items: items([SURF, WOODS]) }),
     );
-    env.ctx.llm = new Llm(env.db, env.ctx.config, refine.transport, env.ctx.now);
+    env.ctx.llm = new Llm(env.db, env.ctx.settings, () => refine.transport, env.ctx.now);
     const { set } = await refineSet(env.ctx, setId, "more upbeat");
     expect(JSON.stringify(refine.requests[0]!.messages.at(-1))).toContain(`Pinned by the owner, keep in the set: Woods - Mac Miller (songKey ${WOODS})`);
     expect(toolResults(refine.requests[1]!)[0]!.value).toMatchObject({ accepted: false, errors: [expect.stringContaining("Woods (songKey woods|mac miller) is pinned by the owner")] });

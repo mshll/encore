@@ -36,7 +36,7 @@ export function ChartTooltip({ x, y, width, children }: { x: number; y: number; 
     <div
       ref={ref}
       role="status"
-      className="tooltip pointer-events-none absolute z-10 whitespace-nowrap"
+      className="pointer-events-none absolute z-10 rounded-sm bg-standout px-2 py-1 text-caption whitespace-nowrap text-on-standout"
       style={{ left, top: y, transform: "translateY(-100%)" }}
     >
       {children}

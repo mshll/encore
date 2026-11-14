@@ -75,6 +75,19 @@ describe("http", () => {
     expect(params.get("scope")).toContain("user-modify-playback-state");
     const res = await app.request("/callback?code=abc&state=forged");
     expect(res.status).toBe(302);
-    expect(res.headers.get("location")).toBe("http://localhost:8888/?spotify=error");
+    expect(res.headers.get("location")).toBe("http://localhost:8888/settings/spotify?spotify=error");
+  });
+
+  test("the Spotify callback returns to where the flow started, from a fixed list", async () => {
+    const { get, app } = signedIn();
+    const { url } = (await (await get("/api/spotify/authorize?return=setup")).json()) as { url: string };
+    expect(new URL(url).searchParams.get("state")).toStartWith("setup.");
+    expect((await get("/api/spotify/authorize?return=https://evil.example")).status).toBe(400);
+    const location = async (query: string) => (await app.request(`/callback?${query}`)).headers.get("location");
+    expect(await location("code=abc&state=setup.forged")).toBe("http://localhost:8888/setup?step=spotifyConnect&spotify=error");
+    expect(await location("error=access_denied&state=setup.x")).toBe("http://localhost:8888/setup?step=spotifyConnect&spotify=denied");
+    expect(await location("error=access_denied&state=settings.x")).toBe("http://localhost:8888/settings/spotify?spotify=denied");
+    for (const state of ["__proto__.x", "constructor.x", "https://evil.example.x", "//evil.example"])
+      expect(await location(`error=access_denied&state=${encodeURIComponent(state)}`)).toBe("http://localhost:8888/settings/spotify?spotify=denied");
   });
 });

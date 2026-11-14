@@ -57,13 +57,14 @@ const view = (d: typeof digests.$inferSelect) => ({
 
 /** Generates the digest for the period that ended before `now`, or returns the stored one. */
 export async function generateDigest(ctx: FeatureContext, kind: DigestKind) {
-  const { db, config, llm } = ctx;
-  const today = localTime(ctx.now(), config.timezone).day;
+  const { db, llm } = ctx;
+  const { timezone } = ctx.settings.get();
+  const today = localTime(ctx.now(), timezone).day;
   const { period, baseline, key } = digestPeriod(kind, today);
   const existing = findDigest(db, kind, key);
   if (existing) return { ...view(existing), created: false };
   llm.assertAvailable();
-  const facts = digestFacts(db, config.timezone, period, baseline);
+  const facts = digestFacts(db, timezone, period, baseline);
   const allowed = allowedNumbers(facts);
   const messages: MessageParam[] = [{ role: "user", content: `${tagged("facts", JSON.stringify(facts))}\n\nWrite the ${kind === "weekly" ? "weekly digest" : "monthly recap"}.` }];
   let written: { text: string; model: string } | null = null;

@@ -70,9 +70,9 @@ const week = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 
 export const pickRoutes = new Hono<Env>()
   .get("/", (c) => {
-    const { db, config, now } = c.var.deps;
+    const { db, settings, now } = c.var.deps;
     const q = parse(z.object({ week: week.optional() }), c.req.query());
-    return c.json({ ...weekPicks(db, q.week ?? weekOf(now(), config.timezone), now()), playlist: picksPlaylist(db) });
+    return c.json({ ...weekPicks(db, q.week ?? weekOf(now(), settings.get().timezone), now()), playlist: picksPlaylist(db) });
   })
   .get("/weeks", (c) => {
     const q = parse(z.object({ limit: z.coerce.number().int().min(1).max(104).default(12) }), c.req.query());
@@ -80,11 +80,12 @@ export const pickRoutes = new Hono<Env>()
   })
   .post("/generate", (c) => respond(c, (ctx, onEvent) => generatePicks(ctx, onEvent), 201))
   .patch("/:id", async (c) => {
-    const { db, config, spotify, services, now } = c.var.deps;
+    const { db, settings, spotify, services, now } = c.var.deps;
+    const { timezone, llm } = settings.get();
     const pickId = parse(id, c.req.param()).id;
     const body = parse(z.object({ state: z.enum(PICK_STATES) }), await jsonBody(c));
     const pick = await mapped(async () => (body.state === "saved" ? savePick(services.assistant, pickId) : updatePickState(services.assistant, pickId, body.state)));
-    if (config.llm.picksPlaylist && picksPlaylist(db) && pick.week === weekOf(now(), config.timezone)) await mapped(() => syncPicksPlaylist(db, spotify, config.timezone, now()));
+    if (llm.picksPlaylist && picksPlaylist(db) && pick.week === weekOf(now(), timezone)) await mapped(() => syncPicksPlaylist(db, spotify, timezone, now()));
     return c.json(pick);
   });
 
@@ -143,12 +144,13 @@ export const digestRoutes = new Hono<Env>()
   });
 
 export const llmRoutes = new Hono<Env>().get("/spend", (c) => {
-  const { db, config, now } = c.var.deps;
+  const { db, now } = c.var.deps;
+  const { timezone, llm } = c.var.deps.settings.get();
   const q = parse(z.object({ month: z.string().regex(/^\d{4}-\d{2}$/).optional(), limit: z.coerce.number().int().min(1).max(500).default(50) }), c.req.query());
-  const budget = budgetStatus(db, config.timezone, config.llm.monthlyBudgetUsd, now());
+  const budget = budgetStatus(db, timezone, llm.monthlyBudgetUsd, now());
   const detail = spendDetail(db, q.month ?? budget.month, q.limit);
   const perMTok = Object.fromEntries(
-    Object.entries(config.llm.prices).map(([model, p]) => [model, Object.fromEntries(Object.entries(p).map(([k, v]) => [k, Math.round(v * 1e6 * 1000) / 1000]))]),
+    Object.entries(llm.prices).map(([model, p]) => [model, Object.fromEntries(Object.entries(p).map(([k, v]) => [k, Math.round(v * 1e6 * 1000) / 1000]))]),
   );
-  return c.json({ ...detail, budget, model: config.llm.model, pricesPerMTok: perMTok, webSearchPerRequest: config.llm.webSearchPerRequest });
+  return c.json({ ...detail, budget, model: llm.model, pricesPerMTok: perMTok, webSearchPerRequest: llm.webSearchPerRequest });
 });

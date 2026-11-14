@@ -4,6 +4,12 @@ export class SpotifyNotConnectedError extends Error {
   }
 }
 
+export class SpotifyNotConfiguredError extends Error {
+  constructor() {
+    super("Spotify client id is not set");
+  }
+}
+
 export class SpotifyAuthError extends Error {}
 
 export class SpotifyApiError extends Error {

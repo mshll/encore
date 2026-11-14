@@ -1,4 +1,4 @@
-import type { DiscordConfig } from "../config";
+import type { DiscordConfig } from "../settings/settings";
 import { NoActiveDeviceError, PremiumRequiredError } from "../player/api";
 import { SpotifyApiError, SpotifyBlockedError, SpotifyNotConnectedError } from "../spotify/errors";
 import type { DiscordContext, DiscordRegistry } from "./registry";
@@ -62,7 +62,7 @@ export class InteractionHandler {
         return { ...(await work()), ...(flags ? { flags } : {}) };
       } catch (error) {
         if (!(error instanceof UserFacingError)) console.error(`[discord] ${interaction.data?.name ?? interaction.data?.custom_id}: ${error instanceof Error ? error.message : error}`);
-        return { content: errorMessage(error, this.ctx.config.timezone), flags: EPHEMERAL };
+        return { content: errorMessage(error, this.ctx.settings.get().timezone), flags: EPHEMERAL };
       }
     };
     if (!spec.defer) return { type: ResponseType.Message, data: { ...(await settle()), allowed_mentions: { parse: [] } } };

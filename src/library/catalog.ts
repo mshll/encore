@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { HOUR_BUCKET, DAY_TYPE, MUSIC, musicWhere, songStatsSql, type SongRow } from "../analytics/common";
+import { HOUR_BUCKET, dayTypeSql, MUSIC, musicWhere, songStatsSql, type SongRow } from "../analytics/common";
 import { momentSplit, type MomentClass } from "../analytics/skips";
 import type { Db } from "../db/client";
 
@@ -36,8 +36,8 @@ function dataVersion(db: Db): string {
   return `${row.plays}:${row.tags}:${row.tagged}`;
 }
 
-export function loadCatalog(db: Db): Catalog {
-  const version = dataVersion(db);
+export function loadCatalog(db: Db, weekendDays: readonly number[]): Catalog {
+  const version = `${dataVersion(db)}:${weekendDays.join(",")}`;
   if (cached?.db === db && cached.catalog.version === version) return cached.catalog;
   const songs = new Map<string, CatalogSong>();
   for (const r of db.all<SongRow>(songStatsSql(musicWhere({})))) {
@@ -66,7 +66,7 @@ export function loadCatalog(db: Db): Catalog {
     const song = songs.get(t.song_key);
     if (song) song.tags = { genres: JSON.parse(t.genres), subgenre: t.subgenre, moods: JSON.parse(t.moods), energy: t.energy, valence: t.valence, language: t.language };
   }
-  for (const s of momentSplit(db, { range: {}, minPlays: 8, minContextPlays: 5, limit: 1_000_000 }).songs) {
+  for (const s of momentSplit(db, { range: {}, minPlays: 8, minContextPlays: 5, limit: 1_000_000, weekendDays }).songs) {
     const song = songs.get(s.songKey);
     if (song) song.class = s.class;
   }
@@ -74,7 +74,7 @@ export function loadCatalog(db: Db): Catalog {
     select t.song_key, 'hourBucket' as dim, ${HOUR_BUCKET} as value, count(*) as plays, sum(p.skipped = 1) as skips
     from ${MUSIC} where ${musicWhere({})} and p.skipped is not null group by t.song_key, value
     union all
-    select t.song_key, 'dayType' as dim, ${DAY_TYPE} as value, count(*) as plays, sum(p.skipped = 1) as skips
+    select t.song_key, 'dayType' as dim, ${dayTypeSql(weekendDays)} as value, count(*) as plays, sum(p.skipped = 1) as skips
     from ${MUSIC} where ${musicWhere({})} and p.skipped is not null group by t.song_key, value`);
   for (const c of contexts) {
     const song = songs.get(c.song_key);
@@ -93,4 +93,4 @@ export function hourBucketOf(hour: number): HourBucket {
   return "evening";
 }
 
-export const dayTypeOf = (weekday: number): DayType => (weekday === 5 || weekday === 6 ? "weekend" : "weekday");
+export const dayTypeOf = (weekday: number, weekendDays: readonly number[]): DayType => (weekendDays.includes(weekday) ? "weekend" : "weekday");

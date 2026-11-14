@@ -23,7 +23,7 @@ export class DjService {
     private readonly player: PlayerApi,
     private readonly playlists: AppPlaylists,
     private replanner: Replanner,
-    private readonly config: { skipTrigger: number },
+    private readonly skipTrigger: () => number,
     private readonly now: () => number = Date.now,
   ) {}
 
@@ -69,7 +69,7 @@ export class DjService {
       const { play } = event;
       if (play.contextUri !== contextUri || play.skipped === null || !session.uris.includes(play.trackUri)) return;
       const skipStreak = play.skipped ? session.skipStreak + 1 : 0;
-      if (skipStreak >= this.config.skipTrigger) this.replanDue = true;
+      if (skipStreak >= this.skipTrigger()) this.replanDue = true;
       this.update(session.id, {
         outcomes: [...session.outcomes, { uri: play.trackUri, outcome: play.skipped ? "skipped" : "finished" }],
         skipStreak,

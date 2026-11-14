@@ -15,7 +15,7 @@ export const ASK_SYSTEM = `You answer questions from one person, the owner of th
 Answer from data, not from impressions. Use the tools to get the numbers you need; the taste profile below is a summary for orientation, and the tools are the source for anything you state. Every number in your answer must come from a tool result in this conversation, and you should say which period and measure it is, for example "41 listens in March 2026, down from 120 in February". If the data can't answer the question, say what it does show and what is missing. Don't guess motives as facts: for a "why" question, show what changed in the data (when plays dropped, what replaced them, whether skips rose first), then give the likely explanation in one sentence, worded as likely ("probably", "most likely"), not as certain.
 
 Things to know about the data
-- Days, hours and weekdays are local time. Weekend means Friday and Saturday.
+- Days, hours and weekdays are local time. Weekend means the owner's weekend days, listed with their local time.
 - A play is any start; a listen is 30 seconds or more. Hours are time actually played.
 - Plays have three sources: the Spotify export (Spotify's own skip flag), live plays watched while they happen (time played observed, skip inferred), and recently-played API rows (no skip, device or country data). A skip is not a dislike: the owner skips about half of all plays, mostly on shuffle, and a song can be skipped in the morning yet finished at night. skip_split separates these cases.
 - Genres, moods, energy and valence are LLM-generated tags; mention coverage when you rely on them.
@@ -27,20 +27,21 @@ export class ThreadNotFoundError extends Error {}
 type ToolCall = { name: string; input: unknown };
 
 export async function ask(ctx: FeatureContext, question: string, threadId: number | null, onEvent?: (e: AgentEvent) => void) {
-  const { db, config, llm } = ctx;
+  const { db, llm } = ctx;
+  const { timezone, homeCountry, weekendDays } = ctx.settings.get();
   const now = ctx.now();
   const existing = threadId === null ? null : getThread(db, threadId);
   if (threadId !== null && (!existing || existing.feature !== "ask")) throw new ThreadNotFoundError();
   llm.assertAvailable();
-  const system = existing?.system ?? [ASK_SYSTEM, tagged("taste_profile", tasteProfile(db, config.timezone, now))];
+  const system = existing?.system ?? [ASK_SYSTEM, tagged("taste_profile", tasteProfile(db, { timezone, weekendDays }, now))];
   const messages: MessageParam[] = existing?.messages ?? [];
-  messages.push({ role: "user", content: `${ownerMessage(question)}\nOwner's local time: ${localNow(config.timezone, now)}.` });
+  messages.push({ role: "user", content: `${ownerMessage(question)}\nOwner's local time: ${localNow({ timezone, weekendDays }, now)}.` });
   const toolCalls: ToolCall[] = [];
   const result = await runAgent(llm, {
     feature: "ask",
     ref: existing ? `thread:${existing.id}` : undefined,
     system,
-    tools: askTools(db, config.homeCountry, now),
+    tools: askTools(db, { homeCountry, weekendDays }, now),
     messages,
     effort: "medium",
     maxCalls: 15,

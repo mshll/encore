@@ -1,62 +1,22 @@
-import { HugeiconsIcon, type IconSvgElement } from "@hugeicons/react";
-import Airplane01Icon from "@hugeicons/core-free-icons/Airplane01Icon";
-import ArrowDown01Icon from "@hugeicons/core-free-icons/ArrowDown01Icon";
-import ArrowUp02Icon from "@hugeicons/core-free-icons/ArrowUp02Icon";
-import ArrowUpRight01Icon from "@hugeicons/core-free-icons/ArrowUpRight01Icon";
-import BubbleChatQuestionIcon from "@hugeicons/core-free-icons/BubbleChatQuestionIcon";
-import Cancel01Icon from "@hugeicons/core-free-icons/Cancel01Icon";
-import Clock01Icon from "@hugeicons/core-free-icons/Clock01Icon";
-import CompassIcon from "@hugeicons/core-free-icons/CompassIcon";
-import Delete02Icon from "@hugeicons/core-free-icons/Delete02Icon";
-import GiftIcon from "@hugeicons/core-free-icons/GiftIcon";
-import Home01Icon from "@hugeicons/core-free-icons/Home01Icon";
-import HourglassIcon from "@hugeicons/core-free-icons/HourglassIcon";
-import Layers01Icon from "@hugeicons/core-free-icons/Layers01Icon";
-import LeftToRightListBulletIcon from "@hugeicons/core-free-icons/LeftToRightListBulletIcon";
-import MoreHorizontalIcon from "@hugeicons/core-free-icons/MoreHorizontalIcon";
-import MusicNoteSquare01Icon from "@hugeicons/core-free-icons/MusicNoteSquare01Icon";
-import NewReleasesIcon from "@hugeicons/core-free-icons/NewReleasesIcon";
-import NextIcon from "@hugeicons/core-free-icons/NextIcon";
-import PauseIcon from "@hugeicons/core-free-icons/PauseIcon";
-import PinIcon from "@hugeicons/core-free-icons/PinIcon";
-import PinOffIcon from "@hugeicons/core-free-icons/PinOffIcon";
-import PlayIcon from "@hugeicons/core-free-icons/PlayIcon";
-import PlayListIcon from "@hugeicons/core-free-icons/PlayListIcon";
-import Radio01Icon from "@hugeicons/core-free-icons/Radio01Icon";
-import Search01Icon from "@hugeicons/core-free-icons/Search01Icon";
-import Settings01Icon from "@hugeicons/core-free-icons/Settings01Icon";
-import Tick02Icon from "@hugeicons/core-free-icons/Tick02Icon";
+import type { Icon as PhosphorIcon } from "@phosphor-icons/react/dist/lib/types";
+import { cx } from "./cx";
 
-export {
-  Airplane01Icon,
-  ArrowDown01Icon,
-  ArrowUp02Icon,
-  ArrowUpRight01Icon,
-  BubbleChatQuestionIcon,
-  Cancel01Icon,
-  Clock01Icon,
-  CompassIcon,
-  Delete02Icon,
-  GiftIcon,
-  Home01Icon,
-  HourglassIcon,
-  Layers01Icon,
-  LeftToRightListBulletIcon,
-  MoreHorizontalIcon,
-  MusicNoteSquare01Icon,
-  NewReleasesIcon,
-  NextIcon,
-  PauseIcon,
-  PinIcon,
-  PinOffIcon,
-  PlayIcon,
-  PlayListIcon,
-  Radio01Icon,
-  Search01Icon,
-  Settings01Icon,
-  Tick02Icon,
-};
+export type IconGlyph = PhosphorIcon;
 
-export function Icon({ icon, size = 20, className }: { icon: IconSvgElement; size?: 16 | 20; className?: string }) {
-  return <HugeiconsIcon icon={icon} size={size} strokeWidth={1.5} absoluteStrokeWidth aria-hidden className={`shrink-0 ${className ?? ""}`} />;
+const SIZES = { sm: 16, md: 20, lg: 24, fill: "100%" } as const;
+export type IconSize = keyof typeof SIZES;
+
+/** `fill` draws the glyph at the size the caller's className gives the box (artwork placeholders). */
+const BOX: Record<IconSize, string> = { sm: "size-4", md: "size-5", lg: "size-6", fill: "" };
+
+/**
+ * The only way to draw an icon. `fill` is for the active nav item and the playing state.
+ * The glyph sits in its own even box, so centering it never lands on a half pixel while a button scales.
+ */
+export function Icon({ icon: Glyph, size = "sm", fill = false, className }: { icon: IconGlyph; size?: IconSize; fill?: boolean; className?: string }) {
+  return (
+    <span aria-hidden className={cx("inline-grid shrink-0 place-items-center", BOX[size], className)}>
+      <Glyph size={SIZES[size]} weight={fill ? "fill" : "regular"} focusable={false} />
+    </span>
+  );
 }

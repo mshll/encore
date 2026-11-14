@@ -5,7 +5,7 @@ import { history } from "../src/analytics/history";
 import { clock, devices, overview, timeSeries } from "../src/analytics/overview";
 import { forgotten, onThisDay } from "../src/analytics/recall";
 import { search } from "../src/analytics/search";
-import { classify, momentSplit, skips } from "../src/analytics/skips";
+import { classify, momentSplit, skipContext, skips } from "../src/analytics/skips";
 import { energyByHour, genreSeries, moodSeries } from "../src/analytics/tags";
 import { eras, topAlbums, topArtists, topTracks } from "../src/analytics/top";
 import { trips } from "../src/analytics/trips";
@@ -13,7 +13,7 @@ import { artists, tracks } from "../src/db/schema";
 import { songKey } from "../src/plays/song";
 import { linkArtists } from "../src/plays/store";
 import { upsertTags } from "../src/tags/service";
-import { play, seed, testDb, track, uri } from "./helpers";
+import { play, seed, testDb, track, uri, WEEKEND } from "./helpers";
 
 const A1 = uri("a1");
 const A2 = uri("a2");
@@ -106,6 +106,31 @@ describe("top lists", () => {
     ]);
     expect(topArtists(db, { range: {}, limit: 1, offset: 1 })[0]!.artist).toBe("Artist Y");
   });
+
+  test("a search narrows tracks by song or artist name and keeps merged stats", () => {
+    const db = baseFixture();
+
+    const tracks = topTracks(db, { range: {}, limit: 10, q: "artist x" });
+
+    expect(tracks.map((t) => [t.songKey, t.plays])).toEqual([[KEY_A, 3]]);
+  });
+
+  test("a search narrows artists and albums", () => {
+    const db = baseFixture();
+
+    const artists = topArtists(db, { range: {}, limit: 10, q: "y" }).map((a) => a.artist);
+    const albums = topAlbums(db, { range: {}, limit: 10, q: "deluxe" }).map((a) => a.album);
+
+    expect([artists, albums]).toEqual([["Artist Y"], ["Album 1 Deluxe"]]);
+  });
+
+  test("a search treats % as text, not a wildcard", () => {
+    const db = baseFixture();
+
+    const albums = topAlbums(db, { range: {}, limit: 10, q: "%" });
+
+    expect(albums).toEqual([]);
+  });
 });
 
 describe("eras", () => {
@@ -161,6 +186,36 @@ describe("skips", () => {
     expect(result.neverSkipped).toEqual([]);
     expect(skips(db, { range: {}, minPlays: 3, limit: 10 }).mostSkippedTracks.map((t) => t.uri)).toEqual([A1]);
   });
+
+  test("context profile over every play with a known skip flag", () => {
+    const { profile } = skipContext(baseFixture(), { range: {}, weekendDays: WEEKEND });
+    expect(profile.device).toEqual([
+      { value: "ios", plays: 3, skips: 1, skipRate: 0.333 },
+      { value: "mac", plays: 1, skips: 1, skipRate: 1 },
+    ]);
+    expect(profile.shuffle.find((v) => v.value === "on")).toEqual({ value: "on", plays: 1, skips: 1, skipRate: 1 });
+  });
+
+  test("positions bucket skips by the share of the song played, leaving out songs without a duration", () => {
+    const db = testDb();
+    seed(
+      db,
+      [track("p", "Song P", "Artist P", null, { durationMs: 200000 }), track("q", "Song Q", "Artist Q", null)],
+      [
+        play("2026-01-01T10:00:00Z", uri("p"), 1000, { skipped: true }),
+        play("2026-01-01T11:00:00Z", uri("p"), 99000, { skipped: true }),
+        play("2026-01-01T12:00:00Z", uri("p"), 250000, { skipped: true }),
+        play("2026-01-01T13:00:00Z", uri("p"), 200000),
+        play("2026-01-01T14:00:00Z", uri("q"), 1000, { skipped: true }),
+      ],
+    );
+    const { positions } = skipContext(db, { range: {}, weekendDays: WEEKEND });
+    expect(positions).toHaveLength(10);
+    expect(positions[0]).toEqual({ start: 0, end: 0.1, skips: 1 });
+    expect(positions[4]).toEqual({ start: 0.4, end: 0.5, skips: 1 });
+    expect(positions[9]).toEqual({ start: 0.9, end: 1, skips: 1 });
+    expect(positions.reduce((sum, p) => sum + p.skips, 0)).toBe(3);
+  });
 });
 
 describe("wrong moment vs dislike", () => {
@@ -186,7 +241,7 @@ describe("wrong moment vs dislike", () => {
   }
 
   test("classifies songs by how their skip rate depends on context", () => {
-    const result = momentSplit(splitFixture(), { range: {}, minPlays: 8, minContextPlays: 3, limit: 10 });
+    const result = momentSplit(splitFixture(), { range: {}, minPlays: 8, minContextPlays: 3, limit: 10, weekendDays: WEEKEND });
     const byUri = Object.fromEntries(result.songs.map((s) => [s.uri, s.class]));
     expect(byUri).toEqual({ [uri("w")]: "wrong_moment", [uri("d")]: "dislike", [uri("k")]: "keeper", [uri("m")]: "mixed" });
     expect(result.counts).toEqual({ keeper: 1, wrong_moment: 1, dislike: 1, mixed: 1 });
@@ -197,8 +252,8 @@ describe("wrong moment vs dislike", () => {
 
   test("filters by class and drops songs under the play threshold", () => {
     const db = splitFixture();
-    expect(momentSplit(db, { range: {}, minPlays: 8, minContextPlays: 3, limit: 10, only: "dislike" }).songs.map((s) => s.uri)).toEqual([uri("d")]);
-    expect(momentSplit(db, { range: {}, minPlays: 11, minContextPlays: 3, limit: 10 }).eligibleSongs).toBe(0);
+    expect(momentSplit(db, { range: {}, minPlays: 8, minContextPlays: 3, limit: 10, only: "dislike", weekendDays: WEEKEND }).songs.map((s) => s.uri)).toEqual([uri("d")]);
+    expect(momentSplit(db, { range: {}, minPlays: 11, minContextPlays: 3, limit: 10, weekendDays: WEEKEND }).eligibleSongs).toBe(0);
   });
 
   test("classify rules", () => {
@@ -271,7 +326,7 @@ describe("trips", () => {
 
 describe("entity pages", () => {
   test("track page merges URIs", () => {
-    const page = trackPage(baseFixture(), { uri: A2, range: {}, period: "month" })!;
+    const page = trackPage(baseFixture(), { uri: A2, range: {}, period: "month", weekendDays: WEEKEND })!;
     expect(page.songKey).toBe(KEY_A);
     expect(page.totals).toMatchObject({ plays: 3, listens: 2, skipRate: 0.333 });
     expect(page.uris.map((u) => [u.uri, u.plays])).toEqual([
@@ -288,13 +343,13 @@ describe("entity pages", () => {
 
   test("artist and album pages, and missing entities", () => {
     const db = baseFixture();
-    const artist = artistPage(db, { artist: "Artist X", range: {}, period: "month" })!;
+    const artist = artistPage(db, { artist: "Artist X", range: {}, period: "month", weekendDays: WEEKEND })!;
     expect(artist.totals.plays).toBe(3);
     expect(artist.tracks).toHaveLength(1);
     expect(artist.albums.map((a) => a.album)).toEqual(["Album 1", "Album 1 Deluxe"]);
-    expect(albumPage(db, { artist: "Artist Y", album: "Album 2", range: {}, period: "month" })!.totals.plays).toBe(2);
-    expect(artistPage(db, { artist: "Nobody", range: {}, period: "month" })).toBeNull();
-    expect(trackPage(db, { uri: uri("zz"), range: {}, period: "month" })).toBeNull();
+    expect(albumPage(db, { artist: "Artist Y", album: "Album 2", range: {}, period: "month", weekendDays: WEEKEND })!.totals.plays).toBe(2);
+    expect(artistPage(db, { artist: "Nobody", range: {}, period: "month", weekendDays: WEEKEND })).toBeNull();
+    expect(trackPage(db, { uri: uri("zz"), range: {}, period: "month", weekendDays: WEEKEND })).toBeNull();
   });
 });
 
@@ -378,7 +433,7 @@ describe("images", () => {
       ["Artist X", "https://img/x"],
       ["Artist Y", null],
     ]);
-    expect(artistPage(db, { artist: "Artist X", range: {}, period: "month" })!.imageUrl).toBe("https://img/x");
+    expect(artistPage(db, { artist: "Artist X", range: {}, period: "month", weekendDays: WEEKEND })!.imageUrl).toBe("https://img/x");
     expect(search(db, { q: "artist", limit: 5 }).artists.map((a) => a.imageUrl)).toEqual(["https://img/x", null]);
     expect(topTracks(db, { range: {}, limit: 1 })[0]).toMatchObject({ uri: A1, albumArtUrl: "https://img/a2" });
   });

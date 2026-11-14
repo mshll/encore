@@ -28,7 +28,7 @@ type Subject = { songKey: string; uri: string; name: string; artist: string; alb
 async function resolveSubject(ctx: FeatureContext, input: { songKey?: string; uri?: string }): Promise<Subject> {
   const { db, spotify } = ctx;
   if (input.songKey) {
-    const song = loadCatalog(db).songs.get(input.songKey);
+    const song = loadCatalog(db, ctx.settings.get().weekendDays).songs.get(input.songKey);
     if (!song) throw new NoteSubjectNotFoundError("No song with that songKey in the history");
     const track = db.select().from(tracks).where(eq(tracks.uri, song.uri)).get();
     return { songKey: song.songKey, uri: song.uri, name: song.name, artist: song.artist, album: song.album, releaseDate: track?.releaseDate ?? null, albumArtUrl: track?.albumArtUrl ?? null };
@@ -42,9 +42,9 @@ async function resolveSubject(ctx: FeatureContext, input: { songKey?: string; ur
   return { songKey: makeSongKey(t.name, artist), uri: t.uri, name: t.name, artist, album: t.album.name, releaseDate: t.album.release_date ?? null, albumArtUrl: t.album.images?.[0]?.url ?? null };
 }
 
-function historyFacts(db: Db, s: Subject): string {
-  const song = loadCatalog(db).songs.get(s.songKey);
-  const artist = artistProfile(db, s.artist);
+function historyFacts(db: Db, s: Subject, weekendDays: readonly number[]): string {
+  const song = loadCatalog(db, weekendDays).songs.get(s.songKey);
+  const artist = artistProfile(db, s.artist, weekendDays);
   const pct = (n: number | null) => (n === null ? "unknown" : `${Math.round(n * 100)}%`);
   const lines = [
     song
@@ -72,7 +72,8 @@ export function cachedNote(db: Db, songKey: string) {
 }
 
 export async function trackNote(ctx: FeatureContext, input: { songKey?: string; uri?: string }) {
-  const { db, config, llm } = ctx;
+  const { db, llm } = ctx;
+  const { timezone, weekendDays } = ctx.settings.get();
   if (input.songKey) {
     const hit = cachedNote(db, input.songKey);
     if (hit) return { ...hit, cached: true };
@@ -84,13 +85,13 @@ export async function trackNote(ctx: FeatureContext, input: { songKey?: string; 
   const now = ctx.now();
   const prompt = [
     tagged("song", `${subject.name} by ${subject.artist}${subject.album ? `, from ${subject.album}` : ""}${subject.releaseDate ? ` (released ${subject.releaseDate})` : ""}. Spotify URI ${subject.uri}.`),
-    tagged("owner_history", historyFacts(db, subject)),
+    tagged("owner_history", historyFacts(db, subject, weekendDays)),
     "Write the liner notes.",
   ].join("\n\n");
   const result = await runAgent(llm, {
     feature: "notes",
     ref: `song:${subject.songKey}`,
-    system: [NOTES_SYSTEM, tagged("taste_profile", tasteProfile(db, config.timezone, now))],
+    system: [NOTES_SYSTEM, tagged("taste_profile", tasteProfile(db, { timezone, weekendDays }, now))],
     tools: [],
     serverTools: [{ type: "web_search_20260209", name: "web_search", max_uses: 4 }],
     messages: [{ role: "user", content: prompt }],

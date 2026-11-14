@@ -125,22 +125,46 @@ const CONTEXT_VALUES: Record<string, string> = {
   morning: "Morning, 06–12",
   afternoon: "Afternoon, 12–18",
   evening: "Evening, 18–24",
-  weekday: "Sun to Thu",
-  weekend: "Fri and Sat",
   on: "Shuffle on",
   off: "Shuffle off",
   chosen: "You picked it",
   auto: "Came from the queue",
 };
 
-export function contextLabel(dimension: ContextDimension, value: string): string {
+const listDays = (days: number[]) => {
+  const names = days.map((d) => WEEKDAYS_SHORT[d - 1]!);
+  return names.length <= 1 ? (names[0] ?? "") : `${names.slice(0, -1).join(", ")} and ${names.at(-1)}`;
+};
+
+/**
+ * Names the weekend and the rest of the week from the ISO days in `GET /api/status` (`weekendDays`):
+ * [5, 6] gives "Fri and Sat" and "Sun to Thu". A run of three or more days in a row reads as a range.
+ */
+export function weekendLabels(weekendDays: number[]): { weekend: string; weekday: string } {
+  const weekend = [...new Set(weekendDays)].filter((d) => d >= 1 && d <= 7).sort((a, b) => a - b);
+  const rest = [1, 2, 3, 4, 5, 6, 7].filter((d) => !weekend.includes(d));
+  if (weekend.length === 0) return { weekend: "No weekend", weekday: "Every day" };
+  if (rest.length === 0) return { weekend: "Every day", weekday: "No weekdays" };
+  const start = rest.find((d) => !rest.includes(d === 1 ? 7 : d - 1)) ?? rest[0]!;
+  const run = rest.map((_, i) => ((start - 1 + i) % 7) + 1);
+  const contiguous = run.every((d) => rest.includes(d));
+  const weekday = contiguous && run.length >= 3 ? `${WEEKDAYS_SHORT[run[0]! - 1]} to ${WEEKDAYS_SHORT[run.at(-1)! - 1]}` : listDays(rest);
+  return { weekend: listDays(weekend), weekday };
+}
+
+/** `weekendDays` from `GET /api/status`; without it the day type reads "Weekdays" or "Weekend". */
+export function contextLabel(dimension: ContextDimension, value: string, weekendDays?: number[]): string {
   if (dimension === "device") return DEVICE_LABELS[value as Device] ?? value;
+  if (dimension === "dayType" && (value === "weekday" || value === "weekend")) {
+    if (!weekendDays) return value === "weekend" ? "Weekend" : "Weekdays";
+    return weekendLabels(weekendDays)[value];
+  }
   return CONTEXT_VALUES[value] ?? value;
 }
 
 export const CLASS_LABELS: Record<MomentClass, string> = {
   wrong_moment: "Wrong moment",
-  dislike: "Dislike",
+  dislike: "Skipped everywhere",
   keeper: "Keeper",
   mixed: "Mixed",
 };

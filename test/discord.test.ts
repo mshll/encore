@@ -9,7 +9,7 @@ import { createServices } from "../src/services";
 import { SpotifyAuth } from "../src/spotify/auth";
 import { SpotifyClient } from "../src/spotify/client";
 import { SpotifyBlockedError } from "../src/spotify/errors";
-import { connectSpotify, jsonResponse, noContent, play, routeFetch, seed, testConfig, testDb, track, uri, type FetchCall } from "./helpers";
+import { connectSpotify, jsonResponse, noContent, play, routeFetch, seed, testConfig, testDb, track, uri, type FetchCall, testSettings } from "./helpers";
 
 const OWNER = "470266318785085440";
 const keyPair = (await crypto.subtle.generateKey({ name: "Ed25519" }, true, ["sign", "verify"])) as unknown as CryptoKeyPair;
@@ -23,13 +23,14 @@ async function sign(body: string, timestamp = String(Math.floor(Date.now() / 100
 function setup(respond: (call: FetchCall) => Response | undefined = () => undefined) {
   const db = testDb();
   const config = testConfig({ DISCORD_APPLICATION_ID: "123456789012345678", DISCORD_PUBLIC_KEY: publicKey, DISCORD_OWNER_ID: OWNER, DISCORD_BOT_TOKEN: "bot", DISCORD_CHANNEL_ID: "1" });
+  const settings = testSettings(db, config);
   connectSpotify(db);
   const { fn, calls } = routeFetch((call) => respond(call) ?? (call.url.includes("discord.com") ? jsonResponse({ id: "m1" }) : undefined));
-  const spotifyAuth = new SpotifyAuth(db, config, fn);
-  const spotify = new SpotifyClient(db, spotifyAuth, config, fn);
-  const services = createServices(db, config, spotify);
-  const discord = createDiscord(config.discord!, { db, config, services, now: Date.now }, fn);
-  const app = createApp({ db, config, passkeys: new Passkeys(db, config), spotifyAuth, spotify, jobs: createJobs(db, config, spotifyAuth, spotify, services), services, discord, now: Date.now });
+  const spotifyAuth = new SpotifyAuth(db, config, settings, fn);
+  const spotify = new SpotifyClient(db, spotifyAuth, settings, fn);
+  const services = createServices(db, config, settings, spotify);
+  const discord = createDiscord(settings.get().discord!, { db, config, settings, services, now: Date.now }, fn);
+  const app = createApp({ db, config, settings, passkeys: new Passkeys(db, config), spotifyAuth, spotify, jobs: createJobs(db, settings, spotifyAuth, spotify, services), services, discord: { current: () => discord }, now: Date.now });
   const post = async (interaction: Partial<Interaction>, headers?: Record<string, string>) => {
     const body = JSON.stringify({ id: "i1", token: "tok", application_id: "123456789012345678", ...interaction });
     return app.request("/api/discord/interactions", { method: "POST", body, headers: { "content-type": "application/json", ...(headers ?? (await sign(body))) } });

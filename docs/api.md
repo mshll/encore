@@ -5,7 +5,7 @@ Contract between the server and the web UI. All routes are JSON over HTTP on the
 ## Conventions
 
 - Base path `/api`. Only exception: `GET /callback` (Spotify OAuth redirect).
-- Auth: every `/api/*` route needs a session cookie, except `/api/health`, `/api/auth/*` and `/api/discord/interactions` (Discord signature instead). `/api/tags/*`, `POST /api/import` and `POST /api/import/catalog` also accept `Authorization: Bearer <ADMIN_TOKEN>`. The admin token is rejected everywhere else. `/mcp` takes only `Authorization: Bearer <MCP_TOKEN>`.
+- Auth: every `/api/*` route needs a session cookie, except `/api/health`, `/api/auth/*` and `/api/discord/interactions` (Discord signature instead). `/api/tags/*`, `POST /api/import` and `POST /api/import/catalog` also accept `Authorization: Bearer <admin token>`. The admin token is rejected everywhere else. `/mcp` takes only `Authorization: Bearer <MCP token>`. Both tokens are settings (`adminToken`, `mcpToken`; see [Settings](#settings)).
 - Session cookie: `__Host-encore_session` when `PUBLIC_BASE_URL` is https, `encore_session` otherwise; `HttpOnly`, `SameSite=Lax`, `Path=/`, 30 days, `Secure` when `PUBLIC_BASE_URL` is https. Send requests with `credentials: "same-origin"` (the default for same-origin `fetch`).
 - Writes to `/api/auth/*` are limited to 20 a minute per client address (`429 rate_limited`, with `Retry-After`).
 - Every response carries a Content-Security-Policy (scripts and connections from the same origin only, images from any https host) and `X-Frame-Options`; `/api/*` responses carry `Cache-Control: no-store`.
@@ -15,7 +15,7 @@ Contract between the server and the web UI. All routes are JSON over HTTP on the
   { "error": { "code": "invalid_request", "message": "Request validation failed", "details": [{ "path": "from", "message": "expected YYYY-MM-DD" }] } }
   ```
 
-  `details` is present only on some errors. Status codes: `400` validation, `401` not signed in, `402` monthly LLM budget spent, `403` setup token wrong or `premium_required`, `404` not found, `409` precondition (`spotify_not_connected`, `no_active_device`), `413` file too large, `415` wrong content type, `422` Claude declined, `500` server error, `502` Spotify or Claude call failed (`spotify_failed`, `llm_failed`), `503` LLM not configured or Spotify calls paused (`spotify_paused`, `details: { reason, until }`). Assistant error codes are listed under [Assistant](#assistant-claude).
+  `details` is present only on some errors. Status codes: `400` validation (`invalid_request`, `invalid_settings`), `401` not signed in, `402` monthly LLM budget spent, `403` setup token wrong or `premium_required`, `404` not found, `409` precondition (`spotify_not_configured`, `spotify_not_connected`, `no_active_device`, `setup_complete`, `llm_not_configured` on key verify, `discord_not_configured`, `discord_registration_unavailable`), `413` file too large, `415` wrong content type, `422` Claude declined, `500` server error, `502` Spotify, Claude or Discord call failed (`spotify_failed`, `llm_failed`, `discord_failed`), `503` LLM not configured or Spotify calls paused (`spotify_paused`, `details: { reason, until }`). Assistant error codes are listed under [Assistant](#assistant-claude).
 - Timestamps (`ts`, `firstPlayed`, `lastPlayed`, `start`, `end`, ...) are ISO 8601 UTC strings.
 - Days, hours, weekdays, weeks, months are local time in `TIMEZONE` (default UTC). `day` is `YYYY-MM-DD`. `weekday` is ISO: 1 = Monday ... 7 = Sunday.
 - `hours` values are rounded to 2 decimals. Rates (`skipRate`, `shuffleRate`, `share`) are 0..1 rounded to 3 decimals, or `null` when the denominator is 0.
@@ -51,7 +51,7 @@ Runs live in memory: a restart ends them.
 - **Artist**: grouped by artist name string. **Album**: grouped by (artist, album name).
 - **Context dimensions** (used by the skip split and skip profiles). Only rows with a known skip flag (export and live):
   - `hourBucket`: `night` 00-05, `morning` 06-11, `afternoon` 12-17, `evening` 18-23 (local hour).
-  - `dayType`: `weekend` = Friday or Saturday, else `weekday`.
+  - `dayType`: `weekend` on the `weekendDays` setting's ISO weekdays (default 5, 6: Friday and Saturday), else `weekday`. Decided at query time, so a change applies to all stored plays.
   - `shuffle`: `on` / `off`.
   - `device`: the device enum below.
   - `startMode`: `chosen` when `reason_start` is `clickrow`, `playbtn`, or `backbtn` (the owner picked this track); `auto` when it is `trackdone` or `fwdbtn` (the track arrived from the queue). Other start reasons (`appload`, `remote`, `trackerror`, `unknown`) are not a context value.
@@ -116,6 +116,7 @@ Artist rows (top artists, eras, skips, search, the artist page, the overview's `
 ```json
 {
   "timezone": "Europe/London",
+  "weekendDays": [5, 6],
   "homeCountry": "GB",
   "spotify": {
     "connected": true,
@@ -150,6 +151,7 @@ Artist rows (top artists, eras, skips, search, the artist page, the overview's `
 ```
 
 - `timezone`: the `TIMEZONE` used for every local day, hour and weekday. Format `ts` values in it to match the buckets.
+- `weekendDays`: ISO weekdays that count as the weekend (`dayType`). Use it wherever the UI labels weekends.
 - `homeCountry`: `HOME_COUNTRY`, or the country with the most plays when unset; `null` when no play has a country.
 - `spotify.paused` is `null` or `{ "reason": "rate_limited" | "quota_exceeded", "until": "...", "since": "..." }`. While paused, the server makes no Spotify calls. `quota_exceeded` means the developer-account quota was hit; the pause lasts `QUOTA_BACKOFF_HOURS` (default 12) and the UI should show it.
 - `missingScopes`: scopes the server asks for that the stored grant lacks. Reconnect to grant them.
@@ -162,7 +164,7 @@ Artist rows (top artists, eras, skips, search, the artist page, the overview's `
 - `tags`: `songs` known (distinct song keys in `tracks`), `tagged` songs with tags, `coverage` = tagged / songs (0..1, not rounded).
 - `plays`: stored rows: all kinds, music only, and rows by source `api` and `live` (the rest are `export`).
 - `live`: the `watch`, `radar` and `library` jobs, same shape as `poll`. `watch.lastResult` is `{ "current": Observation | null, "inserted", "replacedApi", "coveredByExport", "playing" }` for the last tick, or `{ "current", "skipped": "spotify_not_connected" | "spotify_paused", "until"? }`.
-- `llm`: Claude spend for the current local month against `MONTHLY_BUDGET_USD`. `exhausted: true` means every LLM endpoint returns `402` and scheduled LLM jobs skip until the next month. `configured: false` means no `ANTHROPIC_API_KEY`. `schedule`: when the weekly picks and digest jobs run (ISO weekday 1-7 and local hour, from `PICKS_WEEKDAY`/`PICKS_HOUR` and `DIGEST_WEEKDAY`/`DIGEST_HOUR`); `enabled` is `JOBS_ENABLED`. `byFeature` features: `sets`, `picks`, `ask`, `notes`, `digest`, `dj`. Job `lastResult` may be `{ "skipped": "not_due" | "budget_exceeded" | "llm_not_configured" | "spotify_not_connected" | "attempts_exhausted" }`. When Discord posting is configured, `picks` and `digest` results also carry `publish: { "posted": ["picks:2026-11-09"] }` or `publish: { "error": "..." }` (see Discord). `outcomes.lastResult` has set and pick outcome refresh counts and, once a day, `library` (pick library state).
+- `llm`: Claude spend for the current local month against `MONTHLY_BUDGET_USD`. `exhausted: true` means every LLM endpoint returns `402` and scheduled LLM jobs skip until the next month. `configured: false` means no Claude key (`claudeApiKey` setting or `ANTHROPIC_API_KEY`). `schedule`: when the weekly picks and digest jobs run (ISO weekday 1-7 and local hour, from `PICKS_WEEKDAY`/`PICKS_HOUR` and `DIGEST_WEEKDAY`/`DIGEST_HOUR`); `enabled` is `JOBS_ENABLED`. `byFeature` features: `sets`, `picks`, `ask`, `notes`, `digest`, `dj`. Job `lastResult` may be `{ "skipped": "not_due" | "budget_exceeded" | "llm_not_configured" | "spotify_not_connected" | "attempts_exhausted" }`. When Discord posting is configured, `picks` and `digest` results also carry `publish: { "posted": ["picks:2026-11-09"] }` or `publish: { "error": "..." }` (see Discord). `outcomes.lastResult` has set and pick outcome refresh counts and, once a day, `library` (pick library state).
 
 
 ## Auth (passkeys)
@@ -171,7 +173,11 @@ Use `@simplewebauthn/browser` on the client: pass the options JSON to `startRegi
 
 ### `GET /api/auth/session` (public)
 
-`{ "authenticated": false, "setupRequired": true }`. `setupRequired` is true while no passkey exists.
+`{ "authenticated": false, "setupRequired": true, "setupTokenConfigured": true }`. `setupRequired` is true while no passkey exists. `setupTokenConfigured` is false when `SETUP_TOKEN` is unset: no first passkey can be registered until it is set in env.
+
+### `POST /api/auth/setup/verify` (public)
+
+Body `{ "setupToken": string }`. Lets a first-run wizard check the token before the passkey ceremony. `200 { "valid": true }`; `403 setup_token_invalid`; `409 setup_complete` once a passkey exists. Rate-limited like every write to `/api/auth/*`. The token must still be sent to `register/options` and `register/verify`.
 
 ### `POST /api/auth/register/options`
 
@@ -195,15 +201,132 @@ Body `{ "response": AuthenticationResponseJSON }`. `200 { "authenticated": true 
 
 `200 { "authenticated": false }`; deletes the session.
 
+## Settings
+
+Runtime configuration, edited from the dashboard. Boot config (`HOST`, `PORT`, `DATABASE_PATH`, `WEB_DIST`, `PUBLIC_BASE_URL`, `SPOTIFY_REDIRECT_URI`, `SETUP_TOKEN`, `SECRETS_KEY`, `JOBS_ENABLED`, `JOBS_DISABLED`, `LLM_PRICES`) stays in env and is not listed here.
+
+- Precedence: an env var of the field's name (`env`), when set, wins and the field is `locked`; else the stored value (`source: "db"`); else the default (`source: "default"`).
+- Services read settings on each use. Every change applies without a restart: job intervals re-time waiting jobs at once, schedules (picks, digest) apply at the next hourly check, and a running job uses the new value from its next run.
+- Secrets (`secret: true`) are never returned. A field shows `set`, `source` and `hint` (the last 4 characters of a value of 16 or more characters, else `null`). Stored secrets are encrypted with `SECRETS_KEY`. Without it, `secretStorage.available` is false, saving a secret fails with reason `secrets_key_missing`, and env-provided secrets still work. `unreadable: true` marks a stored secret that the current `SECRETS_KEY` cannot open (the key changed); it acts as unset until saved again.
+
+### `GET /api/settings`
+
+```json
+{
+  "groups": [
+    { "id": "locale", "fields": [
+      { "key": "timezone", "env": "TIMEZONE", "type": "timezone", "secret": false, "value": "Asia/Kuwait", "default": "UTC",
+        "source": "env", "locked": true, "set": true, "hint": null, "unreadable": false, "stored": true, "options": ["Africa/Abidjan", "..."] },
+      { "key": "weekendDays", "env": "WEEKEND_DAYS", "type": "weekdays", "secret": false, "value": [5, 6], "default": [5, 6],
+        "source": "default", "locked": false, "set": true, "hint": null, "unreadable": false, "stored": false, "min": 1, "max": 7, "unit": "weekday" }
+    ] },
+    { "id": "claude", "fields": [
+      { "key": "claudeApiKey", "env": "ANTHROPIC_API_KEY", "type": "string", "secret": true, "value": null, "default": null,
+        "source": "db", "locked": false, "set": true, "hint": "WXYZ", "unreadable": false, "stored": true }
+    ] }
+  ],
+  "secretStorage": { "available": true, "envVar": "SECRETS_KEY" }
+}
+```
+
+- `type`: `string`, `integer`, `number`, `boolean`, `enum` (pick from `options`), `timezone` (IANA, `options` lists the zones the server accepts), `weekdays` (array of ISO weekdays 1-7, no repeats, returned sorted).
+- `stored`: the settings table holds a valid value for this field, whatever the `source`. With `source: "env"`, it is the value that applies once the env var is removed and the server restarts.
+- `min`/`max` bound numbers (for `weekdays`, each day). `unit`: `ms`, `seconds`, `minutes`, `hours`, `days`, `usd`, `weekday` (ISO 1-7), `hour` (local 0-23).
+- `value` is `null` for secrets and for unset optional fields; `set` is false for the latter.
+
+Fields by group (env var in brackets; `*` = secret):
+
+| Group | Fields |
+| --- | --- |
+| `spotify` | `spotifyClientId` [SPOTIFY_CLIENT_ID] |
+| `locale` | `timezone` [TIMEZONE], `homeCountry` [HOME_COUNTRY], `weekendDays` [WEEKEND_DAYS, e.g. `5,6`] |
+| `claude` | `claudeApiKey`* [ANTHROPIC_API_KEY], `claudeModel` [LLM_MODEL], `monthlyBudgetUsd` [MONTHLY_BUDGET_USD] |
+| `picks` | `picksPerWeek`, `picksFarOut`, `picksWeekday`, `picksHour`, `picksPlaylist` [PICKS_*] |
+| `digest` | `digestWeekday`, `digestHour` [DIGEST_*] |
+| `dj` | `djReplanner`, `djReplanTimeoutSeconds`, `djSkipTrigger` [DJ_*] |
+| `discord` | `discordApplicationId`, `discordPublicKey`, `discordOwnerId`, `discordBotToken`*, `discordGuildId`, `discordChannelId` [DISCORD_*] |
+| `mcp` | `mcpToken`* [MCP_TOKEN] |
+| `access` | `adminToken`* [ADMIN_TOKEN] |
+| `jobs` | `pollIntervalSeconds`, `enrichIntervalSeconds`, `enrichBatchSize`, `artIntervalSeconds`, `spotifyMinIntervalMs`, `quotaBackoffHours`, `watcherActiveSeconds`, `watcherIdleSeconds`, `watcherBackoffMaxSeconds`, `radarMinListens`, `radarIntervalMinutes`, `radarArtistsPerRun`, `radarRecheckDays`, `radarBaselineDays`, `librarySyncHours`, `libraryPageSeconds` |
+
+Defaults and bounds match the README's environment table.
+
+### `PATCH /api/settings`
+
+Body: an object of field key to value, e.g. `{ "timezone": "Europe/London", "picksHour": 8, "claudeApiKey": "sk-ant-..." }`. `null` or `""` clears the stored value (the default applies again). The patch is checked as a whole: one bad field and nothing is saved.
+
+`200`: the `GET` shape plus `changed` (keys whose effective value changed) and `effects`:
+
+| Effect | When |
+| --- | --- |
+| `{ "type": "spotify_disconnected" }` | The Spotify client id changed while connected. The grant belongs to the old app; connect again. Switching back to the old id restores it. |
+| `{ "type": "timezone_forward_only" }` | The timezone changed. Local day, hour and weekday are stored with each play at insert time, so only plays stored from now on use the new zone. Set it before the first import. |
+| `{ "type": "discord_commands_registered", "count": 9 }` | The Discord application id, bot token or guild id changed and the bot token and guild id are set: guild commands were registered again. |
+| `{ "type": "discord_registration_failed", "message": "..." }` | Same, but Discord refused. The settings are saved; fix them or retry with `POST /api/settings/discord/register`. |
+
+`400 invalid_settings` with `details: [{ "key", "reason", "message" }]`, `reason` one of `invalid`, `unknown`, `locked` (set by env; change it there), `secrets_key_missing`.
+
+No setting needs a restart.
+
+### `POST /api/settings/adopt-env`
+
+No body. Copies the current value of every env-provided field into the settings table (secrets encrypted with `SECRETS_KEY`), so the owner can then remove the env vars without a gap. Env keeps precedence: no effective value changes, every field keeps `source: "env"` and `locked: true`, and no effect runs (no Spotify disconnect, no Discord registration, no reschedule). After an env var is removed and the server restarts, the field reads `source: "db"` with the same value. Running it again writes nothing.
+
+`200`: the `GET` shape plus:
+
+- `adopted`: keys written by this call. A key whose stored value already matches env is not written and not listed.
+- `replaced`: keys in `adopted` whose stored value differed from env and was overwritten.
+- `skipped`: `[{ "key", "reason" }]`, `reason` `secrets_key_missing` (a secret, and `SECRETS_KEY` is not set) or `invalid` (the env value fails the field's validation).
+
+Secret values are never returned or logged.
+
+### `POST /api/settings/claude/verify`
+
+Body `{ "apiKey"?: string }` (send `{}` to check the stored key). Asks the Anthropic Models API whether the key can use the configured model. Free, not recorded in the spend ledger, and the key is not stored. `200 { "valid": true, "model" }` or `{ "valid": false, "model", "message" }`. `409 llm_not_configured` when no key is given or set; `502 llm_failed` when the API cannot be reached.
+
+### `POST /api/settings/discord/register`
+
+Body `{}`. Registers the guild commands now. `200 { "registered": 9, "commands": ["now", "..."] }`. `409 discord_not_configured` (application id, public key or owner id missing), `409 discord_registration_unavailable` (bot token or guild id missing), `502 discord_failed`.
+
+## Onboarding
+
+### `GET /api/onboarding`
+
+State of each first-run step after sign-in. The steps before sign-in come from `GET /api/auth/session` (`setupRequired`, `setupTokenConfigured`) and `POST /api/auth/setup/verify`.
+
+```json
+{
+  "complete": false,
+  "order": ["passkey", "spotifyApp", "spotifyConnect", "locale", "import", "claude", "discord", "mcp"],
+  "steps": {
+    "passkey": { "required": true, "done": true, "passkeys": 1 },
+    "spotifyApp": { "required": true, "done": true, "redirectUri": "https://encore.example/callback", "source": "db", "locked": false },
+    "spotifyConnect": { "required": true, "done": false, "userId": null, "missingScopes": ["..."] },
+    "locale": { "required": true, "done": true, "timezone": "Europe/London", "source": "db", "locked": false, "playsStored": 0 },
+    "import": { "required": true, "done": false, "plays": 0, "exportPlays": 0, "lastImportAt": null },
+    "claude": { "required": false, "done": false, "source": "default", "locked": false },
+    "discord": { "required": false, "done": false, "interactionsUrl": "https://encore.example/api/discord/interactions", "commandsRegistrable": false },
+    "mcp": { "required": false, "done": false, "url": "https://encore.example/mcp", "source": "default", "locked": false }
+  },
+  "secretStorage": { "available": true, "envVar": "SECRETS_KEY" }
+}
+```
+
+- `complete`: every `required` step is done.
+- `spotifyApp`: a client id is set. Register `redirectUri` in the Spotify app. `spotifyConnect`: a grant for that client id exists; start it with `GET /api/spotify/authorize`.
+- `locale.done`: the timezone was chosen (env or stored), not left at the default. Choose it before the import; `playsStored` shows whether plays already carry buckets in the old zone.
+- `import.done`: at least one export row is stored. Upload with `POST /api/import`.
+- `claude.done`: a Claude key is set (not verified; use `POST /api/settings/claude/verify`). `discord.done`: application id, public key and owner id are set; put `interactionsUrl` in the Discord app. `mcp.done`: an MCP token is set.
+
 ## Spotify
 
 ### `GET /api/spotify/authorize`
 
-`{ "url": "https://accounts.spotify.com/authorize?..." }`. Navigate the browser to `url` (full page, not fetch). PKCE, state valid 10 minutes.
+Query: `return` (`setup` or `settings`, default `settings`): where the callback sends the browser back to. `{ "url": "https://accounts.spotify.com/authorize?..." }`. Navigate the browser to `url` (full page, not fetch). PKCE, state valid 10 minutes. `409 spotify_not_configured` while no Spotify client id is set.
 
 ### `GET /callback` (public, Spotify redirects here)
 
-Exchanges the code and redirects (302) to `PUBLIC_BASE_URL/?spotify=connected`, `?spotify=error` (bad state or token exchange failed), or `?spotify=denied` (owner declined).
+Exchanges the code and redirects (302) back to where the flow started: `PUBLIC_BASE_URL/setup?step=spotifyConnect&spotify=<result>` for `return=setup`, `PUBLIC_BASE_URL/settings/spotify?spotify=<result>` otherwise (also for an unknown or forged state). `<result>` is `connected`, `error` (bad state or token exchange failed) or `denied` (owner declined). The target comes from a fixed list, never from the request.
 
 ### `POST /api/spotify/disconnect`
 
@@ -262,7 +385,7 @@ Params: `period`. Only buckets with plays are returned (fill gaps on the client)
 
 ### `GET /api/stats/top/artists` | `/top/tracks` | `/top/albums`
 
-Params: `limit` (1-200, default 50), `offset` (default 0), `sort` = `hours` (default) | `listens` | `plays`. `top/artists` and `top/tracks` also take `weekday` (1-7) and `hour` (0-23) to count only plays in that local weekday and/or hour (one `clock` cell).
+Params: `limit` (1-200, default 50), `offset` (default 0), `sort` = `hours` (default) | `listens` | `plays`. `q` (1-200 chars) keeps rows whose name contains it, case-insensitive: the artist name for artists, the song or artist name for tracks, the album or artist name for albums. Stats still count every play of the row in the range. `top/artists` and `top/tracks` also take `weekday` (1-7) and `hour` (0-23) to count only plays in that local weekday and/or hour (one `clock` cell).
 
 - artists: `{ "items": [{ "artist": "Mac Miller", "imageUrl": "...", "songs": 120, ...Stats }] }`
 - tracks: `{ "items": [Song] }`
@@ -311,11 +434,13 @@ Params: `minPlays` (default 10, plays with a known skip flag needed to appear in
   "mostSkippedTracks": [Song],
   "mostSkippedArtists": [{ "artist": "CeeLo Green", "imageUrl": null, ...Stats }],
   "quickSkips": [Song],
-  "neverSkipped": [Song]
+  "neverSkipped": [Song],
+  "profile": SkipProfile,
+  "positions": [{ "start": 0, "end": 0.1, "skips": 5210 }]
 }
 ```
 
-`mostSkipped*` sort by skip rate, then volume. `quickSkips` sorts by quick-skip count. `neverSkipped` is songs with 0 skips, sorted by plays.
+`mostSkipped*` sort by skip rate, then volume. `quickSkips` sorts by quick-skip count. `neverSkipped` is songs with 0 skips, sorted by plays. `profile` is the skip rate per context value over every play in the range with a known skip flag (see Context dimensions). `positions` is always 10 entries: skipped plays by the share of the song played before the skip (`start` inclusive, `end` exclusive; a play longer than the song counts in the last entry). Skips of songs without a known duration are left out, so `positions` can sum to less than `summary.skips`.
 
 ### `GET /api/stats/skips/split`
 

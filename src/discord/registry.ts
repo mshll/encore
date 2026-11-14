@@ -1,9 +1,10 @@
 import type { Config } from "../config";
 import type { Db } from "../db/client";
+import type { SettingsSource } from "../settings/settings";
 import type { Services } from "../services";
 import type { CommandDefinition, Interaction, Message } from "./types";
 
-export type DiscordContext = { db: Db; config: Config; services: Services; now: () => number };
+export type DiscordContext = { db: Db; config: Config; settings: SettingsSource; services: Services; now: () => number };
 
 export type CommandCall = { ctx: DiscordContext; interaction: Interaction; options: Record<string, string | number | undefined> };
 export type ComponentCall = { ctx: DiscordContext; interaction: Interaction; arg: string };

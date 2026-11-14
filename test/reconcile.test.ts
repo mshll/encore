@@ -6,7 +6,7 @@ import { pollRecentlyPlayed } from "../src/ingest/live/poller";
 import { recordLivePlays } from "../src/ingest/live/reconcile";
 import { SpotifyAuth } from "../src/spotify/auth";
 import { SpotifyClient } from "../src/spotify/client";
-import { connectSpotify, jsonResponse, routeFetch, testConfig, testDb, track, TZ, uri } from "./helpers";
+import { connectSpotify, jsonResponse, routeFetch, testConfig, testDb, track, TZ, uri, testSettings } from "./helpers";
 import { upsertTracks } from "../src/plays/store";
 
 const A = uri("a");
@@ -41,14 +41,15 @@ const spotifyTrack = (trackUri: string) => ({
 function setup() {
   const db = testDb();
   const config = testConfig();
+  const settings = testSettings(db, config);
   connectSpotify(db);
   upsertTracks(db, [track("a", "Song a", "Artist", "Album"), track("b", "Song b", "Artist", "Album")]);
   let recent: { track: ReturnType<typeof spotifyTrack>; played_at: string }[] = [];
   const { fn } = routeFetch(() => jsonResponse({ items: recent }));
-  const spotify = new SpotifyClient(db, new SpotifyAuth(db, config, fn), config, fn);
+  const spotify = new SpotifyClient(db, new SpotifyAuth(db, config, settings, fn), settings, fn);
   const poll = (items: [string, number][]) => {
     recent = items.map(([u, ts]) => ({ track: spotifyTrack(u), played_at: new Date(ts).toISOString(), context: null }));
-    return pollRecentlyPlayed(db, spotify, config);
+    return pollRecentlyPlayed(db, spotify, settings.get());
   };
   const rows = () => db.all<{ track_uri: string; source: string; ts: number; ms_played: number | null }>(sql`select track_uri, source, ts, ms_played from plays order by ts, id`);
   return { db, poll, rows };

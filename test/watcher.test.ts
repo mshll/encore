@@ -8,7 +8,7 @@ import { PlayerApi } from "../src/player/api";
 import { SpotifyAuth } from "../src/spotify/auth";
 import { SpotifyClient } from "../src/spotify/client";
 import type { PlaybackState } from "../src/spotify/types";
-import { connectSpotify, jsonResponse, noContent, routeFetch, testConfig, testDb, uri } from "./helpers";
+import { connectSpotify, jsonResponse, noContent, routeFetch, testConfig, testDb, uri, testSettings } from "./helpers";
 
 const STALE = 150_000;
 const A = uri("a");
@@ -150,6 +150,7 @@ const state = (trackUri: string | null, progressMs: number, isPlaying = true): P
 function setup(responses: (Response | (() => Response))[]) {
   const db = testDb();
   const config = testConfig();
+  const settings = testSettings(db, config);
   connectSpotify(db);
   let clock = 1_000_000_000_000;
   const now = () => clock;
@@ -158,9 +159,9 @@ function setup(responses: (Response | (() => Response))[]) {
     const next = queue.shift();
     return typeof next === "function" ? next() : next;
   });
-  const spotify = new SpotifyClient(db, new SpotifyAuth(db, config, fn, now), config, fn, now);
-  const make = () => new Watcher(db, new PlayerApi(spotify), config, now);
-  return { db, config, calls, make, advance: (ms: number) => (clock += ms), now };
+  const spotify = new SpotifyClient(db, new SpotifyAuth(db, config, settings, fn, now), settings, fn, now);
+  const make = () => new Watcher(db, new PlayerApi(spotify), settings, now);
+  return { db, config: settings.get(), calls, make, advance: (ms: number) => (clock += ms), now };
 }
 
 describe("watcher service", () => {
@@ -188,13 +189,13 @@ describe("watcher service", () => {
   test("stores a live play with device, shuffle and context, and survives a restart mid-track", async () => {
     const { db, make, advance } = setup([jsonResponse(state(A, 0)), jsonResponse(state(A, 30_000)), jsonResponse(state(B, 5_000))]);
     const first = make();
-    await runJob(db, { name: "watch", intervalMs: 1, run: () => first.tick() });
+    await runJob(db, { name: "watch", intervalMs: () => 1, run: () => first.tick() });
     advance(30_000);
     const restarted = make();
     expect(restarted.observation()?.trackUri).toBe(A);
-    await runJob(db, { name: "watch", intervalMs: 1, run: () => restarted.tick() });
+    await runJob(db, { name: "watch", intervalMs: () => 1, run: () => restarted.tick() });
     advance(15_000);
-    await runJob(db, { name: "watch", intervalMs: 1, run: () => restarted.tick() });
+    await runJob(db, { name: "watch", intervalMs: () => 1, run: () => restarted.tick() });
     const rows = db.all(sql`select track_uri, ms_played, skipped, shuffle, device, source, context_uri, reason_end from plays`);
     expect(rows).toEqual([{ track_uri: A, ms_played: 40_000, skipped: 1, shuffle: 1, device: "ios", source: "live", context_uri: "spotify:playlist:p", reason_end: "fwdbtn" }]);
     expect((getJobState(db, "watch")?.data as { current: Observation }).current.trackUri).toBe(B);

@@ -1,6 +1,6 @@
-import type { Config } from "../config";
 import type { Db } from "../db/client";
 import { getJobState, setJobState } from "../jobs/state";
+import type { SettingsSource } from "../settings/settings";
 import type { SpotifyAuth } from "./auth";
 import { SpotifyPacer } from "./pacer";
 import { SpotifyApiError, SpotifyBlockedError, type BlockReason } from "./errors";
@@ -27,16 +27,17 @@ export class SpotifyClient {
   constructor(
     private readonly db: Db,
     private readonly auth: SpotifyAuth,
-    private readonly config: Pick<Config, "quotaBackoffMs" | "spotifyIntervalMs" | "spotifyClientId">,
+    private readonly settings: SettingsSource,
     private readonly fetchFn: typeof fetch = fetch,
     private readonly now: () => number = Date.now,
-    readonly pacer: SpotifyPacer = new SpotifyPacer(config.spotifyIntervalMs, now),
+    readonly pacer: SpotifyPacer = new SpotifyPacer(() => settings.get().spotifyIntervalMs, now),
   ) {}
 
   /** Every pause still in force for the configured app. */
   gates(): SpotifyGate[] {
     const data = getJobState(this.db, "spotify")?.data as { gates?: SpotifyGate[] } | null | undefined;
-    return (data?.gates ?? []).filter((g) => g.blockedUntil > this.now() && g.clientId === this.config.spotifyClientId);
+    const clientId = this.settings.get().spotifyClientId;
+    return (data?.gates ?? []).filter((g) => g.blockedUntil > this.now() && g.clientId === clientId);
   }
 
   /** The pause on the whole app, if any. A pause on one endpoint does not count. */
@@ -135,8 +136,9 @@ export class SpotifyClient {
     const quota = (body.error?.reason ?? body.reason) === "QUOTA_EXCEEDED";
     const retryAfter = Number(res.headers.get("retry-after"));
     const retryAfterMs = (Number.isFinite(retryAfter) && retryAfter > 0 ? retryAfter : defaultRetryAfterSeconds) * 1000;
-    const waitMs = quota ? Math.max(this.config.quotaBackoffMs, retryAfterMs) : retryAfterMs;
-    const gate: SpotifyGate = { reason: quota ? "quota_exceeded" : "rate_limited", blockedUntil: this.now() + waitMs, at: this.now(), clientId: this.config.spotifyClientId, route: quota ? route : ALL_ROUTES };
+    const { quotaBackoffMs, spotifyClientId } = this.settings.get();
+    const waitMs = quota ? Math.max(quotaBackoffMs, retryAfterMs) : retryAfterMs;
+    const gate: SpotifyGate = { reason: quota ? "quota_exceeded" : "rate_limited", blockedUntil: this.now() + waitMs, at: this.now(), clientId: spotifyClientId ?? "", route: quota ? route : ALL_ROUTES };
     setJobState(this.db, "spotify", { lastError: `${gate.reason} on ${gate.route} until ${new Date(gate.blockedUntil).toISOString()}`, data: { gates: [...this.gates().filter((g) => g.route !== gate.route), gate] } });
     if (quota) console.error(`Spotify QUOTA_EXCEEDED on ${route} after ${this.callsToday()} calls today (UTC): paused until ${new Date(gate.blockedUntil).toISOString()}`);
     return new SpotifyBlockedError(gate.reason, gate.blockedUntil);

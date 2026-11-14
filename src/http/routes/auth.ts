@@ -13,6 +13,7 @@ const credential = z.object({ id: z.string().min(1), rawId: z.string().min(1), t
 const optionsBody = z.object({ setupToken: z.string().optional() });
 const registerBody = z.object({ setupToken: z.string().optional(), response: credential });
 const loginBody = z.object({ response: credential });
+const setupBody = z.object({ setupToken: z.string() });
 
 function assertMayRegister(c: Context<Env>, setupToken: string | undefined) {
   const { passkeys, config } = c.var.deps;
@@ -45,7 +46,15 @@ function startSession(c: Context<Env>) {
 }
 
 export const authRoutes = new Hono<Env>()
-  .get("/session", (c) => c.json({ authenticated: hasSession(c), setupRequired: c.var.deps.passkeys.count() === 0 }))
+  .get("/session", (c) =>
+    c.json({ authenticated: hasSession(c), setupRequired: c.var.deps.passkeys.count() === 0, setupTokenConfigured: c.var.deps.config.setupToken !== undefined }),
+  )
+  .post("/setup/verify", async (c) => {
+    const body = parse(setupBody, await jsonBody(c));
+    if (c.var.deps.passkeys.count() > 0) throw new ApiError(409, "setup_complete", "A passkey already exists; sign in instead");
+    assertMayRegister(c, body.setupToken);
+    return c.json({ valid: true });
+  })
   .post("/register/options", async (c) => {
     const body = parse(optionsBody, await jsonBody(c));
     assertMayRegister(c, body.setupToken);

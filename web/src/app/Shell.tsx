@@ -1,127 +1,39 @@
-import { Drawer } from "@base-ui/react/drawer";
-import { useCallback, useEffect, useState, type ReactNode } from "react";
+import { createContext, lazy, Suspense, useCallback, useContext, useEffect, useRef, useState, type ReactNode, type RefObject } from "react";
 import { useLocation, useSearchParams } from "wouter";
-import { AppLink } from "../ui/AppLink";
-import { Lockup } from "../ui/Brand";
-import { Cancel01Icon, Icon, MoreHorizontalIcon, Search01Icon } from "../ui/Icon";
-import { dismissToast, showToast, useToasts } from "../lib/toast";
-import { MiniPlayer } from "../player/MiniPlayer";
-import { NowPlaying } from "../player/NowPlaying";
-import { CommandPalette } from "./CommandPalette";
-import { NAV, NAV_GROUPS, SETTINGS, TAB_PATHS, type NavItem } from "./nav";
+import { useDesktop } from "../lib/useMedia";
+import { showToast } from "../lib/toast";
+import { MiniPlayer, PlayerBar } from "../player/PlayerBar";
+import { Toaster } from "../ui/Toast";
+import { TooltipProvider } from "../ui/Tooltip";
+import { PhoneNav } from "./PhoneNav";
+import { useShortcuts } from "./shortcuts";
+import { Sidebar } from "./Sidebar";
 
-function SidebarLink({ item, location }: { item: NavItem; location: string }) {
-  const active = item.match(location);
-  return (
-    <AppLink
-      to={item.path}
-      aria-current={active ? "page" : undefined}
-      className={`flex h-9 items-center gap-2.5 rounded-lg px-2.5 text-body-base font-medium transition-colors duration-150 ${
-        active ? "bg-nav-selected text-primary" : "text-secondary hover-fine:bg-transparent-hover hover-fine:text-primary"
-      }`}
-    >
-      <Icon icon={item.icon} className={active ? "text-primary" : "text-tertiary"} />
-      {item.label}
-    </AppLink>
-  );
+const CommandPalette = lazy(() => import("./CommandPalette").then((m) => ({ default: m.CommandPalette })));
+const QueuePanel = lazy(() => import("../player/QueuePanel").then((m) => ({ default: m.QueuePanel })));
+const NowPlayingSheet = lazy(() => import("../player/NowPlayingSheet").then((m) => ({ default: m.NowPlayingSheet })));
+
+/** True from the first time `open` is true: an overlay loads on first use, then stays mounted so it can animate closed. */
+function useOnceOpen(open: boolean) {
+  const [opened, setOpened] = useState(open);
+  if (open && !opened) setOpened(true);
+  return opened;
 }
 
-function Sidebar({ location, onSearch }: { location: string; onSearch: () => void }) {
-  const isMac = /Mac|iPhone|iPad/.test(navigator.platform);
-  return (
-    <aside className="sticky top-0 hidden h-dvh w-60 shrink-0 flex-col gap-5 px-3 py-4 md:flex">
-      <AppLink to="/" aria-label="encore, overview" className="flex h-9 items-center px-2.5">
-        <Lockup />
-      </AppLink>
-      <button
-        type="button"
-        onClick={onSearch}
-        className="flex h-9 w-full items-center gap-2.5 rounded-lg bg-raised px-2.5 text-left text-body-base text-secondary transition-colors duration-150 hover-fine:bg-raised-hover"
-      >
-        <Icon icon={Search01Icon} className="text-tertiary" />
-        <span className="flex-1">Search</span>
-        <span className="flex items-center gap-0.5">
-          <kbd className="kbd">{isMac ? "⌘" : "Ctrl"}</kbd>
-          <kbd className="kbd">K</kbd>
-        </span>
-      </button>
-      <nav aria-label="Main" className="flex flex-1 flex-col gap-4 overflow-y-auto">
-        {NAV_GROUPS.map(({ group, items }) => (
-          <div key={group ?? "listening"} className="flex flex-col gap-0.5">
-            {group && <p className="px-2.5 pb-1 text-caption-lg font-medium text-tertiary">{group}</p>}
-            {items.map((item) => (
-              <SidebarLink key={item.path} item={item} location={location} />
-            ))}
-          </div>
-        ))}
-      </nav>
-      <SidebarLink item={SETTINGS} location={location} />
-    </aside>
-  );
-}
+const ScrollContext = createContext<RefObject<HTMLElement | null>>({ current: null });
 
-function TabBar({ location }: { location: string }) {
-  const [moreOpen, setMoreOpen] = useState(false);
-  const tabs = TAB_PATHS.map((p) => NAV.find((n) => n.path === p)!);
-  const more = [...NAV.filter((n) => !TAB_PATHS.includes(n.path)), SETTINGS];
-  const moreActive = more.some((m) => m.match(location));
-  const tabClass = (active: boolean) =>
-    `press flex h-full flex-1 flex-col items-center justify-center gap-0.5 text-caption-base font-medium ${active ? "text-primary" : "text-tertiary"}`;
-  return (
-    <>
-      <nav
-        aria-label="Main"
-        className="fixed inset-x-0 bottom-0 z-40 flex border-t-[0.5px] border-border-default bg-sidebar pb-[env(safe-area-inset-bottom)] md:hidden"
-      >
-        <div className="flex h-14 w-full px-[max(4px,env(safe-area-inset-left))]">
-          {tabs.map((item) => {
-            const active = item.match(location);
-            return (
-              <AppLink key={item.path} to={item.path} aria-current={active ? "page" : undefined} className={tabClass(active)}>
-                <Icon icon={item.icon} />
-                {item.label}
-              </AppLink>
-            );
-          })}
-          <button type="button" className={tabClass(moreActive)} onClick={() => setMoreOpen(true)} aria-haspopup="dialog">
-            <Icon icon={MoreHorizontalIcon} />
-            More
-          </button>
-        </div>
-      </nav>
-      <Drawer.Root open={moreOpen} onOpenChange={setMoreOpen}>
-        <Drawer.Portal>
-          <Drawer.Backdrop className="fixed inset-0 z-50 bg-black/25 transition-opacity duration-300 ease-(--ease-drawer) data-ending-style:opacity-0 data-starting-style:opacity-0 dark:bg-black/60" />
-          <Drawer.Viewport className="fixed inset-0 z-50 flex items-end">
-            <Drawer.Popup className="w-full rounded-t-3xl bg-overlay pb-[max(12px,env(safe-area-inset-bottom))] shadow-extra-large outline-none transition-transform duration-300 ease-(--ease-drawer) [transform:translateY(var(--drawer-swipe-movement-y,0))] data-ending-style:[transform:translateY(100%)] data-starting-style:[transform:translateY(100%)]">
-              <Drawer.Content className="flex flex-col px-2 pt-2">
-                <div aria-hidden className="mx-auto mb-2 h-1 w-9 rounded-full bg-component-active" />
-                <Drawer.Title className="sr-only">More</Drawer.Title>
-                {more.map((item) => (
-                  <AppLink
-                    key={item.path}
-                    to={item.path}
-                    onClick={() => setMoreOpen(false)}
-                    aria-current={item.match(location) ? "page" : undefined}
-                    className={`flex h-12 items-center gap-3 rounded-lg px-4 text-body-lg font-medium text-primary ${item.match(location) ? "bg-nav-selected" : ""}`}
-                  >
-                    <Icon icon={item.icon} className="text-secondary" />
-                    {item.label}
-                  </AppLink>
-                ))}
-              </Drawer.Content>
-            </Drawer.Popup>
-          </Drawer.Viewport>
-        </Drawer.Portal>
-      </Drawer.Root>
-    </>
-  );
-}
+/** The page panel is the scroll container on every width. Virtualised lists measure against it. */
+export const useScrollElement = () => useContext(ScrollContext);
+
+const QueueOpener = createContext<() => void>(() => {});
+
+/** Shows the queue, where a running DJ session lives: the side panel on desktop, the now-playing sheet on a phone. */
+export const useOpenQueue = () => useContext(QueueOpener);
 
 const SPOTIFY_NOTICES: Record<string, { message: string; tone: "info" | "problem" }> = {
   connected: { message: "Spotify connected.", tone: "info" },
   denied: { message: "Spotify was not connected: access was declined.", tone: "problem" },
-  error: { message: "Spotify could not be connected. Try again from Settings.", tone: "problem" },
+  error: { message: "Spotify could not be connected. Try again.", tone: "problem" },
 };
 
 function useSpotifyNotice() {
@@ -142,58 +54,91 @@ function useSpotifyNotice() {
   }, [result, setParams]);
 }
 
-function Toaster() {
-  const toasts = useToasts();
-  return (
-    <div className="pointer-events-none fixed inset-x-4 top-[max(12px,env(safe-area-inset-top))] z-[70] flex flex-col items-center gap-2 md:top-auto md:right-6 md:bottom-6 md:left-auto md:w-96 md:items-stretch">
-      {toasts.map((t) => (
-        <div
-          key={t.id}
-          role={t.tone === "problem" ? "alert" : "status"}
-          className="pointer-events-auto flex w-full items-center justify-between gap-3 rounded-xl bg-standout px-4 py-3 text-on-standout shadow-large transition-[opacity,transform] duration-200 ease-(--ease-out-quint) starting:-translate-y-2 starting:opacity-0 md:starting:translate-y-2"
-        >
-          <span className="text-pretty">{t.message}</span>
-          <button
-            type="button"
-            className="btn btn-icon -mr-2 shrink-0 [--btn-bg:transparent] [--btn-fg:var(--fg-on-standout)]"
-            aria-label="Dismiss"
-            onClick={() => dismissToast(t.id)}
-          >
-            <Icon icon={Cancel01Icon} />
-          </button>
-        </div>
-      ))}
-    </div>
-  );
+/** New page: back to the top, focus on the page so a screen reader starts from its title. */
+function useRouteReset(main: RefObject<HTMLElement | null>) {
+  const [location] = useLocation();
+  const first = useRef(true);
+  useEffect(() => {
+    if (first.current) {
+      first.current = false;
+      return;
+    }
+    main.current?.scrollTo({ top: 0 });
+    main.current?.focus({ preventScroll: true });
+  }, [location, main]);
 }
 
+/**
+ * Desktop: sidebar on the shell ground, the page as an inset panel, the queue as a second panel on the right,
+ * the player docked across the bottom. Phone: the page edge to edge, a mini player and the tab bar at the foot.
+ */
 export function Shell({ children }: { children: ReactNode }) {
-  const [location] = useLocation();
+  const desktop = useDesktop();
+  const main = useRef<HTMLElement>(null);
   const [paletteOpen, setPaletteOpen] = useState(false);
-  const [player, setPlayer] = useState<{ open: boolean; section?: "queue" }>({ open: false });
-  const setPlayerOpen = useCallback((open: boolean) => setPlayer((p) => ({ ...p, open })), []);
+  const [queueOpen, setQueueOpen] = useState(false);
+  const [sheetOpen, setSheetOpen] = useState(false);
+  const paletteLoaded = useOnceOpen(paletteOpen);
+  const sheetLoaded = useOnceOpen(sheetOpen);
   useSpotifyNotice();
+  useRouteReset(main);
+  useShortcuts(useCallback(() => setPaletteOpen((o) => !o), []));
+
   return (
-    <div className="flex min-h-dvh">
-      <a
-        href="#main"
-        className="fixed top-3 left-3 z-[60] -translate-y-[200%] rounded-lg bg-component-on-sunken px-3 py-2 text-body-sm font-medium opacity-0 shadow-extra-large transition-[translate,opacity] focus-visible:translate-y-0 focus-visible:opacity-100"
-      >
-        Skip to content
-      </a>
-      <Sidebar location={location} onSearch={() => setPaletteOpen(true)} />
-      <main
-        id="main"
-        tabIndex={-1}
-        className="flex min-w-0 flex-1 flex-col bg-canvas pb-[calc(56px+env(safe-area-inset-bottom))] outline-none md:my-2 md:mr-2 md:min-h-[calc(100dvh-16px)] md:rounded-2xl md:pb-0 md:shadow-border"
-      >
-        <div className="flex-1">{children}</div>
-        <MiniPlayer onOpen={(section) => setPlayer({ open: true, section })} />
-      </main>
-      <NowPlaying open={player.open} section={player.section} onOpenChange={setPlayerOpen} />
-      <TabBar location={location} />
-      <CommandPalette open={paletteOpen} onOpenChange={setPaletteOpen} />
-      <Toaster />
-    </div>
+    <TooltipProvider delay={500}>
+      <Toaster>
+        <ScrollContext.Provider value={main}>
+          <a
+            href="#main"
+            className="fixed top-3 left-3 z-[80] -translate-y-[200%] rounded-md bg-overlay px-3 py-2 font-medium shadow-overlay focus-visible:translate-y-0"
+          >
+            Skip to content
+          </a>
+          {desktop ? (
+            <div
+              className="grid h-dvh grid-cols-[var(--sidebar-w)_minmax(0,1fr)_auto] grid-rows-[minmax(0,1fr)_var(--player-h)]"
+              style={{ ["--bottom-chrome" as string]: "var(--player-h)" }}
+            >
+              <Sidebar onSearch={() => setPaletteOpen(true)} />
+              <main ref={main} id="main" tabIndex={-1} data-crop className="mt-(--inset) overflow-y-auto rounded-xl bg-page shadow-panel outline-none">
+                <QueueOpener.Provider value={desktop ? () => setQueueOpen(true) : () => setSheetOpen(true)}>{children}</QueueOpener.Provider>
+              </main>
+              <div className={queueOpen ? "mt-(--inset) mr-(--inset) ml-(--inset) min-h-0" : "w-(--inset)"}>
+                {queueOpen && (
+                  <Suspense fallback={null}>
+                    <QueuePanel onClose={() => setQueueOpen(false)} />
+                  </Suspense>
+                )}
+              </div>
+              <div className="col-span-3">
+                <PlayerBar queueOpen={queueOpen} onToggleQueue={() => setQueueOpen((o) => !o)} />
+              </div>
+            </div>
+          ) : (
+            <div className="flex h-dvh flex-col bg-page" style={{ ["--bottom-chrome" as string]: "calc(56px + 64px + env(safe-area-inset-bottom))" }}>
+              <main ref={main} id="main" tabIndex={-1} data-crop className="min-h-0 flex-1 overflow-y-auto pt-[env(safe-area-inset-top)] outline-none">
+                <QueueOpener.Provider value={desktop ? () => setQueueOpen(true) : () => setSheetOpen(true)}>{children}</QueueOpener.Provider>
+              </main>
+              <div className="shrink-0 bg-shell pb-[env(safe-area-inset-bottom)]">
+                <div className="bg-page">
+                  <MiniPlayer onOpen={() => setSheetOpen(true)} />
+                </div>
+                <PhoneNav onSearch={() => setPaletteOpen(true)} />
+              </div>
+              {sheetLoaded && (
+                <Suspense fallback={null}>
+                  <NowPlayingSheet open={sheetOpen} onOpenChange={setSheetOpen} />
+                </Suspense>
+              )}
+            </div>
+          )}
+          {paletteLoaded && (
+            <Suspense fallback={null}>
+              <CommandPalette open={paletteOpen} onOpenChange={setPaletteOpen} />
+            </Suspense>
+          )}
+        </ScrollContext.Provider>
+      </Toaster>
+    </TooltipProvider>
   );
 }

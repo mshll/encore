@@ -4,7 +4,7 @@ import { artistPage, albumPage, trackPage } from "../../analytics/entities";
 import { history } from "../../analytics/history";
 import { clock, devices, overview, timeSeries } from "../../analytics/overview";
 import { forgotten, onThisDay } from "../../analytics/recall";
-import { momentSplit, skips } from "../../analytics/skips";
+import { momentSplit, skipContext, skips } from "../../analytics/skips";
 import { search } from "../../analytics/search";
 import { energyByHour, genreSeries, moodSeries } from "../../analytics/tags";
 import { eras, topAlbums, topArtists, topTracks } from "../../analytics/top";
@@ -24,7 +24,7 @@ function range(q: { from?: string; to?: string }) {
   return { from: q.from, to: q.to };
 }
 const period = z.enum(["day", "week", "month", "year"]).default("month");
-const top = ranged({ limit: int(1, 200, 50), offset: int(0, 1_000_000, 0), sort: z.enum(["hours", "listens", "plays"]).default("hours") });
+const top = ranged({ limit: int(1, 200, 50), offset: int(0, 1_000_000, 0), sort: z.enum(["hours", "listens", "plays"]).default("hours"), q: z.string().trim().min(1).max(200).optional() });
 const topAt = top.extend({ weekday: z.coerce.number().int().min(1).max(7).optional(), hour: z.coerce.number().int().min(0).max(23).optional() });
 
 function found<T>(value: T | null): T {
@@ -61,7 +61,8 @@ export const statsRoutes = new Hono<Env>()
   })
   .get("/skips", (c) => {
     const q = parse(ranged({ minPlays: int(1, 1000, 10), limit: int(1, 200, 50) }), c.req.query());
-    return c.json(skips(c.var.deps.db, { range: range(q), minPlays: q.minPlays, limit: q.limit }));
+    const db = c.var.deps.db;
+    return c.json({ ...skips(db, { range: range(q), minPlays: q.minPlays, limit: q.limit }), ...skipContext(db, { range: range(q), weekendDays: c.var.deps.settings.get().weekendDays }) });
   })
   .get("/skips/split", (c) => {
     const q = parse(
@@ -73,20 +74,20 @@ export const statsRoutes = new Hono<Env>()
       }),
       c.req.query(),
     );
-    return c.json(momentSplit(c.var.deps.db, { range: range(q), minPlays: q.minPlays, minContextPlays: q.minContextPlays, limit: q.limit, only: q.class }));
+    return c.json(momentSplit(c.var.deps.db, { range: range(q), minPlays: q.minPlays, minContextPlays: q.minContextPlays, limit: q.limit, only: q.class, weekendDays: c.var.deps.settings.get().weekendDays }));
   })
   .get("/forgotten", (c) => {
     const q = parse(z.object({ days: int(1, 3650, 90), minListens: int(1, 10_000, 10), limit: int(1, 200, 50) }), c.req.query());
     return c.json(forgotten(c.var.deps.db, { ...q, asOf: c.var.deps.now() }));
   })
   .get("/on-this-day", (c) => {
-    const { config, now, db } = c.var.deps;
+    const { settings, now, db } = c.var.deps;
     const q = parse(z.object({ date: day.optional(), limit: int(1, 50, 5) }), c.req.query());
-    return c.json(onThisDay(db, { date: q.date ?? localTime(now(), config.timezone).day, limit: q.limit }));
+    return c.json(onThisDay(db, { date: q.date ?? localTime(now(), settings.get().timezone).day, limit: q.limit }));
   })
   .get("/trips", (c) => {
     const q = parse(ranged({ minPlays: int(1, 10_000, 5), topTracks: int(0, 50, 5) }), c.req.query());
-    return c.json(trips(c.var.deps.db, { range: range(q), homeCountry: c.var.deps.config.homeCountry, minPlays: q.minPlays, topTracks: q.topTracks }));
+    return c.json(trips(c.var.deps.db, { range: range(q), homeCountry: c.var.deps.settings.get().homeCountry, minPlays: q.minPlays, topTracks: q.topTracks }));
   })
   .get("/tags/genres", (c) => {
     const q = parse(ranged({ period }), c.req.query());
@@ -101,11 +102,11 @@ export const statsRoutes = new Hono<Env>()
 export const entityRoutes = new Hono<Env>()
   .get("/artist", (c) => {
     const q = parse(ranged({ name: z.string().min(1), period }), c.req.query());
-    return c.json(found(artistPage(c.var.deps.db, { artist: q.name, range: range(q), period: q.period })));
+    return c.json(found(artistPage(c.var.deps.db, { artist: q.name, range: range(q), period: q.period, weekendDays: c.var.deps.settings.get().weekendDays })));
   })
   .get("/album", (c) => {
     const q = parse(ranged({ artist: z.string().min(1), album: z.string().min(1), period }), c.req.query());
-    return c.json(found(albumPage(c.var.deps.db, { artist: q.artist, album: q.album, range: range(q), period: q.period })));
+    return c.json(found(albumPage(c.var.deps.db, { artist: q.artist, album: q.album, range: range(q), period: q.period, weekendDays: c.var.deps.settings.get().weekendDays })));
   })
   .get("/track", (c) => {
     const q = parse(
@@ -115,7 +116,7 @@ export const entityRoutes = new Hono<Env>()
       }),
       c.req.query(),
     );
-    return c.json(found(trackPage(c.var.deps.db, { songKey: q.songKey, uri: q.uri, range: range(q), period: q.period })));
+    return c.json(found(trackPage(c.var.deps.db, { songKey: q.songKey, uri: q.uri, range: range(q), period: q.period, weekendDays: c.var.deps.settings.get().weekendDays })));
   });
 
 const historyQuery = ranged({

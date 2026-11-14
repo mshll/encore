@@ -10,6 +10,7 @@ const getOrNull = <T>(path: string, query: Record<string, string>) =>
   });
 import type {
   AskThread,
+  Devices,
   AskTurn,
   Block,
   Digest,
@@ -39,6 +40,7 @@ import type {
   MomentClass,
   OnThisDay,
   Overview,
+  PendingTags,
   Period,
   SearchResult,
   Session,
@@ -50,6 +52,8 @@ import type {
   TimeSeries,
   TrackPage,
   Trips,
+  Onboarding,
+  Settings,
 } from "./types";
 
 const ranged = <T>(path: string, range: Range, extra: Record<string, string | number | undefined> = {}) => ({
@@ -78,6 +82,20 @@ export const useTopAlbums = (range: Range, limit: number) => useQuery(ranged<{ i
 export const useTopTracks = (range: Range, limit: number, at: { weekday?: number; hour?: number } = {}, enabled = true) =>
   useQuery({ ...ranged<{ items: Song[] }>("/api/stats/top/tracks", range, { limit, ...at }), enabled });
 
+export type TopKind = "artists" | "albums" | "tracks";
+export type TopSort = "hours" | "listens" | "plays";
+export type TopItem = { artists: ArtistStats; albums: AlbumStats; tracks: Song };
+export const TOP_PAGE = 200;
+
+export const useTopPages = <K extends TopKind>(kind: K, range: Range, sort: TopSort, q: string | undefined) =>
+  useInfiniteQuery({
+    queryKey: [`/api/stats/top/${kind}`, "pages", range.from ?? null, range.to ?? null, sort, q ?? null],
+    queryFn: ({ pageParam }) => get<{ items: TopItem[K][] }>(`/api/stats/top/${kind}`, { ...range, sort, q, limit: TOP_PAGE, offset: pageParam }),
+    initialPageParam: 0,
+    getNextPageParam: (last, pages) => (last.items.length === TOP_PAGE ? pages.length * TOP_PAGE : undefined),
+    placeholderData: keepPreviousData,
+  });
+
 export const useEras = (range: Range, limit: number) => useQuery(ranged<Eras>("/api/stats/eras", range, { limit }));
 
 export const useClock = (range: Range) => useQuery(ranged<Clock>("/api/stats/clock", range));
@@ -92,6 +110,11 @@ export const useForgotten = (days: number) =>
 export const useOnThisDay = () => useQuery({ queryKey: ["on-this-day"], queryFn: () => get<OnThisDay>("/api/stats/on-this-day", { limit: 3 }) });
 
 export const useTrips = (range: Range) => useQuery(ranged<Trips>("/api/stats/trips", range, { topTracks: 5 }));
+
+export const useDevices = (range: Range) => useQuery(ranged<Devices>("/api/stats/devices", range, { period: "year" }));
+
+/** Only the count is read: how many played songs have no tags yet. */
+export const usePendingTags = () => useQuery({ queryKey: ["tags", "pending"], queryFn: () => get<PendingTags>("/api/tags/pending", { limit: 1 }) });
 
 export const useTagSeries = (kind: "genres" | "moods", range: Range, period: Period) =>
   useQuery(ranged<TagSeries>(`/api/stats/tags/${kind}`, range, { period }));
@@ -208,3 +231,7 @@ export const useDigests = () => useQuery({ queryKey: ["digests"], queryFn: () =>
 export const useDigest = (id: number) => useQuery({ queryKey: ["digests", id], queryFn: () => get<Digest>(`/api/digests/${id}`), staleTime: Infinity });
 
 export const useSpend = () => useQuery({ queryKey: ["spend"], queryFn: () => get<Spend>("/api/llm/spend", { limit: 12 }) });
+
+export const useSettings = () => useQuery({ queryKey: ["settings"], queryFn: () => get<Settings>("/api/settings") });
+
+export const useOnboarding = () => useQuery({ queryKey: ["onboarding"], queryFn: () => get<Onboarding>("/api/onboarding") });

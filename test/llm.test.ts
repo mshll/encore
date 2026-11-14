@@ -69,7 +69,7 @@ describe("ledger and budget", () => {
     const fake = scripted(message([text("a")], "end_turn", { usage: usage({ input_tokens: 0, output_tokens: 50_000 }) }));
     const { ctx } = featureCtx(fake.transport, [], { MONTHLY_BUDGET_USD: "1" });
     await ctx.llm.call({ feature: "ask", system: ["s"], messages: [{ role: "user", content: "q" }], effort: "low", maxTokens: 100 });
-    expect(budgetStatus(ctx.db, ctx.config.timezone, 1, ctx.now())).toMatchObject({ spentUsd: 1, exhausted: true, remainingUsd: 0 });
+    expect(budgetStatus(ctx.db, ctx.settings.get().timezone, 1, ctx.now())).toMatchObject({ spentUsd: 1, exhausted: true, remainingUsd: 0 });
     const call = ctx.llm.call({ feature: "ask", system: ["s"], messages: [{ role: "user", content: "q" }], effort: "low", maxTokens: 100 });
     await expect(call).rejects.toBeInstanceOf(LlmBudgetExceededError);
     expect(fake.requests).toHaveLength(1);
@@ -80,7 +80,7 @@ describe("ledger and budget", () => {
     const { ctx, time } = featureCtx(fake.transport, [], { MONTHLY_BUDGET_USD: "1" }, "2026-01-31T20:00:00Z");
     await ctx.llm.call({ feature: "ask", system: ["s"], messages: [{ role: "user", content: "q" }], effort: "low", maxTokens: 100 });
     time.set("2026-01-31T21:30:00Z");
-    expect(budgetStatus(ctx.db, ctx.config.timezone, 1, ctx.now()).month).toBe("2026-02");
+    expect(budgetStatus(ctx.db, ctx.settings.get().timezone, 1, ctx.now()).month).toBe("2026-02");
     await ctx.llm.call({ feature: "ask", system: ["s"], messages: [{ role: "user", content: "q" }], effort: "low", maxTokens: 100 });
     expect(fake.requests).toHaveLength(2);
   });

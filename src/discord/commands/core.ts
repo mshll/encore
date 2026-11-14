@@ -27,7 +27,7 @@ function rangeOf(ctx: DiscordContext, value: string | number | undefined) {
   const key = (typeof value === "string" && value in RANGES ? value : "month") as RangeKey;
   const { days, title } = RANGES[key];
   if (days === 0) return { range: {}, title };
-  const today = localTime(ctx.now(), ctx.config.timezone).day;
+  const today = localTime(ctx.now(), ctx.settings.get().timezone).day;
   const from = new Date(Date.parse(`${today}T00:00:00Z`) - (days - 1) * 86_400_000).toISOString().slice(0, 10);
   return { range: { from, to: today }, title };
 }
@@ -67,7 +67,7 @@ export function registerCoreCommands(registry: DiscordRegistry): DiscordRegistry
       definition: { name: "now", description: "What is playing" },
       defer: true,
       handle: async ({ ctx }) => {
-        const now = await ctx.services.watcher.nowPlaying(ctx.config.watcherIdleMs + 5000);
+        const now = await ctx.services.watcher.nowPlaying(ctx.settings.get().watcherIdleMs + 5000);
         if (!now.track) return { content: "Nothing is playing." };
         const status = [now.playing ? "Playing" : "Paused", now.device?.name].filter(Boolean).join(" on ");
         return {
@@ -154,7 +154,7 @@ export function registerCoreCommands(registry: DiscordRegistry): DiscordRegistry
       definition: { name: "onthisday", description: "What you played on this day in past years" },
       defer: false,
       handle: ({ ctx }) => {
-        const today = localTime(ctx.now(), ctx.config.timezone).day;
+        const today = localTime(ctx.now(), ctx.settings.get().timezone).day;
         const { years } = onThisDay(ctx.db, { date: today, limit: 3 });
         if (years.length === 0) return { content: "No plays on this day in earlier years." };
         const art = years[0]!.topTracks[0]?.albumArtUrl;

@@ -1,190 +1,297 @@
+/*
+  encore design tokens. Every colour, radius, shadow and size the UI uses is here.
+  Roles, not values: components reference these names only. DESIGN.md is the contract.
+  Light is the default; dark is `.dark` on <html> (set before paint by public/theme.js).
+  The @theme blocks map the roles to Tailwind utilities (bg-page, text-secondary, rounded-md, text-body-sm).
+*/
+
 :root {
-  --gray-1: #fcfcfc;
-  --gray-2: #f9f9f9;
-  --gray-3: #f0f0f0;
-  --gray-4: #e8e8e8;
-  --gray-5: #e0e0e0;
-  --gray-6: #d9d9d9;
-  --gray-7: #cecece;
-  --gray-8: #bbb;
-  --gray-9: #8d8d8d;
-  --gray-10: #838383;
-  --gray-11: #646464;
-  --gray-12: #202020;
+  /* Surfaces, back to front: shell (window, sidebar, player bar), page (inset content panel),
+     container (side panels), card (faint grouping fill), sunken (wells), overlay (menus, dialogs),
+     standout (tooltip, toast). */
+  --surface-shell: #f4f4f4;
+  --surface-page: #ffffff;
+  --surface-container: #ffffff;
+  --surface-card: #00000006;
+  --surface-sunken: #0000000a;
+  --surface-overlay: #ffffff;
+  --surface-standout: #1f1f1f;
+  --backdrop: #00000047;
 
-  --gray-a1: #00000003;
-  --gray-a2: #00000006;
-  --gray-a3: #0000000f;
-  --gray-a4: #00000017;
-  --gray-a5: #0000001f;
-  --gray-a6: #00000026;
-  --gray-a7: #00000031;
-  --gray-a8: #0004;
-  --gray-a9: #00000072;
-  --gray-a10: #0000007c;
-  --gray-a11: #0000009b;
-  --gray-a12: #000000df;
+  /* Component fills: translucent, so they work on any surface. */
+  --fill: #0000000d;
+  --fill-hover: #00000014;
+  --fill-active: #0000001c;
+  --fill-raised: #ffffff;
+  --fill-raised-hover: #fafafa;
+  --fill-inverted: #000000e6;
+  --fill-inverted-hover: #000000cc;
+  --fill-on-standout: #ffffff1f;
 
-  --black-a1: #0000000d;
-  --black-a2: #0000001a;
-  --black-a3: #00000026;
-  --black-a6: #0006;
-  --black-a7: #00000080;
-  --black-a9: #000000b3;
-  --black-a10: #000c;
-  --black-a12: #000000f2;
-  --white-a1: #ffffff0d;
-  --white-a2: #ffffff1a;
-  --white-a7: #ffffff80;
-  --white-a9: #ffffffb3;
-  --white-a10: #fffc;
-  --white-a12: #fffffff2;
+  /* Text. Opaque greys, so icons drawn in them stay crisp where strokes overlap. */
+  --text-primary: #202020;
+  --text-secondary: #696969;
+  --text-tertiary: #878787;
+  --text-disabled: #b8b8b8;
+  --text-inverted: #ffffff;
+  --text-on-standout: #eeeeee;
+  --text-on-standout-secondary: #a5a5a5;
 
-  --page: #fff;
-  --shell: oklch(97.3% 0 0);
-  --modal: oklch(100% 0 0);
-  --card: var(--gray-a2);
+  /* Lines. Structural lines are 0.5px. */
+  --line: #0000001a;
+  --line-subtle: #0000000d;
+  --line-strong: #00000030;
+  --focus-ring: #0000008c;
 
-  --surface-sidebar: var(--shell);
-  --surface-canvas: var(--page);
-  --surface-raised: var(--gray-3);
-  --surface-raised-hover: var(--gray-4);
-  --surface-overlay: var(--modal);
-  --nav-selected: var(--gray-a4);
-  --standout: var(--gray-12);
-  --component: var(--gray-a3);
-  --component-hover: var(--gray-a4);
-  --component-active: var(--gray-a5);
-  --component-on-sunken: #fff;
-  --component-strong: #fff;
-  --component-strong-hover: var(--gray-2);
-  --component-subtle: #fff;
-  --transparent-hover: var(--gray-a3);
-  --inverted: var(--black-a12);
-  --inverted-hover: var(--black-a10);
-  --on-inverted: #fff;
-  --disabled: var(--gray-a3);
-
-  --fg-primary: var(--gray-a12);
-  --fg-secondary: var(--gray-a11);
-  --fg-tertiary: var(--gray-a9);
-  --fg-disabled: var(--gray-a8);
-  --fg-on-standout: #fff;
-  --fg-on-standout-secondary: var(--white-a7);
-
-  --border-default: var(--gray-a3);
-  --border-subtle: var(--gray-a2);
-  --border-strong: var(--gray-a6);
-  --segment-border: var(--gray-6);
-
-  --danger-fg: #d13415;
-  --danger-subtle: #ff0a000a;
-  --warning-fg: #cc4e00;
-
+  /* Accent: Spotify green. Only for selection, the primary action, playing state and chart emphasis. */
   --accent: #1ed760;
-  --accent-hover: #1fdf64;
-  --on-accent: oklch(15% 0 0);
-  --chart-key: #17a34a;
-  --chart-muted: var(--gray-6);
-  --chart-grid: var(--gray-a3);
-  --chart-axis: var(--gray-a6);
+  --accent-hover: #3be477;
+  --text-on-accent: #0b0b0b;
+  --accent-text: #117a37;
+  --accent-subtle: #1ed76026;
 
-  --series-1: #2a78d6;
-  --series-2: #eb6834;
-  --series-3: #1baf7a;
-  --series-4: #eda100;
-  --series-5: #e87ba4;
-  --series-6: #008300;
-  --series-7: #6250d6;
-  --series-8: #e34948;
+  /* Status. Positive shares the accent hue (within 25 degrees), so it uses --accent-text. */
+  --danger: #d13415;
+  --danger-subtle: #e5310014;
+  --warning: #b54700;
+  --warning-subtle: #f76b151a;
 
-  --shadow-inner-1: #0000;
-  --shadow-drop-1: #0000000f;
-  --shadow-drop-2: #0000001a;
-  --shadow-drop-3: #0000000d;
-  --shadow-border-color: #00000012;
-  --shadow-xl-inner-1: #0000;
-  --shadow-xl-drop-1: #0000000f;
-  --shadow-xl-drop-2: #0000000d;
-  --shadow-xl-drop-3: #00000026;
-  --s-default: 0 0 0 0.5px var(--shadow-inner-1) inset, 0 0 0 0.5px var(--shadow-drop-1), 0 1px 1px -1px var(--shadow-drop-2), 0 1px 2px 0 var(--shadow-drop-3);
-  --s-large: 0 0 0 0.5px var(--gray-a3), 0 2px 3px -2px var(--gray-a3), 0 3px 12px -4px var(--black-a2), 0 4px 16px -8px var(--black-a1);
-  --s-extra-large:
-    0 0 0 0.5px var(--shadow-xl-inner-1) inset, 0 0 0 0.5px var(--shadow-xl-drop-1), 0 8px 40px 0 var(--shadow-xl-drop-2),
-    0 12px 32px -16px var(--shadow-xl-drop-3);
-  --s-border: 0 0 0 1px var(--shadow-border-color);
+  /* Charts. The dither family paints in its own palette (components/dither-kit/palette.ts);
+     these tokens cover everything around the canvas. */
+  --chart-key: #1ed760;
+  --chart-empty: #0000000a;
+  --chart-grid: #00000014;
+  --chart-axis: #00000070;
+
+  /* Shadows. Dark mode replaces drops with a hairline. */
+  --shadow-control: 0 0 0 0.5px #00000014, 0 1px 1px -0.5px #0000001a, 0 1px 2px 0 #0000000d;
+  --shadow-panel: 0 0 0 0.5px #00000014, 0 1px 2px 0 #00000008;
+  --shadow-overlay: 0 0 0 0.5px #00000017, 0 2px 4px -2px #0000001f, 0 8px 24px -8px #00000029;
+  --shadow-modal: 0 0 0 0.5px #00000017, 0 8px 40px 0 #0000001a, 0 12px 32px -16px #0000002e;
+
+  /* Sizes */
+  --control-h: 32px;
+  --control-h-sm: 28px;
+  --control-h-lg: 40px;
+  --row-h: 44px;
+  --row-h-compact: 36px;
+  --sidebar-w: 232px;
+  --panel-w: 360px;
+  --player-h: 72px;
+  --page-max: 1200px;
+  --gutter: 32px;
+  --inset: 8px;
+  --hairline: 0.5px;
+
+  /* Motion (curves live in @theme below) */
+  --dur-hover: 150ms;
+  --dur-swap: 200ms;
+  --dur-modal: 240ms;
+  --dur-move: 300ms;
 
   color-scheme: light;
 }
 
 .dark {
-  --gray-1: #111;
-  --gray-2: #191919;
-  --gray-3: #222;
-  --gray-4: #2a2a2a;
-  --gray-5: #313131;
-  --gray-6: #3a3a3a;
-  --gray-7: #484848;
-  --gray-8: #606060;
-  --gray-9: #6e6e6e;
-  --gray-10: #7b7b7b;
-  --gray-11: #b4b4b4;
-  --gray-12: #eee;
+  --surface-shell: #000000;
+  --surface-page: #111111;
+  --surface-container: #111111;
+  --surface-card: #ffffff09;
+  --surface-sunken: #00000066;
+  --surface-overlay: #1f1f1f;
+  --surface-standout: #2a2a2a;
+  --backdrop: #000000a6;
 
-  --gray-a1: #0000;
-  --gray-a2: #ffffff09;
-  --gray-a3: #ffffff12;
-  --gray-a4: #ffffff1b;
-  --gray-a5: #fff2;
-  --gray-a6: #ffffff2c;
-  --gray-a7: #ffffff3b;
-  --gray-a8: #fff5;
-  --gray-a9: #ffffff64;
-  --gray-a10: #ffffff72;
-  --gray-a11: #ffffffaf;
-  --gray-a12: #ffffffed;
+  --fill: #ffffff12;
+  --fill-hover: #ffffff1b;
+  --fill-active: #ffffff24;
+  --fill-raised: #ffffff14;
+  --fill-raised-hover: #ffffff1f;
+  --fill-inverted: #ffffffed;
+  --fill-inverted-hover: #ffffffcc;
 
-  --page: oklch(15% 0 0);
-  --shell: #000;
-  --modal: oklch(25.2% 0 0);
-  --surface-raised: var(--gray-3);
-  --surface-raised-hover: var(--gray-4);
-  --standout: var(--gray-3);
-  --component-on-sunken: var(--gray-4);
-  --component-strong: var(--gray-a3);
-  --component-strong-hover: var(--gray-a4);
-  --component-subtle: var(--gray-a2);
-  --transparent-hover: var(--gray-a4);
-  --inverted: var(--white-a12);
-  --inverted-hover: var(--white-a10);
-  --on-inverted: #000;
-  --disabled: var(--gray-a2);
-  --fg-on-standout: var(--gray-a12);
-  --segment-border: var(--gray-7);
+  --text-primary: #eeeeee;
+  --text-secondary: #a9a9a9;
+  --text-tertiary: #787878;
+  --text-disabled: #535353;
+  --text-inverted: #000000;
+  --text-on-standout: #eeeeee;
+  --text-on-standout-secondary: #a5a5a5;
 
-  --danger-fg: #ff977d;
-  --danger-subtle: #f4121209;
-  --warning-fg: #ffa057;
+  --line: #ffffff1a;
+  --line-subtle: #ffffff0d;
+  --line-strong: #ffffff30;
+  --focus-ring: #ffffff8c;
 
-  --chart-key: #1ed760;
-  --chart-muted: var(--gray-7);
+  --accent-text: #1ed760;
+  --accent-subtle: #1ed76024;
 
-  --series-1: #3987e5;
-  --series-2: #d95926;
-  --series-3: #199e70;
-  --series-4: #c98500;
-  --series-5: #d55181;
-  --series-6: #008300;
-  --series-7: #9085e9;
-  --series-8: #e66767;
+  --danger: #ff8a70;
+  --danger-subtle: #ff55331a;
+  --warning: #ffa057;
+  --warning-subtle: #ff801f1a;
 
-  --shadow-inner-1: #ffffff12;
-  --shadow-drop-1: #0000;
-  --shadow-drop-2: #0000;
-  --shadow-drop-3: #0000;
-  --shadow-border-color: #ffffff12;
-  --shadow-xl-inner-1: #ffffff12;
-  --s-large: 0 0 0 1px var(--gray-a6), 0 2px 3px -2px var(--black-a3), 0 3px 8px -2px var(--black-a6), 0 4px 12px -4px var(--black-a7);
+  --chart-empty: #ffffff0d;
+  --chart-grid: #ffffff14;
+  --chart-axis: #ffffff6b;
+
+  --shadow-control: inset 0 0 0 0.5px #ffffff17;
+  --shadow-panel: 0 0 0 0.5px #ffffff17;
+  --shadow-overlay: inset 0 0 0 0.5px #ffffff1f, 0 8px 24px -8px #000000b3;
+  --shadow-modal: inset 0 0 0 0.5px #ffffff1f, 0 12px 40px -8px #000000cc;
 
   color-scheme: dark;
 }
+
+@media screen and (max-width: 47.99rem) {
+  :root {
+    --control-h: 44px;
+    --control-h-sm: 44px;
+    --control-h-lg: 48px;
+    --row-h: 60px;
+    --row-h-compact: 48px;
+    --gutter: 20px;
+    --inset: 0px;
+  }
+}
+
+/* Tailwind theme: only encore's tokens. The default palette, radii and type scale are cleared. */
+@theme {
+  --color-*: initial;
+  --radius-*: initial;
+  --text-*: initial;
+  --shadow-*: initial;
+  --font-*: initial;
+
+  --font-sans: "Geist Variable", ui-sans-serif, system-ui, sans-serif;
+  --font-serif: "Instrument Serif", ui-serif, Georgia, serif;
+  --font-weight-normal: 400;
+  --font-weight-medium: 500;
+  --font-weight-semibold: 600;
+
+  /* Coupled type styles: size / line height / tracking. Phone overrides below. */
+  --text-display: 44px;
+  --text-display--line-height: 48px;
+  --text-display--letter-spacing: -0.01em;
+  --text-title: 34px;
+  --text-title--line-height: 40px;
+  --text-title--letter-spacing: -0.005em;
+  --text-figure: 32px;
+  --text-figure--line-height: 40px;
+  --text-heading: 15px;
+  --text-heading--line-height: 20px;
+  --text-heading--letter-spacing: -0.01em;
+  --text-body: 14px;
+  --text-body--line-height: 20px;
+  --text-body-sm: 13px;
+  --text-body-sm--line-height: 18px;
+  --text-caption: 12px;
+  --text-caption--line-height: 16px;
+  --text-label: 11px;
+  --text-label--line-height: 14px;
+  --text-wordmark: 20px;
+  --text-wordmark--line-height: 20px;
+
+  --radius-xs: 4px;
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 10px;
+  --radius-xl: 12px;
+  --radius-2xl: 16px;
+  --radius-full: 9999px;
+
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-move: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+@theme inline {
+  --color-transparent: transparent;
+  --color-current: currentColor;
+  --color-black: #000;
+  --color-white: #fff;
+
+  --color-shell: var(--surface-shell);
+  --color-page: var(--surface-page);
+  --color-container: var(--surface-container);
+  --color-card: var(--surface-card);
+  --color-sunken: var(--surface-sunken);
+  --color-overlay: var(--surface-overlay);
+  --color-standout: var(--surface-standout);
+  --color-backdrop: var(--backdrop);
+
+  --color-fill: var(--fill);
+  --color-fill-hover: var(--fill-hover);
+  --color-fill-active: var(--fill-active);
+  --color-fill-raised: var(--fill-raised);
+  --color-fill-raised-hover: var(--fill-raised-hover);
+  --color-fill-inverted: var(--fill-inverted);
+  --color-fill-inverted-hover: var(--fill-inverted-hover);
+  --color-fill-on-standout: var(--fill-on-standout);
+
+  --color-primary: var(--text-primary);
+  --color-secondary: var(--text-secondary);
+  --color-tertiary: var(--text-tertiary);
+  --color-disabled: var(--text-disabled);
+  --color-inverted: var(--text-inverted);
+  --color-on-standout: var(--text-on-standout);
+  --color-on-standout-secondary: var(--text-on-standout-secondary);
+
+  --color-line: var(--line);
+  --color-line-subtle: var(--line-subtle);
+  --color-line-strong: var(--line-strong);
+  --color-focus: var(--focus-ring);
+
+  --color-accent: var(--accent);
+  --color-accent-hover: var(--accent-hover);
+  --color-on-accent: var(--text-on-accent);
+  --color-accent-text: var(--accent-text);
+  --color-accent-subtle: var(--accent-subtle);
+
+  --color-danger: var(--danger);
+  --color-danger-subtle: var(--danger-subtle);
+  --color-warning: var(--warning);
+  --color-warning-subtle: var(--warning-subtle);
+
+  --color-chart-key: var(--chart-key);
+  --color-chart-empty: var(--chart-empty);
+  --color-chart-grid: var(--chart-grid);
+  --color-chart-axis: var(--chart-axis);
+
+  /* Names the vendored dither-kit uses for its axis, grid and tooltip text. */
+  --color-foreground: var(--text-primary);
+  --color-muted-foreground: var(--text-tertiary);
+  --color-popover: var(--surface-overlay);
+  --color-popover-foreground: var(--text-primary);
+  --color-border: var(--line);
+  --color-background: var(--surface-page);
+
+  --shadow-control: var(--shadow-control);
+  --shadow-panel: var(--shadow-panel);
+  --shadow-overlay: var(--shadow-overlay);
+  --shadow-modal: var(--shadow-modal);
+
+  --default-border-color: var(--line);
+}
+
+@media screen and (max-width: 47.99rem) {
+  :root {
+    --text-display: 36px;
+    --text-display--line-height: 40px;
+    --text-title: 30px;
+    --text-title--line-height: 36px;
+    --text-figure: 28px;
+    --text-figure--line-height: 36px;
+    --text-heading: 17px;
+    --text-heading--line-height: 24px;
+    --text-body: 16px;
+    --text-body--line-height: 24px;
+    --text-body-sm: 15px;
+    --text-body-sm--line-height: 20px;
+    --text-caption: 14px;
+    --text-caption--line-height: 20px;
+    --text-label: 12px;
+    --text-label--line-height: 16px;
+  }
+}
+
