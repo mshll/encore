@@ -1,11 +1,12 @@
 import type { Config } from "../config";
 import type { Db } from "../db/client";
+import type { SettingsSource } from "../settings/settings";
 import { dayTypeOf, hourBucketOf } from "../library/catalog";
 import { localTime } from "../plays/localTime";
 import type { SpotifyClient } from "../spotify/client";
 import type { Llm } from "./client";
 
-export type FeatureContext = { db: Db; config: Config; llm: Llm; spotify: SpotifyClient; now: () => number };
+export type FeatureContext = { db: Db; config: Config; settings: SettingsSource; llm: Llm; spotify: SpotifyClient; now: () => number };
 
 const WEEKDAYS = ["", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
 

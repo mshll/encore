@@ -13,7 +13,7 @@ import { syncStep, type SyncCursor } from "../src/library/sync";
 import { SpotifyAuth } from "../src/spotify/auth";
 import { SpotifyClient } from "../src/spotify/client";
 import type { SpotifyTrack } from "../src/spotify/types";
-import { connectSpotify, jsonResponse, noContent, play, routeFetch, seed, testApp, testConfig, testDb, track, uri, type FetchCall } from "./helpers";
+import { connectSpotify, jsonResponse, noContent, play, routeFetch, seed, testApp, testConfig, testDb, track, uri, type FetchCall, testSettings } from "./helpers";
 
 const NOW = Date.parse("2026-11-14T09:00:00Z");
 const DAY = 86_400_000;
@@ -60,12 +60,13 @@ async function syncAll(db: ReturnType<typeof testDb>, spotify: SpotifyClient, au
 function seeded(lib: Library, extra?: (call: FetchCall) => Response | undefined) {
   const db = testDb();
   const config = testConfig();
+  const settings = testSettings(db, config);
   connectSpotify(db, "owner");
   const skipped = (id: string, n: number) => Array.from({ length: n }, (_, i) => play(new Date(NOW - (i + 1) * DAY).toISOString(), uri(id), 3000, { skipped: true }));
   seed(db, ["skp", "ok"].map((id) => track(id, `Song ${id}`, `Artist ${id}`, "Album")), [...skipped("skp", 10), play(new Date(NOW - DAY).toISOString(), uri("ok"), 200_000)]);
   const { fn, calls } = libraryFetch(lib, extra);
-  const auth = new SpotifyAuth(db, config, fn);
-  const spotify = new SpotifyClient(db, auth, config, fn);
+  const auth = new SpotifyAuth(db, config, settings, fn);
+  const spotify = new SpotifyClient(db, auth, settings, fn);
   return { db, config, spotify, auth, calls };
 }
 
@@ -238,7 +239,7 @@ describe("apply is unreachable from automated paths", () => {
     refreshProposals(app.db, Date.now());
     expect(listProposals(app.db, { status: "open", limit: 500, offset: 0 }).total).toBeGreaterThan(0);
 
-    const discord = createDiscord(app.config.discord!, { db: app.db, config: app.config, services: app.services, now: Date.now }, fn);
+    const discord = createDiscord(app.settings.get().discord!, { db: app.db, config: app.config, settings: app.settings, services: app.services, now: Date.now }, fn);
     for (const definition of discord.registry.definitions()) {
       const options = definition.options?.filter((o) => o.required).map((o) => ({ name: o.name, value: "ok" }));
       await discord.interactions.handle({ id: "i", type: InteractionType.Command, token: "t", application_id: "1", member: { user: { id: "42" } }, data: { name: definition.name, options } });

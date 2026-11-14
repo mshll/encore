@@ -1,5 +1,5 @@
 import { and, count, desc, eq, gte, inArray, isNull, sql } from "drizzle-orm";
-import type { Config } from "../config";
+import type { Settings } from "../settings/settings";
 import type { Db } from "../db/client";
 import { radarArtists, releases, tracks } from "../db/schema";
 import { saveSpotifyTrack } from "../ingest/live/enrich";
@@ -8,7 +8,7 @@ import type { SpotifyClient } from "../spotify/client";
 import { SpotifyApiError } from "../spotify/errors";
 import type { Page, SimplifiedAlbum } from "../spotify/types";
 
-export type RadarConfig = Pick<Config, "timezone" | "radarMinListens" | "radarArtistsPerRun" | "radarRecheckMs" | "radarBaselineDays">;
+export type RadarConfig = Pick<Settings, "timezone" | "radarMinListens" | "radarArtistsPerRun" | "radarRecheckMs" | "radarBaselineDays">;
 export type RadarCandidate = { artist: string; listens: number; artistId: string | null; lastCheckedAt: number | null };
 export type RadarResult = { due: number; checked: number; resolved: number; unresolved: number; found: number; newReleases: number; calls: number };
 

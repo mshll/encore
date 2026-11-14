@@ -112,6 +112,13 @@ export const spotifyAuth = sqliteTable("spotify_auth", {
   updatedAt: integer("updated_at").notNull(),
 });
 
+/** Settings edited from the dashboard, keyed by field key. `value` is JSON; a secret's is the sealed string. */
+export const settings = sqliteTable("settings", {
+  key: text("key").primaryKey(),
+  value: text("value", { mode: "json" }).$type<unknown>().notNull(),
+  updatedAt: integer("updated_at").notNull(),
+});
+
 export const oauthStates = sqliteTable("oauth_states", {
   state: text("state").primaryKey(),
   codeVerifier: text("code_verifier").notNull(),

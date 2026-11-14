@@ -9,7 +9,7 @@ import { SpotifyAuth } from "../src/spotify/auth";
 import { SpotifyClient } from "../src/spotify/client";
 import { SpotifyBlockedError, SpotifyNotConnectedError } from "../src/spotify/errors";
 import type { SpotifyTrack } from "../src/spotify/types";
-import { jsonResponse, play, seed, testConfig, testDb, track, TZ, uri } from "./helpers";
+import { jsonResponse, play, seed, testConfig, testDb, track, TZ, uri, testSettings } from "./helpers";
 
 type Handler = (url: string, init?: RequestInit) => Response | Promise<Response>;
 
@@ -26,10 +26,11 @@ function mockFetch(handler: Handler) {
 function setup(handler: Handler, now = () => 1_000_000_000_000) {
   const db = testDb();
   const config = testConfig();
+  const settings = testSettings(db, config);
   const fetch = mockFetch(handler);
-  const auth = new SpotifyAuth(db, config, fetch.fn, now);
-  const client = new SpotifyClient(db, auth, config, fetch.fn, now);
-  return { db, config, auth, client, calls: fetch.calls, now };
+  const auth = new SpotifyAuth(db, config, settings, fetch.fn, now);
+  const client = new SpotifyClient(db, auth, settings, fetch.fn, now);
+  return { db, config: settings.get(), auth, client, calls: fetch.calls, now };
 }
 
 function connect(db: ReturnType<typeof testDb>, expiresAt: number) {

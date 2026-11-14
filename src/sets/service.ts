@@ -262,11 +262,12 @@ async function converse(ctx: FeatureContext, setId: number, threadId: number, sy
 }
 
 export async function createSet(ctx: FeatureContext, request: string, onEvent?: (e: AgentEvent) => void) {
-  const { db, config, llm } = ctx;
+  const { db, llm } = ctx;
   llm.assertAvailable();
+  const { timezone } = ctx.settings.get();
   const now = ctx.now();
-  const system = [SETS_SYSTEM, tagged("taste_profile", tasteProfile(db, config.timezone, now))];
-  const messages: MessageParam[] = [{ role: "user", content: `${ownerMessage(request)}\nOwner's local time: ${localNow(config.timezone, now)}.` }];
+  const system = [SETS_SYSTEM, tagged("taste_profile", tasteProfile(db, timezone, now))];
+  const messages: MessageParam[] = [{ role: "user", content: `${ownerMessage(request)}\nOwner's local time: ${localNow(timezone, now)}.` }];
   const { setId, threadId } = db.transaction((tx) => {
     const threadId = createThread(tx, "sets", system, [], now);
     const setId = tx
@@ -298,7 +299,7 @@ export class SetNotBuiltError extends Error {
 }
 
 export async function refineSet(ctx: FeatureContext, setId: number, message: string, onEvent?: (e: AgentEvent) => void) {
-  const { db, config, llm } = ctx;
+  const { db, llm } = ctx;
   const row = getSetRow(db, setId);
   if (!row) throw new SetNotFoundError();
   llm.assertAvailable();
@@ -306,7 +307,7 @@ export async function refineSet(ctx: FeatureContext, setId: number, message: str
   const messages = thread.messages;
   const pinned = pinnedItems(db, setId);
   const pins = pinned.length ? `\nPinned by the owner, keep in the set: ${pinned.map((i) => `${i.name} - ${i.artist} (songKey ${i.songKey})`).join("; ")}.` : "";
-  messages.push({ role: "user", content: `${ownerMessage(message)}\nOwner's local time: ${localNow(config.timezone, ctx.now())}.${pins}` });
+  messages.push({ role: "user", content: `${ownerMessage(message)}\nOwner's local time: ${localNow(ctx.settings.get().timezone, ctx.now())}.${pins}` });
   const before = row.version;
   const result = await converse(ctx, setId, row.threadId, thread.system, messages, { source: "claude", message }, onEvent);
   return { set: getSet(db, setId)!, changed: getSetRow(db, setId)!.version !== before, reply: result.terminal ? null : textReply(result.final.content) };

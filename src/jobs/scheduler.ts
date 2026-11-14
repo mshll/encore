@@ -3,7 +3,14 @@ import { SpotifyBlockedError } from "../spotify/errors";
 import { inBackground } from "../spotify/pacer";
 import { getJobState, setJobState } from "./state";
 
-export type Job = { name: string; intervalMs: number; run: () => Promise<Record<string, unknown> | void>; nextDelayMs?: () => number };
+/** `intervalMs` and `nextDelayMs` are read each time the job is scheduled, so settings changes apply without a restart. */
+export type Job = { name: string; intervalMs: () => number; run: () => Promise<Record<string, unknown> | void>; nextDelayMs?: () => number };
+
+export type Scheduler = {
+  stop: () => void;
+  /** Re-times every job that is waiting, from its last run and its current interval. A running job picks up the change when it finishes. */
+  reschedule: () => void;
+};
 
 export async function runJob(db: Db, job: Job, now = Date.now) {
   const startedAt = now();
@@ -18,23 +25,36 @@ export async function runJob(db: Db, job: Job, now = Date.now) {
   }
 }
 
-export function startScheduler(db: Db, jobs: Job[]): () => void {
-  const timers = new Set<Timer>();
+export function startScheduler(db: Db, jobs: Job[], now: () => number = Date.now): Scheduler {
+  const waiting = new Map<string, Timer>();
   let stopped = false;
   const schedule = (job: Job, delayMs: number) => {
     const timer = setTimeout(async () => {
-      timers.delete(timer);
+      waiting.delete(job.name);
       await runJob(db, job);
-      if (!stopped) schedule(job, job.nextDelayMs?.() ?? job.intervalMs);
+      if (!stopped) schedule(job, job.nextDelayMs?.() ?? job.intervalMs());
     }, delayMs);
-    timers.add(timer);
+    waiting.set(job.name, timer);
   };
-  for (const job of jobs) {
+  const fromLastRun = (job: Job) => {
     const lastRunAt = getJobState(db, job.name)?.lastRunAt ?? 0;
-    schedule(job, Math.max(1000, lastRunAt + job.intervalMs - Date.now()));
-  }
-  return () => {
-    stopped = true;
-    for (const timer of timers) clearTimeout(timer);
+    return Math.max(1000, lastRunAt + job.intervalMs() - now());
+  };
+  for (const job of jobs) schedule(job, fromLastRun(job));
+  return {
+    stop: () => {
+      stopped = true;
+      for (const timer of waiting.values()) clearTimeout(timer);
+      waiting.clear();
+    },
+    reschedule: () => {
+      if (stopped) return;
+      for (const job of jobs) {
+        const timer = waiting.get(job.name);
+        if (timer === undefined) continue;
+        clearTimeout(timer);
+        schedule(job, fromLastRun(job));
+      }
+    },
   };
 }

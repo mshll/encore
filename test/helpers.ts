@@ -1,10 +1,12 @@
 import { Passkeys } from "../src/auth/passkeys";
-import { loadConfig } from "../src/config";
+import { loadConfig, type Config } from "../src/config";
+import { DiscordHost } from "../src/discord";
 import { createApp } from "../src/http/app";
 import { createJobs } from "../src/jobs/definitions";
 import { createServices } from "../src/services";
+import { SettingsStore } from "../src/settings/store";
 import { SpotifyAuth } from "../src/spotify/auth";
-import type { LlmTransport } from "../src/llm/client";
+import type { LlmKeyCheck, LlmTransport } from "../src/llm/client";
 import { SpotifyClient } from "../src/spotify/client";
 import { openDb, type Db } from "../src/db/client";
 import { spotifyAuth as spotifyAuthTable } from "../src/db/schema";
@@ -25,6 +27,8 @@ export const testConfig = (env: Record<string, string> = {}) =>
   });
 
 export const testDb = () => openDb(":memory:");
+
+export const testSettings = (db: Db, config: Config, now?: () => number) => new SettingsStore(db, config, now);
 
 export const uri = (id: string) => `spotify:track:${id.padStart(22, "0")}`;
 
@@ -62,20 +66,24 @@ export function jsonResponse(body: unknown, status = 200, headers: Record<string
   return new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json", ...headers } });
 }
 
-export function testApp(env: Record<string, string> = {}, fetchFn: typeof fetch = fetch, transport: LlmTransport | null = null) {
+export type TestAppOptions = { llmKeyCheck?: LlmKeyCheck };
+
+export function testApp(env: Record<string, string> = {}, fetchFn: typeof fetch = fetch, transport: LlmTransport | null = null, options: TestAppOptions = {}) {
   const db = testDb();
   const config = testConfig(env);
-  const spotifyAuth = new SpotifyAuth(db, config, fetchFn);
-  const spotify = new SpotifyClient(db, spotifyAuth, config, fetchFn);
-  const services = createServices(db, config, spotify, Date.now, transport);
-  const jobs = createJobs(db, config, spotifyAuth, spotify, services);
+  const settings = testSettings(db, config);
+  const spotifyAuth = new SpotifyAuth(db, config, settings, fetchFn);
+  const spotify = new SpotifyClient(db, spotifyAuth, settings, fetchFn);
+  const services = createServices(db, config, settings, spotify, { llmTransport: transport, llmKeyCheck: options.llmKeyCheck });
+  const jobs = createJobs(db, settings, spotifyAuth, spotify, services);
   const llm = services.llm;
-  const app = createApp({ db, config, passkeys: new Passkeys(db, config), spotifyAuth, spotify, jobs, services, discord: null, now: Date.now });
+  const discord = new DiscordHost(settings, { db, config, settings, services, now: Date.now }, fetchFn);
+  const app = createApp({ db, config, settings, passkeys: new Passkeys(db, config), spotifyAuth, spotify, jobs, services, discord, now: Date.now });
   const request = (path: string, init: RequestInit & { json?: unknown } = {}) => {
     const { json, ...rest } = init;
     return app.request(path, json === undefined ? rest : { method: "POST", ...rest, body: JSON.stringify(json), headers: { "content-type": "application/json", ...rest.headers } });
   };
-  return { db, config, app, request, services, spotify, spotifyAuth, jobs, llm };
+  return { db, config, settings, app, request, services, spotify, spotifyAuth, jobs, llm, discord };
 }
 
 export type FetchCall = { url: string; method: string; body: unknown };

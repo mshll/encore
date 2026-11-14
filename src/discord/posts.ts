@@ -42,7 +42,7 @@ export async function publishAssistantPosts(discord: Discord, ctx: DiscordContex
     Object.assign(state, patch);
     setJobState(ctx.db, STATE, { lastSuccessAt: ctx.now(), data: state });
   };
-  const week = weekOf(ctx.now(), ctx.config.timezone);
+  const week = weekOf(ctx.now(), ctx.settings.get().timezone);
   if (state.picks !== week) {
     const summary = weekPicks(ctx.db, week, ctx.now());
     if (summary.picks.length) {

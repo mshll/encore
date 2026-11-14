@@ -1,7 +1,7 @@
-import type { Config } from "../../config";
 import type { Db } from "../../db/client";
 import { getJobState } from "../../jobs/state";
 import type { PlayerApi } from "../../player/api";
+import type { SettingsSource } from "../../settings/settings";
 import { SpotifyBlockedError, SpotifyNotConnectedError } from "../../spotify/errors";
 import type { PlaybackState, SpotifyTrack } from "../../spotify/types";
 import { saveSpotifyTrack } from "./enrich";
@@ -19,8 +19,6 @@ export type NowPlaying = {
   contextUri: string | null;
   fetchedAt: string | null;
 };
-
-type WatchConfig = Pick<Config, "timezone" | "watcherActiveMs" | "watcherIdleMs" | "watcherBackoffMaxMs">;
 
 export const WATCH_JOB = "watch";
 
@@ -49,7 +47,7 @@ export class Watcher {
   constructor(
     private readonly db: Db,
     private readonly player: PlayerApi,
-    private readonly config: WatchConfig,
+    private readonly settings: SettingsSource,
     private readonly now: () => number = Date.now,
   ) {
     this.current = (getJobState(db, WATCH_JOB)?.data?.current as Observation | undefined) ?? null;
@@ -72,11 +70,12 @@ export class Watcher {
 
   nextDelayMs(): number {
     const now = this.now();
+    const { watcherActiveMs, watcherIdleMs, watcherBackoffMaxMs } = this.settings.get();
     if (this.failures > 0) {
-      const backoff = Math.min(this.config.watcherBackoffMaxMs, this.config.watcherActiveMs * 2 ** this.failures);
+      const backoff = Math.min(watcherBackoffMaxMs, watcherActiveMs * 2 ** this.failures);
       return Math.max(backoff, this.blockedUntil - now);
     }
-    return this.current?.wasPlaying ? this.config.watcherActiveMs : this.config.watcherIdleMs;
+    return this.current?.wasPlaying ? watcherActiveMs : watcherIdleMs;
   }
 
   async nowPlaying(maxAgeMs: number): Promise<NowPlaying> {
@@ -118,11 +117,12 @@ export class Watcher {
 
   private advance(state: PlaybackState | null, now: number): LiveResult & { playing: boolean } {
     const snap = snapshotOf(state);
-    const staleMs = 2 * this.config.watcherIdleMs + 30_000;
+    const { watcherIdleMs, timezone } = this.settings.get();
+    const staleMs = 2 * watcherIdleMs + 30_000;
     const { current, finished } = step(this.current, snap, now, staleMs);
     const started = current && current.startedAt !== this.current?.startedAt ? current : null;
     if (started && state?.item) saveSpotifyTrack(this.db, state.item);
-    const result = finished.length ? recordLivePlays(this.db, finished, this.config.timezone) : { inserted: 0, replacedApi: 0, coveredByExport: 0 };
+    const result = finished.length ? recordLivePlays(this.db, finished, timezone) : { inserted: 0, replacedApi: 0, coveredByExport: 0 };
     this.current = current;
     for (const play of finished) this.emit({ type: "finished", play });
     if (started) this.emit({ type: "started", observation: started });

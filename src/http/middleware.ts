@@ -15,7 +15,7 @@ export function hasSession(c: Context<Env>): boolean {
 function hasAdminToken(c: Context<Env>): boolean {
   const header = c.req.header("authorization");
   const token = header?.startsWith("Bearer ") ? header.slice(7) : undefined;
-  return safeEqual(token, c.var.deps.config.adminToken);
+  return safeEqual(token, c.var.deps.settings.get().adminToken);
 }
 
 const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);

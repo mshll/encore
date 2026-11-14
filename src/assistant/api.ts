@@ -43,7 +43,7 @@ export type PicksSummary = ReturnType<typeof weekPicks>;
 
 /** This week's picks; generates them first when `generate` is set and none exist yet. */
 export async function currentPicks(ctx: FeatureContext, options: { generate?: boolean } = {}): Promise<PicksSummary> {
-  const week = weekOf(ctx.now(), ctx.config.timezone);
+  const week = weekOf(ctx.now(), ctx.settings.get().timezone);
   const exists = ctx.db.select({ id: picks.id }).from(picks).where(eq(picks.week, week)).get();
   if (!exists && options.generate) {
     try {

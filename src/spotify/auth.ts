@@ -2,7 +2,8 @@ import { eq, lt } from "drizzle-orm";
 import type { Config } from "../config";
 import type { Db } from "../db/client";
 import { oauthStates, spotifyAuth } from "../db/schema";
-import { SpotifyAuthError, SpotifyNotConnectedError } from "./errors";
+import type { SettingsSource } from "../settings/settings";
+import { SpotifyAuthError, SpotifyNotConfiguredError, SpotifyNotConnectedError } from "./errors";
 
 export const SPOTIFY_SCOPES = [
   "playlist-read-private",
@@ -36,19 +37,27 @@ export class SpotifyAuth {
 
   constructor(
     private readonly db: Db,
-    private readonly config: Config,
+    private readonly config: Pick<Config, "spotifyRedirectUri">,
+    private readonly settings: SettingsSource,
     private readonly fetchFn: typeof fetch = fetch,
     private readonly now: () => number = Date.now,
   ) {}
 
+  private clientId(): string {
+    const clientId = this.settings.get().spotifyClientId;
+    if (!clientId) throw new SpotifyNotConfiguredError();
+    return clientId;
+  }
+
   createAuthorizeUrl(): string {
+    const clientId = this.clientId();
     const state = randomToken(24);
     const codeVerifier = randomToken(64);
     const challenge = new Bun.CryptoHasher("sha256").update(codeVerifier).digest("base64url");
     this.db.delete(oauthStates).where(lt(oauthStates.expiresAt, this.now())).run();
     this.db.insert(oauthStates).values({ state, codeVerifier, expiresAt: this.now() + stateTtlMs }).run();
     const params = new URLSearchParams({
-      client_id: this.config.spotifyClientId,
+      client_id: clientId,
       response_type: "code",
       redirect_uri: this.config.spotifyRedirectUri,
       code_challenge_method: "S256",
@@ -72,10 +81,14 @@ export class SpotifyAuth {
     this.save(tokens.access_token, tokens.refresh_token, tokens.expires_in, tokens.scope ?? "");
   }
 
-  /** The stored grant, if it was issued to the configured Spotify app. A grant from another app cannot be refreshed and its calls count against that app. */
+  /**
+   * The stored grant, if it was issued to the configured Spotify app. A grant from another app cannot be refreshed and its
+   * calls count against that app, so changing the client id disconnects Spotify.
+   */
   private grant() {
+    const clientId = this.settings.get().spotifyClientId;
     const row = this.db.select().from(spotifyAuth).where(eq(spotifyAuth.id, 1)).get();
-    return row?.clientId === this.config.spotifyClientId ? row : undefined;
+    return clientId && row?.clientId === clientId ? row : undefined;
   }
 
   status() {
@@ -116,7 +129,7 @@ export class SpotifyAuth {
 
   private save(accessToken: string, refreshToken: string, expiresIn: number, scope: string) {
     const now = this.now();
-    const clientId = this.config.spotifyClientId;
+    const clientId = this.clientId();
     const values = { id: 1, accessToken, refreshToken, expiresAt: now + expiresIn * 1000, scope, clientId, updatedAt: now };
     this.db
       .insert(spotifyAuth)
@@ -129,7 +142,7 @@ export class SpotifyAuth {
     const res = await this.fetchFn(`${accountsUrl}/api/token`, {
       method: "POST",
       headers: { "content-type": "application/x-www-form-urlencoded" },
-      body: new URLSearchParams({ ...params, client_id: this.config.spotifyClientId }),
+      body: new URLSearchParams({ ...params, client_id: this.clientId() }),
     });
     if (!res.ok) {
       const body = (await res.json().catch(() => ({}))) as { error?: string; error_description?: string };

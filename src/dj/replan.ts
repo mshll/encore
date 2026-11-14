@@ -101,7 +101,7 @@ function topUpCandidates(db: Db, exclude: Set<string>): string[] {
     .filter((uri) => !exclude.has(uri));
 }
 
-export function createDefaultReplanner(db: Db, timezone: string): Replanner {
+export function createDefaultReplanner(db: Db, timezone: () => string): Replanner {
   return async (input) => {
     const classes = new Map<string, MomentClass>(
       momentSplit(db, { range: {}, minPlays: 8, minContextPlays: 5, limit: 100_000 }).songs.map((s) => [s.songKey, s.class]),
@@ -112,7 +112,7 @@ export function createDefaultReplanner(db: Db, timezone: string): Replanner {
     const disliked = profile(input.skipped.flatMap((u) => known.get(u) ?? []));
     const pool = [...input.upcoming, ...(liked.size > 0 ? topUpCandidates(db, exclude) : [])];
     const info = songInfo(db, pool);
-    const { hour, weekday } = localTime(input.now, timezone);
+    const { hour, weekday } = localTime(input.now, timezone());
     const fit = contextFit(db, [...new Set([...info.values()].map((s) => s.songKey))], hour, weekday);
     const skippedKeys = new Set(input.skipped.flatMap((u) => known.get(u)?.songKey ?? []));
     const scored = pool

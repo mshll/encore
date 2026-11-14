@@ -5,7 +5,7 @@ import type { Env } from "../context";
 import { ApiError } from "../errors";
 
 export const discordRoutes = new Hono<Env>().post("/interactions", async (c) => {
-  const { discord } = c.var.deps;
+  const discord = c.var.deps.discord.current();
   if (!discord) throw new ApiError(404, "not_found", "Discord is not configured");
   const body = await c.req.text();
   const valid = await verifyDiscordSignature(discord.config.publicKey, c.req.header("x-signature-ed25519"), c.req.header("x-signature-timestamp"), body, c.var.deps.now());

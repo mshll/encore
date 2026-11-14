@@ -1,8 +1,8 @@
 import Anthropic from "@anthropic-ai/sdk";
 import type { BetaMessageStreamParams } from "@anthropic-ai/sdk/resources/beta/messages";
-import type { Config } from "../config";
 import type { Db } from "../db/client";
 import type { LlmFeature } from "../db/schema";
+import type { SettingsSource } from "../settings/settings";
 import { callCost } from "./cost";
 import { LlmAbortedError, LlmNotConfiguredError, LlmRefusalError } from "./errors";
 import { assertWithinBudget, recordCall } from "./ledger";
@@ -59,40 +59,61 @@ export function sdkTransport(apiKey: string): LlmTransport {
   };
 }
 
+/** The SDK transport for the current API key, rebuilt only when the key changes. */
+export function keyedSdkTransport(settings: SettingsSource): () => LlmTransport | null {
+  let cached: { apiKey: string; transport: LlmTransport } | null = null;
+  return () => {
+    const apiKey = settings.get().llm.apiKey;
+    if (!apiKey) return null;
+    if (cached?.apiKey !== apiKey) cached = { apiKey, transport: sdkTransport(apiKey) };
+    return cached.transport;
+  };
+}
+
+/** Checks a key against the Models API, which costs nothing and records nothing in the ledger. Throws when the key or model is rejected. */
+export type LlmKeyCheck = (apiKey: string, model: string) => Promise<void>;
+
+export const sdkKeyCheck: LlmKeyCheck = async (apiKey, model) => {
+  await new Anthropic({ apiKey, maxRetries: 0, timeout: 15_000 }).models.retrieve(model);
+};
+
 export class Llm {
   constructor(
     private readonly db: Db,
-    private readonly config: Pick<Config, "timezone" | "llm">,
-    private readonly transport: LlmTransport | null,
+    private readonly settings: SettingsSource,
+    private readonly transport: () => LlmTransport | null,
     private readonly now: () => number = Date.now,
     private readonly signal?: AbortSignal,
   ) {}
 
   /** The same client, with every request cancelled when `signal` aborts. */
   withSignal(signal: AbortSignal): Llm {
-    return new Llm(this.db, this.config, this.transport, this.now, signal);
+    return new Llm(this.db, this.settings, this.transport, this.now, signal);
   }
 
   get configured() {
-    return this.transport !== null;
+    return this.transport() !== null;
   }
 
   get model() {
-    return this.config.llm.model;
+    return this.settings.get().llm.model;
   }
 
   assertAvailable() {
-    if (!this.transport) throw new LlmNotConfiguredError();
-    assertWithinBudget(this.db, this.config.timezone, this.config.llm.monthlyBudgetUsd, this.now());
+    if (!this.transport()) throw new LlmNotConfiguredError();
+    const { timezone, llm } = this.settings.get();
+    assertWithinBudget(this.db, timezone, llm.monthlyBudgetUsd, this.now());
   }
 
   async call(input: CallInput): Promise<LlmMessage> {
     this.assertAvailable();
+    const transport = this.transport()!;
+    const { timezone, llm } = this.settings.get();
     const system = input.system.map((text, i): Anthropic.Beta.BetaTextBlockParam =>
       i === input.system.length - 1 ? { type: "text", text, cache_control: { type: "ephemeral" } } : { type: "text", text },
     );
     const params: StreamParams = {
-      model: this.config.llm.model,
+      model: llm.model,
       max_tokens: input.maxTokens,
       system,
       messages: input.messages,
@@ -107,18 +128,18 @@ export class Llm {
       if (this.signal?.aborted) throw new LlmAbortedError();
       const started = this.now();
       const record = (message: LlmMessage, stopReason: string | null) =>
-        recordCall(this.db, this.config.timezone, {
-          ...callCost(message.usage, this.config.llm.model, this.config.llm.prices, this.config.llm.webSearchPerRequest),
+        recordCall(this.db, timezone, {
+          ...callCost(message.usage, llm.model, llm.prices, llm.webSearchPerRequest),
           ts: started,
           feature: input.feature,
           ref: input.ref ?? null,
-          requestedModel: this.config.llm.model,
+          requestedModel: llm.model,
           model: message.model,
           stopReason,
           durationMs: this.now() - started,
         });
       try {
-        const message = await this.transport!(params, input.onText ?? (() => {}), this.signal);
+        const message = await transport(params, input.onText ?? (() => {}), this.signal);
         record(message, message.stop_reason);
         return this.checked(message);
       } catch (error) {

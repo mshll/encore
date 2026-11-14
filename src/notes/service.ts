@@ -72,7 +72,8 @@ export function cachedNote(db: Db, songKey: string) {
 }
 
 export async function trackNote(ctx: FeatureContext, input: { songKey?: string; uri?: string }) {
-  const { db, config, llm } = ctx;
+  const { db, llm } = ctx;
+  const { timezone } = ctx.settings.get();
   if (input.songKey) {
     const hit = cachedNote(db, input.songKey);
     if (hit) return { ...hit, cached: true };
@@ -90,7 +91,7 @@ export async function trackNote(ctx: FeatureContext, input: { songKey?: string; 
   const result = await runAgent(llm, {
     feature: "notes",
     ref: `song:${subject.songKey}`,
-    system: [NOTES_SYSTEM, tagged("taste_profile", tasteProfile(db, config.timezone, now))],
+    system: [NOTES_SYSTEM, tagged("taste_profile", tasteProfile(db, timezone, now))],
     tools: [],
     serverTools: [{ type: "web_search_20260209", name: "web_search", max_uses: 4 }],
     messages: [{ role: "user", content: prompt }],

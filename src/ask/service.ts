@@ -27,20 +27,21 @@ export class ThreadNotFoundError extends Error {}
 type ToolCall = { name: string; input: unknown };
 
 export async function ask(ctx: FeatureContext, question: string, threadId: number | null, onEvent?: (e: AgentEvent) => void) {
-  const { db, config, llm } = ctx;
+  const { db, llm } = ctx;
+  const { timezone, homeCountry } = ctx.settings.get();
   const now = ctx.now();
   const existing = threadId === null ? null : getThread(db, threadId);
   if (threadId !== null && (!existing || existing.feature !== "ask")) throw new ThreadNotFoundError();
   llm.assertAvailable();
-  const system = existing?.system ?? [ASK_SYSTEM, tagged("taste_profile", tasteProfile(db, config.timezone, now))];
+  const system = existing?.system ?? [ASK_SYSTEM, tagged("taste_profile", tasteProfile(db, timezone, now))];
   const messages: MessageParam[] = existing?.messages ?? [];
-  messages.push({ role: "user", content: `${ownerMessage(question)}\nOwner's local time: ${localNow(config.timezone, now)}.` });
+  messages.push({ role: "user", content: `${ownerMessage(question)}\nOwner's local time: ${localNow(timezone, now)}.` });
   const toolCalls: ToolCall[] = [];
   const result = await runAgent(llm, {
     feature: "ask",
     ref: existing ? `thread:${existing.id}` : undefined,
     system,
-    tools: askTools(db, config.homeCountry, now),
+    tools: askTools(db, homeCountry, now),
     messages,
     effort: "medium",
     maxCalls: 15,

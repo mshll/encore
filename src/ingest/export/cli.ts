@@ -2,6 +2,7 @@ import { readdir } from "node:fs/promises";
 import { join } from "node:path";
 import { loadConfig } from "../../config";
 import { openDb } from "../../db/client";
+import { SettingsStore } from "../../settings/store";
 import { exportFileKind } from "./parse";
 import { importExport } from "./import";
 
@@ -14,5 +15,6 @@ if (!dir) {
 const config = loadConfig();
 const names = (await readdir(dir)).filter((name) => exportFileKind(name));
 const files = await Promise.all(names.map(async (name) => ({ name, content: await Bun.file(join(dir, name)).text() })));
-const result = importExport(openDb(config.databasePath), files, config.timezone);
+const db = openDb(config.databasePath);
+const result = importExport(db, files, new SettingsStore(db, config).get().timezone);
 console.log(JSON.stringify(result, null, 2));

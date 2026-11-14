@@ -12,7 +12,7 @@ export const currentPriority = (): Priority => priority.getStore() ?? "interacti
 type Waiter = { fn: () => Promise<unknown>; resolve: (v: unknown) => void; reject: (e: unknown) => void };
 
 /**
- * One Web API call at a time, starts at least `spacingMs` apart, interactive calls first.
+ * One Web API call at a time, starts at least `spacingMs()` apart (read before each call), interactive calls first.
  * A call made while another is running waits for it, so a call must not wait on another Spotify call.
  */
 export class SpotifyPacer {
@@ -22,7 +22,7 @@ export class SpotifyPacer {
   calls = 0;
 
   constructor(
-    readonly spacingMs: number,
+    readonly spacingMs: () => number,
     private readonly now: () => number = Date.now,
     private readonly sleep: (ms: number) => Promise<void> = (ms) => Bun.sleep(ms),
   ) {}
@@ -43,7 +43,7 @@ export class SpotifyPacer {
     this.busy = true;
     try {
       while (this.queues.interactive.length || this.queues.background.length) {
-        const wait = this.lastStart + this.spacingMs - this.now();
+        const wait = this.lastStart + this.spacingMs() - this.now();
         if (wait > 0) await this.sleep(wait);
         const next = this.queues.interactive.shift() ?? this.queues.background.shift()!;
         this.lastStart = this.now();

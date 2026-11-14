@@ -7,7 +7,7 @@ Stack: Bun, TypeScript, Hono, SQLite (bun:sqlite + Drizzle), passkeys via @simpl
 ## What you need
 
 - A Spotify account and your extended streaming history: request it under Account, Privacy settings, "Extended streaming history". Spotify emails it within about 30 days.
-- A Spotify app from [developer.spotify.com/dashboard](https://developer.spotify.com/dashboard): Web API, development mode. Add your redirect URIs (`http://127.0.0.1:8888/callback` for local, `https://your-domain/callback` for a server) and put its client id in `SPOTIFY_CLIENT_ID`. No client secret is used.
+- A Spotify app from [developer.spotify.com/dashboard](https://developer.spotify.com/dashboard): Web API, development mode. Add your redirect URIs (`http://127.0.0.1:8888/callback` for local, `https://your-domain/callback` for a server) and enter its client id in Settings (or set `SPOTIFY_CLIENT_ID`). No client secret is used.
 - Optional: an Anthropic API key for the Claude features, a Discord application for commands and posts, and an MCP client.
 
 Spotify limits development-mode apps. Some endpoints have a daily quota, counted per Spotify account across all your apps. When Spotify answers `QUOTA_EXCEEDED`, encore pauses only that endpoint until the time Spotify gives.
@@ -16,7 +16,7 @@ Spotify limits development-mode apps. Some endpoints have a daily quota, counted
 
 ```sh
 bun install
-cp .env.example .env          # set SETUP_TOKEN and ADMIN_TOKEN (openssl rand -hex 24)
+cp .env.example .env          # set SETUP_TOKEN and SECRETS_KEY (openssl rand -hex 24 / 32)
 bun run import "/path/to/Spotify Extended Streaming History"
 bun run dev                   # http://localhost:8888
 ```
@@ -38,20 +38,28 @@ cd web && bun install && bun run dev        # http://localhost:8888, proxies /ap
 
 `cd web && bun run build` writes `web/dist`; `bun run start` then serves it on 8888 with the API. The Docker image builds it the same way.
 
-## Environment
+## Configuration
 
-All config is env vars, validated at boot (the process exits on invalid values). See [.env.example](.env.example).
+Two kinds of configuration:
+
+- Boot config is env only, read once at start: `HOST`, `PORT`, `DATABASE_PATH`, `WEB_DIST`, `PUBLIC_BASE_URL`, `SPOTIFY_REDIRECT_URI`, `SETUP_TOKEN`, `SECRETS_KEY`, `JOBS_ENABLED`, `JOBS_DISABLED`, `LLM_PRICES`.
+- Every other variable below is a setting. Settings live in the `settings` table and are edited in the dashboard (`GET`/`PATCH /api/settings`); services read them on each use, so a change applies without a restart. An env var of the same name, when set, overrides the stored value and locks the field in the dashboard. With no env var and nothing stored, the default applies.
+
+Secrets set from the dashboard (Claude key, Discord bot token, MCP token, admin token) are encrypted with `SECRETS_KEY` before they are stored. Without `SECRETS_KEY` they can only come from env vars. Changing `SECRETS_KEY` makes stored secrets unreadable; save them again.
+
+All env values are validated at boot (the process exits on invalid values). See [.env.example](.env.example).
 
 | Var | Default | Notes |
 | --- | --- | --- |
-| `SPOTIFY_CLIENT_ID` | required | PKCE client, no secret |
 | `PUBLIC_BASE_URL` | `http://localhost:8888` | Browser origin. Sets passkey RP ID, cookie `Secure` (https), and post-OAuth redirect |
 | `SPOTIFY_REDIRECT_URI` | `PUBLIC_BASE_URL/callback` | Must be registered in the Spotify app |
 | `SETUP_TOKEN` | unset | Min 24 chars. Needed to register the first passkey |
-| `ADMIN_TOKEN` | unset | Min 24 chars. Bearer token for `/api/tags/*` and `POST /api/import` only |
+| `SECRETS_KEY` | unset | Min 32 chars. Encrypts secrets stored from the dashboard |
 | `HOST`, `PORT` | `127.0.0.1`, `8888` | Docker image uses `0.0.0.0`, `3000` |
 | `DATABASE_PATH` | `./data/encore.db` | Docker image uses `/data/encore.db` |
 | `WEB_DIST` | `./web/dist` | Served with SPA fallback when `index.html` exists |
+| `SPOTIFY_CLIENT_ID` | unset | Setting. PKCE client, no secret. Changing it disconnects Spotify |
+| `ADMIN_TOKEN` | unset | Setting, secret. Min 24 chars. Bearer token for `/api/tags/*` and `POST /api/import` only |
 | `TIMEZONE` | `UTC` | IANA zone for day/hour buckets, applied at insert time. Set it before the first import |
 | `HOME_COUNTRY` | most-played country | Two-letter code; trips are runs of plays outside it |
 | `JOBS_ENABLED` | `true` | Poller and enrichment |
@@ -94,9 +102,10 @@ Production variables:
 
 | Need | Variables |
 | --- | --- |
-| Required | `SPOTIFY_CLIENT_ID`, `PUBLIC_BASE_URL` (compose refuses to start without them); `TIMEZONE` |
+| Required | `SPOTIFY_CLIENT_ID`, `PUBLIC_BASE_URL` (compose refuses to start without them); `TIMEZONE` (or set it in Settings) |
 | Required for first login | `SETUP_TOKEN` (can be removed after the first passkey) |
 | Required if the callback differs from `PUBLIC_BASE_URL/callback` | `SPOTIFY_REDIRECT_URI` |
+| Optional: dashboard-stored secrets | `SECRETS_KEY` (not yet passed through by `docker-compose.yml`) |
 | Optional: bearer import and tagging | `ADMIN_TOKEN` |
 | Optional: Claude features | `ANTHROPIC_API_KEY`; `MONTHLY_BUDGET_USD` (default 100) caps spend; `DJ_REPLANNER=llm` to re-plan DJ sessions with Claude |
 | Optional: Discord commands | `DISCORD_APPLICATION_ID`, `DISCORD_PUBLIC_KEY`, `DISCORD_OWNER_ID`; Interactions Endpoint URL `PUBLIC_BASE_URL/api/discord/interactions` |
@@ -112,7 +121,8 @@ Upload the export with `curl` or the UI after signing in; the CLI also works ins
 ## Layout
 
 ```
-src/config.ts            env validation
+src/config.ts            boot env validation
+src/settings/            settings fields, store (env, then table, then default), secret sealing
 src/db/                  Drizzle schema, migrations runner (SQL in drizzle/)
 src/plays/               shared play model: song key, device enum, local time, inserts
 src/ingest/export/       export parsing, import, CLI

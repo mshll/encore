@@ -10,7 +10,7 @@ import { songKey } from "../src/plays/song";
 import { createServices } from "../src/services";
 import { SpotifyAuth } from "../src/spotify/auth";
 import { SpotifyClient } from "../src/spotify/client";
-import { testConfig, testDb, TZ, uri } from "./helpers";
+import { testConfig, testDb, TZ, uri, testSettings } from "./helpers";
 import { clock, fakeSpotifyFetch, message, scripted, seedLibrary, text, toolCall } from "./llmFakes";
 
 const OWNER = "42";
@@ -18,6 +18,7 @@ const OWNER = "42";
 function setup(transport: LlmTransport | null = null, env: Record<string, string> = {}) {
   const db = testDb();
   const config = testConfig({ DISCORD_APPLICATION_ID: "1", DISCORD_PUBLIC_KEY: "a".repeat(64), DISCORD_OWNER_ID: OWNER, DISCORD_BOT_TOKEN: "bot", DISCORD_CHANNEL_ID: "7", ...env });
+  const settings = testSettings(db, config);
   const time = clock("2026-02-01T12:00:00Z");
   db.insert(spotifyAuth).values({ id: 1, accessToken: "tok", refreshToken: "ref", expiresAt: 9e15, scope: "", clientId: "test-client", updatedAt: 0 }).run();
   const spotifyFake = fakeSpotifyFetch([]);
@@ -28,10 +29,10 @@ function setup(transport: LlmTransport | null = null, env: Record<string, string
     discordCalls.push({ method: init?.method ?? "GET", path: url.replace("https://discord.com/api/v10", ""), body: JSON.parse(String(init?.body ?? "null")) });
     return new Response(JSON.stringify({ id: "m1" }), { status: 200 });
   }) as typeof fetch;
-  const spotify = new SpotifyClient(db, new SpotifyAuth(db, config, fetchFn, time.now), config, fetchFn, time.now);
-  const services = createServices(db, config, spotify, time.now, transport);
-  const ctx = { db, config, services, now: time.now };
-  const discord = createDiscord(config.discord!, ctx, fetchFn);
+  const spotify = new SpotifyClient(db, new SpotifyAuth(db, config, settings, fetchFn, time.now), settings, fetchFn, time.now);
+  const services = createServices(db, config, settings, spotify, { now: time.now, llmTransport: transport });
+  const ctx = { db, config, settings, services, now: time.now };
+  const discord = createDiscord(settings.get().discord!, ctx, fetchFn);
   seedLibrary(db);
   const run = async (interaction: Partial<Interaction>) => {
     const reply = await discord.interactions.handle({ id: "i", token: "tok", application_id: "1", member: { user: { id: OWNER } }, ...interaction } as Interaction);

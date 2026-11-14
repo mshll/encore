@@ -1,4 +1,4 @@
-import type { Config } from "../../config";
+import type { Settings } from "../../settings/settings";
 import type { Db } from "../../db/client";
 import { insertPlays, type PlayInput } from "../../plays/store";
 import type { SpotifyClient } from "../../spotify/client";
@@ -8,7 +8,7 @@ import { coveredByLive } from "./reconcile";
 
 export type PollResult = { received: number; inserted: number; skippedCoveredByExport: number; skippedCoveredByLive: number };
 
-export async function pollRecentlyPlayed(db: Db, spotify: SpotifyClient, config: Pick<Config, "timezone">): Promise<PollResult> {
+export async function pollRecentlyPlayed(db: Db, spotify: SpotifyClient, config: Pick<Settings, "timezone">): Promise<PollResult> {
   const { items } = await spotify.recentlyPlayed();
   const cutoff = exportCoveredUntil(db) ?? -Infinity;
   const fresh = items.filter((item) => item.track?.uri?.startsWith("spotify:track:") && Date.parse(item.played_at) > cutoff);

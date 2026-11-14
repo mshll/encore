@@ -6,13 +6,13 @@ import { overview } from "../analytics/overview";
 import { forgotten, onThisDay } from "../analytics/recall";
 import { search } from "../analytics/search";
 import { topAlbums, topArtists, topTracks } from "../analytics/top";
-import type { Config } from "../config";
 import type { Db } from "../db/client";
 import { localTime } from "../plays/localTime";
 import { listReleases } from "../radar/radar";
 import type { Services } from "../services";
+import type { SettingsSource } from "../settings/settings";
 
-export type McpDeps = { db: Db; config: Config; services: Services; now: () => number };
+export type McpDeps = { db: Db; settings: SettingsSource; services: Services; now: () => number };
 
 const day = z.string().regex(/^\d{4}-\d{2}-\d{2}$/).describe("YYYY-MM-DD, local time");
 const range = { from: day.optional(), to: day.optional() };
@@ -20,7 +20,7 @@ const trackUri = z.string().regex(/^spotify:track:[A-Za-z0-9]{22}$/);
 
 const json = (value: unknown) => ({ content: [{ type: "text" as const, text: JSON.stringify(value) }] });
 
-export function createEncoreMcpServer({ db, config, services, now }: McpDeps): McpServer {
+export function createEncoreMcpServer({ db, settings, services, now }: McpDeps): McpServer {
   const server = new McpServer({ name: "encore", version: "1.0.0" });
 
   server.registerTool(
@@ -83,7 +83,7 @@ export function createEncoreMcpServer({ db, config, services, now }: McpDeps): M
   server.registerTool(
     "on_this_day",
     { description: "What was played on this month-day in earlier years.", inputSchema: z.object({ date: day.optional(), limit: z.number().int().min(1).max(20).default(5) }) },
-    async ({ date, limit }) => json(onThisDay(db, { date: date ?? localTime(now(), config.timezone).day, limit })),
+    async ({ date, limit }) => json(onThisDay(db, { date: date ?? localTime(now(), settings.get().timezone).day, limit })),
   );
 
   server.registerTool(
@@ -95,7 +95,7 @@ export function createEncoreMcpServer({ db, config, services, now }: McpDeps): M
     async (args) => json(forgotten(db, { ...args, asOf: now() })),
   );
 
-  server.registerTool("now_playing", { description: "What is playing on Spotify right now." }, async () => json(await services.watcher.nowPlaying(config.watcherIdleMs + 5000)));
+  server.registerTool("now_playing", { description: "What is playing on Spotify right now." }, async () => json(await services.watcher.nowPlaying(settings.get().watcherIdleMs + 5000)));
 
   server.registerTool(
     "releases",

@@ -8,16 +8,17 @@ import { jsonBody, parse } from "../errors";
 
 export const radarRoutes = new Hono<Env>()
   .get("/", (c) => {
-    const { db, config, now } = c.var.deps;
+    const { db, now } = c.var.deps;
+    const settings = c.var.deps.settings.get();
     const q = parse(
       z.object({ status: z.enum(["new", "recent"]).default("new"), days: z.coerce.number().int().min(1).max(365).default(30), limit: z.coerce.number().int().min(1).max(200).default(50) }),
       c.req.query(),
     );
-    const today = localTime(now(), config.timezone).day;
+    const today = localTime(now(), settings.timezone).day;
     const since = new Date(Date.parse(`${today}T00:00:00Z`) - q.days * 86_400_000).toISOString().slice(0, 10);
     const job = getJobState(db, "radar");
     return c.json({
-      ...radarStatus(db, config, now()),
+      ...radarStatus(db, settings, now()),
       lastRunAt: job?.lastRunAt ? new Date(job.lastRunAt).toISOString() : null,
       lastResult: job?.data ?? null,
       items: listReleases(db, { status: q.status, since, limit: q.limit }),

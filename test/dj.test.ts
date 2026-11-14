@@ -8,7 +8,7 @@ import { SpotifyAuth } from "../src/spotify/auth";
 import { SpotifyClient } from "../src/spotify/client";
 import type { TagInput } from "../src/tags/schema";
 import { upsertTags } from "../src/tags/service";
-import { connectSpotify, jsonResponse, noContent, play, routeFetch, seed, testConfig, testDb, track, uri, type FetchCall } from "./helpers";
+import { connectSpotify, jsonResponse, noContent, play, routeFetch, seed, testConfig, testDb, track, uri, type FetchCall, testSettings } from "./helpers";
 
 const PLAYLIST = "pl0000000000000000000a";
 const CONTEXT = `spotify:playlist:${PLAYLIST}`;
@@ -17,6 +17,7 @@ const set = ["1", "2", "3", "4", "5", "6"].map(uri);
 function setup(replanner: Replanner, respond: (call: FetchCall) => Response | undefined = () => undefined) {
   const db = testDb();
   const config = testConfig();
+  const settings = testSettings(db, config);
   connectSpotify(db);
   const { fn, calls } = routeFetch((call) => {
     const custom = respond(call);
@@ -26,9 +27,9 @@ function setup(replanner: Replanner, respond: (call: FetchCall) => Response | un
     if (call.url.includes("/me/player")) return noContent();
     return undefined;
   });
-  const spotify = new SpotifyClient(db, new SpotifyAuth(db, config, fn), config, fn);
+  const spotify = new SpotifyClient(db, new SpotifyAuth(db, config, settings, fn), settings, fn);
   const playlists = new AppPlaylists(db, spotify);
-  const dj = new DjService(db, new PlayerApi(spotify), playlists, replanner, { skipTrigger: 2 });
+  const dj = new DjService(db, new PlayerApi(spotify), playlists, replanner, () => 2);
   return { db, dj, calls, playlists };
 }
 
@@ -136,7 +137,7 @@ describe("default re-planner", () => {
     seed(db, tracks, dislikePlays);
     const tag = (id: string, genres: TagInput["genres"], energy: number): TagInput => ({ uri: uri(id), genres, moods: ["calm"], energy, valence: 3, language: "en", model: "t", confidence: "high" });
     upsertTags(db, [tag("f", ["jazz"], 2), tag("s", ["metal"], 5), tag("x", ["metal"], 5), tag("y", ["jazz"], 2), tag("d", ["jazz"], 2)]);
-    const replan = createDefaultReplanner(db, "Asia/Kuwait");
+    const replan = createDefaultReplanner(db, () => "Asia/Kuwait");
     const next = await replan({ finished: [uri("f")], skipped: [uri("s")], current: uri("f"), upcoming: [uri("x"), uri("d"), uri("y")], exclude: [uri("f"), uri("s")], now: Date.parse("2026-11-14T10:00:00Z") });
     expect(next).toEqual([uri("y"), uri("x")]);
   });

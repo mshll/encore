@@ -80,13 +80,13 @@ export const statsRoutes = new Hono<Env>()
     return c.json(forgotten(c.var.deps.db, { ...q, asOf: c.var.deps.now() }));
   })
   .get("/on-this-day", (c) => {
-    const { config, now, db } = c.var.deps;
+    const { settings, now, db } = c.var.deps;
     const q = parse(z.object({ date: day.optional(), limit: int(1, 50, 5) }), c.req.query());
-    return c.json(onThisDay(db, { date: q.date ?? localTime(now(), config.timezone).day, limit: q.limit }));
+    return c.json(onThisDay(db, { date: q.date ?? localTime(now(), settings.get().timezone).day, limit: q.limit }));
   })
   .get("/trips", (c) => {
     const q = parse(ranged({ minPlays: int(1, 10_000, 5), topTracks: int(0, 50, 5) }), c.req.query());
-    return c.json(trips(c.var.deps.db, { range: range(q), homeCountry: c.var.deps.config.homeCountry, minPlays: q.minPlays, topTracks: q.topTracks }));
+    return c.json(trips(c.var.deps.db, { range: range(q), homeCountry: c.var.deps.settings.get().homeCountry, minPlays: q.minPlays, topTracks: q.topTracks }));
   })
   .get("/tags/genres", (c) => {
     const q = parse(ranged({ period }), c.req.query());

@@ -151,7 +151,7 @@ const generating = new Set<string>();
 const weekHasPicks = (db: Pick<Db, "select">, week: string) => Boolean(db.select({ id: picks.id }).from(picks).where(eq(picks.week, week)).get());
 
 export async function generatePicks(ctx: FeatureContext, onEvent?: (e: AgentEvent) => void) {
-  const week = weekOf(ctx.now(), ctx.config.timezone);
+  const week = weekOf(ctx.now(), ctx.settings.get().timezone);
   if (weekHasPicks(ctx.db, week) || generating.has(week)) throw new PicksExistError(week);
   generating.add(week);
   try {
@@ -162,18 +162,19 @@ export async function generatePicks(ctx: FeatureContext, onEvent?: (e: AgentEven
 }
 
 async function generateWeek(ctx: FeatureContext, week: string, onEvent?: (e: AgentEvent) => void) {
-  const { db, config, llm, spotify } = ctx;
+  const { db, llm, spotify } = ctx;
+  const { timezone, llm: llmSettings } = ctx.settings.get();
   const now = ctx.now();
   llm.assertAvailable();
-  const { picksPerWeek: count, picksFarOut: far } = config.llm;
+  const { picksPerWeek: count, picksFarOut: far } = llmSettings;
   const blocked = blockedSets(db);
   const verifier = new CandidateVerifier(db, spotify, blocked, MAX_SEARCHES_PER_RUN, ctx.now);
-  const system = [PICKS_SYSTEM, tagged("taste_profile", tasteProfile(db, config.timezone, now))];
+  const system = [PICKS_SYSTEM, tagged("taste_profile", tasteProfile(db, timezone, now))];
   const messages: MessageParam[] = [
     {
       role: "user",
       content: [
-        `Choose this week's picks (week of ${week}). Owner's local time: ${localNow(config.timezone, now)}.`,
+        `Choose this week's picks (week of ${week}). Owner's local time: ${localNow(timezone, now)}.`,
         `Pick exactly ${count} songs: ${count - far} near the owner's taste and ${far} further out.`,
         tagged("past_picks", historyText(db, now)),
       ].join("\n\n"),
@@ -214,7 +215,7 @@ async function generateWeek(ctx: FeatureContext, week: string, onEvent?: (e: Age
     onEvent,
   });
   if (!saved) throw new PicksNotSubmittedError();
-  if (config.llm.picksPlaylist) await syncPicksPlaylist(db, spotify, config.timezone, ctx.now());
+  if (llmSettings.picksPlaylist) await syncPicksPlaylist(db, spotify, timezone, ctx.now());
   return weekPicks(db, week, ctx.now());
 }
 
