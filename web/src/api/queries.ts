@@ -50,6 +50,8 @@ import type {
   TimeSeries,
   TrackPage,
   Trips,
+  Onboarding,
+  Settings,
 } from "./types";
 
 const ranged = <T>(path: string, range: Range, extra: Record<string, string | number | undefined> = {}) => ({
@@ -208,3 +210,7 @@ export const useDigests = () => useQuery({ queryKey: ["digests"], queryFn: () =>
 export const useDigest = (id: number) => useQuery({ queryKey: ["digests", id], queryFn: () => get<Digest>(`/api/digests/${id}`), staleTime: Infinity });
 
 export const useSpend = () => useQuery({ queryKey: ["spend"], queryFn: () => get<Spend>("/api/llm/spend", { limit: 12 }) });
+
+export const useSettings = () => useQuery({ queryKey: ["settings"], queryFn: () => get<Settings>("/api/settings") });
+
+export const useOnboarding = () => useQuery({ queryKey: ["onboarding"], queryFn: () => get<Onboarding>("/api/onboarding") });
