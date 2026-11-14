@@ -6,7 +6,7 @@ import { generateDigest, listDigests, renderDigest } from "../../digest/service"
 import { budgetStatus, spendDetail } from "../../llm/ledger";
 import { listBlocks, removeBlock } from "../../library/blocks";
 import { cachedNote, trackNote } from "../../notes/service";
-import { generatePicks, pickView, pickWeeks, picksPlaylist, syncPicksPlaylist, weekOf, weekPicks } from "../../picks/service";
+import { generatePicks, pickViews, pickWeeks, picksPlaylist, syncPicksPlaylist, weekOf, weekPicks } from "../../picks/service";
 import { setPickState } from "../../picks/state";
 import { saveSetPlaylist } from "../../sets/playlist";
 import { createSet, deleteSet, getSet, listSets, refineSet } from "../../sets/service";
@@ -67,7 +67,7 @@ export const pickRoutes = new Hono<Env>()
     const body = parse(z.object({ state: z.enum(PICK_STATES) }), await jsonBody(c));
     const pick = await mapped(() => setPickState(db, pickId, body.state, now()));
     if (config.llm.picksPlaylist && picksPlaylist(db) && pick.week === weekOf(now(), config.timezone)) await mapped(() => syncPicksPlaylist(db, spotify, config.timezone, now()));
-    return c.json(pickView(pick));
+    return c.json(pickViews(db, [pick])[0]);
   });
 
 export const blockRoutes = new Hono<Env>()

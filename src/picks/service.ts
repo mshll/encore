@@ -7,6 +7,7 @@ import { runAgent, tool, type AgentEvent } from "../llm/agent";
 import type { MessageParam } from "../llm/client";
 import { localNow, tagged, type FeatureContext } from "../llm/context";
 import { artistKey, blockedSets, type Blocked } from "../library/blocks";
+import { withArtwork } from "../library/artwork";
 import { CandidateVerifier } from "../library/candidates";
 import { libraryTools, verifyTool } from "../library/tools";
 import { localTime } from "../plays/localTime";
@@ -48,14 +49,46 @@ function previousPicks(db: Db) {
   return db.select().from(picks).orderBy(desc(picks.createdAt), asc(picks.position)).all();
 }
 
+export type SearchSources = Map<string, string>;
+
+/** Every page the run's web searches returned so far, url to title. */
+export function searchSources(messages: MessageParam[]): SearchSources {
+  const sources: SearchSources = new Map();
+  for (const m of messages) {
+    if (m.role !== "assistant" || typeof m.content === "string") continue;
+    for (const b of m.content ?? []) {
+      if (b.type !== "web_search_tool_result" || !Array.isArray(b.content)) continue;
+      for (const r of b.content) if (r.type === "web_search_result") sources.set(r.url, r.title);
+    }
+  }
+  return sources;
+}
+
+const fold = (s: string) => s.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, "");
+
+/** The source must be a page this run's search returned, and its title or address must name the pick's song or artist. */
+function sourceProblem(sources: SearchSources, url: string, song: { name: string; artists: string[] }): string | null {
+  const title = sources.get(url);
+  if (title === undefined) return "its sourceUrl is not one of the pages your web searches returned in this run";
+  let path = url;
+  try {
+    path = decodeURIComponent(url);
+  } catch {}
+  const haystack = fold(`${title} ${path}`);
+  const names = [song.name, ...song.artists].map(fold).filter((n) => n.length >= 3);
+  if (!names.some((n) => haystack.includes(n))) return "its source page does not name the song or the artist";
+  return null;
+}
+
 export function validatePicks(
   db: Db,
   blocked: Blocked,
   verifier: CandidateVerifier,
-  input: { picks: { uri: string; reason: string; distance: "near" | "far" }[] },
+  input: { picks: { uri: string; reason: string; distance: "near" | "far"; sourceUrl: string }[] },
   expected: { count: number; far: number },
   week: string,
   now: number,
+  sources: SearchSources,
 ): { errors: string[]; rows: PickRow[] } {
   const errors: string[] = [];
   const rows: PickRow[] = [];
@@ -74,6 +107,8 @@ export function validatePicks(
       return errors.push(`Pick ${n}: ${song.name} was already picked in the week of ${before.week}.`);
     }
     if (blocked.songs.has(song.songKey) || song.artists.some((a) => blocked.artists.has(artistKey(a)))) return errors.push(`Pick ${n}: ${song.name} is blocked.`);
+    const problem = sourceProblem(sources, p.sourceUrl, song);
+    if (problem) return errors.push(`Pick ${n}: ${song.name} is unsupported: ${problem}. Cite a search result that confirms the reason, or replace the pick.`);
     const artist = artistKey(song.artists[0]!);
     if (artists.has(artist)) return errors.push(`Pick ${n}: only one pick per artist (${song.artists[0]}).`);
     artists.add(artist);
@@ -86,7 +121,10 @@ export function validatePicks(
       artist: song.artists[0]!,
       album: song.album,
       releaseDate: song.releaseDate,
+      albumArtUrl: song.albumArtUrl,
       reason: p.reason,
+      sourceUrl: p.sourceUrl,
+      sourceTitle: sources.get(p.sourceUrl) ?? null,
       distance: p.distance,
       state: "new",
       stateAt: now,
@@ -132,13 +170,16 @@ export async function generatePicks(ctx: FeatureContext, onEvent?: (e: AgentEven
   const submit = tool({
     name: "submit_picks",
     strict: true,
-    description: `Save this week's ${count} picks. Each needs the uri from verify_new_song, the reason shown to the owner, and whether it is near or far. Returns errors to fix, or accepted: true.`,
+    description: `Save this week's ${count} picks. Each needs the uri from verify_new_song, the reason shown to the owner, whether it is near or far, and sourceUrl: the url of a web_search result from this run that confirms the music side of the reason and names the song or its artist. Returns errors to fix, or accepted: true.`,
     schema: z.strictObject({
-      picks: z.array(z.strictObject({ uri: z.string(), reason: z.string().min(1).max(400), distance: z.enum(["near", "far"]) })).min(1).max(20),
+      picks: z
+        .array(z.strictObject({ uri: z.string(), reason: z.string().min(1).max(400), distance: z.enum(["near", "far"]), sourceUrl: z.string() }))
+        .min(1)
+        .max(20),
     }),
     terminal: true,
     run: (input) => {
-      const { errors, rows } = validatePicks(db, blocked, verifier, input, { count, far }, week, ctx.now());
+      const { errors, rows } = validatePicks(db, blocked, verifier, input, { count, far }, week, ctx.now(), searchSources(messages));
       if (errors.length) return { accepted: false, errors };
       db.transaction((tx) => {
         tx.insert(picks).values(rows).run();
@@ -174,7 +215,9 @@ function view(p: typeof picks.$inferSelect) {
     artist: p.artist,
     album: p.album,
     releaseDate: p.releaseDate,
+    albumArtUrl: p.albumArtUrl,
     reason: p.reason,
+    source: p.sourceUrl ? { url: p.sourceUrl, title: p.sourceTitle } : null,
     distance: p.distance,
     state: p.state,
     stateAt: new Date(p.stateAt).toISOString(),
@@ -191,7 +234,7 @@ function view(p: typeof picks.$inferSelect) {
 
 export function weekPicks(db: Db, week: string, now: number) {
   const rows = db.select().from(picks).where(eq(picks.week, week)).orderBy(asc(picks.position)).all();
-  return { week, picks: rows.map(view), stats: pickStats(db, now) };
+  return { week, picks: pickViews(db, rows), stats: pickStats(db, now) };
 }
 
 export function pickWeeks(db: Db, limit: number) {
@@ -204,7 +247,7 @@ export function pickWeeks(db: Db, limit: number) {
     .all();
 }
 
-export const pickView = view;
+export const pickViews = (db: Db, rows: (typeof picks.$inferSelect)[]) => withArtwork(db, rows.map(view));
 
 /** Mirrors the current week's picks (except "never") into one private playlist, updated in place. */
 export async function syncPicksPlaylist(db: Db, spotify: SpotifyClient, timezone: string, now: number) {

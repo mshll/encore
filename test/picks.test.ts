@@ -9,7 +9,7 @@ import { generatePicks, PicksExistError, syncPicksPlaylist, validatePicks, weekO
 import { setPickState } from "../src/picks/state";
 import { songKey } from "../src/plays/song";
 import { play, seed, track, TZ, uri } from "./helpers";
-import { featureCtx, message, scripted, seedLibrary, toolCall, toolResults, toolUse, type FakeSpotifyTrack } from "./llmFakes";
+import { featureCtx, message, scripted, seedLibrary, toolCall, toolResults, toolUse, webSearch, type FakeSpotifyTrack } from "./llmFakes";
 
 const CATALOG: FakeSpotifyTrack[] = [
   { id: "a1", name: "Alpha", artists: ["Artist A"], album: "One" },
@@ -19,6 +19,9 @@ const CATALOG: FakeSpotifyTrack[] = [
 ];
 
 const DAY = 86_400_000;
+const ALPHA_SRC = "https://www.whosampled.test/Artist-A/Alpha/";
+const BETA_SRC = "https://example.test/news/1234";
+const OTHER_SRC = "https://example.test/lists/long-drive";
 
 let pickIds = 0;
 function insertPick(db: Db, p: { name: string; artist: string; state?: "new" | "saved" | "not_now" | "never"; createdAt?: number; week?: string; distance?: "near" | "far" }) {
@@ -49,6 +52,11 @@ describe("generate picks", () => {
     const fake = scripted(
       message(
         [
+          ...webSearch("alpha samples", [
+            { url: ALPHA_SRC, title: "Artist A - Alpha | sample credits" },
+            { url: BETA_SRC, title: "Beta by Artist B, produced by the Woods producer" },
+            { url: OTHER_SRC, title: "Ten albums for a long drive" },
+          ]),
           toolUse("verify_new_song", { title: "Alpha", artist: "Artist A" }),
           toolUse("verify_new_song", { title: "Gamma", artist: "Artist A" }),
           toolUse("verify_new_song", { title: "Beta", artist: "Artist B" }),
@@ -58,15 +66,21 @@ describe("generate picks", () => {
       ),
       toolCall("submit_picks", {
         picks: [
-          { uri: uri("a1"), reason: "a", distance: "near" },
-          { uri: uri("c1"), reason: "c", distance: "near" },
-          { uri: uri("w1"), reason: "w", distance: "far" },
+          { uri: uri("a1"), reason: "a", distance: "near", sourceUrl: ALPHA_SRC },
+          { uri: uri("c1"), reason: "c", distance: "near", sourceUrl: ALPHA_SRC },
+          { uri: uri("w1"), reason: "w", distance: "far", sourceUrl: ALPHA_SRC },
         ],
       }),
       toolCall("submit_picks", {
         picks: [
-          { uri: uri("a1"), reason: "Shares the producer of Woods.", distance: "near" },
-          { uri: uri("b1"), reason: "Far: a genre you have 0 plays in.", distance: "far" },
+          { uri: uri("a1"), reason: "Shares the producer of Woods.", distance: "near", sourceUrl: "https://made.up/alpha" },
+          { uri: uri("b1"), reason: "Far: a genre you have 0 plays in.", distance: "far", sourceUrl: OTHER_SRC },
+        ],
+      }),
+      toolCall("submit_picks", {
+        picks: [
+          { uri: uri("a1"), reason: "Shares the producer of Woods.", distance: "near", sourceUrl: ALPHA_SRC },
+          { uri: uri("b1"), reason: "Far: a genre you have 0 plays in.", distance: "far", sourceUrl: BETA_SRC },
         ],
       }),
     );
@@ -80,7 +94,12 @@ describe("generate picks", () => {
       "Pick 2: only one pick per artist (Artist A).",
       "Pick 3: the owner has already played Woods.",
     ]);
+    expect(toolResults(fake.requests[3]!)[0]!.value.errors).toEqual([
+      "Pick 1: Alpha is unsupported: its sourceUrl is not one of the pages your web searches returned in this run. Cite a search result that confirms the reason, or replace the pick.",
+      "Pick 2: Beta is unsupported: its source page does not name the song or the artist. Cite a search result that confirms the reason, or replace the pick.",
+    ]);
     expect(result.week).toBe("2026-01-26");
+    expect(result.picks[1]).toMatchObject({ source: { url: BETA_SRC, title: "Beta by Artist B, produced by the Woods producer" }, albumArtUrl: "https://img.test/b1.jpg" });
     expect(result.picks.map((p) => [p.name, p.distance, p.state])).toEqual([
       ["Alpha", "near", "new"],
       ["Beta", "far", "new"],
@@ -106,10 +125,11 @@ describe("validatePicks", () => {
     const { ctx } = featureCtx(null);
     const v = new CandidateVerifier(db, ctx.spotify, blockedSets(db), 0);
     for (const s of songs)
-      v.verified.set(uri(s.id), { uri: uri(s.id), songKey: songKey(s.name, s.artist), name: s.name, artists: [s.artist], album: "x", releaseDate: null, durationMs: 1, heard: false, plays: 0 });
+      v.verified.set(uri(s.id), { uri: uri(s.id), songKey: songKey(s.name, s.artist), name: s.name, artists: [s.artist], album: "x", albumArtUrl: null, releaseDate: null, durationMs: 1, heard: false, plays: 0 });
     return v;
   }
-  const one = (id: string) => ({ picks: [{ uri: uri(id), reason: "r", distance: "near" as const }] });
+  const one = (id: string) => ({ picks: [{ uri: uri(id), reason: "r", distance: "near" as const, sourceUrl: "https://src.test/any-artist" }] });
+  const sources = new Map([["https://src.test/any-artist", "Old X Later Y Recent Z Other Q"]]);
   const expected = { count: 1, far: 0 };
 
   test("a song picked before cannot return, except not_now after 28 days", () => {
@@ -122,7 +142,7 @@ describe("validatePicks", () => {
       { name: "Later", artist: "Y", id: "l" },
       { name: "Recent", artist: "Z", id: "r" },
     ]);
-    const check = (id: string) => validatePicks(db, blockedSets(db), v, one(id), expected, "2026-02-23", now).errors;
+    const check = (id: string) => validatePicks(db, blockedSets(db), v, one(id), expected, "2026-02-23", now, sources).errors;
     expect(check("o")[0]).toContain("already picked");
     expect(check("l")).toEqual([]);
     expect(check("r")[0]).toContain("already picked");
@@ -133,10 +153,10 @@ describe("validatePicks", () => {
     const never = insertPick(db, { name: "Bad", artist: "Q" });
     setPickState(db, never.id, "never", now);
     const v = verifier(db, [{ name: "Other", artist: "Q", id: "q2" }]);
-    expect(validatePicks(db, blockedSets(db), v, one("q2"), expected, "w", now).errors).toEqual([]);
+    expect(validatePicks(db, blockedSets(db), v, one("q2"), expected, "w", now, sources).errors).toEqual([]);
     const second = insertPick(db, { name: "Worse", artist: "Q" });
     setPickState(db, second.id, "never", now);
-    expect(validatePicks(db, blockedSets(db), v, one("q2"), expected, "w", now).errors).toEqual(["Pick 1: Other is blocked."]);
+    expect(validatePicks(db, blockedSets(db), v, one("q2"), expected, "w", now, sources).errors).toEqual(["Pick 1: Other is blocked."]);
   });
 });
 

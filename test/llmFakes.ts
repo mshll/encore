@@ -53,6 +53,15 @@ export const toolUse = (name: string, input: unknown): Block => ({ type: "tool_u
 
 export const toolCall = (name: string, input: unknown) => message([toolUse(name, input)], "tool_use");
 
+/** A server-side web search and its results, as they appear in an assistant message. */
+export function webSearch(query: string, results: { url: string; title: string }[]): Block[] {
+  const id = `srvtoolu_${++ids}`;
+  return [
+    { type: "server_tool_use", id, name: "web_search", input: { query } },
+    { type: "web_search_tool_result", tool_use_id: id, content: results.map((r) => ({ type: "web_search_result", url: r.url, title: r.title, encrypted_content: "", page_age: null })) },
+  ] as unknown as Block[];
+}
+
 /** Replays scripted responses in order and records every request it received. */
 export function scripted(...responses: (LlmMessage | ((params: StreamParams) => LlmMessage))[]) {
   const requests: StreamParams[] = [];
@@ -109,7 +118,7 @@ export function spotifyTrack(t: FakeSpotifyTrack) {
     name: t.name,
     duration_ms: 210_000,
     artists: t.artists.map((a) => ({ id: a, name: a, uri: `spotify:artist:${a}` })),
-    album: { id: "alb", name: t.album, release_date: "2020-01-01" },
+    album: { id: "alb", name: t.album, release_date: "2020-01-01", images: [{ url: `https://img.test/${t.id}.jpg`, width: 640, height: 640 }] },
   };
 }
 
