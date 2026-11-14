@@ -4,6 +4,7 @@ export const SETTING_LABELS: Record<string, { label: string; hint?: string }> = 
   timezone: { label: "Time zone" },
   homeCountry: { label: "Home country", hint: "Two-letter code. Plays from other countries count as trips." },
   weekendDays: { label: "Weekend" },
+  historyStart: { label: "Ignore plays before" },
   claudeApiKey: { label: "Anthropic API key" },
   claudeModel: { label: "Model" },
   monthlyBudgetUsd: { label: "Monthly cap" },

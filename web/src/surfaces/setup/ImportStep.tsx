@@ -1,9 +1,10 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { ApiError } from "../../api/client";
+import { useSettings } from "../../api/queries";
 import type { ImportResult, Onboarding } from "../../api/types";
 import { DitherMeter } from "../../charts/DitherMeter";
-import { fmtDate, fmtInt } from "../../lib/format";
+import { fmtDate, fmtDay, fmtInt } from "../../lib/format";
 import { uploadForm } from "../../lib/upload";
 import { Button, IconButton } from "../../ui/Button";
 import { DropZone } from "../../ui/DropZone";
@@ -11,6 +12,7 @@ import { Icon } from "../../ui/Icon";
 import { FileTextIcon, XIcon } from "../../ui/icons";
 import { Notice } from "../../ui/Notice";
 import { describeError } from "../../ui/States";
+import { fieldsByKey } from "../settings/form";
 
 const MAX_FILES = 30;
 const MAX_BYTES = 50 * 1024 * 1024;
@@ -34,6 +36,7 @@ function importProblem(error: unknown): string {
 
 function Result({ result, timezone }: { result: ImportResult; timezone: string }) {
   const read = result.files.filter((f) => f.rows > 0).length;
+  const historyStart = fieldsByKey(useSettings().data).get("historyStart")?.value;
   return (
     <div role="status" className="flex flex-col gap-1">
       <p className="font-medium text-primary">
@@ -43,6 +46,8 @@ function Result({ result, timezone }: { result: ImportResult; timezone: string }
         {[
           result.range && `${fmtDate(result.range.from, timezone)} to ${fmtDate(result.range.to, timezone)}.`,
           result.alreadyPresent > 0 && `${plays(result.alreadyPresent)} were already stored.`,
+          result.beforeHistoryStart > 0 &&
+            `${plays(result.beforeHistoryStart)} ${typeof historyStart === "string" ? `before ${fmtDay(historyStart)} ` : "before the date set in Settings "}${result.beforeHistoryStart === 1 ? "was" : "were"} ignored.`,
           result.invalidRows > 0 && `${fmtInt(result.invalidRows)} ${result.invalidRows === 1 ? "row" : "rows"} could not be read and ${result.invalidRows === 1 ? "was" : "were"} skipped.`,
           result.ignoredFiles.length > 0 && `Not history files, ignored: ${result.ignoredFiles.join(", ")}.`,
         ]

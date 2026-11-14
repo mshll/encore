@@ -3,7 +3,7 @@ import { useMemo, useState, type ReactNode } from "react";
 import { ApiError, request } from "../../api/client";
 import { useSettings } from "../../api/queries";
 import type { SettingField, SettingIssue, Settings, SettingsEffect, SettingsPatchResult, SettingValue } from "../../api/types";
-import { countryName, fmtHour, fmtInt, WEEKDAYS } from "../../lib/format";
+import { countryName, fmtDay, fmtHour, fmtInt, WEEKDAYS } from "../../lib/format";
 import { settingHint, settingLabel, UNIT_LABELS } from "../../lib/settingLabels";
 import { showToast } from "../../lib/toast";
 import { Button } from "../../ui/Button";
@@ -56,6 +56,7 @@ export function displayValue(field: SettingField): string {
   if (field.type === "boolean") return v ? "On" : "Off";
   if (field.type === "weekdays" && Array.isArray(v)) return v.map((d) => WEEKDAYS[d - 1]).join(", ");
   if (field.type === "timezone") return zoneLabel(String(v));
+  if (field.type === "date") return fmtDay(String(v));
   if (field.unit === "weekday") return WEEKDAYS[Number(v) - 1] ?? String(v);
   if (field.unit === "hour") return fmtHour(Number(v));
   if (field.unit === "usd") return `$${fmtInt(Number(v))}`;
