@@ -1,27 +1,35 @@
-import { sql } from "drizzle-orm";
+import { sql, type SQL } from "drizzle-orm";
 import type { Db } from "../db/client";
-import { hours, iso, MUSIC, musicWhere, type Range, songStatsSql, songWithStats, STATS, stats, type SongRow, type StatsRow, withArtistImages } from "./common";
+import { containsPattern, hours, iso, MUSIC, musicWhere, type Range, songStatsSql, songWithStats, STATS, stats, type SongRow, type StatsRow, withArtistImages } from "./common";
 
 export type TopSort = "hours" | "listens" | "plays";
-export type TopParams = { range: Range; limit: number; offset?: number; sort?: TopSort };
+export type TopParams = { range: Range; limit: number; offset?: number; sort?: TopSort; q?: string };
 export type TopAtParams = TopParams & { weekday?: number; hour?: number };
 
 const sortColumn = { hours: "ms", listens: "listens", plays: "plays" } as const;
 const orderBy = (sort: TopSort = "hours") => sql.raw(`${sortColumn[sort]} desc`);
-const where = ({ range, weekday, hour }: TopAtParams) =>
-  musicWhere(range, weekday === undefined ? undefined : sql`p.weekday = ${weekday}`, hour === undefined ? undefined : sql`p.hour = ${hour}`);
+const where = ({ range, weekday, hour }: TopAtParams, ...extra: (SQL | undefined)[]) =>
+  musicWhere(range, weekday === undefined ? undefined : sql`p.weekday = ${weekday}`, hour === undefined ? undefined : sql`p.hour = ${hour}`, ...extra);
+const matches = (q: string | undefined, ...columns: string[]) => {
+  if (!q) return undefined;
+  const like = containsPattern(q);
+  return sql`(${sql.join(
+    columns.map((c) => sql`${sql.raw(c)} like ${like} escape '\\'`),
+    sql` or `,
+  )})`;
+};
 
 export function topTracks(db: Db, params: TopAtParams) {
-  const { limit, offset = 0, sort } = params;
-  const rows = db.all<SongRow>(sql`select * from (${songStatsSql(where(params))}) order by ${orderBy(sort)}, song_key limit ${limit} offset ${offset}`);
+  const { limit, offset = 0, sort, q } = params;
+  const rows = db.all<SongRow>(sql`select * from (${songStatsSql(where(params))}) where ${matches(q, "name", "artist") ?? sql`1`} order by ${orderBy(sort)}, song_key limit ${limit} offset ${offset}`);
   return rows.map(songWithStats);
 }
 
 export function topArtists(db: Db, params: TopAtParams) {
-  const { limit, offset = 0, sort } = params;
+  const { limit, offset = 0, sort, q } = params;
   const rows = db.all<StatsRow & { artist: string; songs: number }>(sql`
     select t.artist, count(distinct t.song_key) as songs, ${STATS}
-    from ${MUSIC} where ${where(params)}
+    from ${MUSIC} where ${where(params, matches(q, "t.artist"))}
     group by t.artist order by ${orderBy(sort)}, t.artist limit ${limit} offset ${offset}`);
   return withArtistImages(
     db,
@@ -29,10 +37,10 @@ export function topArtists(db: Db, params: TopAtParams) {
   );
 }
 
-export function topAlbums(db: Db, { range, limit, offset = 0, sort }: TopParams) {
+export function topAlbums(db: Db, { range, limit, offset = 0, sort, q }: TopParams) {
   const rows = db.all<StatsRow & { artist: string; album: string; album_art_url: string | null; songs: number }>(sql`
     select t.artist, t.album, max(t.album_art_url) as album_art_url, count(distinct t.song_key) as songs, ${STATS}
-    from ${MUSIC} where ${musicWhere(range, sql`t.album is not null`)}
+    from ${MUSIC} where ${musicWhere(range, sql`t.album is not null`, matches(q, "t.album", "t.artist"))}
     group by t.artist, t.album order by ${orderBy(sort)}, t.artist, t.album limit ${limit} offset ${offset}`);
   return rows.map((r) => ({ album: r.album, artist: r.artist, albumArtUrl: r.album_art_url, songs: r.songs, ...stats(r) }));
 }
