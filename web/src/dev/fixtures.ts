@@ -6,7 +6,7 @@
     ?fixture=error    every API read answers 500
     ?fixture=empty    a range with no plays
     ?fixture=new      a fresh install: nothing imported yet, setup not complete
-    ?fixture=worst    real data bent to the limits: long names, huge counts, one-row lists, broken art,
+    ?fixture=worst    real data bent to the limits: long names, huge counts, one-row lists, broken art, long Ask and set threads,
                       a spent Claude budget, an unreadable stored key, applied and undone cleanup batches,
                       a finished setup
     ?fixture=untagged plays but no tagged songs (Patterns: Taste)
@@ -201,7 +201,16 @@ function worsen(path: string, body: Json): unknown {
     const items = (body.items as Json[])
       .slice(0, 2)
       .map((it, i) => (i === 0 ? { ...it, name: LONG_SONG, artist: LONG_ARTIST, album: LONG_ALBUM, albumArtUrl: BROKEN_ART, pinned: true } : it));
-    return { ...body, title: LONG_ALBUM, description: `${body.description as string} ${LONG_SONG}`, items };
+    const talk = Array.from({ length: 6 }, (_, i) => [
+      { role: "owner", text: i % 2 ? `Swap ${LONG_SONG} for something by ${LONG_ARTIST}, and keep the slower start` : "Less sad" },
+      { role: "assistant", text: `Changed it: ${"a brighter middle, ".repeat(i + 2)}and the same ending.` },
+    ]).flat();
+    return { ...body, title: LONG_ALBUM, description: `${body.description as string} ${LONG_SONG}`, items, conversation: [...(body.conversation as Json[]), ...talk] };
+  }
+  if (/^\/api\/ask\/threads\/\d+$/.test(path)) {
+    const turns = body.turns as Json[];
+    const long = Array.from({ length: 6 }, (_, i) => [{ role: "owner", text: i % 2 ? `${LONG_SONG} by ${LONG_ARTIST}: when did I play it most?` : "And on weekdays?" }, ...turns.slice(1)]).flat();
+    return { ...body, turns: [...turns, ...long] };
   }
   if (path === "/api/ask/threads") return { items: (body.items as Json[]).slice(0, 1).map((t) => ({ ...t, title: `${LONG_SONG} ${LONG_ARTIST}?` })) };
   if (path === "/api/cleanup") {
