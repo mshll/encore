@@ -4,6 +4,7 @@ import { refreshProposals } from "../cleanup/proposals";
 import { enrich, fetchAlbumArt } from "../ingest/live/enrich";
 import { pollRecentlyPlayed } from "../ingest/live/poller";
 import { WATCH_JOB } from "../ingest/live/watcher";
+import { appOwnedPlaylistIds } from "../library/owned";
 import { syncDue, syncStep, type SyncCursor } from "../library/sync";
 import { runRadar } from "../radar/radar";
 import type { Services } from "../services";
@@ -38,7 +39,7 @@ export function createJobs(db: Db, settings: SettingsSource, spotifyAuth: Spotif
         const cursor = libraryCursor(db);
         if (!spotifyAuth.status().connected) return { cursor, skipped: "spotify_not_connected" };
         if (!syncDue(cursor, now(), current().librarySyncMs)) return { cursor };
-        const step = await syncStep({ db, spotify, spotifyAuth, appPlaylistIds: () => services.playlists.ids() }, cursor, now());
+        const step = await syncStep({ db, spotify, spotifyAuth, appPlaylistIds: () => appOwnedPlaylistIds(db) }, cursor, now());
         return { cursor: step.cursor, calls: step.calls, ...(step.passCompleted ? { proposals: refreshProposals(db, now(), current().weekendDays) } : {}) };
       },
       nextDelayMs: () => {
