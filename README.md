@@ -1,8 +1,12 @@
+<img src="web/public/logo.svg" width="64" height="64" alt="encore logo">
+
 # encore
 
 A self-hosted dashboard for your own Spotify listening. It imports your full streaming history, keeps logging new plays, and shows what you listen to, when, and how that changes. With an Anthropic API key it also builds playlists from a prompt, picks new songs each week, and answers questions about your history.
 
 One instance serves one person. Your data stays in a single SQLite file on your server.
+
+![Overview: time listened over all time, top artists and what is waiting](docs/screenshots/overview.png)
 
 ## What it does
 
@@ -23,6 +27,11 @@ One instance serves one person. Your data stays in a single SQLite file on your 
 
 - **Recaps**: a weekly and a monthly write-up.
 - **Library**: proposals to tidy saved songs and playlists. Nothing is removed until you approve it, and every applied batch can be undone.
+
+| | |
+| --- | --- |
+| ![A set built from a prompt, with a reason for each song and a conversation to refine it](docs/screenshots/set.png) | ![Patterns: which artists defined which months](docs/screenshots/eras.png) |
+| ![Patterns: listening by weekday and hour](docs/screenshots/when.png) | ![Plays: the full log, in the light theme](docs/screenshots/plays-light.png) |
 
 Optional integrations: Discord commands and channel posts, and an MCP server over your analytics and playback.
 
