@@ -2,9 +2,10 @@ import { startRegistration } from "@simplewebauthn/browser";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useRef, useState, type ReactNode } from "react";
 import { request } from "../api/client";
-import { useStatus } from "../api/queries";
-import type { ImportResult, JobStatus, Status } from "../api/types";
-import { fmtAgo, fmtDate, fmtInt, fmtPct } from "../lib/format";
+import { useSpend, useStatus, useTimezone } from "../api/queries";
+import type { ImportResult, JobStatus, LlmFeature, Slot, Status } from "../api/types";
+import { resetDay } from "../lib/assistant";
+import { WEEKDAYS, fmtAgo, fmtDate, fmtHour, fmtInt, fmtPct, fmtTimestamp } from "../lib/format";
 import { useTheme, type ThemePref } from "../lib/theme";
 import { Page } from "../ui/Page";
 import { Segmented } from "../ui/Segmented";
@@ -188,7 +189,8 @@ function Library({ status }: { status: Status }) {
         <p className="text-body-sm text-secondary">{fmtPct(status.tags.coverage)} of songs tagged.</p>
       )}
       <p className="text-secondary tabular">
-        {fmtInt(status.plays.plays)} plays stored, {fmtInt(status.plays.api)} from Spotify’s recently played.
+        {fmtInt(status.plays.plays)} plays stored: {fmtInt(status.plays.live)} watched live, {fmtInt(status.plays.api)} from Spotify’s recently played, the rest
+        from your export.
       </p>
     </Block>
   );
@@ -207,12 +209,111 @@ function libraryLine(job: JobStatus) {
   return jobLine(job, "Checked");
 }
 
+function pacingLine(p: Status["spotify"]["pacing"]) {
+  const waiting = p.queued.interactive + p.queued.background;
+  return `${fmtInt(p.calls)} since start, at most one every ${p.minIntervalMs / 1000} s${waiting ? `, ${waiting} waiting` : ""}`;
+}
+
+function scheduledLine(job: JobStatus, enabled: boolean, slot: Slot) {
+  const result = job.lastResult as { skipped?: string } | null;
+  if (job.lastError) return { text: `Failed ${job.lastRunAt ? fmtAgo(job.lastRunAt) : ""}: ${job.lastError}`, problem: true };
+  if (result?.skipped === "budget_exceeded") return { text: "Skipped: this month’s spending cap is reached", problem: true };
+  if (!enabled) return { text: "Scheduled runs are off", problem: false };
+  return { text: `${WEEKDAYS[slot.weekday - 1]}s at ${fmtHour(slot.hour)}`, problem: false };
+}
+
+const FEATURE_LABELS: Record<LlmFeature, string> = { sets: "Sets", picks: "Picks", ask: "Ask", notes: "Notes", digest: "Digests", dj: "Session re-plans" };
+const usd = (n: number) => `$${n.toFixed(2)}`;
+
+function SpendBlock({ status }: { status: Status }) {
+  const llm = status.llm;
+  const spend = useSpend();
+  const timezone = useTimezone();
+  if (!llm.configured)
+    return (
+      <Block title="Spend">
+        <p>No Anthropic API key is set. Sets, picks, Ask, notes and digests need ANTHROPIC_API_KEY on the server.</p>
+      </Block>
+    );
+  const share = llm.capUsd > 0 ? Math.min(1, llm.spentUsd / llm.capUsd) : 1;
+  return (
+    <Block title="Spend">
+      {llm.exhausted ? (
+        <p className="font-medium text-danger">
+          Spending cap reached: {usd(llm.spentUsd)} of {usd(llm.capUsd)} this month. Sets, picks, Ask, notes and digests are paused until {resetDay(llm.month)}.
+        </p>
+      ) : (
+        <p>
+          <strong className="font-semibold tabular">{usd(llm.spentUsd)}</strong>{" "}
+          <span className="text-secondary">
+            of {usd(llm.capUsd)} this month. Resets on {resetDay(llm.month)}.
+          </span>
+        </p>
+      )}
+      <div
+        role="meter"
+        aria-valuenow={llm.spentUsd}
+        aria-valuemin={0}
+        aria-valuemax={llm.capUsd}
+        aria-label="Spend this month"
+        className="h-2 w-full max-w-md rounded-full bg-component"
+      >
+        <div
+          className={`h-full rounded-full ${llm.exhausted ? "bg-danger" : "bg-chart-key"}`}
+          style={{ width: `${Math.max(share * 100, llm.spentUsd > 0 ? 1 : 0)}%` }}
+        />
+      </div>
+      {llm.byFeature.length > 0 && (
+        <table className="w-full max-w-md text-body-sm tabular">
+          <caption className="sr-only">Spend by feature this month</caption>
+          <tbody>
+            {[...llm.byFeature]
+              .sort((a, b) => b.usd - a.usd)
+              .map((f) => (
+                <tr key={f.feature} className="border-t-[0.5px] border-border-default first:border-t-0">
+                  <th scope="row" className="py-1.5 text-left font-normal">
+                    {FEATURE_LABELS[f.feature] ?? f.feature}
+                  </th>
+                  <td className="py-1.5 text-right text-secondary">
+                    {f.calls} {f.calls === 1 ? "call" : "calls"}
+                  </td>
+                  <td className="w-20 py-1.5 text-right">{usd(f.usd)}</td>
+                </tr>
+              ))}
+          </tbody>
+        </table>
+      )}
+      {spend.data && spend.data.recent.length > 0 && (
+        <details className="max-w-md">
+          <summary className="cursor-default text-body-sm text-secondary hover-fine:text-primary">Recent calls</summary>
+          <table className="mt-2 w-full text-body-sm tabular">
+            <caption className="sr-only">Recent calls</caption>
+            <tbody>
+              {spend.data.recent.map((c) => (
+                <tr key={c.id} className="border-t-[0.5px] border-border-default">
+                  <td className="py-1.5">{FEATURE_LABELS[c.feature] ?? c.feature}</td>
+                  <td className="py-1.5 text-secondary">{fmtTimestamp(c.ts, timezone, false)}</td>
+                  <td className="py-1.5 text-right text-secondary">{Math.round(c.durationMs / 1000)} s</td>
+                  <td className="w-20 py-1.5 text-right">{usd(c.usd)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </details>
+      )}
+    </Block>
+  );
+}
+
 function Jobs({ status }: { status: Status }) {
   const playing = status.live.watch.lastResult?.playing === true;
   const rows = [
     { name: "Playback watcher", ...jobLine(status.live.watch, playing ? "Playing, checked" : "Checked") },
     { name: "Release radar", ...jobLine(status.live.radar, "Checked") },
     { name: "Library sync", ...libraryLine(status.live.library) },
+    { name: "Spotify calls", text: pacingLine(status.spotify.pacing), problem: false },
+    { name: "Weekly picks", ...scheduledLine(status.llm.jobs.picks, status.llm.schedule.enabled, status.llm.schedule.picks) },
+    { name: "Weekly digest", ...scheduledLine(status.llm.jobs.digest, status.llm.schedule.enabled, status.llm.schedule.digest) },
     { name: "Discord", text: status.integrations.discord ? "Connected" : "Not set up", problem: false },
     { name: "MCP", text: status.integrations.mcp ? "Enabled" : "Off", problem: false },
   ];
@@ -296,6 +397,7 @@ export default function Settings() {
           <Import status={q.data} />
           <Library status={q.data} />
           <Jobs status={q.data} />
+          <SpendBlock status={q.data} />
           <Account />
         </div>
       )}

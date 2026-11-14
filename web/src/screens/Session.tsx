@@ -1,9 +1,9 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { request } from "../api/client";
-import { useDj, useTracks } from "../api/queries";
+import { useDj, useTimezone, useTracks } from "../api/queries";
 import type { DjSession, TrackIdentity } from "../api/types";
-import { fmtAgo, fmtInt } from "../lib/format";
+import { fmtAgo, fmtInt, fmtTime } from "../lib/format";
 import { showToast } from "../lib/toast";
 import { playbackProblem } from "../player/playback";
 import { AppLink, songPath } from "../ui/AppLink";
@@ -35,7 +35,11 @@ function TrackRow({ uri, track, rank, value }: { uri: string; track?: TrackIdent
 function Starters() {
   return (
     <Empty title="No session running">
-      Start one from{" "}
+      Play one of your{" "}
+      <AppLink to="/sets" className="font-medium text-primary underline underline-offset-2">
+        sets
+      </AppLink>
+      , or start from{" "}
       <AppLink to="/forgotten" className="font-medium text-primary underline underline-offset-2">
         Forgotten
       </AppLink>
@@ -57,6 +61,7 @@ function Starters() {
 }
 
 function Active({ session }: { session: DjSession }) {
+  const timezone = useTimezone();
   const uris = [...session.played.map((p) => p.uri), ...(session.current ? [session.current] : []), ...session.upcoming];
   const tracks = useTracks(uris);
   const byUri = new Map(tracks.data?.items.map((t) => [t.uri, t]));
@@ -67,11 +72,20 @@ function Active({ session }: { session: DjSession }) {
         Started {fmtAgo(session.startedAt)}. <strong className="font-semibold text-primary tabular">{fmtInt(session.played.length)}</strong> played,{" "}
         <strong className="font-semibold text-primary tabular">{fmtInt(skipped)}</strong> skipped,{" "}
         <strong className="font-semibold text-primary tabular">{fmtInt(session.upcoming.length)}</strong> to go.{" "}
-        {session.replans > 0
-          ? `Re-planned ${session.replans === 1 ? "once" : `${session.replans} times`} after skips in a row.`
+        {session.replannedAt
+          ? `Re-planned the rest at ${fmtTime(session.replannedAt, timezone)} after ${session.replanSkips ?? 2} skips in a row${session.replans > 1 ? `, ${session.replans} times so far` : ""}.`
           : "It re-plans the rest after skips in a row."}
         {session.skipStreak > 0 && ` ${session.skipStreak} skipped in a row now.`}
       </p>
+      {session.set && (
+        <p className="-mt-4 text-body-sm text-secondary md:-mt-8">
+          From the set{" "}
+          <AppLink to={`/sets/${session.set.id}`} className="font-medium text-primary underline underline-offset-2">
+            {session.set.title}
+          </AppLink>
+          . How each song did shows on the set.
+        </p>
+      )}
       {session.current && (
         <Section title="Playing">
           <RowList>
