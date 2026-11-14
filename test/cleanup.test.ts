@@ -171,6 +171,22 @@ describe("cleanup proposals", () => {
     await expect(undoCleanup(db, spotify, result.batchId, NOW + 2)).rejects.toThrow("already undone");
   });
 
+  test("overlapping apply or undo requests for the same items send one set of writes", async () => {
+    const { db, spotify, auth, calls } = seeded(library());
+    await syncAll(db, spotify, auth);
+    refreshProposals(db, NOW);
+    const ids = [listProposals(db, { kind: "saved_dislike", status: "open", limit: 1, offset: 0 }).items[0]!.id];
+    calls.length = 0;
+    const applies = await Promise.allSettled([applyCleanup(db, spotify, ids, NOW), applyCleanup(db, spotify, ids, NOW)]);
+    expect(applies.map((r) => r.status)).toEqual(["fulfilled", "rejected"]);
+    expect(calls.filter((c) => c.method === "DELETE")).toHaveLength(1);
+    const batchId = (applies[0] as PromiseFulfilledResult<{ batchId: number }>).value.batchId;
+    calls.length = 0;
+    const undos = await Promise.allSettled([undoCleanup(db, spotify, batchId, NOW + 1), undoCleanup(db, spotify, batchId, NOW + 1)]);
+    expect(undos.map((r) => r.status)).toEqual(["fulfilled", "rejected"]);
+    expect(calls.filter((c) => c.method === "PUT")).toHaveLength(1);
+  });
+
   test("apply needs an explicit list of open proposal ids", async () => {
     const { db, spotify, calls } = seeded(library());
     await expect(applyCleanup(db, spotify, [], NOW)).rejects.toThrow("at least one");

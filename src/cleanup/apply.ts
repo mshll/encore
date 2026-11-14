@@ -85,12 +85,25 @@ async function applyOne(db: Db, spotify: SpotifyClient, removed: Removed, p: Pro
   return undo;
 }
 
+const applying = new Set<number>();
+const undoing = new Set<number>();
+
 export async function applyCleanup(db: Db, spotify: SpotifyClient, ids: number[], now: number) {
   const unique = [...new Set(ids)];
   if (unique.length === 0) throw new CleanupSelectionError("Choose at least one proposal");
   const proposals = db.select().from(cleanupProposals).where(inArray(cleanupProposals.id, unique)).all();
   const notOpen = unique.filter((id) => !proposals.some((p) => p.id === id && p.status === "open"));
-  if (notOpen.length) throw new CleanupSelectionError("Some proposals are not open", notOpen);
+  const busy = unique.filter((id) => applying.has(id));
+  if (notOpen.length || busy.length) throw new CleanupSelectionError("Some proposals are not open", [...notOpen, ...busy]);
+  for (const id of unique) applying.add(id);
+  try {
+    return await applyProposals(db, spotify, proposals, now);
+  } finally {
+    for (const id of unique) applying.delete(id);
+  }
+}
+
+async function applyProposals(db: Db, spotify: SpotifyClient, proposals: Proposal[], now: number) {
   const undo: UndoAction[] = [];
   const applied: number[] = [];
   const removed: Removed = new Map();
@@ -113,7 +126,17 @@ export async function applyCleanup(db: Db, spotify: SpotifyClient, ids: number[]
 export async function undoCleanup(db: Db, spotify: SpotifyClient, batchId: number, now: number) {
   const batch = db.select().from(cleanupBatches).where(eq(cleanupBatches.id, batchId)).get();
   if (!batch) throw new CleanupSelectionError("Unknown batch");
-  if (batch.undoneAt) throw new CleanupSelectionError("Batch already undone");
+  if (batch.undoneAt || undoing.has(batchId)) throw new CleanupSelectionError("Batch already undone");
+  undoing.add(batchId);
+  try {
+    return await restoreBatch(db, spotify, batch, now);
+  } finally {
+    undoing.delete(batchId);
+  }
+}
+
+async function restoreBatch(db: Db, spotify: SpotifyClient, batch: typeof cleanupBatches.$inferSelect, now: number) {
+  const batchId = batch.id;
   const libraryUris = batch.undo.flatMap((a) => (a.type === "library_save" ? a.uris : []));
   if (libraryUris.length) await saveToLibrary(spotify, libraryUris);
   const inserts = batch.undo
