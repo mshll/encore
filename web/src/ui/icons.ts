@@ -1,6 +1,7 @@
 export { ArrowUpRightIcon } from "@phosphor-icons/react/dist/csr/ArrowUpRight";
 export { BroomIcon } from "@phosphor-icons/react/dist/csr/Broom";
 export { CaretDownIcon } from "@phosphor-icons/react/dist/csr/CaretDown";
+export { CaretLeftIcon } from "@phosphor-icons/react/dist/csr/CaretLeft";
 export { CaretRightIcon } from "@phosphor-icons/react/dist/csr/CaretRight";
 export { ChartBarIcon } from "@phosphor-icons/react/dist/csr/ChartBar";
 export { ChatCircleTextIcon } from "@phosphor-icons/react/dist/csr/ChatCircleText";

@@ -1,8 +1,11 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import { Dialog as Sheet } from "@base-ui/react/dialog";
 import { useScrollElement } from "../app/Shell";
-import { Button } from "./Button";
+import { useMedia } from "../lib/useMedia";
+import { Button, IconButton } from "./Button";
 import { cx } from "./cx";
-import { ArrowDownIcon } from "./icons";
+import { ArrowDownIcon, XIcon } from "./icons";
+import { BACKDROP } from "./surfaces";
 
 const NEAR_END = 64;
 
@@ -24,6 +27,7 @@ export function Conversation({
   startAtEnd = false,
   thread,
   contained = false,
+  inset = false,
   className,
 }: {
   /** The thread; null or false while it has no messages. */
@@ -40,6 +44,8 @@ export function Conversation({
   thread?: unknown;
   /** Its own scroll box, filling the parent's height (a side column). Otherwise the page panel scrolls. */
   contained?: boolean;
+  /** Pads the messages and the composer off the edges of a surface (`ConversationPanel`). */
+  inset?: boolean;
   className?: string;
 }) {
   const pinned = Boolean(messages);
@@ -127,7 +133,7 @@ export function Conversation({
     <div className={cx("flex min-h-0 min-w-0 flex-1 flex-col", className)}>
       {pinned && (
         <div ref={box} className={cx("flex flex-1 flex-col", contained && "min-h-0 overflow-y-auto overscroll-contain")}>
-          <div ref={content} className="flex flex-col pb-6">
+          <div ref={content} className={cx("flex flex-col pb-6", inset && "px-4 pt-1")}>
             {messages}
           </div>
         </div>
@@ -136,6 +142,7 @@ export function Conversation({
         ref={dock}
         className={cx(
           "flex flex-col gap-3",
+          inset && "px-3 pb-3 [--gutter:--spacing(3)]",
           pinned && "relative pt-1",
           pinned && !contained && "sticky bottom-0 z-10 bg-page pb-4 phone:-mx-(--gutter) phone:px-(--gutter) md:pb-6",
         )}
@@ -152,7 +159,90 @@ export function Conversation({
         )}
         {composer}
       </div>
-      {!pinned && empty}
+      {!pinned && (inset ? <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-4">{empty}</div> : empty)}
     </div>
   );
 }
+
+type ConversationProps = Omit<Parameters<typeof Conversation>[0], "contained" | "inset" | "className">;
+
+/** The panel's own surface: a header that names it, the thread scrolling inside, the composer pinned at its foot. */
+function PanelSurface({ title, actions, className, ...conversation }: ConversationProps & { title: string; actions?: ReactNode; className?: string }) {
+  return (
+    <section aria-label={title} className={cx("flex min-h-0 flex-col overflow-hidden rounded-2xl bg-card shadow-panel", className)}>
+      <header className="flex min-h-12 shrink-0 items-center gap-2 pr-2 pl-4">
+        <h2 title={title} className="min-w-0 flex-1 truncate font-medium text-primary">
+          {title}
+        </h2>
+        {actions && <div className="flex shrink-0 items-center gap-1">{actions}</div>}
+      </header>
+      <Conversation {...conversation} contained inset />
+    </section>
+  );
+}
+
+/**
+ * A conversation with Claude as its own docked panel (the set page, Ask, Library). From `lg` (`useDocked`): a panel that
+ * fills the height its parent gives it (`DOCKED` in a page column). Narrower: with `sheet`, the same panel in a bottom sheet the
+ * page opens from a button; it stays mounted while closed, so a run keeps reporting to it. Without `sheet`, the
+ * conversation is the page: no surface, the page scrolls and the composer sticks above the tab bar.
+ */
+export function ConversationPanel({
+  title,
+  actions,
+  sheet,
+  flatHeader = true,
+  className,
+  ...conversation
+}: ConversationProps & {
+  /** What the panel holds: "Change the set", a thread's title. */
+  title: string;
+  /** Beside the title (a thread's More menu). */
+  actions?: ReactNode;
+  /** Phone only: the panel opens as a bottom sheet. */
+  sheet?: { open: boolean; onOpenChange: (open: boolean) => void };
+  /** Phone without a sheet: show the title row above the thread. */
+  flatHeader?: boolean;
+  className?: string;
+}) {
+  const docked = useDocked();
+  if (docked) return <PanelSurface title={title} actions={actions} className={className} {...conversation} />;
+  if (sheet)
+    return (
+      <Sheet.Root open={sheet.open} onOpenChange={sheet.onOpenChange}>
+        <Sheet.Portal keepMounted>
+          <Sheet.Backdrop className={BACKDROP} />
+          <Sheet.Popup
+            aria-label={title}
+            className="fixed inset-x-0 bottom-0 z-50 flex h-[calc(100dvh-24px)] flex-col rounded-t-[14px] bg-overlay pb-[env(safe-area-inset-bottom)] shadow-modal outline-none transition-transform duration-300 ease-(--ease-drawer) data-[ending-style]:translate-y-full data-[ending-style]:duration-200 data-[starting-style]:translate-y-full motion-reduce:transition-none"
+          >
+            <header className="flex min-h-14 shrink-0 items-center gap-2 pr-2 pl-4">
+              <Sheet.Title className="min-w-0 flex-1 truncate text-heading font-medium text-primary">{title}</Sheet.Title>
+              {actions}
+              <Sheet.Close render={<IconButton icon={XIcon} label="Close" />} />
+            </header>
+            <Conversation {...conversation} contained inset />
+          </Sheet.Popup>
+        </Sheet.Portal>
+      </Sheet.Root>
+    );
+  return (
+    <div className={cx("flex min-h-0 flex-1 flex-col gap-4", className)}>
+      {flatHeader && (
+        <div className="flex min-h-11 items-center gap-2">
+          <h2 title={title} className="min-w-0 flex-1 truncate text-heading font-medium text-primary">
+            {title}
+          </h2>
+          {actions}
+        </div>
+      )}
+      <Conversation {...conversation} />
+    </div>
+  );
+}
+
+/** True from `lg`, where a conversation panel docks beside the page's content. */
+export const useDocked = () => useMedia("(min-width: 1024px)");
+
+/** Classes for a docked panel in a page column from `lg`: sticks under the frame's top band and ends one gutter above the panel's foot. */
+export const DOCKED = "lg:sticky lg:top-12 lg:h-[calc(100dvh-var(--bottom-chrome)-var(--inset)-80px)]";

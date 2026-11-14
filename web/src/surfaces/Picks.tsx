@@ -5,7 +5,6 @@ import { request } from "../api/client";
 import { useLifetime, usePickWeeks, usePicks, useStatus } from "../api/queries";
 import type { Pick, PicksWeek, PickState } from "../api/types";
 import { artistPath } from "../app/paths";
-import { FOR_YOU_TABS } from "../app/nav";
 import { assistantProblem } from "../lib/assistant";
 import { fmtDayShort, fmtHour, fmtInt, fmtPct, WEEKDAYS } from "../lib/format";
 import { showToast } from "../lib/toast";
@@ -28,14 +27,13 @@ import {
   WaveformIcon,
 } from "../ui/icons";
 import { MenuItem, MenuLinkItem, MenuPopup, MenuRoot, MenuSeparator, MoreTrigger } from "../ui/Menu";
-import { Page, PageHeader, Section, dimWhile } from "../ui/Page";
+import { Section, dimWhile } from "../ui/Page";
 import { RunProgress } from "../ui/RunProgress";
 import { Select } from "../ui/Select";
 import { Skeleton } from "../ui/Skeleton";
 import { EmptyState, ErrorState, FirstUseState } from "../ui/States";
 import { BlockedList } from "./BlockedList";
 import { Notice } from "../ui/Notice";
-import { TabNav } from "../ui/TabNav";
 
 const STATE_TEXT: Record<Exclude<PickState, "new">, string> = { saved: "Saved", not_now: "Not now", never: "Never again" };
 
@@ -240,13 +238,15 @@ function WeekPicker({ current, value, onChange }: { current: string; value: stri
       value={value}
       onChange={onChange}
       options={all.map((w) => ({ value: w, label: w === current ? "This week" : `Week of ${fmtDayShort(w)}` }))}
-      className="phone:w-full"
     />
   );
 }
 
-/** For you: Picks. What Claude picked this week, why, and how earlier weeks went. Primary action: play the picks. */
-export function Picks() {
+/**
+ * Weekly picks' own content: what Claude picked in the shown week (`?week=`), why, the keep and never actions,
+ * making this week's picks when there are none, how earlier weeks did, and what is kept out of picks.
+ */
+export function WeeklyPicks() {
   const [params, setParams] = useSearchParams();
   const asked = params.get("week") ?? undefined;
   const q = usePicks(asked);
@@ -259,53 +259,46 @@ export function Picks() {
   const firstUse = lifetime.data !== undefined && !lifetime.data.firstPlayed;
   const pickWeek = (w: string) => setParams(w === current ? {} : { week: w }, { replace: true });
 
+  if (firstUse) return <FirstUseState icon={WaveformIcon} description="Picks are chosen from what you play. Import your history or connect Spotify first." />;
+  if (q.isError) return <ErrorState error={q.error} onRetry={() => q.refetch()} />;
+  if (!q.data) return <PicksSkeleton />;
   return (
-    <Page width="read">
-      <PageHeader title="For you" actions={current && week && !firstUse && <WeekPicker current={current} value={week} onChange={pickWeek} />}>
-        <TabNav items={FOR_YOU_TABS} label="For you" />
-      </PageHeader>
-      {firstUse ? (
-        <FirstUseState icon={WaveformIcon} description="Picks are chosen from what you play. Import your history or connect Spotify first." />
-      ) : q.isError ? (
-        <ErrorState error={q.error} onRetry={() => q.refetch()} />
-      ) : !q.data ? (
-        <PicksSkeleton />
-      ) : (
-        <>
-          <section aria-labelledby="picks-title" className="flex flex-col gap-6">
-            <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between md:gap-4">
-              <div className="flex min-w-0 flex-col">
-                <h2 id="picks-title" className="text-heading font-medium">
-                  {isCurrent ? "This week" : `Week of ${fmtDayShort(q.data.week)}`}
-                </h2>
-                {q.data.picks.length > 0 && (
-                  <p className="text-secondary tabular">
-                    {plural(q.data.picks.length, "song", "songs")} new to you, {fmtInt(q.data.picks.filter((p) => p.outcome.plays > 0).length)} played so far
-                  </p>
-                )}
-              </div>
-              {q.data.picks.length > 0 && (
-                <Button variant="accent" icon={PlayIcon} className="phone:w-full" onClick={() => playback.play(q.data.picks.map((p) => p.uri))}>
-                  Play picks
-                </Button>
-              )}
-            </div>
-            {q.data.picks.length > 0 ? (
-              <ol className={cx("flex flex-col divide-y-[0.5px] divide-line", dimWhile(q.isPlaceholderData))}>
-                {q.data.picks.map((p) => (
-                  <PickRow key={p.id} pick={p} />
-                ))}
-              </ol>
-            ) : isCurrent ? (
-              <Generate />
-            ) : (
-              <EmptyState title="No picks that week" />
+    <>
+      <Section
+        labelledBy="picks-title"
+        title={isCurrent ? "This week" : `Week of ${fmtDayShort(q.data.week)}`}
+        description={
+          q.data.picks.length > 0 && (
+            <span className="tabular">
+              {plural(q.data.picks.length, "song", "songs")} new to you, {fmtInt(q.data.picks.filter((p) => p.outcome.plays > 0).length)} played so far
+            </span>
+          )
+        }
+        actions={
+          <>
+            {!isCurrent && q.data.picks.length > 0 && (
+              <Button icon={PlayIcon} onClick={() => playback.play(q.data.picks.map((p) => p.uri))}>
+                Play that week
+              </Button>
             )}
-          </section>
-          <HowPicksDid stats={q.data.stats} />
-          <BlockedList />
-        </>
-      )}
-    </Page>
+            {current && week && <WeekPicker current={current} value={week} onChange={pickWeek} />}
+          </>
+        }
+      >
+        {q.data.picks.length > 0 ? (
+          <ol className={cx("flex flex-col divide-y-[0.5px] divide-line", dimWhile(q.isPlaceholderData))}>
+            {q.data.picks.map((p) => (
+              <PickRow key={p.id} pick={p} />
+            ))}
+          </ol>
+        ) : isCurrent ? (
+          <Generate />
+        ) : (
+          <EmptyState title="No picks that week" />
+        )}
+      </Section>
+      <HowPicksDid stats={q.data.stats} />
+      <BlockedList />
+    </>
   );
 }

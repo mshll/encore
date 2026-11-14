@@ -4,7 +4,6 @@ import { useLocation, useSearchParams } from "wouter";
 import { request } from "../api/client";
 import { useLifetime, useRadar } from "../api/queries";
 import type { Release } from "../api/types";
-import { FOR_YOU_TABS } from "../app/nav";
 import { artistPath } from "../app/paths";
 import { fmtAgo, fmtDay, fmtInt } from "../lib/format";
 import { showToast } from "../lib/toast";
@@ -14,11 +13,10 @@ import { Button, IconButton } from "../ui/Button";
 import { cx } from "../ui/cx";
 import { ArrowUpRightIcon, CheckIcon, MicrophoneStageIcon, PlayIcon, VinylRecordIcon, WaveformIcon } from "../ui/icons";
 import { MenuItem, MenuLinkItem, MenuPopup, MenuRoot, MoreTrigger } from "../ui/Menu";
-import { Page, PageHeader, dimWhile } from "../ui/Page";
+import { Section, dimWhile } from "../ui/Page";
 import { RowSkeleton } from "../ui/Rows";
 import { Segmented } from "../ui/Segmented";
 import { EmptyState, ErrorState, FirstUseState } from "../ui/States";
-import { TabNav } from "../ui/TabNav";
 
 type View = "new" | "recent";
 
@@ -83,8 +81,8 @@ function ReleaseRow({ release, view, onSeen, busy }: { release: Release; view: V
   );
 }
 
-/** For you: Releases. What artists the owner plays released lately. Mark seen, play. */
-export function Releases() {
+/** New from your artists' own content: what artists the owner plays released lately. Mark seen, play. */
+export function ReleasesSection() {
   const [params, setParams] = useSearchParams();
   const view: View = params.get("view") === "recent" ? "recent" : "new";
   const q = useRadar(view, 30);
@@ -94,64 +92,54 @@ export function Releases() {
   const setView = (v: View) => setParams(v === "new" ? {} : { view: v }, { replace: true });
   const d = q.data;
 
+  if (firstUse) return <FirstUseState icon={WaveformIcon} description="Releases are watched for the artists you play. Import your history or connect Spotify first." />;
   return (
-    <Page width="read">
-      <PageHeader title="For you">
-        <TabNav items={FOR_YOU_TABS} label="For you" />
-      </PageHeader>
-      {firstUse ? (
-        <FirstUseState icon={WaveformIcon} description="Releases are watched for the artists you play. Import your history or connect Spotify first." />
-      ) : (
-        <section aria-label="Releases" className="flex flex-col gap-4">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <Segmented
-              label="Releases"
-              value={view}
-              onChange={setView}
-              options={[
-                { value: "new", label: "New" },
-                { value: "recent", label: "Last 30 days" },
-              ]}
-            />
-            {view === "new" && d && d.unseenNew > 1 && (
-              <Button size="sm" busy={busy === "all"} busyLabel="Marking" onClick={() => mark("all")}>
-                Mark all seen
+    <Section
+      title="Releases"
+      description={d && d.artists > 0 ? `Watching ${fmtInt(d.artists)} artists you play often${d.lastRunAt ? `, checked ${fmtAgo(d.lastRunAt)}` : ""}` : undefined}
+    >
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <Segmented
+          label="Releases"
+          value={view}
+          onChange={setView}
+          options={[
+            { value: "new", label: "New" },
+            { value: "recent", label: "Last 30 days" },
+          ]}
+        />
+        {view === "new" && d && d.unseenNew > 1 && (
+          <Button size="sm" busy={busy === "all"} busyLabel="Marking" onClick={() => mark("all")}>
+            Mark all seen
+          </Button>
+        )}
+      </div>
+      {q.isError ? (
+        <ErrorState error={q.error} onRetry={() => q.refetch()} />
+      ) : !d ? (
+        <RowSkeleton rows={5} />
+      ) : d.items.length === 0 ? (
+        view === "new" ? (
+          <EmptyState
+            icon={VinylRecordIcon}
+            title="Nothing new"
+            description={d.lastRunAt ? undefined : "The release check has not run yet."}
+            action={
+              <Button size="sm" onClick={() => setView("recent")}>
+                Show the last 30 days
               </Button>
-            )}
-          </div>
-          {d && d.artists > 0 && (
-            <p className="text-caption text-secondary">
-              Watching {fmtInt(d.artists)} artists you play often{d.lastRunAt ? `, checked ${fmtAgo(d.lastRunAt)}` : ""}
-            </p>
-          )}
-          {q.isError ? (
-            <ErrorState error={q.error} onRetry={() => q.refetch()} />
-          ) : !d ? (
-            <RowSkeleton rows={5} />
-          ) : d.items.length === 0 ? (
-            view === "new" ? (
-              <EmptyState
-                icon={VinylRecordIcon}
-                title="Nothing new"
-                description={d.lastRunAt ? "New songs and albums from artists you play show up here." : "The release check has not run yet."}
-                action={
-                  <Button size="sm" onClick={() => setView("recent")}>
-                    Show the last 30 days
-                  </Button>
-                }
-              />
-            ) : (
-              <EmptyState icon={VinylRecordIcon} title="No releases in the last 30 days" />
-            )
-          ) : (
-            <ul className={cx("flex flex-col", dimWhile(q.isPlaceholderData))}>
-              {d.items.map((r) => (
-                <ReleaseRow key={r.id} release={r} view={view} busy={busy === r.id} onSeen={() => mark(r.id, [r.id])} />
-              ))}
-            </ul>
-          )}
-        </section>
+            }
+          />
+        ) : (
+          <EmptyState icon={VinylRecordIcon} title="No releases in the last 30 days" />
+        )
+      ) : (
+        <ul className={cx("flex flex-col", dimWhile(q.isPlaceholderData))}>
+          {d.items.map((r) => (
+            <ReleaseRow key={r.id} release={r} view={view} busy={busy === r.id} onSeen={() => mark(r.id, [r.id])} />
+          ))}
+        </ul>
       )}
-    </Page>
+    </Section>
   );
 }

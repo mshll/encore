@@ -7,9 +7,9 @@ import { assistantProblem } from "../lib/assistant";
 import { fmtDate, fmtDay, fmtDayRange, fmtHoursValue, fmtInt, fmtMonthLong, fmtPct } from "../lib/format";
 import { AppLink } from "../ui/AppLink";
 import { Artwork } from "../ui/Artwork";
-import { Button, buttonClass } from "../ui/Button";
+import { Button } from "../ui/Button";
 import { Icon } from "../ui/Icon";
-import { ArrowLeftIcon, CaretRightIcon, NewspaperIcon } from "../ui/icons";
+import { CaretRightIcon, NewspaperIcon } from "../ui/icons";
 import { Notice } from "../ui/Notice";
 import { Page, PageHeader, Section, useDocumentTitle } from "../ui/Page";
 import { Skeleton } from "../ui/Skeleton";
@@ -109,7 +109,7 @@ export function Recaps() {
   const lifetime = useLifetime();
   const firstUse = lifetime.data !== undefined && !lifetime.data.firstPlayed;
   return (
-    <Page width="read">
+    <Page>
       <PageHeader title="Recaps" />
       {q.isError ? (
         <ErrorState error={q.error} onRetry={() => q.refetch()} />
@@ -263,24 +263,14 @@ function Neighbours({ id }: { id: number }) {
   );
 }
 
-function BackLink() {
-  return (
-    <AppLink to="/recaps" className={buttonClass({ variant: "ghost", size: "sm", className: "-ml-2.5 self-start" })}>
-      <Icon icon={ArrowLeftIcon} />
-      Recaps
-    </AppLink>
-  );
-}
-
 export function Recap({ id }: { id: number }) {
   const q = useDigest(id);
   const timezone = useTimezone();
   useDocumentTitle(q.data ? recapPeriod(q.data) : "Recap");
   const notFound = q.error instanceof ApiError && q.error.status === 404;
   return (
-    <Page width="read">
+    <Page width="read" crumb={q.data ? recapPeriod(q.data) : q.isError ? null : undefined}>
       <div className="flex flex-col gap-4">
-        <BackLink />
         {q.data ? (
           <header className="flex flex-col">
             <p className="text-caption text-secondary">

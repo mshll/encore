@@ -1,5 +1,5 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { useLocation } from "wouter";
 import { ApiError, request } from "../api/client";
 import { useDj, useSet } from "../api/queries";
@@ -9,7 +9,6 @@ import { artistPath, songPath } from "../app/paths";
 import { assistantProblem } from "../lib/assistant";
 import { fmtAgo, fmtInt } from "../lib/format";
 import { showToast } from "../lib/toast";
-import { useMedia } from "../lib/useMedia";
 import { useRun } from "../lib/useRun";
 import { openInSpotify, usePlayback } from "../player/playback";
 import { AppLink } from "../ui/AppLink";
@@ -17,10 +16,10 @@ import { Artwork } from "../ui/Artwork";
 import { Button, buttonClass, IconButton } from "../ui/Button";
 import { useClaudeGate } from "../ui/ClaudeNotice";
 import { Composer } from "../ui/Composer";
-import { Conversation } from "../ui/Conversation";
+import { ConversationPanel, DOCKED, useDocked } from "../ui/Conversation";
 import { Confirm } from "../ui/Dialog";
 import { Icon } from "../ui/Icon";
-import { ArrowUpRightIcon, MicrophoneStageIcon, MusicNoteIcon, PlayIcon, PlaylistIcon, PushPinIcon, QueueIcon, TrashIcon } from "../ui/icons";
+import { ArrowUpRightIcon, ChatCircleTextIcon, MicrophoneStageIcon, MusicNoteIcon, PlayIcon, PlaylistIcon, PushPinIcon, QueueIcon, TrashIcon } from "../ui/icons";
 import { MenuItem, MenuLinkItem, MenuPopup, MenuRoot, MenuSeparator, MoreTrigger } from "../ui/Menu";
 import { EntityHeader, EntityHeaderSkeleton } from "../ui/EntityHeader";
 import { Page, PageHeader, Section, useDocumentTitle } from "../ui/Page";
@@ -130,13 +129,26 @@ function TrackRow({ item, added, onPin, onRemove }: { item: SetTrack; added: boo
   );
 }
 
-function SetConversation({ set, contained, onRefined }: { set: SetDetail; contained: boolean; onRefined: (result: SetResult) => void }) {
+type SetRun = ReturnType<typeof useRun<SetResult>>;
+
+const messagesPath = (id: number) => `/api/sets/${id}/messages`;
+
+function SetConversation({
+  set,
+  run,
+  sheet,
+  onRefined,
+}: {
+  set: SetDetail;
+  run: SetRun;
+  sheet?: { open: boolean; onOpenChange: (open: boolean) => void };
+  onRefined: (result: SetResult) => void;
+}) {
   const [text, setText] = useState("");
   const [sent, setSent] = useState<string | null>(null);
   const [stopped, setStopped] = useState(false);
   const gate = useClaudeGate({ needsSpotify: true });
-  const path = `/api/sets/${set.id}/messages`;
-  const run = useRun<SetResult>({ key: path, onDone: onRefined });
+  const path = messagesPath(set.id);
   const entries = timeline(set);
   const asking = set.version === 0;
   const send = async () => {
@@ -157,8 +169,10 @@ function SetConversation({ set, contained, onRefined }: { set: SetDetail; contai
     if (sent) setText(sent);
   };
   return (
-    <Conversation
-      contained={contained}
+    <ConversationPanel
+      title={asking ? "Claude asks" : "Change the set"}
+      sheet={sheet}
+      className={DOCKED}
       follow={entries.length + (run.running && sent ? 1 : 0)}
       messages={
         <div className="flex flex-col gap-5">
@@ -246,7 +260,7 @@ function savedMessage(updated: boolean, cover: SavedPlaylist["cover"]["status"])
   return `${base}.`;
 }
 
-function SetActions({ set, playing }: { set: SetDetail; playing: boolean }) {
+function SetActions({ set, playing, converse }: { set: SetDetail; playing: boolean; converse: ReactNode }) {
   const queryClient = useQueryClient();
   const openQueue = useOpenQueue();
   const [, navigate] = useLocation();
@@ -283,7 +297,7 @@ function SetActions({ set, playing }: { set: SetDetail; playing: boolean }) {
     });
   const empty = set.items.length === 0;
   return (
-    <div className="flex items-center gap-2 phone:grid phone:w-full phone:grid-cols-[minmax(0,1fr)_auto]">
+    <div className="flex items-center gap-2 max-lg:grid max-lg:w-full max-lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] md:max-lg:flex">
       {!playing && (
         <Button
           variant="accent"
@@ -292,11 +306,12 @@ function SetActions({ set, playing }: { set: SetDetail; playing: boolean }) {
           busy={busy === "play"}
           busyLabel="Starting"
           onClick={play}
-          className="phone:col-span-2"
+          className="max-lg:col-span-3"
         >
           Play as a session
         </Button>
       )}
+      {converse}
       {!set.playlist || set.playlist.outdated ? (
         <Button disabled={empty || busy !== null} busy={busy === "save"} busyLabel="Saving" onClick={save}>
           {set.playlist ? "Update playlist" : "Save to Spotify"}
@@ -348,7 +363,7 @@ function summary(set: SetDetail): string {
 
 function SetSkeleton() {
   return (
-    <Page>
+    <Page crumb={undefined}>
       <EntityHeaderSkeleton />
       <RowSkeleton rows={8} rank />
     </Page>
@@ -361,13 +376,15 @@ export function SetPage({ id }: { id: number }) {
   const dj = useDj();
   const queryClient = useQueryClient();
   const [removing, setRemoving] = useState<SetTrack | null>(null);
-  const wide = useMedia("(min-width: 1024px)");
+  const [talking, setTalking] = useState(false);
+  const docked = useDocked();
   useDocumentTitle(q.data?.title ?? "Set");
 
   const replace = (set: SetDetail) => {
     queryClient.setQueryData(["sets", id], set);
     void queryClient.invalidateQueries({ queryKey: ["sets"], exact: true });
   };
+  const run = useRun<SetResult>({ key: messagesPath(id), onDone: (r) => replace(r.set) });
   const edit = async (item: SetTrack, init: RequestInit & { json?: unknown }) => {
     try {
       replace(await request<SetDetail>(`/api/sets/${id}/items/${item.position}`, init));
@@ -378,7 +395,7 @@ export function SetPage({ id }: { id: number }) {
 
   if (q.isError)
     return q.error instanceof ApiError && q.error.status === 404 ? (
-      <Page>
+      <Page crumb={null}>
         <PageHeader title="Set" />
         <EmptyState
           size="page"
@@ -392,7 +409,7 @@ export function SetPage({ id }: { id: number }) {
         />
       </Page>
     ) : (
-      <Page>
+      <Page crumb={null}>
         <PageHeader title="Set" />
         <ErrorState error={q.error} onRetry={() => q.refetch()} />
       </Page>
@@ -405,10 +422,16 @@ export function SetPage({ id }: { id: number }) {
   const added = new Set(current?.added.map((t) => t.songKey));
   const session = dj.data?.session;
   const playing = session?.status === "active" && session.set?.id === set.id ? session : null;
+  const asking = set.version === 0;
+  const converse = !docked && (
+    <Button icon={ChatCircleTextIcon} onClick={() => setTalking(true)}>
+      {run.running ? "Changing…" : asking ? "Answer" : "Change"}
+    </Button>
+  );
 
   return (
-    <Page>
-      <div className="grid gap-10 md:gap-12 lg:grid-cols-[minmax(0,1fr)_minmax(0,360px)]">
+    <Page crumb={set.title}>
+      <div className="grid gap-10 md:gap-12 lg:grid-cols-[minmax(0,1fr)_var(--panel-w)]">
         <div className="flex min-w-0 flex-col gap-10 md:gap-12">
           <EntityHeader
             title={set.title}
@@ -416,7 +439,7 @@ export function SetPage({ id }: { id: number }) {
             kind="playlist"
             credits={set.description || undefined}
             detail={set.items.length > 0 ? summary(set) : undefined}
-            actions={<SetActions set={set} playing={Boolean(playing)} />}
+            actions={<SetActions set={set} playing={Boolean(playing)} converse={converse} />}
           />
           {playing && (
             <div className="-mt-6 md:-mt-8">
@@ -425,7 +448,7 @@ export function SetPage({ id }: { id: number }) {
           )}
           <Section title="Songs">
             {set.items.length === 0 ? (
-              <EmptyState icon={PlaylistIcon} title="No songs yet" description="Answer the question to build the set." />
+              <EmptyState icon={PlaylistIcon} title="No songs yet" description="Answer Claude’s question to build the set." />
             ) : (
               <ol className="flex flex-col">
                 {set.items.map((item) => (
@@ -441,9 +464,7 @@ export function SetPage({ id }: { id: number }) {
             )}
           </Section>
         </div>
-        <Section title="Conversation" className="lg:sticky lg:top-8 lg:h-[calc(100dvh-var(--bottom-chrome)-var(--inset)-64px)]">
-          <SetConversation set={set} contained={wide} onRefined={(r) => replace(r.set)} />
-        </Section>
+        <SetConversation set={set} run={run} sheet={docked ? undefined : { open: talking, onOpenChange: setTalking }} onRefined={(r) => replace(r.set)} />
       </div>
       <Confirm
         open={removing !== null}

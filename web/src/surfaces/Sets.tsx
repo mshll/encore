@@ -1,6 +1,6 @@
 import { useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
-import { useLocation } from "wouter";
+import { useEffect, useRef, useState } from "react";
+import { useLocation, useSearchParams } from "wouter";
 import { useLifetime, useSets } from "../api/queries";
 import type { SetResult, SetSummary } from "../api/types";
 import { fmtAgo, fmtInt } from "../lib/format";
@@ -55,8 +55,22 @@ function NewSet() {
   };
   const run = useRun<SetResult>({ key: "/api/sets", onDone: show });
 
-  const build = async () => {
-    const request = text.trim();
+  const [params, setParams] = useSearchParams();
+  const fromHome = params.get("q");
+  const builtFromHome = useRef(false);
+  useEffect(() => {
+    if (!fromHome || builtFromHome.current || !gate.ready) return;
+    // Deferred so a mount React StrictMode tears down at once never starts, and so never abandons, a paid run.
+    const timer = setTimeout(() => {
+      builtFromHome.current = true;
+      setParams({}, { replace: true });
+      setText(fromHome);
+      if (!gate.blocked) void build(fromHome);
+    });
+    return () => clearTimeout(timer);
+  });
+
+  const build = async (request: string) => {
     setAsked(request);
     setStopped(false);
     const result = await run.start("/api/sets", { request });
@@ -80,7 +94,7 @@ function NewSet() {
   return (
     <div className="flex flex-col gap-5">
       {run.problem && (
-        <Notice tone="danger" onRetry={gate.blocked || !text.trim() ? undefined : build}>
+        <Notice tone="danger" onRetry={gate.blocked || !text.trim() ? undefined : () => build(text.trim())}>
           {run.problem}
         </Notice>
       )}
@@ -90,7 +104,7 @@ function NewSet() {
         placeholder="A late drive home, songs I finished at night, a few I’ve never heard"
         value={text}
         onChange={setText}
-        onSubmit={build}
+        onSubmit={() => build(text.trim())}
         disabled={Boolean(gate.blocked)}
         notice={gate.blocked ?? gate.warning}
         footer={gate.spend}

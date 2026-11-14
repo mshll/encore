@@ -4,7 +4,7 @@ import { Skeleton } from "./Skeleton";
 
 /**
  * The head of an artist, album or song page (`kind`): artwork left, title over its credits and one line of detail,
- * the page's actions under them. `aside` (the range picker) sits top right on desktop, last on phone.
+ * the page's actions under them. `aside` (the range picker) sits top right at every width: beside the artwork on a phone.
  */
 export function EntityHeader({
   title,
@@ -24,11 +24,11 @@ export function EntityHeader({
   aside?: ReactNode;
 }) {
   return (
-    <header className="flex flex-col gap-5 md:flex-row md:items-end md:gap-6">
+    <header className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-5 md:grid-cols-[auto_minmax(0,1fr)_auto] md:items-end md:gap-x-6">
       <div className="w-28 shrink-0 md:w-40">
         <Artwork src={art} kind={kind} box="fill" />
       </div>
-      <div className="flex min-w-0 flex-1 flex-col gap-4">
+      <div className="col-span-2 row-start-2 flex min-w-0 flex-col gap-4 md:col-span-1 md:col-start-2 md:row-start-1">
         <div className="flex min-w-0 flex-col gap-1">
           <h1 title={title} className="line-clamp-3 font-display text-title text-balance break-words text-primary">
             {title}
@@ -42,7 +42,7 @@ export function EntityHeader({
         </div>
         {actions && <div className="flex flex-wrap items-center gap-2">{actions}</div>}
       </div>
-      {aside && <div className="flex shrink-0 phone:w-full md:self-start">{aside}</div>}
+      {aside && <div className="col-start-2 row-start-1 flex shrink-0 self-start justify-self-end md:col-start-3">{aside}</div>}
     </header>
   );
 }

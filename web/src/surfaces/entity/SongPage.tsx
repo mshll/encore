@@ -49,7 +49,7 @@ export function SongPage({ songKey }: { songKey: string }) {
   useDocumentTitle(q.data?.name ?? "Song");
   if (q.isError)
     return (
-      <Page>
+      <Page crumb={null}>
         <EntityMissing error={q.error} onRetry={() => q.refetch()} title="Song" what="song" />
       </Page>
     );
@@ -61,7 +61,7 @@ export function SongPage({ songKey }: { songKey: string }) {
     );
   const d = q.data;
   return (
-    <Page className={dimWhile(q.isPlaceholderData)}>
+    <Page crumb={d.name} className={dimWhile(q.isPlaceholderData)}>
       <EntityHeader
         kind="song"
         title={d.name}

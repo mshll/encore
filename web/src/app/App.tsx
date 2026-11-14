@@ -6,16 +6,14 @@ import { NotFound } from "../surfaces/NotFound";
 import { paramValue } from "./paths";
 import { Shell } from "./Shell";
 
-const Overview = lazy(() => import("../surfaces/Overview").then((m) => ({ default: m.Overview })));
+const Home = lazy(() => import("../surfaces/Home").then((m) => ({ default: m.Home })));
 const Plays = lazy(() => import("../surfaces/Plays").then((m) => ({ default: m.Plays })));
 const When = lazy(() => import("../surfaces/When").then((m) => ({ default: m.When })));
 const Music = lazy(() => import("../surfaces/Music").then((m) => ({ default: m.Music })));
 const ArtistPage = lazy(() => import("../surfaces/entity/ArtistPage").then((m) => ({ default: m.ArtistPage })));
 const AlbumPage = lazy(() => import("../surfaces/entity/AlbumPage").then((m) => ({ default: m.AlbumPage })));
 const SongPage = lazy(() => import("../surfaces/entity/SongPage").then((m) => ({ default: m.SongPage })));
-const Picks = lazy(() => import("../surfaces/Picks").then((m) => ({ default: m.Picks })));
-const Releases = lazy(() => import("../surfaces/Releases").then((m) => ({ default: m.Releases })));
-const Playlists = lazy(() => import("../surfaces/Playlists").then((m) => ({ default: m.Playlists })));
+const ForYou = lazy(() => import("../surfaces/Playlists").then((m) => ({ default: m.ForYou })));
 const PlaylistPage = lazy(() => import("../surfaces/Playlists").then((m) => ({ default: m.PlaylistPage })));
 const Sets = lazy(() => import("../surfaces/Sets").then((m) => ({ default: m.Sets })));
 const SetPage = lazy(() => import("../surfaces/SetPage").then((m) => ({ default: m.SetPage })));
@@ -51,7 +49,7 @@ export function App() {
     <Shell>
       <Suspense fallback={null}>
         <Switch>
-          <Route path="/" component={Overview} />
+          <Route path="/" component={Home} />
           <Route path="/plays" component={Plays} />
 
           <Route path="/music">
@@ -76,13 +74,8 @@ export function App() {
           <Route path="/patterns/skips" component={Skips} />
           <Route path="/patterns/places" component={Places} />
 
-          <Route path="/for-you">
-            <Redirect to="/for-you/picks" replace />
-          </Route>
-          <Route path="/for-you/picks" component={Picks} />
-          <Route path="/for-you/releases" component={Releases} />
-          <Route path="/for-you/playlists" component={Playlists} />
-          <Route path="/for-you/playlists/:kind">{(p) => <PlaylistPage key={p.kind} kind={p.kind} />}</Route>
+          <Route path="/for-you" component={ForYou} />
+          <Route path="/for-you/:kind">{(p) => <PlaylistPage key={p.kind} kind={p.kind} />}</Route>
 
           <Route path="/sets/:id">{(p) => <SetPage key={p.id} id={Number(p.id)} />}</Route>
           <Route path="/sets" component={Sets} />

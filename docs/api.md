@@ -1079,7 +1079,7 @@ Param `limit` (1-100, default 20). `{ "items": [{ "id": 3, "title": "Why did I s
 
 #### `GET /api/ask/threads/:id`
 
-`{ "id": 3, "createdAt": "...", "updatedAt": "...", "turns": [{ "role": "owner" | "assistant", "text": "..." }] }`.
+`{ "id": 3, "title": "...", "createdAt": "...", "updatedAt": "...", "turns": [{ "role": "owner" | "assistant", "text": "..." }] }`. `title` is the first question (up to 120 characters), as in the list.
 
 #### `DELETE /api/ask/threads/:id`
 

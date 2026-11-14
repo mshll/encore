@@ -19,20 +19,20 @@ export function AlbumPage({ artist, album }: { artist: string; album: string }) 
   useDocumentTitle(album);
   if (q.isError)
     return (
-      <Page>
+      <Page crumb={album}>
         <EntityMissing error={q.error} onRetry={() => q.refetch()} title={album} what="album" />
       </Page>
     );
   if (!q.data)
     return (
-      <Page>
+      <Page crumb={album}>
         <EntityLoading />
       </Page>
     );
   const d = q.data;
   const songs = d.tracks.length;
   return (
-    <Page className={dimWhile(q.isPlaceholderData)}>
+    <Page crumb={album} className={dimWhile(q.isPlaceholderData)}>
       <EntityHeader
         kind="album"
         title={d.album}
