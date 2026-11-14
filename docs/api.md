@@ -740,6 +740,43 @@ Body `{ "ids"?: [release id] }`; without `ids`, marks every unseen new release. 
 
 For the weekly digest: `newReleasesSince(db, sinceMs)` in `src/radar/radar.ts` returns releases flagged new and first seen at or after `sinceMs`, seen or not.
 
+## Library
+
+What state the liked songs and own playlists are in. Read only; changes go through [plans](#cleanup).
+
+**Play class** of a song, from its last listen (a play of 30 s or more; see Metric definitions) and nothing else, so a skip neither condemns a song nor keeps it in rotation: `active` (last listen under 90 days ago), `fading` (90 to 179 days), `dormant` (180 days or more), `never` (no listen since history starts: the `historyStart` setting, else the first stored play). Playlists encore owns (the DJ session playlist, the archive, saved sets: `app_playlists` plus `sets.playlist_id`) are never part of the library; the `library` job does not sync them.
+
+### `GET /api/library/analysis`
+
+```json
+{ "library": { "savedTracks": 1979, "playlists": 23, "syncing": false, "lastSyncAt": "..." },
+  "historyStart": "2024-11-01",
+  "rules": { "fadingAfterDays": 90, "dormantAfterDays": 180, "unsavedMinListens": 10, "finishedShare": 0.8 },
+  "liked": { "total": 1979, "classes": { "active": 536, "fading": 210, "dormant": 1098, "never": 135 } },
+  "savedMonths": [{ "month": "2024-12", "active": 12, "fading": 4, "dormant": 80, "never": 9 }],
+  "artists": [{ "artist": "Kendrick Lamar", "total": 60, "active": 10, "fading": 6, "dormant": 40, "never": 4 }],
+  "playlists": [{ "id": "...", "name": "AMF", "items": 181, "songs": 173, "duplicates": 8,
+                  "classes": { "active": 51, "fading": 24, "dormant": 83, "never": 15 }, "lastPlayed": "...",
+                  "overlap": { "id": "...", "name": "2k24 h-h", "shared": 109 } }],
+  "overlaps": [{ "a": { "id": "...", "name": "AMF" }, "b": { "id": "...", "name": "2k24 h-h" }, "shared": 109 }],
+  "unsaved": { "total": 35, "songs": [{ "songKey": "...", "uri": "...", "name": "Wonderwall", "artist": "Oasis", "albumArtUrl": "...", "listens": 46, "lastPlayed": "..." }] } }
+```
+
+`savedMonths` counts liked songs by local month saved. `artists`: the 12 with the most dormant plus never-played liked songs. Playlist `classes` count songs (merged by `songKey`); `items` counts entries, `duplicates` the extra copies; `lastPlayed` is the last listen of any song in it (Spotify does not report which plays came from a playlist). `overlaps`: the 10 playlist pairs sharing the most songs. `unsaved`: songs with 10 or more listens not in the liked songs (any version), most listened first, first 8.
+
+### `GET /api/library/songs`
+
+The songs behind a figure. Params: `kind` = `songs` (default) | `duplicates` | `unsaved`; for `songs` and `duplicates`, `where` = `liked` or a playlist id (an app-owned or unknown playlist has no songs); for `songs`, optional `classes` (comma separated), `artist` (exact), `savedMonth` (`YYYY-MM`, month saved or added); `limit` (1-500, default 100), `offset`. Sorted by last listen, oldest first (`unsaved`: most listens first).
+
+```json
+{ "group": { "kind": "songs", "where": "liked", "classes": ["dormant"] }, "total": 1098, "limit": 100, "offset": 0,
+  "items": [{ "uri": "...", "where": { "kind": "liked" }, "positions": [], "reason": "Last played Mar 2025, 3 listens in all",
+              "name": "...", "artist": "...", "album": "...", "albumArtUrl": "...", "songKey": "...", "plays": 5, "listens": 3,
+              "lastPlayed": "...", "finishedShare": 0.4, "addedAt": "...", "playClass": "dormant" }] }
+```
+
+`where` for playlist songs is `{ "kind": "playlist", "id", "name" }` and `positions` lists every position of the song in it. `finishedShare`: plays reaching 80% of the song's length over plays with a known time played (`null` for API-only plays). `reason` states the evidence in plain words.
+
 ## Cleanup
 
 Proposals only; nothing is removed until the owner applies a selected batch here. The `library` job syncs saved songs (`GET /me/tracks`) and the items of playlists the owner owns (`GET /me/playlists`, then `GET /playlists/{id}/items` for playlists whose snapshot changed), one page call every `LIBRARY_PAGE_SECONDS` (20), a full pass every `LIBRARY_SYNC_HOURS` (24). The cursor is stored, so a restart resumes the pass. App-owned playlists are skipped. Proposals are rebuilt after each pass; dismissed and applied ones keep their status.
