@@ -17,7 +17,7 @@ describe("auth gating", () => {
   test("health and session status are public, data routes are not", async () => {
     const { request } = testApp();
     expect((await request("/api/health")).status).toBe(200);
-    expect(await (await request("/api/auth/session")).json()).toEqual({ authenticated: false, setupRequired: true });
+    expect(await (await request("/api/auth/session")).json()).toEqual({ authenticated: false, setupRequired: true, setupTokenConfigured: true });
     for (const path of ["/api/status", "/api/stats/overview", "/api/history", "/api/spotify/authorize", "/api/entities/artist?name=x", "/api/search?q=x", "/api/nope"]) {
       const res = await request(path);
       expect(res.status).toBe(401);
@@ -52,7 +52,7 @@ describe("auth gating", () => {
     expect(login.headers.get("set-cookie")).toContain("SameSite=Lax");
 
     expect((await request("/api/stats/overview", { headers: { cookie } })).status).toBe(200);
-    expect(await (await request("/api/auth/session", { headers: { cookie } })).json()).toEqual({ authenticated: true, setupRequired: false });
+    expect(await (await request("/api/auth/session", { headers: { cookie } })).json()).toEqual({ authenticated: true, setupRequired: false, setupTokenConfigured: true });
 
     await request("/api/auth/logout", { method: "POST", headers: { cookie } });
     expect((await request("/api/stats/overview", { headers: { cookie } })).status).toBe(401);

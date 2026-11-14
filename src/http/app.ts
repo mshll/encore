@@ -15,11 +15,13 @@ import { discordRoutes } from "./routes/discord";
 import { djRoutes } from "./routes/dj";
 import { importRoutes } from "./routes/imports";
 import { mcpRoutes } from "./routes/mcp";
+import { onboardingRoutes } from "./routes/onboarding";
 import { playerRoutes } from "./routes/player";
 import { radarRoutes } from "./routes/radar";
 import { runRoutes } from "./routes/runs";
 import { callbackRoute, spotifyRoutes } from "./routes/spotify";
 import { entityRoutes, historyRoutes, searchRoutes, statsRoutes } from "./routes/stats";
+import { settingsRoutes } from "./routes/settings";
 import { statusRoutes } from "./routes/status";
 import { tagRoutes } from "./routes/tags";
 import { trackRoutes } from "./routes/tracks";
@@ -79,6 +81,8 @@ export function createApp(deps: Deps) {
 
   app.use("/api/*", requireSession);
   app.route("/api/status", statusRoutes);
+  app.route("/api/settings", settingsRoutes);
+  app.route("/api/onboarding", onboardingRoutes);
   app.route("/api/spotify", spotifyRoutes);
   app.route("/api/stats", statsRoutes);
   app.route("/api/entities", entityRoutes);

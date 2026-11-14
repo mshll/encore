@@ -2,6 +2,7 @@ import type { Context } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { z } from "zod";
 import { NoActiveDeviceError, PremiumRequiredError } from "../player/api";
+import { SettingsValidationError } from "../settings/store";
 import { SpotifyApiError, SpotifyBlockedError, SpotifyNotConfiguredError, SpotifyNotConnectedError } from "../spotify/errors";
 
 export class ApiError extends Error {
@@ -43,7 +44,7 @@ function spotifyError(error: unknown): ApiError | null {
 }
 
 export function errorResponse(c: Context, raw: unknown) {
-  const error = spotifyError(raw) ?? raw;
+  const error = spotifyError(raw) ?? (raw instanceof SettingsValidationError ? new ApiError(400, "invalid_settings", "Settings validation failed", raw.issues) : raw);
   if (error instanceof ApiError) {
     return c.json({ error: { code: error.code, message: error.message, ...(error.details ? { details: error.details } : {}) } }, error.status);
   }

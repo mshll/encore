@@ -70,11 +70,20 @@ export function keyedSdkTransport(settings: SettingsSource): () => LlmTransport 
   };
 }
 
-/** Checks a key against the Models API, which costs nothing and records nothing in the ledger. Throws when the key or model is rejected. */
+export class LlmKeyRejectedError extends Error {}
+
+/** Checks a key against the Models API, which costs nothing and records nothing in the ledger. Throws LlmKeyRejectedError when the key or model is refused. */
 export type LlmKeyCheck = (apiKey: string, model: string) => Promise<void>;
 
 export const sdkKeyCheck: LlmKeyCheck = async (apiKey, model) => {
-  await new Anthropic({ apiKey, maxRetries: 0, timeout: 15_000 }).models.retrieve(model);
+  try {
+    await new Anthropic({ apiKey, maxRetries: 0, timeout: 15_000 }).models.retrieve(model);
+  } catch (error) {
+    if (error instanceof Anthropic.AuthenticationError) throw new LlmKeyRejectedError("The API key was rejected");
+    if (error instanceof Anthropic.PermissionDeniedError) throw new LlmKeyRejectedError("This key is not allowed to use the API");
+    if (error instanceof Anthropic.NotFoundError) throw new LlmKeyRejectedError(`Model ${model} is not available to this key`);
+    throw error;
+  }
 };
 
 export class Llm {
