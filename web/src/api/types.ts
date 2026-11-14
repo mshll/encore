@@ -41,6 +41,7 @@ export type Status = {
     scopes: string[];
     missingScopes: string[];
     paused: null | { reason: "rate_limited" | "quota_exceeded"; until: string | null; since: string | null };
+    pacing: { minIntervalMs: number; queued: { interactive: number; background: number }; calls: number };
   };
   poll: JobStatus;
   enrichment: JobStatus & {
@@ -53,10 +54,134 @@ export type Status = {
   };
   import: null | { lastImportAt: string | null; result: ImportResult | null };
   tags: { songs: number; tagged: number; coverage: number | null };
-  plays: { plays: number; music: number; api: number };
+  plays: { plays: number; music: number; api: number; live: number };
   live: { watch: JobStatus; radar: JobStatus; library: JobStatus };
   integrations: { discord: boolean; mcp: boolean };
+  llm: LlmStatus;
 };
+
+export type LlmFeature = "sets" | "picks" | "ask" | "notes" | "digest" | "dj";
+
+export type Budget = { month: string; spentUsd: number; capUsd: number; remainingUsd: number; exhausted: boolean };
+
+export type LlmStatus = Budget & {
+  configured: boolean;
+  model: string;
+  byFeature: { feature: LlmFeature; calls: number; usd: number }[];
+  jobs: { picks: JobStatus; digest: JobStatus; outcomes: JobStatus };
+  schedule: { enabled: boolean; picks: Slot; digest: Slot };
+};
+
+export type Slot = { weekday: number; hour: number };
+
+export type Spend = {
+  month: string;
+  byFeature: { feature: LlmFeature; calls: number; usd: number; webSearches: number }[];
+  recent: {
+    id: number;
+    ts: string;
+    feature: LlmFeature;
+    ref: string | null;
+    model: string;
+    requestedModel: string;
+    usd: number;
+    durationMs: number;
+    webSearches: number;
+  }[];
+  budget: Budget;
+  model: string;
+};
+
+export type Artwork = { albumArtUrl: string | null; artistImageUrl: string | null };
+
+export type SetTrack = Artwork & {
+  position: number;
+  kind: "library" | "new";
+  songKey: string;
+  uri: string;
+  name: string;
+  artist: string;
+  album: string | null;
+  reason: string;
+  pinned: boolean;
+  history: { listens: number; lastPlayed: string } | null;
+  outcome: { plays: number; finished: number; skipped: number; firstPlayedAt: string | null };
+  dj: { finished: number; skipped: number };
+};
+
+export type SetChangeTrack = { songKey: string; name: string; artist: string };
+export type SetChange = {
+  version: number;
+  source: "claude" | "owner";
+  message: string | null;
+  added: SetChangeTrack[];
+  removed: SetChangeTrack[];
+  moved: (SetChangeTrack & { from: number; to: number })[];
+  at: string;
+};
+
+export type SetSummary = {
+  id: number;
+  title: string;
+  description: string;
+  request: string;
+  version: number;
+  playlist: { id: string; url: string; savedVersion: number; outdated: boolean } | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type SetDetail = SetSummary & {
+  items: SetTrack[];
+  djSessions: number;
+  conversation: { role: "owner" | "assistant"; text: string }[];
+  changes: SetChange[];
+};
+
+export type SetResult = { set: SetDetail; reply: string | null; changed?: boolean };
+
+export type PickState = "new" | "saved" | "not_now" | "never";
+
+export type Pick = Artwork & {
+  id: number;
+  week: string;
+  position: number;
+  uri: string;
+  songKey: string;
+  name: string;
+  artist: string;
+  album: string | null;
+  releaseDate: string | null;
+  reason: string;
+  source: { url: string; title: string } | null;
+  distance: "near" | "far";
+  state: PickState;
+  stateAt: string | null;
+  outcome: { plays: number; finished: number; playDays: number; inLibrary: boolean; firstPlayedAt: string | null; hit: boolean };
+};
+
+export type PickStats = { settled: number; played: number; hits: number; hitRate: number | null };
+export type PicksWeek = { week: string; picks: Pick[]; stats: PickStats };
+
+export type Block = { id: number; kind: "song" | "artist"; key: string; label: string; reason: string; createdAt: string };
+
+export type AskThread = { id: number; title: string; createdAt: string; updatedAt: string };
+export type AskTurn = { role: "owner" | "assistant"; text: string };
+export type AskResult = { threadId: number; answer: string };
+
+export type Note = Artwork & {
+  songKey: string;
+  uri: string;
+  name: string;
+  artist: string;
+  text: string;
+  sources: { url: string; title: string }[];
+  createdAt: string;
+  cached: boolean;
+};
+
+export type DigestItem = { id: number; kind: "weekly" | "monthly"; periodKey: string; from: string; to: string; title: string; createdAt: string };
+export type Digest = DigestItem & { text: string; facts: Record<string, unknown>; model: string };
 
 export type JobStatus = {
   lastRunAt: string | null;
@@ -232,6 +357,9 @@ export type DjSession = {
   played: { uri: string; outcome: "finished" | "skipped" | string }[];
   skipStreak: number;
   replans: number;
+  replannedAt: string | null;
+  replanSkips: number | null;
+  set: { id: number; title: string } | null;
   startedAt: string;
   endedAt: string | null;
   endReason: "stopped" | "replaced" | "left_playlist" | null;

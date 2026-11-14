@@ -6,10 +6,11 @@ import { useStartSession } from "../player/session";
 import { Icon, MoreHorizontalIcon, PlayIcon, Radio01Icon } from "./Icon";
 
 export type SongRef = { uri: string; name: string };
+export type ExtraAction = { label: string; onSelect: () => void; danger?: boolean };
 
 const POPUP = "popup min-w-48 p-1 outline-none";
 
-function Items({ song, Item, LinkItem }: { song: SongRef; Item: typeof Menu.Item; LinkItem: typeof Menu.LinkItem }) {
+function Items({ song, Item, LinkItem, extra = [] }: { song: SongRef; Item: typeof Menu.Item; LinkItem: typeof Menu.LinkItem; extra?: ExtraAction[] }) {
   const playback = usePlayback();
   return (
     <>
@@ -22,11 +23,17 @@ function Items({ song, Item, LinkItem }: { song: SongRef; Item: typeof Menu.Item
       <LinkItem className="menu-item" href={openInSpotify(song.uri)} target="_blank" rel="noreferrer">
         Open in Spotify
       </LinkItem>
+      {extra.length > 0 && <div role="separator" className="mx-2 my-1 h-px bg-border-default" />}
+      {extra.map((a) => (
+        <Item key={a.label} className={`menu-item ${a.danger ? "text-danger" : ""}`} onClick={a.onSelect}>
+          {a.label}
+        </Item>
+      ))}
     </>
   );
 }
 
-export function SongMenu({ song, className = "" }: { song: SongRef; className?: string }) {
+export function SongMenu({ song, className = "", extra }: { song: SongRef; className?: string; extra?: ExtraAction[] }) {
   return (
     <Menu.Root>
       <Menu.Trigger className={`btn btn-icon btn-transparent shrink-0 ${className}`} aria-label={`Actions for ${song.name}`}>
@@ -35,7 +42,7 @@ export function SongMenu({ song, className = "" }: { song: SongRef; className?: 
       <Menu.Portal>
         <Menu.Positioner side="bottom" align="end" sideOffset={4} className="z-50">
           <Menu.Popup className={POPUP}>
-            <Items song={song} Item={Menu.Item} LinkItem={Menu.LinkItem} />
+            <Items song={song} Item={Menu.Item} LinkItem={Menu.LinkItem} extra={extra} />
           </Menu.Popup>
         </Menu.Positioner>
       </Menu.Portal>
@@ -48,11 +55,13 @@ export function SongContext({
   children,
   className = "",
   element = "li",
+  extra,
 }: {
   song: SongRef;
   children: ReactNode;
   className?: string;
   element?: "li" | "div";
+  extra?: ExtraAction[];
 }) {
   return (
     <ContextMenu.Root>
@@ -62,7 +71,7 @@ export function SongContext({
       <ContextMenu.Portal>
         <ContextMenu.Positioner className="z-50">
           <ContextMenu.Popup className={POPUP}>
-            <Items song={song} Item={ContextMenu.Item} LinkItem={ContextMenu.LinkItem} />
+            <Items song={song} Item={ContextMenu.Item} LinkItem={ContextMenu.LinkItem} extra={extra} />
           </ContextMenu.Popup>
         </ContextMenu.Positioner>
       </ContextMenu.Portal>

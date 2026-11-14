@@ -1,8 +1,24 @@
 import { keepPreviousData, useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import { DEFAULT_TIMEZONE } from "../lib/dates";
 import type { Range } from "../lib/range";
-import { get } from "./client";
+import { ApiError, get } from "./client";
+
+const getOrNull = <T>(path: string, query: Record<string, string>) =>
+  get<T>(path, query).catch((error: unknown) => {
+    if (error instanceof ApiError && error.status === 404) return null;
+    throw error;
+  });
 import type {
+  AskThread,
+  AskTurn,
+  Block,
+  Digest,
+  DigestItem,
+  Note,
+  PicksWeek,
+  SetDetail,
+  SetSummary,
+  Spend,
   Cleanup,
   CleanupBatch,
   CleanupKind,
@@ -160,3 +176,35 @@ export const useCleanup = (kind: CleanupKind | undefined, status: "open" | "dism
   });
 
 export const useCleanupBatches = () => useQuery({ queryKey: ["cleanup", "batches"], queryFn: () => get<{ items: CleanupBatch[] }>("/api/cleanup/batches") });
+
+export const useSets = () =>
+  useQuery({
+    queryKey: ["sets"],
+    queryFn: () => get<{ items: (SetSummary & { tracks: number; covers: string[] })[]; total: number }>("/api/sets", { limit: 100 }),
+  });
+
+export const useSet = (id: number) => useQuery({ queryKey: ["sets", id], queryFn: () => get<SetDetail>(`/api/sets/${id}`), retry: false });
+
+export const usePicks = (week?: string) => useQuery({ queryKey: ["picks", week ?? "current"], queryFn: () => get<PicksWeek>("/api/picks", { week }) });
+
+export const usePickWeeks = () =>
+  useQuery({
+    queryKey: ["picks", "weeks"],
+    queryFn: () => get<{ items: { week: string; picks: number; played: number }[] }>("/api/picks/weeks", { limit: 26 }),
+  });
+
+export const useBlocks = () => useQuery({ queryKey: ["blocks"], queryFn: () => get<{ items: Block[] }>("/api/blocks") });
+
+export const useAskThreads = () => useQuery({ queryKey: ["ask", "threads"], queryFn: () => get<{ items: AskThread[] }>("/api/ask/threads", { limit: 50 }) });
+
+export const useAskThread = (id: number | null) =>
+  useQuery({ queryKey: ["ask", "threads", id], queryFn: () => get<AskThread & { turns: AskTurn[] }>(`/api/ask/threads/${id}`), enabled: id !== null });
+
+export const useNote = (songKey: string) =>
+  useQuery({ queryKey: ["note", songKey], queryFn: () => getOrNull<Note>("/api/notes", { songKey }), staleTime: Infinity });
+
+export const useDigests = () => useQuery({ queryKey: ["digests"], queryFn: () => get<{ items: DigestItem[] }>("/api/digests", { limit: 30 }) });
+
+export const useDigest = (id: number) => useQuery({ queryKey: ["digests", id], queryFn: () => get<Digest>(`/api/digests/${id}`), staleTime: Infinity });
+
+export const useSpend = () => useQuery({ queryKey: ["spend"], queryFn: () => get<Spend>("/api/llm/spend", { limit: 12 }) });

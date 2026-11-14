@@ -3,6 +3,7 @@ export class ApiError extends Error {
     readonly status: number,
     readonly code: string,
     message: string,
+    readonly details?: Record<string, unknown>,
   ) {
     super(message);
   }
@@ -17,9 +18,13 @@ export function withQuery(path: string, query: Query = {}) {
   return qs ? `${path}?${qs}` : path;
 }
 
-async function parseError(res: Response): Promise<ApiError> {
-  const body = (await res.json().catch(() => null)) as { error?: { code?: string; message?: string } } | null;
-  return new ApiError(res.status, body?.error?.code ?? "http_error", body?.error?.message ?? `Request failed with status ${res.status}`);
+type ErrorBody = { error?: { code?: string; message?: string; details?: Record<string, unknown> } };
+
+export const toApiError = (status: number, body: ErrorBody | null) =>
+  new ApiError(status, body?.error?.code ?? "http_error", body?.error?.message ?? `Request failed with status ${status}`, body?.error?.details);
+
+export async function parseError(res: Response): Promise<ApiError> {
+  return toApiError(res.status, (await res.json().catch(() => null)) as ErrorBody | null);
 }
 
 let onUnauthenticated = () => {};
