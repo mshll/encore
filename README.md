@@ -93,6 +93,7 @@ src/taste/               cached taste profile given to Claude
 src/sets/ src/picks/     set building and weekly picks
 src/ask/ src/notes/      questions over the history, liner notes
 src/digest/              weekly and monthly digest facts and text
+src/assistant/           plain entry points for chat integrations
 src/jobs/                scheduler and persisted job state
 src/http/                Hono app and routes
 web/                     UI (Vite + React), built into web/dist; dither-kit charts vendored in web/src/components/dither-kit

@@ -509,6 +509,7 @@ Set shape (`GET /api/sets/:id`, and `set` in create/refine):
   "items": [{
     "position": 1, "kind": "library", "songKey": "woods|mac miller", "uri": "spotify:track:...",
     "name": "Woods", "artist": "Mac Miller", "album": "Circles",
+    "albumArtUrl": "https://i.scdn.co/image/...", "artistImageUrl": "https://i.scdn.co/image/...",
     "reason": "Finished 41 of 44 night plays.",
     "outcome": { "plays": 3, "finished": 2, "skipped": 1, "firstPlayedAt": "..." }
   }],
@@ -517,6 +518,8 @@ Set shape (`GET /api/sets/:id`, and `set` in create/refine):
 ```
 
 - `kind`: `library` (in the history) or `new` (never played, verified on Spotify).
+- `albumArtUrl`, `artistImageUrl`: artwork for the row, or `null` when not known yet. Album art comes from any known version of the song (or the Spotify search result for new songs); the artist image is the primary artist's. Picks and notes carry the same two fields.
+- A refinement that changes mood or direction ("less sad") is applied to every track: familiar songs whose tags conflict with it are rejected unless the owner asked to keep them.
 - `playlist` is `null` until saved. `outdated: true` when the set changed after the last save; saving again updates the same playlist.
 - `outcome` counts plays of the song after the set was saved (or created, if never saved). Refreshed hourly.
 
@@ -550,13 +553,16 @@ Pick shape:
 {
   "id": 7, "week": "2026-11-09", "position": 1, "uri": "spotify:track:...", "songKey": "no love|lyves",
   "name": "No Love", "artist": "Lyves", "album": "...", "releaseDate": "2016-05-20",
+  "albumArtUrl": "https://i.scdn.co/image/...", "artistImageUrl": null,
   "reason": "Sampled on WHEN SPARKS FLY, which you finished 38 times.",
+  "source": { "url": "https://www.whosampled.com/...", "title": "..." },
   "distance": "near", "state": "new", "stateAt": "...",
   "outcome": { "plays": 2, "finished": 2, "playDays": 2, "inLibrary": true, "firstPlayedAt": "...", "hit": true }
 }
 ```
 
 - `distance`: `near` or `far`.
+- `source`: the web search result from the run that supports the reason. A pick is stored only when its source was returned by that run's search and names the song or its artist. `null` only on picks made before this field existed.
 - `state`: `new`, `saved`, `not_now`, `never`. `never` blocks the song from all future suggestions (sets and picks); a second `never` for the same artist blocks the artist. Moving a pick out of `never` lifts those blocks. `not_now` songs may be picked again after 28 days.
 - `outcome.hit`: finished at least once and (played on 2+ days, or in the Spotify library, or state `saved`). Plays are refreshed hourly, library state daily.
 
@@ -588,7 +594,7 @@ Generates this week's picks now. `201 { "week", "picks": [Pick], "stats" }`. `40
 
 ### Ask
 
-Natural-language questions about the listening history. Claude answers from read-only analytics tools and cites the numbers it used. Answers are plain text, may contain light markdown, and end with a "Based on:" line.
+Natural-language questions about the listening history. Claude answers from read-only analytics tools and cites the numbers it used. Answers are plain text (short paragraphs, numbers inline, no markdown; any markdown the model adds is stripped), suitable for a panel or a chat message, and end with a "Based on:" line.
 
 #### `POST /api/ask`
 
@@ -620,13 +626,14 @@ The cached note, or `404` if none yet. Never calls Claude.
 
 ```json
 { "songKey": "woods|mac miller", "uri": "spotify:track:...", "name": "Woods", "artist": "Mac Miller",
+  "albumArtUrl": "https://i.scdn.co/image/...", "artistImageUrl": "https://i.scdn.co/image/...",
   "text": "...", "sources": [{ "url": "https://...", "title": "..." }], "model": "claude-opus-5-5",
   "createdAt": "...", "cached": false }
 ```
 
 ### Digests
 
-Weekly digest (the 7 local days before the run, against the 28 before those) and monthly recap (previous calendar month, against the 3 before it). Numbers are computed in code; Claude only phrases them. Generated at `DIGEST_WEEKDAY`/`DIGEST_HOUR` local time (weekly) and on the 1st at `DIGEST_HOUR` (monthly), or on demand. One digest per kind and period.
+Weekly digest (the 7 local days before the run, against the 28 before those) and monthly recap (previous calendar month, against the 3 before it). Numbers are computed in code; Claude only phrases them. Every number in Claude's text is checked against the facts: on a mismatch Claude rewrites once, and if the rewrite still fails the digest is written from the facts in code (`model: "code"`). Generated at `DIGEST_WEEKDAY`/`DIGEST_HOUR` local time (weekly) and on the 1st at `DIGEST_HOUR` (monthly), or on demand. One digest per kind and period.
 
 #### `GET /api/digests`
 
@@ -661,3 +668,16 @@ Params `month` (`YYYY-MM`, default current local month), `limit` (1-500, default
 ```
 
 `model` in `recent` differs from `requestedModel` when the API fell back to another model.
+
+### Chat integrations
+
+Not HTTP: plain functions in `src/assistant/api.ts` for a chat bot running in the same process. They take the `FeatureContext` the routes use and throw the same typed errors.
+
+| Function | Returns |
+| --- | --- |
+| `createSetFromText(ctx, text)` | `{ id, title, description, tracks, newTracks, lines: ["1. Woods - Mac Miller: reason"], reply }` |
+| `currentPicks(ctx, { generate? })` | Same body as `GET /api/picks` without `playlist`; generates this week's picks first when `generate` is set and none exist |
+| `updatePickState(ctx, pickId, state)` | Pick (blocks applied as for `PATCH /api/picks/:id`) |
+| `askText(ctx, question, threadId?)` | `{ threadId, text }` |
+| `latestDigest(db, kind?)` | Same body as `GET /api/digests/:id`, or `null` |
+
