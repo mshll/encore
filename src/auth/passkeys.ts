@@ -14,6 +14,7 @@ import { passkeys } from "../db/schema";
 type Ceremony = "register" | "login";
 
 const challengeTtlMs = 5 * 60_000;
+const maxChallenges = 1000;
 const ownerUserId = new TextEncoder().encode("encore-owner");
 
 export class PasskeyError extends Error {}
@@ -100,7 +101,10 @@ export class Passkeys {
 
   private remember(challenge: string, ceremony: Ceremony) {
     const now = this.now();
-    for (const [key, value] of this.challenges) if (value.expiresAt < now) this.challenges.delete(key);
+    for (const [key, value] of this.challenges) {
+      if (value.expiresAt >= now && this.challenges.size < maxChallenges) break;
+      this.challenges.delete(key);
+    }
     this.challenges.set(challenge, { ceremony, expiresAt: now + challengeTtlMs });
   }
 

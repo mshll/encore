@@ -2,10 +2,12 @@ import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { Hono } from "hono";
 import { serveStatic } from "hono/bun";
+import { secureHeaders } from "hono/secure-headers";
 import { API_BODY_BYTES, limitBody, PRE_AUTH_BODY_BYTES } from "./bodyLimits";
 import type { Deps, Env } from "./context";
 import { ApiError, errorResponse } from "./errors";
 import { guardWrites, requireSession, requireSessionOrAdmin } from "./middleware";
+import { rateLimit } from "./rateLimit";
 import { authRoutes } from "./routes/auth";
 import { askRoutes, blockRoutes, digestRoutes, llmRoutes, noteRoutes, pickRoutes, setRoutes } from "./routes/assistant";
 import { cleanupRoutes } from "./routes/cleanup";
@@ -28,7 +30,30 @@ export function createApp(deps: Deps) {
     await next();
   });
   app.onError((error, c) => errorResponse(c, error));
+  app.use(
+    secureHeaders({
+      contentSecurityPolicy: {
+        defaultSrc: ["'self'"],
+        scriptSrc: ["'self'"],
+        styleSrc: ["'self'", "'unsafe-inline'"],
+        imgSrc: ["'self'", "data:", "blob:", "https:"],
+        fontSrc: ["'self'", "data:"],
+        connectSrc: ["'self'"],
+        frameAncestors: ["'none'"],
+        baseUri: ["'self'"],
+        formAction: ["'self'"],
+        objectSrc: ["'none'"],
+      },
+      strictTransportSecurity: deps.config.secureCookies ? "max-age=31536000" : false,
+      referrerPolicy: "same-origin",
+    }),
+  );
+  app.use("/api/*", async (c, next) => {
+    await next();
+    c.header("Cache-Control", "no-store");
+  });
 
+  const authLimit = rateLimit(20, 60_000);
   const preAuthLimit = limitBody(PRE_AUTH_BODY_BYTES);
   const apiLimit = limitBody(API_BODY_BYTES);
   app.use("/mcp", preAuthLimit);
@@ -40,6 +65,7 @@ export function createApp(deps: Deps) {
   app.get("/api/health", (c) => c.json({ ok: true }));
   app.route("/api/discord", discordRoutes);
   app.use("/api/*", guardWrites(["/api/import"]));
+  app.use("/api/auth/*", async (c, next) => (c.req.method === "GET" ? next() : authLimit(c, next)));
   app.route("/api/auth", authRoutes);
   app.route("/", callbackRoute);
   app.route("/mcp", mcpRoutes(deps));

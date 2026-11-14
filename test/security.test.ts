@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { createSession } from "../src/auth/sessions";
-import { testApp } from "./helpers";
+import { Passkeys } from "../src/auth/passkeys";
+import { testApp, testConfig, testDb } from "./helpers";
 
 const ADMIN = "admin-token-admin-token-123";
 
@@ -107,5 +108,42 @@ describe("import upload limits", () => {
     const res = await app.request("/api/import", { method: "POST", headers: { cookie, origin: "http://localhost:8888" }, body: multipart([{ name: "Streaming_History_Audio_2026.json", bytes: 50 * 1024 * 1024 + 1 }]) });
     expect(res.status).toBe(413);
     expect(await errorCode(res)).toBe("file_too_large");
+  });
+});
+
+describe("pre-auth hardening", () => {
+  test("auth writes are limited to 20 a minute per client, session reads are not", async () => {
+    const { app } = testApp();
+    const hit = () => app.request("/api/auth/login/options", { method: "POST", headers: { "cf-connecting-ip": "203.0.113.9" } });
+    for (let i = 0; i < 20; i++) expect((await hit()).status).toBe(200);
+    const blocked = await hit();
+    expect(blocked.status).toBe(429);
+    expect(Number(blocked.headers.get("retry-after"))).toBeGreaterThan(0);
+    expect((await app.request("/api/auth/login/options", { method: "POST", headers: { "cf-connecting-ip": "203.0.113.10" } })).status).toBe(200);
+    expect((await app.request("/api/auth/session", { headers: { "cf-connecting-ip": "203.0.113.9" } })).status).toBe(200);
+  });
+
+  test("the challenge store never grows past 1,000 entries", async () => {
+    const passkeys = new Passkeys(testDb(), testConfig());
+    for (let i = 0; i < 1005; i++) await passkeys.authenticationOptions();
+    expect((passkeys as unknown as { challenges: Map<string, unknown> }).challenges.size).toBe(1000);
+  });
+
+  test("every response carries the security headers and API responses are not cached", async () => {
+    const { app } = testApp();
+    for (const path of ["/api/health", "/api/status"]) {
+      const res = await app.request(path);
+      expect(res.headers.get("content-security-policy")).toContain("frame-ancestors 'none'");
+      expect(res.headers.get("x-content-type-options")).toBe("nosniff");
+      expect(res.headers.get("cache-control")).toBe("no-store");
+    }
+  });
+
+  test("an https deployment uses a __Host- session cookie", async () => {
+    const { app, db, config } = testApp({ PUBLIC_BASE_URL: "https://encore.example" });
+    expect(config.secureCookies).toBe(true);
+    const id = createSession(db);
+    expect((await app.request("/api/status", { headers: { cookie: `__Host-encore_session=${id}` } })).status).toBe(200);
+    expect((await app.request("/api/status", { headers: { cookie: `encore_session=${id}` } })).status).toBe(401);
   });
 });
