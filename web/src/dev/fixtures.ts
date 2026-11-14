@@ -20,6 +20,10 @@
     ?run=unconfigured Claude has no API key (status and the run answer 503)
     ?run=paused       Spotify calls are paused (status and the run answer 503 spotify_paused)
     Every run fixture answers POSTs itself: no Claude call, no Spotify call.
+    ?settings=env     every setting is set by an env var, none saved in the dashboard yet
+    ?settings=stored  every setting is set by an env var and also saved in the dashboard
+    ?settings=mixed   Spotify, locale and Claude settings are set by env vars, the rest are not; no SECRETS_KEY
+    Settings fixtures answer POST /api/settings/adopt-env themselves: nothing is written.
 
   The choice sticks for the tab (sessionStorage) so in-app navigation keeps it; ?fixture=off clears it.
 */
@@ -27,7 +31,7 @@
 type Json = Record<string, unknown>;
 
 const params = new URLSearchParams(location.search);
-for (const key of ["fixture", "player", "run", "dj"]) {
+for (const key of ["fixture", "player", "run", "dj", "settings"]) {
   const value = params.get(key);
   if (value === "off") sessionStorage.removeItem(`encore-${key}`);
   else if (value) sessionStorage.setItem(`encore-${key}`, value);
@@ -36,6 +40,7 @@ const fixture = sessionStorage.getItem("encore-fixture");
 const player = sessionStorage.getItem("encore-player");
 const run = sessionStorage.getItem("encore-run");
 const dj = sessionStorage.getItem("encore-dj");
+const settingsFixture = sessionStorage.getItem("encore-settings");
 
 const LONG_ARTIST = "Bùi Thị Xuân Hương and the Extraordinarily Long-Named Orchestra of Hồ Chí Minh City";
 const LONG_SONG = "Somewhere Only We Know (Live at the Royal Albert Hall, 14 February 2004) [2024 Remaster]";
@@ -250,6 +255,48 @@ const PLAYING_NOW = {
 
 const realFetch = window.fetch.bind(window);
 
+const MIXED_ENV_GROUPS = ["spotify", "locale", "claude"];
+const ENV_SAMPLES: Record<string, unknown> = { spotifyClientId: "3f9a1c0b7d2e4a6b8c0d1e2f3a4b5c6d", homeCountry: "KW", discordPublicKey: "a".repeat(64) };
+let settingsAdopted = settingsFixture === "stored";
+
+/** The real settings with fields moved to env, as an install configured only by env vars reads. */
+async function envSettings(): Promise<Json & { groups: { id: string; fields: Json[] }[] }> {
+  const body = (await realFetch("/api/settings").then((r) => r.json())) as Json & { groups: { id: string; fields: Json[] }[] };
+  const mixed = settingsFixture === "mixed";
+  const groups = body.groups.map((g) =>
+    mixed && !MIXED_ENV_GROUPS.includes(g.id)
+      ? g
+      : {
+          ...g,
+          fields: g.fields.map((f) => ({
+            ...f,
+            value: f.secret ? null : (f.value ?? ENV_SAMPLES[f.key as string] ?? "123456789012345678"),
+            source: "env",
+            locked: true,
+            set: true,
+            hint: f.secret ? "WXYZ" : null,
+            unreadable: false,
+            stored: settingsAdopted && !(mixed && f.secret),
+          })),
+        },
+  );
+  return { ...body, groups, secretStorage: { available: !mixed, envVar: "SECRETS_KEY" } };
+}
+
+async function settingsFixtureAnswer(path: string, method: string): Promise<Response | null> {
+  if (path === "/api/settings" && method === "GET") return json(await envSettings());
+  if (path !== "/api/settings/adopt-env" || method !== "POST") return null;
+  settingsAdopted = true;
+  const view = await envSettings();
+  const env = view.groups.flatMap((g) => g.fields).filter((f) => f.source === "env");
+  return json({
+    ...view,
+    adopted: env.filter((f) => f.stored).map((f) => f.key),
+    replaced: [],
+    skipped: env.filter((f) => !f.stored).map((f) => ({ key: f.key, reason: "secrets_key_missing" })),
+  });
+}
+
 async function djSession() {
   const sets = (await realFetch("/api/sets").then((r) => r.json())) as { items: { id: number; title: string }[] };
   const set = sets.items[0];
@@ -387,6 +434,10 @@ window.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
   }
   if (run) {
     const answer = await runFixture(path, method, init?.signal);
+    if (answer) return answer;
+  }
+  if (settingsFixture) {
+    const answer = await settingsFixtureAnswer(path, method);
     if (answer) return answer;
   }
   if (!fixture || method !== "GET") return realFetch(input, init);

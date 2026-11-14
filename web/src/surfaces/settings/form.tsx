@@ -273,7 +273,7 @@ export function SettingFieldRow({ field, form, hint, storage = true }: { field: 
   const label = settingLabel(field.key);
   if (field.locked)
     return (
-      <SettingRow label={label} hint={`Set by ${field.env} on the server.`}>
+      <SettingRow label={label} hint={`Set by ${field.env} on the server${field.stored ? ", also saved here" : ""}.`}>
         {(control) => (
           <p id={control.id} className="flex min-h-(--control-h) items-center break-all text-primary md:justify-end md:text-right">
             {displayValue(field)}
