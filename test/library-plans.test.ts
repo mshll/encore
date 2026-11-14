@@ -5,7 +5,7 @@ import type { Db } from "../src/db/client";
 import { appPlaylists, cleanupBatches, cleanupProposals, libraryPlans, llmThreads, ownedPlaylists, playlistItems, savedTracks, sets } from "../src/db/schema";
 import { getBatch, recoverInterrupted, startApply, startUndo } from "../src/library/apply";
 import { loadLibrary } from "../src/library/analysis";
-import { getPlan, planFromGroup, updateItems } from "../src/library/plans";
+import { createPlan, getPlan, planFromGroup, updateItems } from "../src/library/plans";
 import { CLEANUP_RULES, computeProposals, ensureRulePlans, refreshProposals, rulePlanIds } from "../src/library/rules";
 import { SpotifyAuth } from "../src/spotify/auth";
 import { SpotifyClient } from "../src/spotify/client";
@@ -290,6 +290,19 @@ describe("applying a plan", () => {
     await apply(deps, planId);
 
     expect(account.liked).toEqual([first!.uri]);
+  });
+
+  test("a group selection changes only the items of that action on that place", () => {
+    const { db } = setup({ liked: [], playlists: new Map(), created: 0 }, ["a", "b"]);
+    const item = (u: string, playlistId: string | null) => ({ action: "archive" as const, playlistId, uri: uri(u), reason: "r", evidence: {} });
+    const planId = createPlan(db, { source: "claude", title: "t", summary: "", items: [item("a", null), item("b", null), item("a", "p1")] }, NOW);
+
+    updateItems(db, planId, { ids: { action: "archive", where: "liked" }, action: "remove" }, NOW);
+
+    expect(getPlan(db, planId, { status: "open", limit: 10, offset: 0 }).groups.map((g) => [g.action, g.where.kind, g.items])).toEqual([
+      ["remove", "liked", 2],
+      ["archive", "playlist", 1],
+    ]);
   });
 
   test("library writes go in batches of 40: 45 liked songs archived cost 1 create, 1 archive add and 2 removals", async () => {

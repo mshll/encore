@@ -2,7 +2,7 @@ import { Hono } from "hono";
 import { z } from "zod";
 import type { Context } from "hono";
 import { count, eq } from "drizzle-orm";
-import { libraryPlans, ownedPlaylists, savedTracks, STANDING_CADENCES } from "../../db/schema";
+import { libraryPlans, ownedPlaylists, PLAN_ACTIONS, savedTracks, STANDING_CADENCES } from "../../db/schema";
 import { libraryCursor } from "../../jobs/definitions";
 import { entryEvidence, groupEntries, libraryAnalysis, loadLibrary, plainReason, PLAY_CLASSES, songGroup } from "../../library/analysis";
 import { BatchBusyError, BatchNotFoundError, getBatch, listBatches, startApply, startUndo, type Started } from "../../library/apply";
@@ -29,7 +29,11 @@ const groupQuery = z
   .transform((q) => (q.kind === "unsaved" ? { kind: q.kind } : q.kind === "duplicates" ? { kind: q.kind, where: q.where } : q));
 
 const id = z.coerce.number().int().positive();
-const selection = z.union([z.array(z.number().int().positive()).min(1).max(5000), z.literal("all")]);
+const byId = z.union([z.array(z.number().int().positive()).min(1).max(5000), z.literal("all")]);
+const selection = z.union([
+  byId,
+  z.strictObject({ action: z.enum(PLAN_ACTIONS), where: z.string().min(1) }),
+]);
 
 function planError(error: unknown): never {
   if (error instanceof PlanNotFoundError || error instanceof BatchNotFoundError) throw new ApiError(404, "not_found", "Not found");
@@ -85,7 +89,7 @@ export const planRoutes = new Hono<Env>()
     return c.json(guarded(() => dismissPlan(db, parse(id, c.req.param("id")), ids, now())));
   })
   .post("/:id/restore", async (c) => {
-    const { ids } = parse(z.strictObject({ ids: selection.default("all") }), await jsonBody(c));
+    const { ids } = parse(z.strictObject({ ids: byId.default("all") }), await jsonBody(c));
     const { db, now } = c.var.deps;
     return c.json(guarded(() => restorePlan(db, parse(id, c.req.param("id")), ids, now())));
   })

@@ -744,7 +744,7 @@ For the weekly digest: `newReleasesSince(db, sinceMs)` in `src/radar/radar.ts` r
 
 What state the liked songs and own playlists are in. Read only; changes go through [plans](#plans).
 
-**Play class** of a song, from its last listen (a play of 30 s or more; see Metric definitions) and nothing else, so a skip neither condemns a song nor keeps it in rotation: `active` (last listen under 90 days ago), `fading` (90 to 179 days), `dormant` (180 days or more), `never` (no listen since history starts: the `historyStart` setting, else the first stored play). Playlists encore owns (the DJ session playlist, the archive, saved sets: `app_playlists` plus `sets.playlist_id`) are never part of the library; the `library` job does not sync them.
+**Play class** of a song, from its last listen (a play of 30 s or more; see Metric definitions) and nothing else, so a skip neither condemns a song nor keeps it in rotation: `active` (last listen under 90 days ago), `fading` (90 to 179 days), `dormant` (180 days or more), `never` (no listen since history starts: the `historyStart` setting, else the first stored play). Playlists encore owns (the DJ session playlist, the archive, saved sets, self-updating playlists: `app_playlists`, `sets.playlist_id` and `living_playlists.playlist_id` once that table exists) are never part of the library; the `library` job does not sync them.
 
 ### `GET /api/library/analysis`
 
@@ -834,11 +834,11 @@ Params: `status` = `open` (default) | `dismissed` | `applied` | `skipped`, `limi
 
 ### `PATCH /api/library/plans/:id/items`
 
-Body `{ "ids": [17, 18] | "all", "included"?: false, "action"?: "archive" | "remove" }`. Only open items of an open plan; `action` only on items that take a song out (with `"all"`, the others are left as they are). `{ "updated": 2 }`.
+Body `{ "ids": [17, 18] | "all" | { "action": "archive", "where": "liked" | "<playlist id>" }, "included"?: false, "action"?: "archive" | "remove" }`. The object form is one group of `groups`. Only open items of an open plan; `action` only on items that take a song out (with `"all"` or a group, the others are left as they are). `{ "updated": 2 }`.
 
 ### `POST /api/library/plans/:id/dismiss` and `/restore`
 
-Body `{ "ids"?: [...] | "all" }` (default `"all"`). A rule plan dismisses (restores) items; another plan with `"all"` is dismissed (restored) whole. `{ "dismissed": 3 }`, `{ "restored": 3 }`.
+Body `{ "ids"?: [...] | "all" }` (default `"all"`; dismiss also takes a group). A rule plan dismisses (restores) items; another plan with `"all"` is dismissed (restored) whole. `{ "dismissed": 3 }`, `{ "restored": 3 }`.
 
 ### `POST /api/library/plans/:id/apply`
 

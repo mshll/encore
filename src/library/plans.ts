@@ -201,13 +201,18 @@ export function getPlan(db: Db, id: number, page: { status: (typeof ITEM_STATUSE
   };
 }
 
-function openItems(db: Db, planId: number, ids: number[] | "all") {
+/** Items by id, every item ("all"), or one group: an action on one place (`where` = "liked" or a playlist id). */
+export type Selection = number[] | "all" | { action: PlanAction; where: string };
+
+function openItems(db: Db, planId: number, ids: Selection) {
+  const byId = Array.isArray(ids);
   const rows = db
     .select()
     .from(cleanupProposals)
-    .where(and(eq(cleanupProposals.planId, planId), eq(cleanupProposals.status, "open"), ids === "all" ? undefined : inArray(cleanupProposals.id, ids)))
-    .all();
-  if (ids !== "all") {
+    .where(and(eq(cleanupProposals.planId, planId), eq(cleanupProposals.status, "open"), byId ? inArray(cleanupProposals.id, ids) : undefined))
+    .all()
+    .filter((r) => byId || ids === "all" || (actionOf(r) === ids.action && (r.playlistId ?? "liked") === ids.where));
+  if (byId) {
     const missing = ids.filter((id) => !rows.some((r) => r.id === id));
     if (missing.length) throw new PlanSelectionError("Some items are not open in this plan", missing);
   }
@@ -215,12 +220,12 @@ function openItems(db: Db, planId: number, ids: number[] | "all") {
 }
 
 /** Ticks or unticks items, or switches take-out items between archive and remove. `ids: "all"` covers every open item. */
-export function updateItems(db: Db, planId: number, change: { ids: number[] | "all"; included?: boolean; action?: "archive" | "remove" }, now: number) {
+export function updateItems(db: Db, planId: number, change: { ids: Selection; included?: boolean; action?: "archive" | "remove" }, now: number) {
   const plan = getPlanRow(db, planId);
   if (plan.status !== "open") throw new PlanSelectionError("The plan is not open");
   const rows = openItems(db, planId, change.ids);
   const targets = change.action ? rows.filter((r) => TAKE_OUT.includes(actionOf(r))) : rows;
-  if (change.action && change.ids !== "all" && targets.length !== rows.length)
+  if (change.action && Array.isArray(change.ids) && targets.length !== rows.length)
     throw new PlanSelectionError("Only songs taken out can switch between archive and remove", rows.filter((r) => !targets.includes(r)).map((r) => r.id));
   const ids = targets.map((r) => r.id);
   if (ids.length)
@@ -232,7 +237,7 @@ export function updateItems(db: Db, planId: number, change: { ids: number[] | "a
 }
 
 /** A rule plan stays open; dismissing it dismisses its open items (or the given ones). Another plan is dismissed whole. */
-export function dismissPlan(db: Db, planId: number, ids: number[] | "all", now: number) {
+export function dismissPlan(db: Db, planId: number, ids: Selection, now: number) {
   const plan = getPlanRow(db, planId);
   if (plan.source !== "rule" && ids === "all") {
     db.update(libraryPlans).set({ status: "dismissed", updatedAt: now }).where(eq(libraryPlans.id, planId)).run();
