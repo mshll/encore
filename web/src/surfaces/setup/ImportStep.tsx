@@ -134,7 +134,7 @@ export function ImportStep({ step, timezone }: { step: Onboarding["steps"]["impo
       {tooBig.length > 0 && <Notice tone="danger">Files over 50 MB cannot be uploaded: {tooBig.map((f) => f.name).join(", ")}.</Notice>}
       {problem && <Notice tone="danger">{problem}</Notice>}
       {files.length > 0 && !uploading && (
-        <Button variant="primary" className="self-end" disabled={tooBig.length > 0} onClick={() => void upload()}>
+        <Button variant={step.done ? "secondary" : "primary"} className="self-end" disabled={tooBig.length > 0} onClick={() => void upload()}>
           Import {fmtInt(files.length)} {files.length === 1 ? "file" : "files"}
         </Button>
       )}

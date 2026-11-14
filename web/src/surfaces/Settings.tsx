@@ -172,7 +172,7 @@ function SpotifyTab({ status }: { status: Status }) {
         form={form}
         hints={changing ? { spotifyClientId: "Saving a new ID disconnects Spotify until you connect again." } : undefined}
         effectAction={
-          <Button size="sm" variant="accent" busy={connect.isPending} onClick={() => connect.mutate()}>
+          <Button size="sm" busy={connect.isPending} busyLabel="Opening Spotify" onClick={() => connect.mutate()}>
             Connect Spotify
           </Button>
         }

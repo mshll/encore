@@ -270,7 +270,7 @@ function ConnectStep({ o, frame, onNext, onPick }: StepProps) {
       </p>
       {missing && <Notice tone="warning">Spotify has not granted {s.missingScopes.join(", ")}. Connect again to grant them.</Notice>}
       {(!s.done || missing) && (
-        <Button variant="accent" className="self-start" busy={busy} busyLabel="Opening Spotify" onClick={() => void connect()}>
+        <Button variant={s.done ? "secondary" : "accent"} className="self-start" busy={busy} busyLabel="Opening Spotify" onClick={() => void connect()}>
           {s.done ? "Connect again" : "Connect Spotify"}
         </Button>
       )}
