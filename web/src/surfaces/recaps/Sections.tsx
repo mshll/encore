@@ -158,7 +158,7 @@ export function Songs({ s, title, actions }: { s: Of<"songs">; title: string; ac
           <TrackRow
             key={t.songKey}
             rank={i + 1}
-            song={{ songKey: t.songKey, uri: t.uri ?? "", name: t.name, artist: t.artist, album: null, albumArtUrl: t.albumArtUrl, hours: t.hours, plays: t.listens, listens: t.listens, skips: 0, skipRate: null, quickSkips: 0, firstPlayed: null, lastPlayed: null }}
+            song={{ songKey: t.songKey, uri: t.uri ?? "", name: t.name, artist: t.artist, album: null, albumArtUrl: t.albumArtUrl, hours: t.hours, plays: t.listens, listens: t.listens, skips: 0, skipRate: null, earlySkips: 0, firstPlayed: null, lastPlayed: null }}
             value={plural(t.listens, "play", "plays")}
           />
         ))}
