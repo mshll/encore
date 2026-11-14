@@ -7,7 +7,7 @@ import { pollRecentlyPlayed } from "../src/ingest/live/poller";
 import { importExport } from "../src/ingest/export/import";
 import { SpotifyAuth } from "../src/spotify/auth";
 import { SpotifyClient } from "../src/spotify/client";
-import { SpotifyBlockedError } from "../src/spotify/errors";
+import { SpotifyBlockedError, SpotifyNotConnectedError } from "../src/spotify/errors";
 import type { SpotifyTrack } from "../src/spotify/types";
 import { jsonResponse, play, seed, testConfig, testDb, track, TZ, uri } from "./helpers";
 
@@ -33,7 +33,7 @@ function setup(handler: Handler, now = () => 1_000_000_000_000) {
 }
 
 function connect(db: ReturnType<typeof testDb>, expiresAt: number) {
-  db.insert(spotifyAuthTable).values({ id: 1, accessToken: "old-access", refreshToken: "refresh-1", expiresAt, scope: "user-read-recently-played", updatedAt: 0 }).run();
+  db.insert(spotifyAuthTable).values({ id: 1, accessToken: "old-access", refreshToken: "refresh-1", expiresAt, scope: "user-read-recently-played", clientId: "test-client", updatedAt: 0 }).run();
 }
 
 const spotifyTrack = (id: string, name: string, artist: string, durationMs = 180000): SpotifyTrack => ({
@@ -239,6 +239,13 @@ describe("enrichment", () => {
     setJobState(db, "spotify", { data: { reason: "rate_limited", blockedUntil: now() + 60_000, at: now() } });
     expect(await fetchAlbumArt(db, client, 5)).toEqual({ attempted: 1, found: 0, failed: 1 });
     expect(calls).toHaveLength(3);
+  });
+
+  test("a grant issued to another Spotify app counts as not connected", async () => {
+    const { db, client, auth, now } = setup(() => jsonResponse({ id: "me" }));
+    db.insert(spotifyAuthTable).values({ id: 1, accessToken: "a", refreshToken: "r", expiresAt: now() + 3_600_000, scope: "", clientId: "other-app", updatedAt: 0 }).run();
+    expect(auth.status().connected).toBe(false);
+    await expect(client.me()).rejects.toBeInstanceOf(SpotifyNotConnectedError);
   });
 
   test("a pause recorded for another Spotify app does not block this one", async () => {

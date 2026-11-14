@@ -72,8 +72,14 @@ export class SpotifyAuth {
     this.save(tokens.access_token, tokens.refresh_token, tokens.expires_in, tokens.scope ?? "");
   }
 
-  status() {
+  /** The stored grant, if it was issued to the configured Spotify app. A grant from another app cannot be refreshed and its calls count against that app. */
+  private grant() {
     const row = this.db.select().from(spotifyAuth).where(eq(spotifyAuth.id, 1)).get();
+    return row?.clientId === this.config.spotifyClientId ? row : undefined;
+  }
+
+  status() {
+    const row = this.grant();
     return row ? { connected: true, scopes: row.scope.split(" ").filter(Boolean), userId: row.spotifyUserId } : { connected: false, scopes: [], userId: null };
   }
 
@@ -86,7 +92,7 @@ export class SpotifyAuth {
   }
 
   async accessToken(forceRefresh = false): Promise<string> {
-    const row = this.db.select().from(spotifyAuth).where(eq(spotifyAuth.id, 1)).get();
+    const row = this.grant();
     if (!row) throw new SpotifyNotConnectedError();
     if (!forceRefresh && row.expiresAt - refreshMarginMs > this.now()) return row.accessToken;
     this.refreshing ??= this.refresh(row.refreshToken).finally(() => {
@@ -103,18 +109,19 @@ export class SpotifyAuth {
       if (error instanceof SpotifyAuthError && error.message.includes("invalid_grant")) this.disconnect();
       throw error;
     }
-    const row = this.db.select().from(spotifyAuth).where(eq(spotifyAuth.id, 1)).get();
+    const row = this.grant();
     this.save(tokens.access_token, tokens.refresh_token ?? refreshToken, tokens.expires_in, tokens.scope ?? row?.scope ?? "");
     return tokens.access_token;
   }
 
   private save(accessToken: string, refreshToken: string, expiresIn: number, scope: string) {
     const now = this.now();
-    const values = { id: 1, accessToken, refreshToken, expiresAt: now + expiresIn * 1000, scope, updatedAt: now };
+    const clientId = this.config.spotifyClientId;
+    const values = { id: 1, accessToken, refreshToken, expiresAt: now + expiresIn * 1000, scope, clientId, updatedAt: now };
     this.db
       .insert(spotifyAuth)
       .values(values)
-      .onConflictDoUpdate({ target: spotifyAuth.id, set: { accessToken, refreshToken, expiresAt: values.expiresAt, scope, updatedAt: now } })
+      .onConflictDoUpdate({ target: spotifyAuth.id, set: { accessToken, refreshToken, expiresAt: values.expiresAt, scope, clientId, updatedAt: now } })
       .run();
   }
 

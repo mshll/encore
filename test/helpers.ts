@@ -93,7 +93,7 @@ export function routeFetch(routes: (call: FetchCall) => Response | Promise<Respo
 
 export function connectSpotify(db: Db, userId: string | null = "owner") {
   db.insert(spotifyAuthTable)
-    .values({ id: 1, accessToken: "access", refreshToken: "refresh", expiresAt: Date.now() + 3_600_000, scope: "", spotifyUserId: userId, updatedAt: 0 })
+    .values({ id: 1, accessToken: "access", refreshToken: "refresh", expiresAt: Date.now() + 3_600_000, scope: "", spotifyUserId: userId, clientId: "test-client", updatedAt: 0 })
     .run();
 }
 

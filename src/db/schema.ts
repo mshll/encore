@@ -108,6 +108,7 @@ export const spotifyAuth = sqliteTable("spotify_auth", {
   expiresAt: integer("expires_at").notNull(),
   scope: text("scope").notNull(),
   spotifyUserId: text("spotify_user_id"),
+  clientId: text("client_id"),
   updatedAt: integer("updated_at").notNull(),
 });
 

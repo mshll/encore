@@ -19,7 +19,7 @@ function setup(transport: LlmTransport | null = null, env: Record<string, string
   const db = testDb();
   const config = testConfig({ DISCORD_APPLICATION_ID: "1", DISCORD_PUBLIC_KEY: "a".repeat(64), DISCORD_OWNER_ID: OWNER, DISCORD_BOT_TOKEN: "bot", DISCORD_CHANNEL_ID: "7", ...env });
   const time = clock("2026-02-01T12:00:00Z");
-  db.insert(spotifyAuth).values({ id: 1, accessToken: "tok", refreshToken: "ref", expiresAt: 9e15, scope: "", updatedAt: 0 }).run();
+  db.insert(spotifyAuth).values({ id: 1, accessToken: "tok", refreshToken: "ref", expiresAt: 9e15, scope: "", clientId: "test-client", updatedAt: 0 }).run();
   const spotifyFake = fakeSpotifyFetch([]);
   const discordCalls: { method: string; path: string; body: Record<string, unknown> }[] = [];
   const fetchFn = (async (input: string | URL | Request, init?: RequestInit) => {

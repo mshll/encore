@@ -158,7 +158,7 @@ export function featureCtx(transport: LlmTransport | null, catalog: FakeSpotifyT
   const db = testDb();
   const config = testConfig(env);
   const time = clock(start);
-  db.insert(spotifyAuth).values({ id: 1, accessToken: "tok", refreshToken: "ref", expiresAt: 9e15, scope: "", updatedAt: 0 }).run();
+  db.insert(spotifyAuth).values({ id: 1, accessToken: "tok", refreshToken: "ref", expiresAt: 9e15, scope: "", clientId: "test-client", updatedAt: 0 }).run();
   const auth = new SpotifyAuth(db, config, fetch, time.now);
   const fake = fakeSpotifyFetch(catalog);
   const spotify = new SpotifyClient(db, auth, config, fake.fetchFn, time.now);

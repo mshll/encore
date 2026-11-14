@@ -43,6 +43,13 @@
       "when": 1794640948684,
       "tag": "0005_picks_unique_week_position",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1794643796274,
+      "tag": "0006_spotify_auth_client",
+      "breakpoints": true
     }
   ]
 }
