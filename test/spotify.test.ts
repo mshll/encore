@@ -241,6 +241,23 @@ describe("enrichment", () => {
     expect(calls).toHaveLength(2);
   });
 
+  test("polled rows keep the playlist or album they were played from", async () => {
+    const { db, client, config, now } = setup(() =>
+      jsonResponse({
+        items: [
+          { played_at: "2026-11-01T10:00:00Z", track: spotifyTrack("t8", "Eight", "Lead"), context: { uri: "spotify:playlist:abc", type: "playlist" } },
+          { played_at: "2026-11-01T09:00:00Z", track: spotifyTrack("t7", "Seven", "Lead"), context: null },
+        ],
+      }),
+    );
+    connect(db, now() + 3_600_000);
+    await pollRecentlyPlayed(db, client, config);
+    expect(db.all(sql`select track_uri, context_uri from plays order by ts`)).toEqual([
+      { track_uri: uri("t7"), context_uri: null },
+      { track_uri: uri("t8"), context_uri: "spotify:playlist:abc" },
+    ]);
+  });
+
   test("polled tracks link their artists", async () => {
     const { db, client, config, now } = setup(() => jsonResponse({ items: [{ played_at: "2026-11-01T10:00:00Z", track: spotifyTrack("t9", "Nine", "Lead"), context: null }] }));
     connect(db, now() + 3_600_000);

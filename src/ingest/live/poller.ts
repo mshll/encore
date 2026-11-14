@@ -23,6 +23,7 @@ export async function pollRecentlyPlayed(db: Db, spotify: SpotifyClient, config:
       msPlayed: null,
       device: "unknown",
       source: "api",
+      contextUri: item.context?.uri ?? null,
     };
   });
   for (const track of new Map(fresh.map((item) => [item.track.uri, item.track])).values()) saveSpotifyTrack(db, track);
