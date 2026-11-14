@@ -3,13 +3,16 @@ import { EmptyImportError, importExport } from "../../ingest/export/import";
 import { ExportFormatError } from "../../ingest/export/parse";
 import { limitMultipartParts, PartTooLargeError } from "../bodyLimits";
 import type { Env } from "../context";
-import { ApiError } from "../errors";
+import { catalogBody, seedCatalog } from "../../ingest/catalog";
+import { ApiError, jsonBody, parse } from "../errors";
 
 export const MAX_IMPORT_FILES = 30;
 export const MAX_IMPORT_FILE_BYTES = 50 * 1024 * 1024;
 const PART_HEADER_BYTES = 16 * 1024;
 
-export const importRoutes = new Hono<Env>().post("/", async (c) => {
+export const importRoutes = new Hono<Env>()
+  .post("/catalog", async (c) => c.json(seedCatalog(c.var.deps.db, parse(catalogBody, await jsonBody(c)))))
+  .post("/", async (c) => {
   const { db, config, now } = c.var.deps;
   if (!c.req.header("content-type")?.startsWith("multipart/form-data")) {
     throw new ApiError(415, "multipart_required", "Upload the export files as multipart/form-data in the 'files' field");

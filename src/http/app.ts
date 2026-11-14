@@ -74,6 +74,7 @@ export function createApp(deps: Deps) {
   app.use("/api/tags/*", requireSessionOrAdmin);
   app.route("/api/tags", tagRoutes);
   app.use("/api/import", requireSessionOrAdmin);
+  app.use("/api/import/*", requireSessionOrAdmin);
   app.route("/api/import", importRoutes);
 
   app.use("/api/*", requireSession);
