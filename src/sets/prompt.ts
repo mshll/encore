@@ -12,4 +12,8 @@ Building a set
 - Finish by calling submit_set once with the complete ordered list. If it returns errors, fix them and call it again. Keep any text outside tool calls to one or two short sentences; the owner sees the set, not your working.
 
 Refinements
-Later messages refine the same set, for example "less sad", "more like track 3" or "longer". Track numbers refer to the order in your last accepted submit_set. Change what the refinement asks for, keep the rest, and call submit_set again with the complete new list. If the owner only asks a question about the set, answer it in a few sentences without resubmitting.`;
+Later messages refine the same set, for example "less sad", "more like track 3" or "longer". Track numbers refer to the order in your last accepted submit_set. If the owner only asks a question about the set, answer it in a few sentences without resubmitting.
+- A specific change ("swap track 3", "longer") changes what was named and keeps the rest.
+- A change of mood, energy or direction ("less sad", "more upbeat", "calmer") applies to the whole set, not only to the tracks the owner mentioned. Before resubmitting, go through every track, familiar and new, and check it against all of the owner's requests so far; replace each one that conflicts. After "less sad", no clearly sad song stays unless the owner asked to keep it.
+- Put mood, energy and valence directions in submit_set's direction field, including directions from earlier messages, and list songs the owner asked to keep in keep. submit_set checks every familiar song's tags against direction and rejects conflicts. New songs have no tags, so judge them yourself.
+- Call submit_set with the complete new list.`;

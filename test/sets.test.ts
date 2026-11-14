@@ -4,7 +4,9 @@ import { outcomeOf } from "../src/library/outcomes";
 import { songKey } from "../src/plays/song";
 import { refreshSetOutcomes } from "../src/sets/outcomes";
 import { saveSetPlaylist } from "../src/sets/playlist";
-import { createSet, getSet, listSets, refineSet, SetNotBuiltError } from "../src/sets/service";
+import { createSet, directionConflict, getSet, listSets, refineSet, SetNotBuiltError } from "../src/sets/service";
+import { upsertTags } from "../src/tags/service";
+import { sql } from "drizzle-orm";
 import { play, seed, track, uri } from "./helpers";
 import { featureCtx, message, scripted, seedLibrary, text, toolCall, toolResults, toolUse, type FakeSpotifyTrack } from "./llmFakes";
 
@@ -141,6 +143,76 @@ describe("refine", () => {
     const result = await refineSet(env.ctx, env.result.set.id, "change track 2");
     expect(result).toMatchObject({ changed: false, reply: "Swap for something faster or something brighter?" });
     expect(result.set.version).toBe(1);
+  });
+});
+
+describe("refine applies a direction to the whole set", () => {
+  const MISSED = songKey("Missed Calls", "Mac Miller");
+
+  async function sadSet() {
+    const create = scripted(
+      toolCall("submit_set", {
+        title: "Late drive",
+        description: "Night roads.",
+        items: [
+          { source: "library", songKey: WOODS, reason: "Finished at night." },
+          { source: "library", songKey: MISSED, reason: "Night favourite." },
+          { source: "library", songKey: SURF, reason: "Bright closer." },
+        ],
+      }),
+    );
+    const env = featureCtx(create.transport, CATALOG);
+    seedLibrary(env.db);
+    seed(env.db, [track("m1", "Missed Calls", "Mac Miller", "Faces", { durationMs: 200_000 })], [play("2026-01-12T20:00:00Z", uri("m1"), 200_000)]);
+    upsertTags(env.db, [{ uri: uri("m1"), genres: ["hip-hop"], moods: ["sad", "melancholic"], energy: 2, valence: 1, language: "en", model: "test", confidence: "high" }]);
+    const { set } = await createSet(env.ctx, "late drive");
+    return { ...env, set };
+  }
+
+  const lessSad = { avoidMoods: ["sad", "melancholic"] };
+  const resubmit = (items: string[], extra: object = {}) =>
+    toolCall("submit_set", { title: "Late drive", description: "Less sad.", items: items.map((k) => ({ source: "library", songKey: k, reason: "r" })), direction: lessSad, ...extra });
+
+  test("a sad song the owner didn't name is rejected after 'less sad', and the set is rebuilt without it", async () => {
+    const env = await sadSet();
+    const refine = scripted(resubmit([WOODS, MISSED, SURF]), resubmit([SURF, WOODS]));
+    env.ctx.llm = new Llm(env.db, env.ctx.config, refine.transport, env.ctx.now);
+    const result = await refineSet(env.ctx, env.set.id, "less sad");
+    const [first] = toolResults(refine.requests[1]!);
+    expect(first!.value).toMatchObject({ accepted: false });
+    expect(first!.value.errors).toEqual(["Track 2: Missed Calls conflicts with the direction (tagged sad, melancholic). Replace it, or list its songKey in keep if the owner asked to keep it."]);
+    expect(result.set.items.map((i) => i.name)).toEqual(["Surf", "Woods"]);
+    expect(JSON.stringify(refine.requests[0]!.system)).toContain("applies to the whole set");
+  });
+
+  test("a song the owner asked to keep stays", async () => {
+    const env = await sadSet();
+    const refine = scripted(resubmit([WOODS, MISSED, SURF], { keep: [MISSED] }));
+    env.ctx.llm = new Llm(env.db, env.ctx.config, refine.transport, env.ctx.now);
+    const result = await refineSet(env.ctx, env.set.id, "less sad, but keep Missed Calls");
+    expect(result.set.items.map((i) => i.name)).toEqual(["Woods", "Missed Calls", "Surf"]);
+  });
+
+  test("energy and valence limits are checked against tags", () => {
+    const tags = { genres: [], subgenre: null, moods: ["chill"], energy: 2, valence: 4, language: "en" };
+    expect(directionConflict(tags, { energyMin: 3 })).toBe("energy 2 is below 3");
+    expect(directionConflict(tags, { valenceMax: 3 })).toBe("valence 4 is above 3");
+    expect(directionConflict(tags, { avoidMoods: ["sad"] })).toBeNull();
+    expect(directionConflict(null, { energyMin: 5 })).toBeNull();
+  });
+});
+
+describe("artwork", () => {
+  test("set items carry album art and artist images in one response", async () => {
+    const { result, db } = await builtSet();
+    db.run(sql`update tracks set album_art_url = 'https://img.test/woods-any.jpg' where uri = ${uri("w1")}`);
+    db.run(sql`insert into artists (id, name, image_url) values ('mm', 'Mac Miller', 'https://img.test/mac.jpg')`);
+    db.run(sql`insert into track_artists (track_uri, artist_id, position) values (${uri("w1")}, 'mm', 0)`);
+    const items = getSet(db, result.set.id)!.items;
+    expect(items.map((i) => [i.name, i.albumArtUrl, i.artistImageUrl])).toEqual([
+      ["Woods", "https://img.test/woods-any.jpg", "https://img.test/mac.jpg"],
+      ["Good News", "https://img.test/g1.jpg", "https://img.test/mac.jpg"],
+    ]);
   });
 });
 

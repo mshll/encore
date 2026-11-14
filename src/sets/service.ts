@@ -8,7 +8,9 @@ import { localNow, tagged, type FeatureContext } from "../llm/context";
 import { createThread, deleteThread, getThread, ownerMessage, saveThreadMessages, transcript } from "../llm/threads";
 import { blockedSets, isBlocked, type Blocked } from "../library/blocks";
 import { CandidateVerifier } from "../library/candidates";
-import { loadCatalog } from "../library/catalog";
+import { withArtwork } from "../library/artwork";
+import { loadCatalog, type CatalogSong } from "../library/catalog";
+import { MOODS } from "../tags/vocabulary";
 import { libraryTools, verifyTool } from "../library/tools";
 import { tasteProfile } from "../taste/profile";
 import { SETS_SYSTEM } from "./prompt";
@@ -30,7 +32,34 @@ const submitInput = z.strictObject({
     )
     .min(1)
     .max(MAX_SET_ITEMS),
+  direction: z
+    .strictObject({
+      avoidMoods: z.array(z.enum(MOODS)).optional(),
+      valenceMin: z.number().int().min(1).max(5).optional(),
+      valenceMax: z.number().int().min(1).max(5).optional(),
+      energyMin: z.number().int().min(1).max(5).optional(),
+      energyMax: z.number().int().min(1).max(5).optional(),
+    })
+    .optional()
+    .describe(
+      "Limits every track must meet, gathered from all of the owner's messages so far, e.g. 'less sad' -> avoidMoods [sad, melancholic] and valenceMin 3. Checked against each familiar song's tags (valence and energy 1-5).",
+    ),
+  keep: z.array(z.string()).optional().describe("songKeys the owner explicitly asked to keep; they are exempt from direction."),
 });
+
+type Direction = NonNullable<z.infer<typeof submitInput>["direction"]>;
+
+/** Why a tagged song breaks the direction, or null. Untagged songs pass: the model judges them. */
+export function directionConflict(tags: CatalogSong["tags"], d: Direction | undefined): string | null {
+  if (!d || !tags) return null;
+  const moods = d.avoidMoods?.filter((m) => tags.moods.includes(m)) ?? [];
+  if (moods.length) return `tagged ${moods.join(", ")}`;
+  if (d.valenceMin !== undefined && tags.valence < d.valenceMin) return `valence ${tags.valence} is below ${d.valenceMin}`;
+  if (d.valenceMax !== undefined && tags.valence > d.valenceMax) return `valence ${tags.valence} is above ${d.valenceMax}`;
+  if (d.energyMin !== undefined && tags.energy < d.energyMin) return `energy ${tags.energy} is below ${d.energyMin}`;
+  if (d.energyMax !== undefined && tags.energy > d.energyMax) return `energy ${tags.energy} is above ${d.energyMax}`;
+  return null;
+}
 
 type SubmitInput = z.infer<typeof submitInput>;
 
@@ -50,6 +79,8 @@ export function validateSubmission(db: Db, blocked: Blocked, verifier: Candidate
       if (!song) return errors.push(`Track ${n}: songKey ${JSON.stringify(item.songKey)} is not in the owner's history; use a songKey returned by find_songs.`);
       if (isBlocked(blocked, song.songKey, [song.artist])) return errors.push(`Track ${n}: ${song.name} is blocked by the owner.`);
       if (seen.has(song.songKey)) return errors.push(`Track ${n}: ${song.name} appears twice.`);
+      const conflict = input.keep?.includes(song.songKey) ? null : directionConflict(song.tags, input.direction);
+      if (conflict) return errors.push(`Track ${n}: ${song.name} conflicts with the direction (${conflict}). Replace it, or list its songKey in keep if the owner asked to keep it.`);
       seen.add(song.songKey);
       rows.push({ position: n, kind: "library", songKey: song.songKey, uri: song.uri, name: song.name, artist: song.artist, album: song.album, reason: item.reason });
       return;
@@ -59,7 +90,7 @@ export function validateSubmission(db: Db, blocked: Blocked, verifier: Candidate
     if (song.heard) return errors.push(`Track ${n}: the owner has already played ${song.name}; it cannot be a new song. Use it as a library song or replace it.`);
     if (seen.has(song.songKey)) return errors.push(`Track ${n}: ${song.name} appears twice.`);
     seen.add(song.songKey);
-    rows.push({ position: n, kind: "new", songKey: song.songKey, uri: song.uri, name: song.name, artist: song.artists[0]!, album: song.album, reason: item.reason });
+    rows.push({ position: n, kind: "new", songKey: song.songKey, uri: song.uri, name: song.name, artist: song.artists[0]!, album: song.album, albumArtUrl: song.albumArtUrl, reason: item.reason });
   });
   return { errors, rows };
 }
@@ -87,6 +118,7 @@ function seedVerifier(db: Db, verifier: CandidateVerifier, setId: number) {
       name: item.name,
       artists: [item.artist],
       album: item.album ?? "",
+      albumArtUrl: item.albumArtUrl,
       releaseDate: null,
       durationMs: 0,
       heard: false,
@@ -234,17 +266,21 @@ export function getSet(db: Db, setId: number) {
   const items = db.select().from(setItems).where(eq(setItems.setId, setId)).orderBy(asc(setItems.position)).all();
   return {
     ...summary(row),
-    items: items.map((i) => ({
-      position: i.position,
-      kind: i.kind,
-      songKey: i.songKey,
-      uri: i.uri,
-      name: i.name,
-      artist: i.artist,
-      album: i.album,
-      reason: i.reason,
-      outcome: { plays: i.playsAfter, finished: i.finished, skipped: i.skipped, firstPlayedAt: i.firstPlayedAt ? new Date(i.firstPlayedAt).toISOString() : null },
-    })),
+    items: withArtwork(
+      db,
+      items.map((i) => ({
+        position: i.position,
+        kind: i.kind,
+        songKey: i.songKey,
+        uri: i.uri,
+        name: i.name,
+        artist: i.artist,
+        album: i.album,
+        albumArtUrl: i.albumArtUrl,
+        reason: i.reason,
+        outcome: { plays: i.playsAfter, finished: i.finished, skipped: i.skipped, firstPlayedAt: i.firstPlayedAt ? new Date(i.firstPlayedAt).toISOString() : null },
+      })),
+    ),
     conversation: transcript(getThread(db, row.threadId)?.messages ?? []),
   };
 }
