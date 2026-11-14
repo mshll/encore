@@ -9,7 +9,7 @@ export function DataTable({ label, head, rows }: { label: string; head: string[]
     <>
       <button
         type="button"
-        className="self-start rounded text-body-sm text-tertiary underline-offset-2 hover-fine:text-primary hover-fine:underline"
+        className="self-start rounded-xs text-caption phone:flex phone:h-11 phone:items-center text-secondary underline decoration-line-strong underline-offset-2 hover:text-primary hover:decoration-current"
         aria-expanded={open}
         aria-controls={id}
         onClick={() => setOpen((v) => !v)}
@@ -17,7 +17,7 @@ export function DataTable({ label, head, rows }: { label: string; head: string[]
         {open ? "Hide data" : "View data"}
       </button>
       <div id={id} className={open ? "max-h-80 overflow-auto" : "sr-only"}>
-        <table className="w-full text-body-sm tabular">
+        <table className="w-full text-caption tabular">
           <caption className="sr-only">{label}</caption>
           <thead>
             <tr className="text-secondary">
@@ -30,7 +30,7 @@ export function DataTable({ label, head, rows }: { label: string; head: string[]
           </thead>
           <tbody>
             {rows.map(({ key, cells: [first, ...rest] }) => (
-              <tr key={key} className="border-t-[0.5px] border-border-default">
+              <tr key={key} className="hairline-t">
                 <th scope="row" className="py-1.5 text-left font-normal">
                   {first}
                 </th>

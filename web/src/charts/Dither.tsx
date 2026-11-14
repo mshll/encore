@@ -37,7 +37,7 @@ function Frame({
   const [head, ...values] = columns;
   return (
     <figure role="group" aria-label={label} className="flex w-full flex-col gap-2">
-      <div aria-hidden className="relative w-full [&_.font-mono]:font-sans [&_.font-mono]:text-caption-base [&_.font-mono]:tabular-nums" style={{ height }}>
+      <div aria-hidden className="relative w-full [&_.font-mono]:font-sans [&_.font-mono]:text-label [&_.font-mono]:tabular-nums" style={{ height }}>
         {children}
       </div>
       <DataTable
@@ -90,6 +90,52 @@ export function DitherBars({
         <Tooltip labelKey={tipLabel} valueFormatter={(v) => format(v)} />
         <Bar dataKey={valueKey} variant="gradient" />
       </BarChart>
+    </Frame>
+  );
+}
+
+/** One series over time as a dithered area: the chart under a StatStrip. */
+export function DitherArea({
+  label,
+  rows,
+  xKey,
+  valueKey,
+  valueLabel,
+  xFormat,
+  tipLabel,
+  format,
+  height = 240,
+}: {
+  label: string;
+  rows: Row[];
+  xKey: string;
+  valueKey: string;
+  valueLabel: string;
+  xFormat: (v: string, i: number) => string;
+  tipLabel: string;
+  format: (v: number) => string;
+  height?: number;
+}) {
+  const config: ChartConfig = { [valueKey]: { label: valueLabel, color: "green" } };
+  const ticks = useDesktop() ? 7 : 4;
+  return (
+    <Frame
+      label={label}
+      height={height}
+      columns={[
+        { key: tipLabel, label: "Period" },
+        { key: valueKey, label: valueLabel },
+      ]}
+      rows={rows}
+      format={format}
+    >
+      <AreaChart data={rows} config={config} margins={{ left: 44 }} className="size-full">
+        <Grid />
+        <XAxis dataKey={xKey} tickFormatter={(v, i) => xFormat(String(v), i)} maxTicks={ticks} />
+        <YAxis tickFormatter={(v) => (v === 0 ? "0" : format(v))} />
+        <Tooltip labelKey={tipLabel} valueFormatter={(v) => format(v)} />
+        <Area dataKey={valueKey} variant="gradient" />
+      </AreaChart>
     </Frame>
   );
 }

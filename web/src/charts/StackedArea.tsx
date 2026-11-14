@@ -68,7 +68,7 @@ export function StackedArea({
             role="img"
             aria-label={label}
             tabIndex={0}
-            className="block overflow-visible outline-none focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-(--fg-primary)"
+            className="block overflow-visible outline-none focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-focus"
             onPointerMove={(e) => setActive(indexAt(e.clientX, e.currentTarget.getBoundingClientRect()))}
             onPointerLeave={() => setActive(null)}
             onBlur={() => setActive(null)}
@@ -99,7 +99,7 @@ export function StackedArea({
                   key={`l${t}`}
                   x={0}
                   y={y(t) - 4}
-                  className="fill-(--fg-tertiary) text-caption-base tabular"
+                  className="fill-(--chart-axis) text-label tabular"
                   paintOrder="stroke"
                   stroke="var(--page)"
                   strokeWidth={3}
@@ -107,15 +107,15 @@ export function StackedArea({
                   {format(t)}
                 </text>
               ))}
-            {selectedIdx >= 0 && <line x1={x(selectedIdx)} x2={x(selectedIdx)} y1={0} y2={plotH} stroke="var(--fg-primary)" strokeWidth={1.5} />}
-            {active !== null && <line x1={x(active)} x2={x(active)} y1={0} y2={plotH} stroke="var(--fg-secondary)" strokeWidth={1} />}
+            {selectedIdx >= 0 && <line x1={x(selectedIdx)} x2={x(selectedIdx)} y1={0} y2={plotH} stroke="var(--text-primary)" strokeWidth={1.5} />}
+            {active !== null && <line x1={x(active)} x2={x(active)} y1={0} y2={plotH} stroke="var(--text-secondary)" strokeWidth={1} />}
             {labels.map(({ j, text }) => (
               <text
                 key={j}
                 x={x(j)}
                 y={height - 6}
                 textAnchor={j === 0 ? "start" : j === n - 1 ? "end" : "middle"}
-                className="fill-(--fg-tertiary) text-caption-base tabular"
+                className="fill-(--chart-axis) text-label tabular"
               >
                 {text}
               </text>

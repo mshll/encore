@@ -30,7 +30,7 @@ export function SegmentedBar({ segments, label, format }: { segments: Segment[];
           key={p.id}
           onPointerEnter={() => setActive(p.id)}
           onPointerLeave={() => setActive(null)}
-          className="absolute top-0 flex h-7 items-center overflow-hidden rounded-sm px-2 text-caption-lg font-semibold tabular"
+          className="absolute top-0 flex h-7 items-center overflow-hidden rounded-sm px-2 text-caption font-semibold tabular"
           style={{ left: p.x, width: p.w, background: p.color, color: p.ink }}
         >
           {p.w > 44 && `${Math.round(p.share * 100)}%`}

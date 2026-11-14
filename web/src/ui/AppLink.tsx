@@ -2,6 +2,7 @@ import type { ComponentProps } from "react";
 import { Link, useSearchParams } from "wouter";
 import { rangeSearch } from "../lib/range";
 
+/** Builds hrefs that keep the current date range, so moving between surfaces keeps the scope. */
 export function useRangeHref() {
   const [params] = useSearchParams();
   const search = rangeSearch({ from: params.get("from") ?? undefined, to: params.get("to") ?? undefined });
@@ -15,7 +16,3 @@ export function AppLink({ to, ...props }: { to: string } & Omit<ComponentProps<"
   const href = useRangeHref();
   return <Link href={href(to)} {...props} />;
 }
-
-export const artistPath = (name: string) => `/artist/${encodeURIComponent(name)}`;
-export const songPath = (songKey: string) => `/song/${encodeURIComponent(songKey)}`;
-export const albumPath = (artist: string, album: string) => `/album/${encodeURIComponent(artist)}/${encodeURIComponent(album)}`;

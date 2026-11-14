@@ -39,7 +39,7 @@ function Trend({ kind, title, range }: { kind: "genres" | "moods"; title: string
   const built = toRows(q.data);
   if (!built) return null;
   return (
-    <Section title={title} aside={<span className="text-body-sm text-secondary">Tagged songs cover {fmtPct(q.data.coverage.share)} of listening hours</span>}>
+    <Section title={title} actions={<span className="text-caption text-secondary">Tagged songs cover {fmtPct(q.data.coverage.share)} of listening hours</span>}>
       <DitherStack
         label={`Hours per month by ${kind === "genres" ? "genre" : "mood"}`}
         rows={built.rows}
@@ -60,7 +60,7 @@ function MoodProfile({ range }: { range: Range }) {
   const total = q.data.totals.reduce((sum, t) => sum + t.hours, 0);
   const rows = q.data.totals.slice(0, 8).map((t) => ({ mood: t.value, share: Math.round((t.hours / total) * 1000) / 10 }));
   return (
-    <Section title="Mood profile" aside={<span className="text-body-sm text-secondary">Share of tagged hours, top 8 moods</span>}>
+    <Section title="Mood profile" actions={<span className="text-caption text-secondary">Share of tagged hours, top 8 moods</span>}>
       <DitherRadar label="Share of tagged listening hours by mood" rows={rows} nameKey="mood" valueKey="share" valueLabel="Share" format={(v) => `${v}%`} />
     </Section>
   );
@@ -74,7 +74,7 @@ function EnergyByHour({ range }: { range: Range }) {
   const rows = q.data.hours.filter((h) => h.energy !== null).map((h) => ({ hour: h.hour, title: fmtHour(h.hour), energy: h.energy! }));
   if (rows.length < 2) return null;
   return (
-    <Section title="Energy by hour" aside={<span className="text-body-sm text-secondary">Average energy, 1 calm to 5 intense</span>}>
+    <Section title="Energy by hour" actions={<span className="text-caption text-secondary">Average energy, 1 calm to 5 intense</span>}>
       <DitherLine
         label="Average song energy by hour of day"
         rows={rows}

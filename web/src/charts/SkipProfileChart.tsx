@@ -16,12 +16,12 @@ export function SkipProfileChart({ profile, overall, minPlays = 3 }: { profile: 
           Plays through, {fmtPct(WORKS)} or less skipped
         </span>
         <span className="flex items-center gap-2">
-          <span aria-hidden className="h-2 w-4 rounded-sm bg-(--gray-12)" />
+          <span aria-hidden className="h-2 w-4 rounded-sm bg-primary" />
           Skipped, {fmtPct(FAILS)} or more
         </span>
         {overall !== null && (
           <span className="flex items-center gap-2">
-            <span aria-hidden className="h-3 w-px bg-(--fg-primary)" />
+            <span aria-hidden className="h-3 w-px bg-primary" />
             Overall {fmtPct(overall)}
           </span>
         )}
@@ -29,21 +29,21 @@ export function SkipProfileChart({ profile, overall, minPlays = 3 }: { profile: 
       <div className="grid gap-x-12 gap-y-6 lg:grid-cols-2">
         {groups.map(({ d, values }) => (
           <div key={d} className="flex flex-col gap-2">
-            <h3 className="text-body-sm font-medium text-secondary">{DIMENSION_LABELS[d]}</h3>
+            <h3 className="text-caption font-medium text-secondary">{DIMENSION_LABELS[d]}</h3>
             <ul className="flex flex-col gap-2.5">
               {values.map((v) => {
                 const rate = v.skipRate!;
-                const fill = rate <= WORKS ? "var(--chart-key)" : rate >= FAILS ? "var(--gray-12)" : "var(--chart-muted)";
+                const fill = rate <= WORKS ? "var(--chart-key)" : rate >= FAILS ? "var(--text-primary)" : "var(--text-tertiary)";
                 return (
                   <li key={v.value} className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1">
                     <span className="truncate text-body-sm">{contextLabel(d, v.value)}</span>
                     <span className="text-body-sm tabular">
                       <span className="font-semibold">{fmtPct(rate)}</span> <span className="text-secondary">of {fmtInt(v.plays)} plays</span>
                     </span>
-                    <span className="relative col-span-2 h-2 rounded-full bg-component">
+                    <span className="relative col-span-2 h-2 rounded-full bg-fill">
                       <span className="absolute inset-y-0 left-0 rounded-full" style={{ width: `${Math.max(rate * 100, 1)}%`, background: fill }} />
                       {overall !== null && (
-                        <span aria-hidden className="absolute -top-1 -bottom-1 w-px bg-(--fg-primary)" style={{ left: `${overall * 100}%` }} />
+                        <span aria-hidden className="absolute -top-1 -bottom-1 w-px bg-primary" style={{ left: `${overall * 100}%` }} />
                       )}
                     </span>
                   </li>
