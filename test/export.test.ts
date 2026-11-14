@@ -122,6 +122,22 @@ describe("export import", () => {
     expect(left[2]!.ts).toBe(Date.parse("2026-01-08T10:00:00Z"));
   });
 
+  test("api plays in the gap between two uploaded files, or under the video file, are kept", () => {
+    const db = openDb(":memory:");
+    seed(db, [track("a1", "Song A", "Artist X", "Album 1")], [play("2026-01-06T10:00:00Z", uri("a1"), null), play("2026-03-01T10:00:00Z", uri("a1"), null), play("2026-06-06T10:00:00Z", uri("a1"), null)]);
+    const result = importExport(
+      db,
+      [
+        file("Streaming_History_Audio_2026_1.json", [row({ ts: "2026-01-05T10:00:00Z" }), row({ ts: "2026-01-07T10:00:00Z" })]),
+        file("Streaming_History_Audio_2026_2.json", [row({ ts: "2026-06-05T10:00:00Z" }), row({ ts: "2026-06-07T10:00:00Z" })]),
+        file("Streaming_History_Video_2026.json", [row({ ts: "2026-01-01T10:00:00Z" }), row({ ts: "2026-12-01T10:00:00Z" })]),
+      ],
+      TZ,
+    );
+    expect(result.apiPlaysRemoved).toBe(2);
+    expect(db.all<{ ts: number }>(sql`select ts from plays where source = 'api'`).map((p) => p.ts)).toEqual([Date.parse("2026-03-01T10:00:00Z")]);
+  });
+
   test("stores local Kuwait day, hour and weekday", () => {
     const db = openDb(":memory:");
     importExport(db, [file("Streaming_History_Audio_2026.json", [row({ ts: "2026-01-04T22:30:00Z" })])], TZ);

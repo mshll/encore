@@ -31,6 +31,17 @@ function hash(value: string): string {
   return new Bun.CryptoHasher("sha256").update(value).digest("hex").slice(0, 32);
 }
 
+type Range = { from: number; to: number };
+
+function rangeOf(timestamps: number[]): Range | null {
+  return timestamps.reduce<Range | null>((r, ts) => (r ? { from: Math.min(r.from, ts), to: Math.max(r.to, ts) } : { from: ts, to: ts }), null);
+}
+
+/**
+ * Export rows replace api and live plays only inside each audio file's own time range. The video file spans
+ * the whole account and two uploaded files can be years apart, so one range over the upload would delete
+ * plays the export does not contain.
+ */
 export function importExport(db: Db, input: ExportFile[], timezone: string, now = Date.now()): ImportResult {
   const ignoredFiles = input.filter((f) => !exportFileKind(f.name)).map((f) => f.name);
   const parsedFiles = input.filter((f) => exportFileKind(f.name)).map((f) => ({ name: f.name, ...parseExportFile(f.name, f.content) }));
@@ -39,7 +50,10 @@ export function importExport(db: Db, input: ExportFile[], timezone: string, now 
   const occurrences = new Map<string, number>();
   const playRows: PlayInput[] = [];
   const trackRows: TrackInput[] = [];
+  const audioRanges: Range[] = [];
   for (const file of parsedFiles) {
+    const fileRange = rangeOf(file.entries.map((e) => e.play.ts));
+    if (fileRange && file.kind === "audio") audioRanges.push(fileRange);
     for (const entry of file.entries) {
       const digest = hash(entry.identity);
       const n = (occurrences.get(digest) ?? 0) + 1;
@@ -49,19 +63,19 @@ export function importExport(db: Db, input: ExportFile[], timezone: string, now 
     }
   }
 
-  const range = playRows.reduce<{ from: number; to: number } | null>(
-    (r, p) => (r ? { from: Math.min(r.from, p.ts), to: Math.max(r.to, p.ts) } : { from: p.ts, to: p.ts }),
-    null,
-  );
+  const range = rangeOf(playRows.map((p) => p.ts));
 
   const { inserted, apiPlaysRemoved } = db.transaction((tx) => {
-    const removed = range
-      ? tx
+    const removed = audioRanges.reduce(
+      (n, r) =>
+        n +
+        tx
           .delete(plays)
-          .where(and(inArray(plays.source, ["api", "live"]), between(plays.ts, range.from, range.to + EXPORT_TS_PRECISION_MS)))
+          .where(and(inArray(plays.source, ["api", "live"]), between(plays.ts, r.from, r.to + EXPORT_TS_PRECISION_MS)))
           .returning({ id: plays.id })
-          .all().length
-      : 0;
+          .all().length,
+      0,
+    );
     upsertTracks(tx, trackRows, now);
     return { inserted: insertPlays(tx, playRows, timezone), apiPlaysRemoved: removed };
   });
