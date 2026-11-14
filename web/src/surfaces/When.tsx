@@ -1,24 +1,21 @@
 import { useMemo, useState } from "react";
-import { useClock, useLifetime, useTopArtists, useTopTracks } from "../api/queries";
+import { useClock, useTopArtists, useTopTracks } from "../api/queries";
 import type { Clock } from "../api/types";
-import { PATTERN_TABS } from "../app/nav";
 import { DataTable } from "../charts/DataTable";
 import { DitherHeatmap, HeatLegend, type HeatCell } from "../charts/DitherHeatmap";
 import { DitherMeter } from "../charts/DitherMeter";
 import { fmtHour, fmtHours, fmtHoursValue, fmtCompact, fmtInt, WEEKDAYS, WEEKDAYS_SHORT } from "../lib/format";
 import { useRange, type Range } from "../lib/range";
 import { useDesktop } from "../lib/useMedia";
-import { AppLink } from "../ui/AppLink";
-import { buttonClass } from "../ui/Button";
 import { cx } from "../ui/cx";
 import { ClockIcon } from "../ui/icons";
-import { Page, PageHeader, Section } from "../ui/Page";
+import { Section } from "../ui/Page";
 import { RangePicker } from "../ui/RangePicker";
 import { ArtistRow, RowList, RowSkeleton, TrackRow } from "../ui/Rows";
 import { Skeleton } from "../ui/Skeleton";
 import { StatStrip, type StatItem } from "../ui/Stat";
 import { EmptyState, ErrorState } from "../ui/States";
-import { TabNav } from "../ui/TabNav";
+import { PatternsFrame } from "./PatternsFrame";
 
 type Metric = "hours" | "plays";
 type Cell = Clock["cells"][number];
@@ -208,28 +205,9 @@ function ClockView({ range }: { range: Range }) {
 
 export function When() {
   const { range } = useRange();
-  const lifetime = useLifetime();
-  const firstUse = lifetime.data?.plays === 0;
   return (
-    <Page>
-      <PageHeader title="Patterns" actions={!firstUse && <RangePicker />}>
-        <TabNav items={PATTERN_TABS} label="Patterns" />
-      </PageHeader>
-      {firstUse ? (
-        <EmptyState
-          size="page"
-          icon={ClockIcon}
-          title="No listening yet"
-          description="Once plays come in, this shows the hours and weekdays you listen most."
-          action={
-            <AppLink to="/setup" className={buttonClass({ variant: "primary" })}>
-              Set up encore
-            </AppLink>
-          }
-        />
-      ) : (
-        <ClockView range={range} />
-      )}
-    </Page>
+    <PatternsFrame icon={ClockIcon} firstUse="Once plays come in, this shows the hours and weekdays you listen most.">
+      <ClockView range={range} />
+    </PatternsFrame>
   );
 }
