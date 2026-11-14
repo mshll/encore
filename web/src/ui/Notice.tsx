@@ -40,7 +40,7 @@ export function Notice({
     </>
   );
   return (
-    <div role={tone === "danger" ? "alert" : "status"} className={cx("flex items-start gap-2.5 rounded-lg px-3 py-2.5 phone:-mx-(--gutter) phone:rounded-none phone:px-(--gutter)", TONE[tone], className)}>
+    <div role={tone === "danger" ? "alert" : "status"} className={cx("flex items-start gap-2.5 rounded-lg px-3 py-2.5 phone:-mx-(--gutter) phone:rounded-none phone:px-(--gutter) phone:py-4", TONE[tone], className)}>
       <Icon icon={tone === "info" ? InfoIcon : WarningIcon} className="mt-px" />
       <div className="flex min-w-0 flex-1 flex-col items-start gap-2 text-pretty md:flex-row md:items-center md:justify-between">
         <p className="min-w-0">{children}</p>

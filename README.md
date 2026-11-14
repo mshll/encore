@@ -45,6 +45,8 @@ Two kinds of configuration:
 - Boot config is env only, read once at start: `HOST`, `PORT`, `DATABASE_PATH`, `WEB_DIST`, `PUBLIC_BASE_URL`, `SPOTIFY_REDIRECT_URI`, `SETUP_TOKEN`, `SECRETS_KEY`, `JOBS_ENABLED`, `JOBS_DISABLED`, `LLM_PRICES`.
 - Every other variable below is a setting. Settings live in the `settings` table and are edited in the dashboard (`GET`/`PATCH /api/settings`); services read them on each use, so a change applies without a restart. An env var of the same name, when set, overrides the stored value and locks the field in the dashboard. With no env var and nothing stored, the default applies.
 
+To move settings from env vars to the dashboard, use Save them here in Settings (`POST /api/settings/adopt-env`): it stores the current env values without changing them. Then remove those env vars and restart; the stored values apply from then on.
+
 Secrets set from the dashboard (Claude key, Discord bot token, MCP token, admin token) are encrypted with `SECRETS_KEY` before they are stored. Without `SECRETS_KEY` they can only come from env vars. Changing `SECRETS_KEY` makes stored secrets unreadable; save them again.
 
 All env values are validated at boot (the process exits on invalid values). See [.env.example](.env.example).

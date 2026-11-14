@@ -17,6 +17,10 @@ export const settingsRoutes = new Hono<Env>()
     const result = await applySettings(c.var.deps, parse(patchBody, await jsonBody(c)));
     return c.json({ ...settingsView(c.var.deps.settings), ...result });
   })
+  .post("/adopt-env", (c) => {
+    const result = c.var.deps.settings.adoptEnv();
+    return c.json({ ...settingsView(c.var.deps.settings), ...result });
+  })
   .post("/claude/verify", async (c) => {
     const { settings, services } = c.var.deps;
     const body = parse(verifyBody, await jsonBody(c));

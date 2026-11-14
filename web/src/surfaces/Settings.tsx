@@ -2,7 +2,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState, type ReactNode } from "react";
 import { ApiError, request } from "../api/client";
 import { useOnboarding, useSettings, useSpend, useStatus } from "../api/queries";
-import type { ClaudeKeyCheck, DiscordRegistration, JobStatus, LlmFeature, Session, Status } from "../api/types";
+import type { ClaudeKeyCheck, DiscordRegistration, JobStatus, LlmFeature, Session, Settings as SettingsData, SettingsAdoptResult, Status } from "../api/types";
 import { SETTINGS_TABS } from "../app/nav";
 import { BudgetBar } from "../charts/BudgetBar";
 import { resetDay } from "../lib/assistant";
@@ -62,10 +62,75 @@ function JobLine({ job, verb }: { job: JobStatus | undefined; verb?: string }) {
   return <span className={line.problem ? "text-danger" : undefined}>{line.text}</span>;
 }
 
-/** Shown once per tab when the tab has keys that only SECRETS_KEY lets the server store. */
+const listOf = (items: string[]) => (items.length < 2 ? items.join("") : `${items.slice(0, -1).join(", ")} and ${items.at(-1)}`);
+
+/** Fields set by env vars, by what the owner can do next: save them here, wait for SECRETS_KEY, or remove the env var. */
+function envFields(settings: SettingsData) {
+  const env = settings.groups.flatMap((g) => g.fields).filter((f) => f.source === "env");
+  const pending = env.filter((f) => !f.stored);
+  return {
+    saveable: pending.filter((f) => settings.secretStorage.available || !f.secret),
+    blocked: pending.filter((f) => !settings.secretStorage.available && f.secret),
+    removable: env.filter((f) => f.stored),
+  };
+}
+
+/** Past this many, the env var names wait behind Show names instead of filling the notice. */
+const INLINE_ENV_NAMES = 6;
+
+function envText(settings: SettingsData, showNames: boolean): string {
+  const { saveable, blocked, removable } = envFields(settings);
+  const keyVar = settings.secretStorage.envVar;
+  const pending = saveable.length + blocked.length;
+  if (saveable.length > 0) {
+    const count = pending === 1 ? "1 setting is" : `${fmtInt(pending)} settings are`;
+    return `${count} set by environment variables and cannot be edited here.${blocked.length ? ` Keys and tokens cannot be saved until ${keyVar} is set.` : ""}`;
+  }
+  const keys = blocked.length === 1 ? "1 key is" : `${fmtInt(blocked.length)} keys are`;
+  if (removable.length === 0) return `${keys} set by environment variables and cannot be saved here until ${keyVar} is set.`;
+  const names = showNames || removable.length <= INLINE_ENV_NAMES ? listOf(removable.map((f) => f.env)) : `their ${fmtInt(removable.length)} environment variables`;
+  const remove = `The values are saved. Remove ${names} from the server and restart it to edit ${removable.length === 1 ? "this setting" : "these settings"} here.`;
+  return blocked.length ? `${remove} Keys and tokens cannot be saved until ${keyVar} is set.` : remove;
+}
+
+/** The one notice for settings that env vars set: save their values here, then remove the env vars. */
+function EnvNotice() {
+  const queryClient = useQueryClient();
+  const settings = useSettings();
+  const [showNames, setShowNames] = useState(false);
+  const adopt = useMutation({
+    mutationFn: () => request<SettingsAdoptResult>("/api/settings/adopt-env", { method: "POST" }),
+    onSuccess: ({ adopted: _adopted, replaced: _replaced, skipped: _skipped, ...fresh }) => queryClient.setQueryData(["settings"], fresh),
+  });
+  if (!settings.data) return null;
+  const { saveable, blocked, removable } = envFields(settings.data);
+  if (saveable.length + blocked.length + removable.length === 0) return null;
+  if (adopt.isError)
+    return (
+      <Notice tone="danger" onRetry={() => adopt.mutate()}>
+        {describeError(adopt.error)}
+      </Notice>
+    );
+  const action =
+    saveable.length > 0 ? (
+      <Button size="sm" busy={adopt.isPending} busyLabel="Saving" onClick={() => adopt.mutate()}>
+        Save them here
+      </Button>
+    ) : (
+      !showNames &&
+      removable.length > INLINE_ENV_NAMES && (
+        <Button size="sm" onClick={() => setShowNames(true)}>
+          Show names
+        </Button>
+      )
+    );
+  return <Notice action={action}>{envText(settings.data, showNames)}</Notice>;
+}
+
+/** Shown once per tab when the tab has keys that only SECRETS_KEY lets the server store, unless EnvNotice already says so. */
 function SecretsNotice({ keys }: { keys: string[] }) {
   const settings = useSettings();
-  if (!settings.data || settings.data.secretStorage.available) return null;
+  if (!settings.data || settings.data.secretStorage.available || envFields(settings.data).blocked.length > 0) return null;
   const editable = settings.data.groups.flatMap((g) => g.fields).some((f) => keys.includes(f.key) && f.secret && !f.locked);
   if (!editable) return null;
   return <Notice tone="warning">Keys and tokens cannot be saved here until {settings.data.secretStorage.envVar} is set on the server. Ones set as environment variables still work.</Notice>;
@@ -527,6 +592,7 @@ export function Settings({ section }: { section: string }) {
       >
         <TabNav items={SETTINGS_TABS} label="Settings" />
       </PageHeader>
+      <EnvNotice />
       <TabBody key={tab} tab={tab} />
     </Page>
   );
