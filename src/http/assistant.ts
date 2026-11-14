@@ -53,7 +53,7 @@ const wantsStream = (c: Context) => c.req.header("accept")?.includes("text/event
  * JSON by default. With `Accept: text/event-stream` the response is SSE: `text` and `tool` events while
  * Claude works, then one `done` event with the same body the JSON response would have, or one `error` event.
  */
-export async function respond<T>(c: Context<Env>, run: (onEvent?: (e: AgentEvent) => void) => Promise<T>, status: 200 | 201 = 200) {
+export async function respond<T>(c: Context<Env>, run: (onEvent?: (e: AgentEvent) => void) => Promise<T>, status: 200 | 201 = 200, keepAliveMs = 5_000) {
   if (!wantsStream(c)) return c.json((await mapped(() => run())) as object, status);
   await mapped(() => c.var.deps.services.llm.assertAvailable());
   return streamSSE(c, async (stream) => {
@@ -61,6 +61,12 @@ export async function respond<T>(c: Context<Env>, run: (onEvent?: (e: AgentEvent
     const send = (event: string, data: unknown) => {
       chain = chain.then(() => stream.writeSSE({ event, data: JSON.stringify(data) }));
     };
+    // Bun closes a response that sends nothing for 10 s, and a tool call can take longer, so a comment line keeps the stream open.
+    const keepAlive = setInterval(() => {
+      chain = chain.then(async () => {
+        await stream.write(": keep-alive\n\n");
+      });
+    }, keepAliveMs);
     try {
       const result = await run((e) => (e.type === "text" ? send("text", { delta: e.delta }) : send("tool", { name: e.name, input: e.input })));
       send("done", result);
@@ -68,6 +74,8 @@ export async function respond<T>(c: Context<Env>, run: (onEvent?: (e: AgentEvent
       const api = toApiError(error);
       if (!(api instanceof ApiError)) console.error(error);
       send("error", { error: api instanceof ApiError ? { code: api.code, message: api.message, ...(api.details ? { details: api.details } : {}) } : { code: "internal", message: "Internal server error" } });
+    } finally {
+      clearInterval(keepAlive);
     }
     await chain;
   });

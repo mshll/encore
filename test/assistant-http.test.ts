@@ -3,6 +3,7 @@ import { createSession } from "../src/auth/sessions";
 import { llmCalls, picks } from "../src/db/schema";
 import type { LlmTransport } from "../src/llm/client";
 import { monthOf } from "../src/llm/ledger";
+import type { Env } from "../src/http/context";
 import { testApp, TZ, uri } from "./helpers";
 import { message, scripted, seedLibrary, text } from "./llmFakes";
 
@@ -155,5 +156,21 @@ describe("set items", () => {
     const removed = await request("/api/sets/1/items/1", { method: "DELETE", headers: { cookie } });
     expect(await removed.json()).toMatchObject({ version: 2, items: [{ position: 1, name: "Surf", pinned: true }], changes: [{ version: 2, source: "owner" }] });
     expect((await request("/api/sets/1/items/9", { method: "DELETE", headers: { cookie } })).status).toBe(404);
+  });
+});
+
+describe("SSE keep-alive", () => {
+  test("a run that is silent for longer than the interval gets comment lines, then its done event", async () => {
+    const { Hono } = await import("hono");
+    const { respond } = await import("../src/http/assistant");
+    const app = new Hono<Env>()
+      .use(async (c, next) => {
+        c.set("deps", { services: { llm: { assertAvailable: () => {} } } } as unknown as Env["Variables"]["deps"]);
+        await next();
+      })
+      .post("/", (c) => respond(c, () => new Promise((resolve) => setTimeout(() => resolve({ ok: true }), 60)), 200, 20));
+    const body = await (await app.request("/", { method: "POST", headers: { accept: "text/event-stream" } })).text();
+    expect(body).toContain(": keep-alive");
+    expect(body.trim().endsWith('data: {"ok":true}')).toBe(true);
   });
 });
