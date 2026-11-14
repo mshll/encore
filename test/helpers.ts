@@ -19,6 +19,7 @@ export const testConfig = (env: Record<string, string> = {}) =>
     SETUP_TOKEN: "setup-token-setup-token-123",
     ADMIN_TOKEN: "admin-token-admin-token-123",
     JOBS_ENABLED: "false",
+    SPOTIFY_MIN_INTERVAL_MS: "0",
     ...env,
   });
 
