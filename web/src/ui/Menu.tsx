@@ -1,11 +1,22 @@
 import { Menu as Base } from "@base-ui/react/menu";
 import type { ComponentProps, ReactNode } from "react";
+import { iconButtonClass } from "./Button";
 import { cx } from "./cx";
 import { Icon, type IconGlyph } from "./Icon";
+import { DotsThreeIcon } from "./icons";
 import { MENU_ITEM, POPUP } from "./surfaces";
 
 export const MenuRoot = Base.Root;
 export const MenuTrigger = Base.Trigger;
+
+/** The "more" button that opens a row's or a page's menu. `label` names what it is for ("More for Woods"). */
+export function MoreTrigger({ label, size = "sm", className }: { label: string; size?: "sm" | "md"; className?: string }) {
+  return (
+    <Base.Trigger className={iconButtonClass({ size, className })} aria-label={label}>
+      <Icon icon={DotsThreeIcon} size="md" />
+    </Base.Trigger>
+  );
+}
 
 export function MenuPopup({
   children,

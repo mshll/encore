@@ -214,7 +214,7 @@ function Releases({ digest }: { digest: Digest }) {
         {items.slice(0, 6).map((r) => (
           <li key={r.id}>
             <a href={r.url} target="_blank" rel="noreferrer" className="-mx-2 flex min-h-(--row-h) items-center gap-3 rounded-md px-2 py-1.5 transition-colors duration-150 hover:bg-fill">
-              <Artwork src={r.imageUrl} kind="album" box={40} />
+              <Artwork src={r.imageUrl} kind="album" box={48} />
               <span className="flex min-w-0 flex-col">
                 <span className="truncate text-primary">{r.name}</span>
                 <span className="truncate text-caption text-secondary">

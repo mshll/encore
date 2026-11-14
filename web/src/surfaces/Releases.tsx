@@ -10,11 +10,10 @@ import { fmtAgo, fmtDay, fmtInt } from "../lib/format";
 import { showToast } from "../lib/toast";
 import { usePlayback } from "../player/playback";
 import { Artwork } from "../ui/Artwork";
-import { Button, buttonClass, IconButton } from "../ui/Button";
+import { Button, IconButton } from "../ui/Button";
 import { cx } from "../ui/cx";
-import { Icon } from "../ui/Icon";
-import { ArrowUpRightIcon, CheckIcon, DotsThreeIcon, MicrophoneStageIcon, PlayIcon, VinylRecordIcon, WaveformIcon } from "../ui/icons";
-import { MenuItem, MenuLinkItem, MenuPopup, MenuRoot, MenuTrigger } from "../ui/Menu";
+import { ArrowUpRightIcon, CheckIcon, MicrophoneStageIcon, PlayIcon, VinylRecordIcon, WaveformIcon } from "../ui/icons";
+import { MenuItem, MenuLinkItem, MenuPopup, MenuRoot, MoreTrigger } from "../ui/Menu";
 import { Page, PageHeader, dimWhile } from "../ui/Page";
 import { RowSkeleton } from "../ui/Rows";
 import { Segmented } from "../ui/Segmented";
@@ -62,9 +61,7 @@ function ReleaseRow({ release, view, onSeen, busy }: { release: Release; view: V
       )}
       <IconButton icon={PlayIcon} label={`Play ${release.name}`} size="sm" onClick={() => playback.playContext(release.uri)} />
       <MenuRoot>
-        <MenuTrigger className={buttonClass({ variant: "ghost", size: "sm", className: "touch-target size-(--control-h-sm) px-0" })} aria-label={`More for ${release.name}`}>
-          <Icon icon={DotsThreeIcon} size="md" />
-        </MenuTrigger>
+        <MoreTrigger label={`More for ${release.name}`} />
         <MenuPopup>
           <MenuItem icon={PlayIcon} onClick={() => playback.playContext(release.uri)}>
             Play

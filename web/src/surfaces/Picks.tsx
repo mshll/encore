@@ -13,14 +13,13 @@ import { useRun } from "../lib/useRun";
 import { openInSpotify, usePlayback } from "../player/playback";
 import { AppLink } from "../ui/AppLink";
 import { Artwork } from "../ui/Artwork";
-import { Button, buttonClass, IconButton } from "../ui/Button";
+import { Button, IconButton } from "../ui/Button";
 import { useClaudeGate } from "../ui/ClaudeNotice";
 import { cx } from "../ui/cx";
 import { Icon } from "../ui/Icon";
 import {
   ArrowCounterClockwiseIcon,
   ArrowUpRightIcon,
-  DotsThreeIcon,
   MicrophoneStageIcon,
   PlayIcon,
   ProhibitIcon,
@@ -28,7 +27,7 @@ import {
   SparkleIcon,
   WaveformIcon,
 } from "../ui/icons";
-import { MenuItem, MenuLinkItem, MenuPopup, MenuRoot, MenuSeparator, MenuTrigger } from "../ui/Menu";
+import { MenuItem, MenuLinkItem, MenuPopup, MenuRoot, MenuSeparator, MoreTrigger } from "../ui/Menu";
 import { Page, PageHeader, Section, dimWhile } from "../ui/Page";
 import { RunProgress } from "../ui/RunProgress";
 import { Select } from "../ui/Select";
@@ -103,12 +102,7 @@ function PickRow({ pick }: { pick: Pick }) {
             )}
             <IconButton icon={PlayIcon} label={`Play ${pick.name}`} size="sm" className="max-md:hidden" onClick={() => playback.play([pick.uri])} />
             <MenuRoot>
-              <MenuTrigger
-                className={buttonClass({ variant: "ghost", size: "sm", className: "touch-target size-(--control-h-sm) px-0" })}
-                aria-label={`More for ${pick.name}`}
-              >
-                <Icon icon={DotsThreeIcon} size="md" />
-              </MenuTrigger>
+              <MoreTrigger label={`More for ${pick.name}`} />
               <MenuPopup>
                 <MenuItem icon={PlayIcon} onClick={() => playback.play([pick.uri])}>
                   Play

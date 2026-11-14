@@ -16,8 +16,8 @@ import { Composer } from "../ui/Composer";
 import { cx } from "../ui/cx";
 import { Confirm } from "../ui/Dialog";
 import { Icon } from "../ui/Icon";
-import { CaretRightIcon, ChatCircleTextIcon, DotsThreeIcon, PlusIcon, TrashIcon, WaveformIcon } from "../ui/icons";
-import { MenuItem, MenuPopup, MenuRoot, MenuTrigger } from "../ui/Menu";
+import { CaretRightIcon, ChatCircleTextIcon, PlusIcon, TrashIcon, WaveformIcon } from "../ui/icons";
+import { MenuItem, MenuPopup, MenuRoot, MoreTrigger } from "../ui/Menu";
 import { Page, PageHeader } from "../ui/Page";
 import { RowSkeleton } from "../ui/Rows";
 import { RunProgress } from "../ui/RunProgress";
@@ -151,9 +151,7 @@ function DeleteThread({ id, title }: { id: number; title: string }) {
   return (
     <>
       <MenuRoot>
-        <MenuTrigger className={buttonClass({ variant: "ghost", className: "touch-target size-(--control-h) px-0" })} aria-label="More for this question">
-          <Icon icon={DotsThreeIcon} size="md" />
-        </MenuTrigger>
+        <MoreTrigger label="More for this question" size="md" />
         <MenuPopup>
           <MenuItem icon={TrashIcon} danger onClick={() => setOpen(true)}>
             Delete question

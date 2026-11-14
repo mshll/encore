@@ -18,8 +18,8 @@ import { useClaudeGate } from "../ui/ClaudeNotice";
 import { Composer } from "../ui/Composer";
 import { Confirm } from "../ui/Dialog";
 import { Icon } from "../ui/Icon";
-import { ArrowUpRightIcon, DotsThreeIcon, MicrophoneStageIcon, MusicNoteIcon, PlayIcon, PlaylistIcon, PushPinIcon, QueueIcon, TrashIcon } from "../ui/icons";
-import { MenuItem, MenuLinkItem, MenuPopup, MenuRoot, MenuSeparator, MenuTrigger } from "../ui/Menu";
+import { ArrowUpRightIcon, MicrophoneStageIcon, MusicNoteIcon, PlayIcon, PlaylistIcon, PushPinIcon, QueueIcon, TrashIcon } from "../ui/icons";
+import { MenuItem, MenuLinkItem, MenuPopup, MenuRoot, MenuSeparator, MoreTrigger } from "../ui/Menu";
 import { Page, PageHeader, Section } from "../ui/Page";
 import { RowSkeleton } from "../ui/Rows";
 import { RunProgress } from "../ui/RunProgress";
@@ -94,12 +94,7 @@ function TrackRow({ item, added, onPin, onRemove }: { item: SetTrack; added: boo
       <span className="flex shrink-0 items-start md:opacity-0 md:transition-opacity md:duration-150 md:group-hover:opacity-100 md:group-focus-within:opacity-100 md:has-[[data-popup-open]]:opacity-100">
         <IconButton icon={PlayIcon} label={`Play ${item.name}`} size="sm" className="max-md:hidden" onClick={() => playback.play([item.uri])} />
         <MenuRoot>
-          <MenuTrigger
-            className={buttonClass({ variant: "ghost", size: "sm", className: "touch-target size-(--control-h-sm) px-0" })}
-            aria-label={`More for ${item.name}`}
-          >
-            <Icon icon={DotsThreeIcon} size="md" />
-          </MenuTrigger>
+          <MoreTrigger label={`More for ${item.name}`} />
           <MenuPopup>
             <MenuItem icon={PlayIcon} onClick={() => playback.play([item.uri])}>
               Play
@@ -299,9 +294,7 @@ function SetActions({ set, playing }: { set: SetDetail; playing: boolean }) {
         </a>
       )}
       <MenuRoot>
-        <MenuTrigger className={buttonClass({ variant: "ghost", className: "touch-target size-(--control-h) px-0" })} aria-label="More for this set">
-          <Icon icon={DotsThreeIcon} size="md" />
-        </MenuTrigger>
+        <MoreTrigger label="More for this set" size="md" />
         <MenuPopup>
           {set.playlist && (
             <MenuLinkItem icon={ArrowUpRightIcon} href={set.playlist.url} target="_blank" rel="noreferrer">
