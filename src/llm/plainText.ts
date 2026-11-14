@@ -24,3 +24,8 @@ export function plainText(text: string): string {
     .replace(/\n{3,}/g, "\n\n")
     .trim();
 }
+
+/** True when text meant for the owner carries a song reference (#123), a snake_case id (wrong_moment) or a field name. */
+export function leaksInternals(text: string): boolean {
+  return /#\d/.test(text) || /\b[a-z]+_[a-z_]+\b/.test(text) || /\b(songKey|playClass|finishedShare|lastPlayedGroup|uri)\b/.test(text);
+}

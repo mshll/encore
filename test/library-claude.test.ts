@@ -6,7 +6,8 @@ import { cleanupBatches, libraryPlans, libraryStanding, ownedPlaylists, playlist
 import { createAssistantJobs } from "../src/jobs/assistant";
 import { runJob } from "../src/jobs/scheduler";
 import { getPlan, updateItems } from "../src/library/plans";
-import { continuePlanConversation, leaksInternals, startPlanConversation } from "../src/library/planner";
+import { leaksInternals } from "../src/llm/plainText";
+import { continuePlanConversation, startPlanConversation } from "../src/library/planner";
 import { createStanding } from "../src/library/standing";
 import { SpotifyAuth } from "../src/spotify/auth";
 import { featureCtx, message, scripted, seedLibrary, text, toolCall, toolResults } from "./llmFakes";

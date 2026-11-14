@@ -5,6 +5,7 @@ import { libraryPlans, PLAN_ACTIONS, type PlanAction, type PlanSource } from "..
 import { runAgent, tool, type AgentEvent, type AgentTool } from "../llm/agent";
 import type { MessageParam } from "../llm/client";
 import { localNow, type FeatureContext } from "../llm/context";
+import { leaksInternals } from "../llm/plainText";
 import { createThread, deleteThread, getThread, ownerMessage, saveThreadMessages, transcript } from "../llm/threads";
 import { CLASS_RULES, entryEvidence, libraryAnalysis, loadLibrary, monthYear, unsavedSongs, type LibraryEntry, type LibrarySnapshot, type PlayClass } from "./analysis";
 import { createPlan, PlanNotFoundError, replaceItems, type NewItem } from "./plans";
@@ -164,11 +165,6 @@ export const submitPlanInput = z.strictObject({
 });
 
 type SubmitInput = z.infer<typeof submitPlanInput>;
-
-/** Reasons the owner reads must be plain words: no song references, no field or tool names. */
-export function leaksInternals(text: string): boolean {
-  return /#\d/.test(text) || /\b[a-z]+_[a-z_]+\b/.test(text) || /\b(songKey|playClass|finishedShare|lastPlayedGroup|uri)\b/.test(text);
-}
 
 const takesOut = (a: PlanAction) => a === "archive" || a === "remove" || a === "dedupe";
 
