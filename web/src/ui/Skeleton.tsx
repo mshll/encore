@@ -3,7 +3,9 @@ import { cx } from "./cx";
 
 /** A placeholder block. Only where the final layout is known; otherwise use inline status text. */
 export function Skeleton({ className, style }: { className?: string; style?: CSSProperties }) {
-  return <div aria-hidden className={cx("animate-[skeleton-pulse_1.6s_ease-in-out_infinite] rounded-xs bg-fill", className)} style={style} />;
+  // cx does not merge Tailwind classes, so the default radius steps aside when the caller sets one.
+  const radius = !className?.includes("rounded-") && "rounded-xs";
+  return <div aria-hidden className={cx("animate-[skeleton-pulse_1.6s_ease-in-out_infinite] bg-fill", radius, className)} style={style} />;
 }
 
 const BARS = [38, 52, 46, 61, 74, 58, 49, 67, 82, 63, 47, 40, 55, 71, 60, 45];
