@@ -3,10 +3,6 @@ import { useStatus, useTimezone } from "../api/queries";
 import { resetDay } from "../lib/assistant";
 import { fmtTime } from "../lib/format";
 import { AppLink } from "./AppLink";
-import { Button } from "./Button";
-import { cx } from "./cx";
-import { Icon } from "./Icon";
-import { WarningIcon } from "./icons";
 
 const usd = (n: number) => `$${n.toFixed(2)}`;
 
@@ -55,36 +51,4 @@ export function useClaudeGate({ needsSpotify }: { needsSpotify: boolean }): Clau
       ? `Spotify calls are paused${spotify.paused.until ? ` until ${fmtTime(spotify.paused.until, timezone)}` : ""}, so songs new to you cannot be checked.`
       : null;
   return { ready: true, blocked: null, warning, spend };
-}
-
-/** A gate message or a failed run, in the page flow. Problems carry Try again when the run can be repeated. */
-export function RunNotice({
-  children,
-  tone = "warning",
-  onRetry,
-  className,
-}: {
-  children: ReactNode;
-  tone?: "warning" | "danger";
-  onRetry?: () => void;
-  className?: string;
-}) {
-  return (
-    <div
-      role={tone === "danger" ? "alert" : "status"}
-      className={cx(
-        "flex items-start gap-2.5 rounded-lg px-3 py-2.5",
-        tone === "danger" ? "bg-danger-subtle text-danger" : "bg-warning-subtle text-warning",
-        className,
-      )}
-    >
-      <Icon icon={WarningIcon} className="mt-0.5" />
-      <p className="min-w-0 flex-1 text-pretty">{children}</p>
-      {onRetry && (
-        <Button size="sm" onClick={onRetry} className="-my-1">
-          Try again
-        </Button>
-      )}
-    </div>
-  );
 }

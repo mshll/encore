@@ -11,7 +11,7 @@ import { showToast } from "../lib/toast";
 import { useRun } from "../lib/useRun";
 import { AppLink } from "../ui/AppLink";
 import { buttonClass } from "../ui/Button";
-import { RunNotice, useClaudeGate } from "../ui/ClaudeNotice";
+import { useClaudeGate } from "../ui/ClaudeNotice";
 import { Composer } from "../ui/Composer";
 import { cx } from "../ui/cx";
 import { Confirm } from "../ui/Dialog";
@@ -22,7 +22,8 @@ import { Page, PageHeader } from "../ui/Page";
 import { RowSkeleton } from "../ui/Rows";
 import { RunProgress } from "../ui/RunProgress";
 import { Skeleton } from "../ui/Skeleton";
-import { EmptyState, ErrorState } from "../ui/States";
+import { EmptyState, ErrorState, FirstUseState } from "../ui/States";
+import { Notice } from "../ui/Notice";
 import { useDesktop } from "../lib/useMedia";
 
 /** Splits an answer into paragraphs and its closing "Based on:" line. */
@@ -227,7 +228,7 @@ export function Ask({ id }: { id?: string }) {
     threadId === null ? null : missing ? (
       <EmptyState
         icon={ChatCircleTextIcon}
-        title="This question no longer exists"
+        title="This question does not exist"
         action={
           <AppLink to="/ask" className={buttonClass()}>
             Ask something new
@@ -250,9 +251,9 @@ export function Ask({ id }: { id?: string }) {
   const composer = (
     <div className="flex flex-col gap-3">
       {run.problem && (
-        <RunNotice tone="danger" onRetry={gate.blocked || !text.trim() ? undefined : () => ask(text.trim())}>
+        <Notice tone="danger" onRetry={gate.blocked || !text.trim() ? undefined : () => ask(text.trim())}>
           {run.problem}
-        </RunNotice>
+        </Notice>
       )}
       {stopped && <p className="text-secondary">Stopped.</p>}
       {!run.running && !missing && (
@@ -330,17 +331,7 @@ export function Ask({ id }: { id?: string }) {
     return (
       <Page width="read">
         <PageHeader title="Ask" />
-        <EmptyState
-          size="page"
-          icon={WaveformIcon}
-          title="No listening yet"
-          description="Answers come from your history. Import it or connect Spotify first."
-          action={
-            <AppLink to="/setup" className={buttonClass({ variant: "primary" })}>
-              Set up encore
-            </AppLink>
-          }
-        />
+        <FirstUseState icon={WaveformIcon} description="Answers come from your history. Import it or connect Spotify first." />
       </Page>
     );
 

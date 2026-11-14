@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { ApiError } from "../api/client";
-import { Button } from "./Button";
+import { AppLink } from "./AppLink";
+import { Button, buttonClass } from "./Button";
 import { cx } from "./cx";
 import { Icon, type IconGlyph } from "./Icon";
 
@@ -76,5 +77,22 @@ export function ErrorState({
         </Button>
       )}
     </div>
+  );
+}
+
+/** Before any play is imported: what this surface will show, and the one step that gets there. */
+export function FirstUseState({ icon, title = "No listening yet", description }: { icon: IconGlyph; title?: string; description: string }) {
+  return (
+    <EmptyState
+      size="page"
+      icon={icon}
+      title={title}
+      description={description}
+      action={
+        <AppLink to="/setup" className={buttonClass({ variant: "primary" })}>
+          Set up encore
+        </AppLink>
+      }
+    />
   );
 }

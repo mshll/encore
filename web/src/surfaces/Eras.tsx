@@ -12,11 +12,12 @@ import { useDesktop } from "../lib/useMedia";
 import { Artwork } from "../ui/Artwork";
 import { cx } from "../ui/cx";
 import { ChartBarIcon } from "../ui/icons";
-import { Section } from "../ui/Page";
+import { SECTIONS, SIDE_COLUMNS, Section, dimWhile } from "../ui/Page";
 import { RangePicker } from "../ui/RangePicker";
 import { ArtistRow, Row, RowList, RowSkeleton, TrackRow } from "../ui/Rows";
-import { Skeleton } from "../ui/Skeleton";
+import { ChartSkeleton, Skeleton } from "../ui/Skeleton";
 import { EmptyState, ErrorState } from "../ui/States";
+import { StartSessionButton } from "../ui/StartSessionButton";
 import { PatternsFrame } from "./PatternsFrame";
 
 const ARTISTS = 10;
@@ -115,6 +116,7 @@ function PickDetail({ era, month, hours, led }: { era: Era; month: string; hours
       title={`${era.artist} in ${fmtMonthLong(month)}`}
       description={hours > 0 ? `${fmtHours(hours)}${led ? ", more than any other artist" : ""}` : undefined}
       labelledBy="eras-pick"
+      actions={page.data && hours > 0 && <StartSessionButton uris={page.data.tracks.map((s) => s.uri)} />}
     >
       <div className="grid gap-8 xl:grid-cols-2">
         <Column title="Songs">
@@ -168,7 +170,7 @@ function ErasView({ range }: { range: Range }) {
     return (
       <div aria-busy className="flex flex-col gap-4">
         <Skeleton className="h-5 w-full max-w-md" />
-        <Skeleton className="h-[960px] w-full md:h-[268px]" />
+        <ChartSkeleton shape="grid" className="h-[960px] md:h-[268px]" />
       </div>
     );
   if (!shape) return <EmptyState size="section" title="No plays in this range" description="Pick a wider range to see which artists defined each month." action={<RangePicker />} />;
@@ -183,7 +185,7 @@ function ErasView({ range }: { range: Range }) {
   const top = eras[0]?.hours || 1;
 
   return (
-    <div className={cx("flex flex-col gap-10 transition-opacity duration-200", q.isPlaceholderData && "opacity-60")}>
+    <div className={cx(SECTIONS, dimWhile(q.isPlaceholderData))}>
       <div className="flex flex-col gap-4">
         {run && (
           <p className="text-body text-pretty">
@@ -206,7 +208,7 @@ function ErasView({ range }: { range: Range }) {
           </p>
         )}
       </div>
-      <div className="grid gap-10 lg:grid-cols-[minmax(0,1fr)_minmax(0,320px)]">
+      <div className={SIDE_COLUMNS}>
         <PickDetail key={`${pick.artist}-${months[pick.month]}`} era={eras[pick.artist]!} month={months[pick.month]!} hours={pickedHours} led={led} />
         <Section title="Artists">
           <RowList label="Top artists in this range">

@@ -9,10 +9,10 @@ import { useRange, type Range } from "../lib/range";
 import { useDesktop } from "../lib/useMedia";
 import { cx } from "../ui/cx";
 import { ClockIcon } from "../ui/icons";
-import { Section } from "../ui/Page";
+import { SECTIONS, SIDE_COLUMNS, Section, dimWhile } from "../ui/Page";
 import { RangePicker } from "../ui/RangePicker";
 import { ArtistRow, RowList, RowSkeleton, TrackRow } from "../ui/Rows";
-import { Skeleton } from "../ui/Skeleton";
+import { ChartSkeleton, Skeleton } from "../ui/Skeleton";
 import { StatStrip, type StatItem } from "../ui/Stat";
 import { EmptyState, ErrorState } from "../ui/States";
 import { PatternsFrame } from "./PatternsFrame";
@@ -161,7 +161,7 @@ function ClockView({ range }: { range: Range }) {
             </div>
           ))}
         </div>
-        <Skeleton className="h-[480px] w-full md:h-[226px]" />
+        <ChartSkeleton shape="grid" className="h-[480px] md:h-[226px]" />
       </div>
     );
 
@@ -178,7 +178,7 @@ function ClockView({ range }: { range: Range }) {
   ];
 
   return (
-    <div className={cx("flex flex-col gap-10 transition-opacity duration-200", q.isPlaceholderData && "opacity-60")}>
+    <div className={cx(SECTIONS, dimWhile(q.isPlaceholderData))}>
       <StatStrip items={figures} value={metric} onChange={setMetric} label="Listening figures">
         <div className="flex flex-col gap-4 pt-5">
           <p className="text-body text-pretty">
@@ -195,7 +195,7 @@ function ClockView({ range }: { range: Range }) {
           </div>
         </div>
       </StatStrip>
-      <div className="grid gap-10 lg:grid-cols-[minmax(0,1fr)_minmax(0,320px)]">
+      <div className={SIDE_COLUMNS}>
         <SlotDetail slot={slot} cell={cell} range={range} />
         <ByWeekday days={days} metric={metric} />
       </div>

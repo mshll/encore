@@ -2,7 +2,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { useLocation, useSearchParams } from "wouter";
 import { request } from "../api/client";
-import { useBlocks, useLifetime, usePickWeeks, usePicks, useStatus } from "../api/queries";
+import { useLifetime, usePickWeeks, usePicks, useStatus } from "../api/queries";
 import type { Pick, PicksWeek, PickState } from "../api/types";
 import { artistPath } from "../app/paths";
 import { FOR_YOU_TABS } from "../app/nav";
@@ -14,26 +14,28 @@ import { openInSpotify, usePlayback } from "../player/playback";
 import { AppLink } from "../ui/AppLink";
 import { Artwork } from "../ui/Artwork";
 import { Button, buttonClass, IconButton } from "../ui/Button";
-import { RunNotice, useClaudeGate } from "../ui/ClaudeNotice";
+import { useClaudeGate } from "../ui/ClaudeNotice";
 import { cx } from "../ui/cx";
 import { Icon } from "../ui/Icon";
 import {
   ArrowCounterClockwiseIcon,
   ArrowUpRightIcon,
   DotsThreeIcon,
+  MicrophoneStageIcon,
   PlayIcon,
   ProhibitIcon,
   QueueIcon,
   SparkleIcon,
-  VinylRecordIcon,
   WaveformIcon,
 } from "../ui/icons";
 import { MenuItem, MenuLinkItem, MenuPopup, MenuRoot, MenuSeparator, MenuTrigger } from "../ui/Menu";
-import { Page, PageHeader, Section } from "../ui/Page";
+import { Page, PageHeader, Section, dimWhile } from "../ui/Page";
 import { RunProgress } from "../ui/RunProgress";
 import { Select } from "../ui/Select";
 import { Skeleton } from "../ui/Skeleton";
-import { EmptyState, ErrorState } from "../ui/States";
+import { EmptyState, ErrorState, FirstUseState } from "../ui/States";
+import { BlockedList } from "./BlockedList";
+import { Notice } from "../ui/Notice";
 import { TabNav } from "../ui/TabNav";
 
 const STATE_TEXT: Record<Exclude<PickState, "new">, string> = { saved: "Saved", not_now: "Not now", never: "Never again" };
@@ -130,7 +132,7 @@ function PickRow({ pick }: { pick: Pick }) {
                   </MenuItem>
                 )}
                 <MenuSeparator />
-                <MenuItem icon={VinylRecordIcon} onClick={() => navigate(artistPath(pick.artist))}>
+                <MenuItem icon={MicrophoneStageIcon} onClick={() => navigate(artistPath(pick.artist))}>
                   Go to artist
                 </MenuItem>
                 <MenuLinkItem icon={ArrowUpRightIcon} href={openInSpotify(pick.uri)} target="_blank" rel="noreferrer">
@@ -204,7 +206,7 @@ function Generate() {
   return (
     <div className="flex flex-col gap-4">
       {run.problem && (
-<RunNotice tone="danger">{run.problem}</RunNotice>
+<Notice tone="danger">{run.problem}</Notice>
       )}
       <EmptyState
         icon={SparkleIcon}
@@ -232,36 +234,6 @@ function HowPicksDid({ stats }: { stats: PicksWeek["stats"] }) {
   );
 }
 
-function Blocked() {
-  const q = useBlocks();
-  const queryClient = useQueryClient();
-  const unblock = async (id: number) => {
-    try {
-      await request(`/api/blocks/${id}`, { method: "DELETE" });
-      await Promise.all([queryClient.invalidateQueries({ queryKey: ["blocks"] }), queryClient.invalidateQueries({ queryKey: ["picks"] })]);
-    } catch (error) {
-      showToast(assistantProblem(error), "problem");
-    }
-  };
-  if (!q.data || q.data.items.length === 0) return null;
-  return (
-    <Section title="Never suggested">
-      <ul className="flex flex-col">
-        {q.data.items.map((b) => (
-          <li key={b.id} className="flex min-h-(--row-h) items-center justify-between gap-4">
-            <span className="flex min-w-0 flex-col">
-              <span className="truncate">{b.label}</span>
-              <span className="text-caption text-secondary">{b.kind === "artist" ? "Artist" : "Song"}</span>
-            </span>
-            <Button size="sm" onClick={() => unblock(b.id)}>
-              Unblock
-            </Button>
-          </li>
-        ))}
-      </ul>
-    </Section>
-  );
-}
 
 function WeekPicker({ current, value, onChange }: { current: string; value: string; onChange: (week: string) => void }) {
   const weeks = usePickWeeks();
@@ -299,17 +271,7 @@ export function Picks() {
         <TabNav items={FOR_YOU_TABS} label="For you" />
       </PageHeader>
       {firstUse ? (
-        <EmptyState
-          size="page"
-          icon={WaveformIcon}
-          title="No listening yet"
-          description="Picks are chosen from what you play. Import your history or connect Spotify first."
-          action={
-            <AppLink to="/setup" className={buttonClass({ variant: "primary" })}>
-              Set up encore
-            </AppLink>
-          }
-        />
+        <FirstUseState icon={WaveformIcon} description="Picks are chosen from what you play. Import your history or connect Spotify first." />
       ) : q.isError ? (
         <ErrorState error={q.error} onRetry={() => q.refetch()} />
       ) : !q.data ? (
@@ -335,7 +297,7 @@ export function Picks() {
               )}
             </div>
             {q.data.picks.length > 0 ? (
-              <ol className={cx("flex flex-col divide-y-[0.5px] divide-line", q.isPlaceholderData && "opacity-60")}>
+              <ol className={cx("flex flex-col divide-y-[0.5px] divide-line", dimWhile(q.isPlaceholderData))}>
                 {q.data.picks.map((p) => (
                   <PickRow key={p.id} pick={p} />
                 ))}
@@ -347,7 +309,7 @@ export function Picks() {
             )}
           </section>
           <HowPicksDid stats={q.data.stats} />
-          <Blocked />
+          <BlockedList />
         </>
       )}
     </Page>

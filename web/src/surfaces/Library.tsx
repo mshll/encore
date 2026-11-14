@@ -2,10 +2,9 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { ApiError, request } from "../api/client";
 import { useBlocks, useCleanup, useCleanupBatches, useTimezone } from "../api/queries";
-import type { Block, CleanupBatch, CleanupKind, CleanupProposal } from "../api/types";
+import type { CleanupBatch, CleanupKind, CleanupProposal } from "../api/types";
 import { fmtAgo, fmtDate, fmtInt } from "../lib/format";
 import { showToast } from "../lib/toast";
-import { AppLink } from "../ui/AppLink";
 import { Artwork } from "../ui/Artwork";
 import { Button } from "../ui/Button";
 import { Checkbox } from "../ui/Checkbox";
@@ -15,7 +14,8 @@ import { BroomIcon } from "../ui/icons";
 import { Page, PageHeader, Section } from "../ui/Page";
 import { RowSkeleton } from "../ui/Rows";
 import { TabList, TabPanel, TabsRoot } from "../ui/Segmented";
-import { describeError, EmptyState, ErrorState } from "../ui/States";
+import { BlockedList } from "./BlockedList";
+import { EmptyState, ErrorState, FirstUseState, describeError } from "../ui/States";
 
 const KINDS: { value: CleanupKind; label: string; rule: string; empty: string }[] = [
   {
@@ -219,41 +219,6 @@ function Batches({ items }: { items: CleanupBatch[] }) {
   );
 }
 
-function Blocks({ items }: { items: Block[] }) {
-  const queryClient = useQueryClient();
-  const [pending, setPending] = useState<number | null>(null);
-  const unblock = async (b: Block) => {
-    setPending(b.id);
-    try {
-      await request(`/api/blocks/${b.id}`, { method: "DELETE" });
-      showToast(`${b.label} can be picked again`);
-      await queryClient.invalidateQueries({ queryKey: ["blocks"] });
-    } catch (error) {
-      showToast(describeError(error), "problem");
-    } finally {
-      setPending(null);
-    }
-  };
-  return (
-    <Section title="Kept out of picks and sets">
-      <ul className="flex flex-col">
-        {items.map((b) => (
-          <li key={b.id} className="flex min-h-(--row-h) items-center justify-between gap-3 py-1">
-            <span className="flex min-w-0 flex-col">
-              <span className="truncate text-primary" title={b.label}>
-                {b.label}
-              </span>
-              <span className="truncate text-caption text-secondary">{b.kind === "artist" ? "Artist" : "Song"}</span>
-            </span>
-            <Button size="sm" variant="ghost" busy={pending === b.id} busyLabel="Allowing" onClick={() => void unblock(b)}>
-              Allow
-            </Button>
-          </li>
-        ))}
-      </ul>
-    </Section>
-  );
-}
 
 export function Library() {
   const [kind, setKind] = useState<CleanupKind>("saved_dislike");
@@ -281,17 +246,7 @@ export function Library() {
       {summary.isError ? (
         <ErrorState error={summary.error} onRetry={() => summary.refetch()} />
       ) : neverSynced && total === 0 ? (
-        <EmptyState
-          size="page"
-          icon={BroomIcon}
-          title="Your library has not synced yet"
-          description="encore reads your saved songs and playlists once Spotify is connected, then proposes what could go."
-          action={
-            <AppLink to="/setup" className="font-medium text-primary underline underline-offset-2">
-              Set up encore
-            </AppLink>
-          }
-        />
+        <FirstUseState icon={BroomIcon} title="Your library has not synced yet" description="encore reads your saved songs and playlists once Spotify is connected, then proposes what could go." />
       ) : (
         <div className={cx("grid gap-10", side && "lg:grid-cols-[minmax(0,1fr)_minmax(0,320px)] lg:gap-12")}>
           <TabsRoot value={kind} onValueChange={(v) => setKind(v as CleanupKind)} className="flex min-w-0 flex-col gap-4">
@@ -316,7 +271,7 @@ export function Library() {
           {side && (
             <div className="flex min-w-0 flex-col gap-10">
               {batches.data && batches.data.items.length > 0 && <Batches items={batches.data.items} />}
-              {blocks.data && blocks.data.items.length > 0 && <Blocks items={blocks.data.items} />}
+              <BlockedList />
             </div>
           )}
         </div>

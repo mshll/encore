@@ -291,7 +291,6 @@ export function SettingFieldRow({ field, form, hint, storage = true }: { field: 
 
 const EFFECT_TEXT: Partial<Record<SettingsEffect["type"], string>> = {
   spotify_disconnected: "Spotify is disconnected: the connection belonged to the old client ID. Connect again to keep logging plays.",
-  timezone_forward_only: "Plays stored from now on use the new time zone. Plays already stored keep the old one.",
 };
 
 /** What a save changed beyond the values: shown under the section until dismissed or the next save. */
@@ -306,9 +305,11 @@ export function Effects({ form, spotifyAction }: { form: SettingsForm; spotifyAc
               Saved, but Discord refused the commands: {effect.message}
             </Notice>
           );
+        const text = EFFECT_TEXT[effect.type];
+        if (!text) return null;
         return (
           <Notice key={effect.type} tone={effect.type === "spotify_disconnected" ? "warning" : "info"} action={effect.type === "spotify_disconnected" ? spotifyAction : undefined}>
-            {EFFECT_TEXT[effect.type]}
+            {text}
           </Notice>
         );
       })}

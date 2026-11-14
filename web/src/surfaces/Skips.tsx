@@ -11,14 +11,15 @@ import { Artwork } from "../ui/Artwork";
 import { Button } from "../ui/Button";
 import { cx } from "../ui/cx";
 import { SkipForwardIcon } from "../ui/icons";
-import { Section } from "../ui/Page";
+import { SECTIONS, Section, dimWhile } from "../ui/Page";
 import { RangePicker } from "../ui/RangePicker";
 import { RowSkeleton } from "../ui/Rows";
 import { TabList, TabsRoot } from "../ui/Segmented";
-import { Skeleton } from "../ui/Skeleton";
+import { ChartSkeleton, Skeleton } from "../ui/Skeleton";
 import { SongContext, SongMenu } from "../ui/SongMenu";
 import { Stat } from "../ui/Stat";
 import { EmptyState, ErrorState } from "../ui/States";
+import { StartSessionButton } from "../ui/StartSessionButton";
 import { PatternsFrame } from "./PatternsFrame";
 
 const CLASSES: MomentClass[] = ["wrong_moment", "keeper", "mixed", "dislike"];
@@ -140,7 +141,7 @@ function ClassSongs({ range, cls, onClass }: { range: Range; cls: MomentClass; o
               ),
             }))}
           />
-          <div className={cx("flex flex-col gap-2 transition-opacity duration-200", q.isPlaceholderData && "opacity-60")}>
+          <div className={cx("flex flex-col gap-2", dimWhile(q.isPlaceholderData))}>
             {q.data.songs.length === 0 ? (
               <EmptyState size="inline" title={`No songs in ${CLASS_LABELS[cls].toLowerCase()} for this range`} />
             ) : (
@@ -155,6 +156,7 @@ function ClassSongs({ range, cls, onClass }: { range: Range; cls: MomentClass; o
                 Show more
               </Button>
             )}
+            {cls === "keeper" && <StartSessionButton uris={q.data.songs.map((s) => s.uri)} className="self-start" />}
           </div>
         </TabsRoot>
       )}
@@ -177,7 +179,7 @@ function SkipsView({ range }: { range: Range }) {
             </div>
           ))}
         </div>
-        <Skeleton className="h-[248px] w-full" />
+        <ChartSkeleton className="h-[248px]" />
       </div>
     );
   const { summary } = q.data;
@@ -192,7 +194,7 @@ function SkipsView({ range }: { range: Range }) {
       />
     );
   return (
-    <div className={cx("flex flex-col gap-12 transition-opacity duration-200", q.isPlaceholderData && "opacity-60")}>
+    <div className={cx(SECTIONS, dimWhile(q.isPlaceholderData))}>
       <Figures summary={summary} />
       <Positions positions={q.data.positions} />
       <ContextGroups profile={q.data.profile} plays={summary.plays} overall={summary.skipRate} />

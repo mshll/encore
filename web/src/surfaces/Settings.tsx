@@ -27,11 +27,19 @@ type Tab = "general" | "spotify" | "claude" | "integrations" | "jobs" | "account
 
 const usd = (n: number) => `$${n.toFixed(2)}`;
 
+const SKIP_REASONS: Record<string, string> = {
+  not_due: "not due yet",
+  budget_exceeded: "this month’s Claude budget is spent",
+  llm_not_configured: "Claude is not set up",
+  spotify_not_connected: "Spotify is not connected",
+  attempts_exhausted: "it failed too many times",
+};
+
 function jobLine(job: JobStatus | undefined, verb = "Ran"): { text: string; problem: boolean } {
   if (!job) return { text: "", problem: false };
   if (job.lastError) return { text: `Failed ${job.lastRunAt ? fmtAgo(job.lastRunAt) : ""}: ${job.lastError}`, problem: true };
   const skipped = job.lastResult?.skipped;
-  if (typeof skipped === "string" && job.lastRunAt) return { text: `Skipped ${fmtAgo(job.lastRunAt)}: ${skipped.replaceAll("_", " ")}`, problem: false };
+  if (typeof skipped === "string" && job.lastRunAt) return { text: `Skipped ${fmtAgo(job.lastRunAt)}: ${SKIP_REASONS[skipped] ?? skipped.replaceAll("_", " ")}`, problem: false };
   if (!job.lastSuccessAt) return { text: "Not run yet", problem: false };
   return { text: `${verb} ${fmtAgo(job.lastSuccessAt)}`, problem: false };
 }
@@ -61,7 +69,7 @@ function General() {
         title="Time and place"
         keys={["timezone", "homeCountry", "weekendDays"]}
         form={form}
-        hints={zoneChanging ? { timezone: "Only plays stored after you save use the new zone. Plays already stored keep the old one." } : undefined}
+        hints={zoneChanging ? { timezone: "Plays already stored keep the old zone." } : undefined}
       />
       <Section title="Appearance">
         <SettingRows>

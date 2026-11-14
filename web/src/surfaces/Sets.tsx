@@ -8,15 +8,15 @@ import { useSetStarters } from "../lib/prompts";
 import { useRun } from "../lib/useRun";
 import { AppLink } from "../ui/AppLink";
 import { Artwork } from "../ui/Artwork";
-import { buttonClass } from "../ui/Button";
-import { RunNotice, useClaudeGate } from "../ui/ClaudeNotice";
+import { useClaudeGate } from "../ui/ClaudeNotice";
 import { Composer } from "../ui/Composer";
 import { cx } from "../ui/cx";
 import { PlaylistIcon, WaveformIcon } from "../ui/icons";
 import { Page, PageHeader, Section } from "../ui/Page";
 import { RowSkeleton } from "../ui/Rows";
 import { RunProgress } from "../ui/RunProgress";
-import { EmptyState, ErrorState } from "../ui/States";
+import { Notice } from "../ui/Notice";
+import { EmptyState, ErrorState, FirstUseState } from "../ui/States";
 
 type SetListItem = SetSummary & { tracks: number; covers: string[] };
 
@@ -93,9 +93,9 @@ function NewSet() {
   return (
     <div className="flex flex-col gap-5">
       {run.problem && (
-        <RunNotice tone="danger" onRetry={gate.blocked || !text.trim() ? undefined : build}>
+        <Notice tone="danger" onRetry={gate.blocked || !text.trim() ? undefined : build}>
           {run.problem}
-        </RunNotice>
+        </Notice>
       )}
       {stopped && <p className="text-secondary">Stopped.</p>}
       <Composer
@@ -139,17 +139,7 @@ export function Sets() {
     <Page width="read">
       <PageHeader title="Sets" />
       {firstUse ? (
-        <EmptyState
-          size="page"
-          icon={WaveformIcon}
-          title="No listening yet"
-          description="Sets are built from what you play. Import your history or connect Spotify first."
-          action={
-            <AppLink to="/setup" className={buttonClass({ variant: "primary" })}>
-              Set up encore
-            </AppLink>
-          }
-        />
+        <FirstUseState icon={WaveformIcon} description="Sets are built from what you play. Import your history or connect Spotify first." />
       ) : (
         <>
           <NewSet />

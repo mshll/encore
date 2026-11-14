@@ -8,7 +8,7 @@ import type { RunState } from "../lib/useRun";
 import { Artwork, type ArtBox, type ArtKind } from "../ui/Artwork";
 import { EncoreMark, Lockup } from "../ui/Brand";
 import { Button, IconButton } from "../ui/Button";
-import { RunNotice } from "../ui/ClaudeNotice";
+
 import { Checkbox } from "../ui/Checkbox";
 import { Combobox } from "../ui/Combobox";
 import { Composer } from "../ui/Composer";
@@ -312,10 +312,10 @@ export function Kit() {
         <Section title="Runs">
           <RunProgress run={RUN} title="Making picks" onCancel={() => {}} />
           <Composer value={text} onChange={setText} onSubmit={() => setText("")} label="Ask about your listening" placeholder="What did I play most last winter?" />
-          <RunNotice>Spotify calls are paused until 14:30, so songs new to you cannot be checked.</RunNotice>
-          <RunNotice tone="danger" onRetry={() => {}}>
+          <Notice tone="warning">Spotify calls are paused until 14:30, so songs new to you cannot be checked.</Notice>
+          <Notice tone="danger" onRetry={() => {}}>
             The Anthropic API did not answer. Try again in a minute.
-          </RunNotice>
+          </Notice>
           <Composer value="" onChange={() => {}} onSubmit={() => {}} label="Describe a set" disabled notice="Claude is not set up." />
         </Section>
       </div>

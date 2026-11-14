@@ -113,7 +113,7 @@ function PasskeyStep({ token, onBack, supported }: { token: string; onBack: () =
         </>
       }
     >
-      <p className="text-body text-pretty">You sign in to encore with this passkey. Your device asks where to keep it.</p>
+      <p className="text-body text-pretty">You sign in to encore with this passkey.</p>
       {error && <Notice tone="danger">{error}</Notice>}
     </Card>
   );

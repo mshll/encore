@@ -29,7 +29,7 @@ function WriteRecaps({ missing }: { missing: Kind[] }) {
   const [problem, setProblem] = useState<string | null>(null);
   if (missing.length === 0) return null;
   const llm = status.data?.llm;
-  const blocked = !llm ? null : !llm.configured ? "Writing a recap needs a Claude key." : llm.exhausted ? "This month’s Claude spending cap is reached." : null;
+  const blocked = !llm ? null : !llm.configured ? "Claude is not set up." : llm.exhausted ? "This month’s Claude budget is spent." : null;
   const write = async (kind: Kind) => {
     setWriting(kind);
     setProblem(null);

@@ -9,7 +9,7 @@ import { Button, buttonClass } from "../../ui/Button";
 import { cx } from "../../ui/cx";
 import { EntityHeader } from "../../ui/EntityHeader";
 import { PlayIcon } from "../../ui/icons";
-import { Page, Section, useDocumentTitle } from "../../ui/Page";
+import { Page, Section, dimWhile, useDocumentTitle } from "../../ui/Page";
 import { RangePicker } from "../../ui/RangePicker";
 import { SongMenu } from "../../ui/SongMenu";
 import { LinerNotes } from "./LinerNotes";
@@ -61,7 +61,7 @@ export function SongPage({ songKey }: { songKey: string }) {
     );
   const d = q.data;
   return (
-    <Page className={cx("transition-opacity duration-200", q.isPlaceholderData && "opacity-60")}>
+    <Page className={dimWhile(q.isPlaceholderData)}>
       <EntityHeader
         kind="song"
         title={d.name}

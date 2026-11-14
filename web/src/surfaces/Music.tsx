@@ -8,16 +8,14 @@ import { useScrollElement } from "../app/Shell";
 import { fmtHours, fmtInt } from "../lib/format";
 import { useRange } from "../lib/range";
 import { useDesktop } from "../lib/useMedia";
-import { AppLink } from "../ui/AppLink";
-import { Button, buttonClass } from "../ui/Button";
-import { cx } from "../ui/cx";
+import { Button } from "../ui/Button";
 import { VinylRecordIcon } from "../ui/icons";
-import { Page, PageHeader } from "../ui/Page";
+import { Page, PageHeader, dimWhile } from "../ui/Page";
 import { RangePicker } from "../ui/RangePicker";
 import { AlbumRow, ArtistRow, RowSkeleton, TrackRow } from "../ui/Rows";
 import { SearchField } from "../ui/SearchField";
 import { Select } from "../ui/Select";
-import { EmptyState, ErrorState } from "../ui/States";
+import { EmptyState, ErrorState, FirstUseState } from "../ui/States";
 import { TabNav } from "../ui/TabNav";
 import { Forgotten } from "./Forgotten";
 
@@ -123,7 +121,7 @@ function RankedList({ tab }: { tab: Exclude<MusicTab, "forgotten"> }) {
       <p className="min-h-5 text-secondary tabular" aria-live="polite">
         {count === undefined ? " " : `${fmtInt(count)} ${count === 1 ? one : many}`}
       </p>
-      <div className={cx("transition-opacity duration-200", query.isPlaceholderData && "opacity-60")}>
+      <div className={dimWhile(query.isPlaceholderData)}>
         <div aria-hidden className="@container">
           <div className="flex h-9 items-center gap-3 text-caption text-secondary">
             {!q && <span className="w-8 shrink-0" />}
@@ -131,7 +129,7 @@ function RankedList({ tab }: { tab: Exclude<MusicTab, "forgotten"> }) {
             <span className="flex-1">{COLUMN[tab]}</span>
             <span className="hidden w-24 shrink-0 @lg:block" />
             <span className="w-16 shrink-0 text-right">{SORTS.find((s) => s.value === sort)!.label}</span>
-            {tab === "songs" && <span className="w-[calc(var(--control-h-sm)*2)] shrink-0 max-md:w-(--control-h-sm)" />}
+            {tab === "songs" && <span className="hidden w-(--control-h-sm) shrink-0 max-md:block" />}
           </div>
         </div>
         {query.isError ? (
@@ -185,17 +183,7 @@ export function Music({ tab }: { tab: MusicTab }) {
         <TabNav items={MUSIC_TABS} label="Music" />
       </PageHeader>
       {firstUse ? (
-        <EmptyState
-          size="page"
-          icon={VinylRecordIcon}
-          title="No music yet"
-          description="Import your Spotify history or connect Spotify, and the artists, albums and songs you play rank here."
-          action={
-            <AppLink to="/setup" className={buttonClass({ variant: "primary" })}>
-              Set up encore
-            </AppLink>
-          }
-        />
+        <FirstUseState icon={VinylRecordIcon} description="Import your Spotify history or connect Spotify, and the artists, albums and songs you play rank here." />
       ) : tab === "forgotten" ? (
         <Forgotten />
       ) : (

@@ -5,6 +5,8 @@ import { fmtAgo, fmtInt } from "../lib/format";
 import { cx } from "../ui/cx";
 import { Row, RowList, RowSkeleton } from "../ui/Rows";
 import { Segmented } from "../ui/Segmented";
+import { StartSessionButton } from "../ui/StartSessionButton";
+import { dimWhile } from "../ui/Page";
 import { EmptyState, ErrorState } from "../ui/States";
 
 const WINDOWS = [
@@ -26,7 +28,10 @@ export function Forgotten() {
   const items = q.data?.items ?? [];
   return (
     <div className="flex flex-col gap-4">
-      <Segmented label="Not played for" value={days} onChange={setDays} options={[...WINDOWS]} className="md:self-start" />
+      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+        <Segmented label="Not played for" value={days} onChange={setDays} options={[...WINDOWS]} />
+        {q.data && !q.isPlaceholderData && <StartSessionButton uris={items.map((s) => s.uri)} className="self-start md:self-auto" />}
+      </div>
       <p className="min-h-5 text-secondary text-pretty tabular" aria-live="polite">
         {q.data && !q.isError ? `${items.length >= LIMIT ? `Top ${LIMIT}` : fmtInt(items.length)} ${items.length === 1 ? "song" : "songs"} with ${fmtInt(q.data.minListens)} or more listens, none in ${label}` : " "}
       </p>
@@ -37,12 +42,12 @@ export function Forgotten() {
       ) : items.length === 0 ? (
         <EmptyState title={`Nothing forgotten in ${label}`} description="Every song you played often came back more recently. Try a shorter window." />
       ) : (
-        <div className={cx("flex flex-col transition-opacity duration-200", q.isPlaceholderData && "opacity-60")}>
+        <div className={cx("flex flex-col", dimWhile(q.isPlaceholderData))}>
           <div aria-hidden className="flex h-9 items-center gap-3 text-caption text-secondary">
             <span className="size-8 shrink-0 phone:size-10" />
             <span className="flex-1">Song</span>
             <span className="w-16 shrink-0 text-right">Listens</span>
-            <span className="w-[calc(var(--control-h-sm)*2)] shrink-0 max-md:w-(--control-h-sm)" />
+            <span className="hidden w-(--control-h-sm) shrink-0 max-md:block" />
           </div>
           <RowList label={`Songs not played in ${label}`}>
             {items.map((s) => (

@@ -11,16 +11,17 @@ import { fillPeriods } from "../lib/series";
 import { AppLink } from "../ui/AppLink";
 import { Artwork } from "../ui/Artwork";
 import { buttonClass } from "../ui/Button";
-import { cx } from "../ui/cx";
 import { Icon, type IconGlyph } from "../ui/Icon";
-import { CaretRightIcon, NewspaperIcon, SparkleIcon, VinylRecordIcon, WarningIcon, WaveformIcon } from "../ui/icons";
-import { Page, PageHeader, Section } from "../ui/Page";
+import { CaretRightIcon, NewspaperIcon, SparkleIcon, VinylRecordIcon, WaveformIcon } from "../ui/icons";
+import { Page, PageHeader, SIDE_COLUMNS, Section, dimWhile } from "../ui/Page";
 import { RangePicker } from "../ui/RangePicker";
 import { AlbumRow, ArtistRow, RowList, RowSkeleton, TrackRow } from "../ui/Rows";
 import { TabList, TabPanel, TabsRoot } from "../ui/Segmented";
-import { Skeleton } from "../ui/Skeleton";
+import { ChartSkeleton, Skeleton } from "../ui/Skeleton";
 import { StatStrip, type StatItem } from "../ui/Stat";
-import { EmptyState, ErrorState } from "../ui/States";
+import { EmptyState, ErrorState, FirstUseState } from "../ui/States";
+import { StartSessionButton } from "../ui/StartSessionButton";
+import { Notice } from "../ui/Notice";
 import { useDesktop } from "../lib/useMedia";
 
 type Metric = "hours" | "plays" | "listens";
@@ -68,7 +69,7 @@ function Chart({ metric, range }: { metric: Metric; range: Range }) {
   const height = desktop ? 260 : 180;
   if (q.isError) return <ErrorState error={q.error} onRetry={() => q.refetch()} title="Could not load the chart" />;
   if (!q.data) return <Skeleton className="w-full" style={{ height }} />;
-  if (q.data.points.length === 0) return <EmptyState size="section" title="Nothing played in this range" />;
+  if (q.data.points.length === 0) return <EmptyState size="section" title="No plays in this range" />;
   const unit = q.data.period === "day" ? "per day" : q.data.period === "week" ? "per week" : "per month";
   const rows = fillPeriods(q.data.points, q.data.period, range, today, (p) => ({ period: p, hours: 0, plays: 0, listens: 0 })).map((p) => ({
     period: p.period,
@@ -76,7 +77,7 @@ function Chart({ metric, range }: { metric: Metric; range: Range }) {
     value: p[metric],
   }));
   return (
-    <div className={cx("transition-opacity duration-200", q.isPlaceholderData && "opacity-60")}>
+    <div className={dimWhile(q.isPlaceholderData)}>
       <DitherArea
         label={`${METRIC_LABEL[metric]} ${unit}`}
         rows={rows}
@@ -110,14 +111,14 @@ function Headline({ range }: { range: Range }) {
             </div>
           ))}
         </div>
-        <Skeleton className="h-[180px] w-full md:h-[260px]" />
+        <ChartSkeleton className="h-[180px] md:h-[260px]" />
       </div>
     );
   if (q.data.plays === 0)
     return <EmptyState size="section" title="No plays in this range" description="Pick a wider range to see your listening." action={<RangePicker />} />;
   const compare = prev && before.data && !before.isPlaceholderData ? before.data : undefined;
   return (
-    <div className={cx("transition-opacity duration-200", q.isPlaceholderData && "opacity-60")}>
+    <div className={dimWhile(q.isPlaceholderData)}>
       <StatStrip items={figures(q.data, compare)} value={metric} onChange={setMetric} label="Listening figures">
         <Chart metric={metric} range={range} />
       </StatStrip>
@@ -148,9 +149,12 @@ function Top({ range, overview }: { range: Range; overview: OverviewData | undef
             { value: "albums", label: "Albums" },
           ]}
         />
-        <AppLink to={allPath} className={buttonClass({ variant: "ghost", size: "sm", className: "-mr-2.5 shrink-0" })}>
-          Show all
-        </AppLink>
+        <div className="flex shrink-0 items-center gap-2">
+          {tab === "songs" && songs.data && <StartSessionButton uris={songs.data.items.map((s) => s.uri)} className="phone:hidden" />}
+          <AppLink to={allPath} className={buttonClass({ variant: "ghost", size: "sm", className: "-mr-2.5" })}>
+            Show all
+          </AppLink>
+        </div>
       </div>
       <TabPanel value={tab}>
         {q.isError ? (
@@ -160,7 +164,7 @@ function Top({ range, overview }: { range: Range; overview: OverviewData | undef
         ) : items.length === 0 ? (
           <EmptyState title={`No ${tab} in this range`} />
         ) : (
-          <RowList label={`Top ${tab}`} className={cx("transition-opacity duration-200", q.isPlaceholderData && "opacity-60")}>
+          <RowList label={`Top ${tab}`} className={dimWhile(q.isPlaceholderData)}>
             {tab === "artists" &&
               artists.data?.items.map((a, i) => <ArtistRow key={a.artist} artist={a} rank={i + 1} value={fmtHours(a.hours)} share={a.hours / max} subtitle={`${fmtInt(a.listens)} listens`} />)}
             {tab === "songs" && songs.data?.items.map((s, i) => <TrackRow key={s.songKey} song={s} rank={i + 1} value={fmtHours(s.hours)} share={s.hours / max} />)}
@@ -242,7 +246,7 @@ function OnThisDay() {
 function problemOf(s: Status): string | null {
   if (!s.spotify.connected) return "Spotify is not connected, so new plays are not logged.";
   if (s.spotify.paused) return `Spotify calls are paused${s.spotify.paused.until ? ` until ${fmtAgo(s.spotify.paused.until)}` : ""}. New plays wait until then.`;
-  if (s.poll.lastError) return `The last sync failed: ${s.poll.lastError}`;
+  if (s.poll.lastError) return `The last check for new plays failed: ${s.poll.lastError}`;
   return null;
 }
 
@@ -251,15 +255,16 @@ function StatusNotice() {
   const problem = q.data ? problemOf(q.data) : null;
   if (!problem) return null;
   return (
-    <div role="status" className="flex items-start gap-2.5 rounded-lg bg-warning-subtle px-3 py-2.5 text-warning">
-      <Icon icon={WarningIcon} className="mt-px" />
-      <p className="min-w-0 flex-1 text-pretty">
-        {problem}{" "}
-        <AppLink to="/settings/spotify" className="font-medium underline underline-offset-2">
+    <Notice
+      tone="warning"
+      action={
+        <AppLink to="/settings/spotify" className={buttonClass({ size: "sm" })}>
           Open Spotify settings
         </AppLink>
-      </p>
-    </div>
+      }
+    >
+      {problem}
+    </Notice>
   );
 }
 
@@ -272,22 +277,12 @@ export function Overview() {
     <Page>
       <PageHeader title="Overview" actions={!firstUse && <RangePicker />} />
       {firstUse ? (
-        <EmptyState
-          size="page"
-          icon={WaveformIcon}
-          title="No listening yet"
-          description="Import your Spotify history or connect Spotify, and your listening shows here."
-          action={
-            <AppLink to="/setup" className={buttonClass({ variant: "primary" })}>
-              Set up encore
-            </AppLink>
-          }
-        />
+        <FirstUseState icon={WaveformIcon} description="Import your Spotify history or connect Spotify, and your listening shows here." />
       ) : (
         <>
           <StatusNotice />
           <Headline range={range} />
-          <div className="grid gap-10 lg:grid-cols-[minmax(0,1fr)_minmax(0,320px)] lg:gap-12">
+          <div className={SIDE_COLUMNS}>
             <Top range={range} overview={overview.data} />
             <div className="flex min-w-0 flex-col gap-10">
               <Waiting />

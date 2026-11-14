@@ -10,10 +10,10 @@ import { leadInEnd } from "../lib/leadIn";
 import { useRange, type Range } from "../lib/range";
 import { cx } from "../ui/cx";
 import { WaveformIcon } from "../ui/icons";
-import { Section } from "../ui/Page";
+import { SECTIONS, SIDE_COLUMNS, Section, dimWhile } from "../ui/Page";
 import { RangePicker } from "../ui/RangePicker";
 import { Segmented } from "../ui/Segmented";
-import { Skeleton } from "../ui/Skeleton";
+import { ChartSkeleton, Skeleton } from "../ui/Skeleton";
 import { EmptyState, ErrorState } from "../ui/States";
 import { PatternsFrame } from "./PatternsFrame";
 
@@ -72,7 +72,7 @@ function TagTrend({ data, tag, range }: { data: TagSeries; tag: string; range: R
     return { rows, from: start > 0 ? all[start]! : null };
   }, [data, tag, months.data]);
   if (months.isError) return <ErrorState size="inline" error={months.error} onRetry={() => months.refetch()} />;
-  if (!months.data) return <Skeleton className="h-60 w-full" />;
+  if (!months.data) return <ChartSkeleton className="h-60" />;
   if (!trend) return null;
   return (
     <>
@@ -102,7 +102,7 @@ function energyLine(hours: Energy["hours"]): string | null {
 function EnergyByHour({ range }: { range: Range }) {
   const q = useEnergy(range);
   if (q.isError) return <ErrorState size="inline" error={q.error} onRetry={() => q.refetch()} />;
-  if (!q.data) return <Skeleton className="h-52 w-full" />;
+  if (!q.data) return <ChartSkeleton className="h-52" />;
   const rows = q.data.hours.filter((h) => h.energy !== null).map((h) => ({ hour: h.hour, title: fmtHour(h.hour), energy: h.energy! }));
   const line = energyLine(q.data.hours);
   if (!line) return null;
@@ -148,9 +148,9 @@ function TasteView({ range }: { range: Range }) {
       <div aria-busy className="flex flex-col gap-6">
         <Skeleton className="h-8 w-44" />
         <Skeleton className="h-5 w-full max-w-md" />
-        <div className="grid gap-10 lg:grid-cols-[minmax(0,1fr)_minmax(0,320px)]">
-          <Skeleton className="h-60 w-full" />
-          <Skeleton className="h-60 w-full" />
+        <div className={SIDE_COLUMNS}>
+          <ChartSkeleton className="h-60" />
+          <ChartSkeleton className="h-60" />
         </div>
       </div>
     );
@@ -163,7 +163,7 @@ function TasteView({ range }: { range: Range }) {
   const noun = kind === "genres" ? "genre" : "mood";
 
   return (
-    <div className={cx("flex flex-col gap-10 transition-opacity duration-200", q.isPlaceholderData && "opacity-60")}>
+    <div className={cx(SECTIONS, dimWhile(q.isPlaceholderData))}>
       <div className="flex flex-col gap-5">
         <Segmented<Kind>
           label="Tag kind"
@@ -178,7 +178,7 @@ function TasteView({ range }: { range: Range }) {
         <p className="text-body text-pretty">
           Top {noun}: <span className="font-medium">{tagLabel(lead.value)}</span>, in {fmtPct(lead.hours / coverage.hoursTagged)} of tagged listening ({fmtHours(lead.hours)}).
         </p>
-        <div className="grid gap-x-10 gap-y-8 lg:grid-cols-[minmax(0,1fr)_minmax(0,320px)]">
+        <div className={SIDE_COLUMNS}>
           <div className="flex min-w-0 flex-col gap-3 max-lg:order-2">
             <h2 className="text-heading font-medium">{tagLabel(tag)} over time</h2>
             <TagTrend data={q.data} tag={tag} range={range} />

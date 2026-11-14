@@ -1,6 +1,8 @@
 import { ApiError } from "../api/client";
 import type { StreamEvent } from "../api/stream";
+import type { MomentClass } from "../api/types";
 import { playbackProblem } from "../player/playback";
+import { CLASS_LABELS } from "./format";
 
 const usd = (n: unknown) => (typeof n === "number" ? `$${n.toFixed(2)}` : null);
 
@@ -19,10 +21,10 @@ export function assistantProblem(error: unknown): string {
       const spent = usd(d.spentUsd);
       const cap = usd(d.capUsd);
       const amounts = spent && cap ? ` (${spent} of ${cap})` : "";
-      return `This month’s spending cap is reached${amounts}. It resets on ${typeof d.month === "string" ? resetDay(d.month) : "the 1st"}, or raise MONTHLY_BUDGET_USD.`;
+      return `This month’s Claude budget is spent${amounts}. It resets on ${typeof d.month === "string" ? resetDay(d.month) : "the 1st"}.`;
     }
     case "llm_not_configured":
-      return "No Anthropic API key is set. Add ANTHROPIC_API_KEY to the server, then try again.";
+      return "Claude is not set up. Add an API key in Settings.";
     case "llm_refused":
       return "This request was declined. Try wording it differently.";
     case "llm_incomplete":
@@ -30,7 +32,7 @@ export function assistantProblem(error: unknown): string {
     case "llm_failed":
       return "The Anthropic API did not answer. Try again in a minute.";
     case "set_empty":
-      return "This set has no tracks yet.";
+      return "This set has no songs yet.";
     case "picks_exist":
       return "This week already has picks.";
     case "spotify_failed":
@@ -52,7 +54,7 @@ export function progressLine(event: Extract<StreamEvent, { type: "tool" }>): str
         typeof i.notPlayedForDays === "number" && `not played for ${i.notPlayedForDays} days`,
         typeof i.playedFrom === "string" && `played since ${i.playedFrom}`,
         typeof i.energyMin === "number" && `energy ${i.energyMin} and up`,
-        Array.isArray(i.classes) && i.classes.length > 0 && `${(i.classes as string[]).map((c) => c.replace("_", " ")).join(" or ")} songs`,
+        Array.isArray(i.classes) && i.classes.length > 0 && `${(i.classes as string[]).map((c) => (CLASS_LABELS[c as MomentClass] ?? c.replace("_", " ")).toLowerCase()).join(" or ")} songs`,
       ];
       const what = [list(i.artists), list(i.genres), list(i.moods), typeof i.text === "string" ? `“${i.text}”` : null, ...when].filter(Boolean).join(", ");
       return what ? `Searching your history: ${what}` : "Searching your history";

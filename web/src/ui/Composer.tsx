@@ -1,5 +1,6 @@
 import { useEffect, useRef, type ReactNode } from "react";
 import { IconButton } from "./Button";
+import { Notice } from "./Notice";
 import { ArrowUpIcon } from "./icons";
 
 /**
@@ -47,7 +48,11 @@ export function Composer({
         if (ready) onSubmit();
       }}
     >
-      {notice && <div className="bg-fill px-3 py-2 text-caption text-secondary">{notice}</div>}
+      {notice && (
+        <Notice tone="warning" className="rounded-none phone:mx-0 phone:px-3">
+          {notice}
+        </Notice>
+      )}
       <textarea
         ref={ref}
         rows={2}

@@ -72,7 +72,7 @@ function Session() {
         <span className="text-caption text-secondary">Playing from session</span>
         <span className="truncate">{session.set?.title ?? "Your session"}</span>
       </div>
-      <Button size="sm" busy={stop.isPending} busyLabel="Stopping…" onClick={() => stop.mutate()}>
+      <Button size="sm" busy={stop.isPending} busyLabel="Stopping" onClick={() => stop.mutate()}>
         Stop
       </Button>
     </section>

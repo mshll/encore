@@ -8,11 +8,12 @@ import { useRange, type Range } from "../lib/range";
 import { cx } from "../ui/cx";
 import { Icon } from "../ui/Icon";
 import { CaretDownIcon, GlobeHemisphereWestIcon } from "../ui/icons";
-import { Section } from "../ui/Page";
+import { SIDE_COLUMNS, Section, dimWhile } from "../ui/Page";
 import { RangePicker } from "../ui/RangePicker";
 import { Row, RowList, RowSkeleton } from "../ui/Rows";
 import { Skeleton } from "../ui/Skeleton";
 import { EmptyState, ErrorState } from "../ui/States";
+import { StartSessionButton } from "../ui/StartSessionButton";
 import { PatternsFrame } from "./PatternsFrame";
 
 const plural = (n: number, one: string, many: string) => `${fmtInt(n)} ${n === 1 ? one : many}`;
@@ -59,6 +60,7 @@ function TripDetail({ trip }: { trip: Trip }) {
               />
             ))}
           </RowList>
+          <StartSessionButton uris={trip.topTracks.map((s) => s.uri)} className="mt-2 self-start" />
         </div>
       )}
     </div>
@@ -121,7 +123,7 @@ function Trips({ range }: { range: Range }) {
   const longest = trips.reduce((a, b) => (b.days > a.days ? b : a));
   const open = openId === undefined ? trips[0]!.start : openId;
   return (
-    <div className={cx("flex flex-col gap-4 transition-opacity duration-200", q.isPlaceholderData && "opacity-60")}>
+    <div className={cx("flex flex-col gap-4", dimWhile(q.isPlaceholderData))}>
       <p className="text-body text-pretty">
         {plural(trips.length, "trip", "trips")} away from {home}. Longest: <span className="font-medium">{places(longest, homeCountry)}</span>, {plural(longest.days, "day", "days")}.
       </p>
@@ -162,7 +164,7 @@ function DeviceSection({ q }: { q: ReturnType<typeof useDevices> }) {
           ))}
         </div>
       ) : (
-        <div className={cx("transition-opacity duration-200", q.isPlaceholderData && "opacity-60")}>
+        <div className={dimWhile(q.isPlaceholderData)}>
           <DeviceList data={q.data} />
         </div>
       )}
@@ -176,7 +178,7 @@ function PlacesView({ range }: { range: Range }) {
   if (devices.data?.totals.length === 0)
     return <EmptyState size="section" title="No plays in this range" description="Pick a wider range to see your trips and devices." action={<RangePicker />} />;
   return (
-    <div className="grid gap-12 lg:grid-cols-[minmax(0,1fr)_minmax(0,320px)]">
+    <div className={SIDE_COLUMNS}>
       <Section title="Trips">
         <Trips range={range} />
       </Section>

@@ -14,12 +14,13 @@ import { useDesktop } from "../../lib/useMedia";
 import { AppLink } from "../../ui/AppLink";
 import { Button, buttonClass } from "../../ui/Button";
 import { EntityHeaderSkeleton } from "../../ui/EntityHeader";
-import { Section } from "../../ui/Page";
+import { PageHeader, Section } from "../../ui/Page";
 import { RangePicker } from "../../ui/RangePicker";
 import { Row, RowList, RowSkeleton } from "../../ui/Rows";
-import { Skeleton } from "../../ui/Skeleton";
+import { ChartSkeleton, Skeleton } from "../../ui/Skeleton";
 import { StatStrip, type StatItem } from "../../ui/Stat";
-import { EmptyState, ErrorState } from "../../ui/States";
+import { EmptyState, ErrorState, FirstUseState } from "../../ui/States";
+import { VinylRecordIcon } from "../../ui/icons";
 
 export function usePeriod(range: Range) {
   const timezone = useTimezone();
@@ -160,7 +161,7 @@ export function EntityLoading({ round = false }: { round?: boolean }) {
             </div>
           ))}
         </div>
-        <Skeleton className="h-[160px] w-full md:h-[200px]" />
+        <ChartSkeleton className="h-[160px] md:h-[200px]" />
       </div>
       <RowSkeleton rows={8} rank />
     </>
@@ -176,25 +177,11 @@ export function EntityMissing({ error, onRetry, title, what }: { error: unknown;
   const lifetime = useLifetime();
   if (!(error instanceof ApiError && error.status === 404)) return <ErrorState size="page" error={error} onRetry={onRetry} title={`Could not load this ${what}`} />;
   if (lifetime.data?.plays === 0)
-    return (
-      <EmptyState
-        size="page"
-        title="No listening yet"
-        description="Import your Spotify history or connect Spotify, and every artist, album and song gets a page."
-        action={
-          <AppLink to="/setup" className={buttonClass({ variant: "primary" })}>
-            Set up encore
-          </AppLink>
-        }
-      />
-    );
+    return <FirstUseState icon={VinylRecordIcon} description="Import your Spotify history or connect Spotify, and every artist, album and song gets a page." />;
   const allTime = !range.from && !range.to;
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
-        <h1 className="font-serif text-title text-balance break-words text-primary">{title}</h1>
-        {!allTime && <RangePicker />}
-      </div>
+      <PageHeader title={title} actions={!allTime && <RangePicker />} />
       <EmptyState
         size="page"
         title={allTime ? `No plays of this ${what}` : `No plays of this ${what} in this range`}

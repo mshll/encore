@@ -5,10 +5,9 @@ import { useRange } from "../../lib/range";
 import { usePlayback } from "../../player/playback";
 import { AppLink } from "../../ui/AppLink";
 import { Button } from "../../ui/Button";
-import { cx } from "../../ui/cx";
 import { EntityHeader } from "../../ui/EntityHeader";
 import { PlayIcon } from "../../ui/icons";
-import { Page, Section, useDocumentTitle } from "../../ui/Page";
+import { Page, Section, dimWhile, useDocumentTitle } from "../../ui/Page";
 import { RangePicker } from "../../ui/RangePicker";
 import { EntityLoading, EntityMissing, FirstLast, Listening, SkipContext, SongList, usePeriod } from "./parts";
 
@@ -33,7 +32,7 @@ export function AlbumPage({ artist, album }: { artist: string; album: string }) 
   const d = q.data;
   const songs = d.tracks.length;
   return (
-    <Page className={cx("transition-opacity duration-200", q.isPlaceholderData && "opacity-60")}>
+    <Page className={dimWhile(q.isPlaceholderData)}>
       <EntityHeader
         kind="album"
         title={d.album}

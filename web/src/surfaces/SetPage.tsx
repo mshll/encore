@@ -14,16 +14,17 @@ import { openInSpotify, usePlayback } from "../player/playback";
 import { AppLink } from "../ui/AppLink";
 import { Artwork } from "../ui/Artwork";
 import { Button, buttonClass, IconButton } from "../ui/Button";
-import { RunNotice, useClaudeGate } from "../ui/ClaudeNotice";
+import { useClaudeGate } from "../ui/ClaudeNotice";
 import { Composer } from "../ui/Composer";
 import { Confirm } from "../ui/Dialog";
 import { Icon } from "../ui/Icon";
-import { ArrowUpRightIcon, DotsThreeIcon, MusicNotesIcon, PlayIcon, PlaylistIcon, PushPinIcon, QueueIcon, TrashIcon, VinylRecordIcon } from "../ui/icons";
+import { ArrowUpRightIcon, DotsThreeIcon, MicrophoneStageIcon, MusicNoteIcon, PlayIcon, PlaylistIcon, PushPinIcon, QueueIcon, TrashIcon } from "../ui/icons";
 import { MenuItem, MenuLinkItem, MenuPopup, MenuRoot, MenuSeparator, MenuTrigger } from "../ui/Menu";
 import { Page, PageHeader, Section } from "../ui/Page";
 import { RowSkeleton } from "../ui/Rows";
 import { RunProgress } from "../ui/RunProgress";
 import { Skeleton } from "../ui/Skeleton";
+import { Notice } from "../ui/Notice";
 import { EmptyState, ErrorState } from "../ui/States";
 
 const names = (tracks: { name: string }[]) => tracks.map((t) => t.name).join(", ");
@@ -111,11 +112,11 @@ function TrackRow({ item, added, onPin, onRemove }: { item: SetTrack; added: boo
             </MenuItem>
             <MenuSeparator />
             {item.kind === "library" && (
-              <MenuItem icon={MusicNotesIcon} onClick={() => navigate(songPath(item.songKey))}>
+              <MenuItem icon={MusicNoteIcon} onClick={() => navigate(songPath(item.songKey))}>
                 Go to song
               </MenuItem>
             )}
-            <MenuItem icon={VinylRecordIcon} onClick={() => navigate(artistPath(item.artist))}>
+            <MenuItem icon={MicrophoneStageIcon} onClick={() => navigate(artistPath(item.artist))}>
               Go to artist
             </MenuItem>
             <MenuLinkItem icon={ArrowUpRightIcon} href={openInSpotify(item.uri)} target="_blank" rel="noreferrer">
@@ -187,9 +188,9 @@ function Conversation({ set, onRefined }: { set: SetDetail; onRefined: (result: 
       ) : (
         <>
           {run.problem && (
-            <RunNotice tone="danger" onRetry={gate.blocked || !text.trim() ? undefined : send}>
+            <Notice tone="danger" onRetry={gate.blocked || !text.trim() ? undefined : send}>
               {run.problem}
-            </RunNotice>
+            </Notice>
           )}
           {stopped && <p className="text-secondary">Stopped.</p>}
           <Composer
@@ -229,7 +230,7 @@ function SessionLine({ session }: { session: DjSession }) {
         <Button size="sm" onClick={openQueue}>
           Show queue
         </Button>
-        <Button size="sm" busy={stop.isPending} busyLabel="Stopping…" onClick={() => stop.mutate()}>
+        <Button size="sm" busy={stop.isPending} busyLabel="Stopping" onClick={() => stop.mutate()}>
           Stop
         </Button>
       </div>
@@ -281,7 +282,7 @@ function SetActions({ set, playing }: { set: SetDetail; playing: boolean }) {
           icon={PlayIcon}
           disabled={empty || busy !== null}
           busy={busy === "play"}
-          busyLabel="Starting…"
+          busyLabel="Starting"
           onClick={play}
           className="phone:col-span-2"
         >
@@ -289,7 +290,7 @@ function SetActions({ set, playing }: { set: SetDetail; playing: boolean }) {
         </Button>
       )}
       {!set.playlist || set.playlist.outdated ? (
-        <Button disabled={empty || busy !== null} busy={busy === "save"} busyLabel="Saving…" onClick={save}>
+        <Button disabled={empty || busy !== null} busy={busy === "save"} busyLabel="Saving" onClick={save}>
           {set.playlist ? "Update playlist" : "Save to Spotify"}
         </Button>
       ) : (
@@ -377,7 +378,7 @@ export function SetPage({ id }: { id: number }) {
         <EmptyState
           size="page"
           icon={PlaylistIcon}
-          title="This set no longer exists"
+          title="This set does not exist"
           action={
             <AppLink to="/sets" className={buttonClass()}>
               Back to sets

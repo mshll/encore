@@ -10,17 +10,17 @@ import { countryName, DEVICE_LABELS, fmtDuration, fmtInt, fmtTime } from "../lib
 import { useRange } from "../lib/range";
 import { AppLink } from "../ui/AppLink";
 import { Artwork } from "../ui/Artwork";
-import { Button, buttonClass, IconButton } from "../ui/Button";
+import { Button, IconButton } from "../ui/Button";
 import { cx } from "../ui/cx";
 import { Icon } from "../ui/Icon";
 import { ListBulletsIcon, PlayIcon, XIcon } from "../ui/icons";
-import { Page, PageHeader } from "../ui/Page";
+import { Page, PageHeader, dimWhile } from "../ui/Page";
 import { RangePicker } from "../ui/RangePicker";
 import { RowSkeleton } from "../ui/Rows";
 import { SearchField } from "../ui/SearchField";
 import { Select } from "../ui/Select";
 import { SongContext, SongMenu } from "../ui/SongMenu";
-import { EmptyState, ErrorState } from "../ui/States";
+import { EmptyState, ErrorState, FirstUseState } from "../ui/States";
 import { cellClass, TableHead, useColumns, type Column } from "../ui/Table";
 import { usePlayback } from "../player/playback";
 
@@ -231,17 +231,7 @@ export function Plays() {
     <Page>
       <PageHeader title="Plays" actions={!firstUse && <RangePicker />} />
       {firstUse ? (
-        <EmptyState
-          size="page"
-          icon={ListBulletsIcon}
-          title="No plays yet"
-          description="Every play you import or encore logs from Spotify lands here."
-          action={
-            <AppLink to="/setup" className={buttonClass({ variant: "primary" })}>
-              Set up encore
-            </AppLink>
-          }
-        />
+        <FirstUseState icon={ListBulletsIcon} description="Every play you import or encore logs from Spotify lands here." />
       ) : (
         <div className="flex flex-col gap-4">
           <Toolbar filters={filters} setFilters={setFilters} />
@@ -255,7 +245,7 @@ export function Plays() {
               </Button>
             )}
           </div>
-          <div ref={listRef} role="table" aria-label="Plays" aria-rowcount={total} className={cx("transition-opacity duration-200", q.isPlaceholderData && "opacity-60")}>
+          <div ref={listRef} role="table" aria-label="Plays" aria-rowcount={total} className={dimWhile(q.isPlaceholderData)}>
             {desktop && <TableHead columns={visible} style={style} className="mb-1" />}
             {q.isError ? (
               <ErrorState error={q.error} onRetry={() => q.refetch()} />

@@ -1,12 +1,22 @@
 import { useEffect, type ReactNode } from "react";
 import { cx } from "./cx";
 
+/** Sections stacked at the page rhythm, for a body that sits under a shared header (Patterns tabs). */
+export const SECTIONS = "flex flex-col gap-10 md:gap-12";
+
+/** The main answer left, small related lists right (DESIGN.md, Main plus side column). */
+export const SIDE_COLUMNS = "grid gap-10 lg:grid-cols-[minmax(0,1fr)_minmax(0,320px)] lg:gap-12";
+
+/** Old data stays on screen, dimmed, while a new range or filter loads. */
+export const dimWhile = (refetching: boolean) => cx("transition-opacity duration-200", refetching && "opacity-60");
+
 /** The content column inside the page panel. `width` picks the column: data 1200, read 800, form 480. */
 export function Page({ children, width = "data", className }: { children: ReactNode; width?: "data" | "read" | "form"; className?: string }) {
   return (
     <div
       className={cx(
-        "mx-auto flex w-full flex-col gap-10 px-(--gutter) pt-6 pb-16 md:gap-12 md:pt-8",
+        SECTIONS,
+        "mx-auto w-full px-(--gutter) pt-6 pb-16 md:pt-8",
         width === "data" ? "max-w-(--page-max)" : width === "read" ? "max-w-[800px]" : "max-w-[480px]",
         className,
       )}
@@ -37,7 +47,7 @@ export function PageHeader({
   useDocumentTitle(title);
   return (
     <header className="flex flex-col gap-4">
-      <div className="flex flex-col gap-3 md:flex-row md:flex-wrap md:items-end md:justify-between md:gap-x-6">
+      <div className="flex flex-col gap-3 md:grid md:grid-cols-[minmax(0,1fr)_auto] md:items-end md:gap-x-6">
         <div className="flex min-w-0 flex-col gap-1">
           <h1 className="font-serif text-title text-balance text-primary">{title}</h1>
           {description && <p className="max-w-2xl text-secondary text-pretty">{description}</p>}

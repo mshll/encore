@@ -8,11 +8,10 @@ import { usePlayback } from "../../player/playback";
 import { AppLink } from "../../ui/AppLink";
 import { Artwork } from "../../ui/Artwork";
 import { Button, buttonClass } from "../../ui/Button";
-import { cx } from "../../ui/cx";
 import { EntityHeader } from "../../ui/EntityHeader";
 import { Icon } from "../../ui/Icon";
 import { ArrowUpRightIcon, PlayIcon } from "../../ui/icons";
-import { Page, Section, useDocumentTitle } from "../../ui/Page";
+import { Page, SIDE_COLUMNS, Section, dimWhile, useDocumentTitle } from "../../ui/Page";
 import { RangePicker } from "../../ui/RangePicker";
 import { Row, RowList } from "../../ui/Rows";
 import { EntityLoading, EntityMissing, FirstLast, Listening, SkipContext, SongList, usePeriod } from "./parts";
@@ -103,7 +102,7 @@ export function ArtistPage({ name }: { name: string }) {
     );
   const d = q.data;
   return (
-    <Page className={cx("transition-opacity duration-200", q.isPlaceholderData && "opacity-60")}>
+    <Page className={dimWhile(q.isPlaceholderData)}>
       <EntityHeader
         title={d.artist}
         art={d.imageUrl}
@@ -122,7 +121,7 @@ export function ArtistPage({ name }: { name: string }) {
         aside={<RangePicker />}
       />
       <Listening totals={d.totals} timeline={d.timeline} />
-      <div className="grid gap-10 lg:grid-cols-[minmax(0,1fr)_minmax(0,320px)] lg:gap-12">
+      <div className={SIDE_COLUMNS}>
         <Section title="Top songs">
           <SongList songs={d.tracks} label="Top songs" subtitle={(s) => s.album ?? undefined} />
         </Section>

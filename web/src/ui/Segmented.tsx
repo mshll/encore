@@ -4,7 +4,7 @@ import { cx } from "./cx";
 
 export type SegmentedOption<T extends string> = { value: T; label: ReactNode };
 
-/** Two to four mutually exclusive views of the same data. A filled pill slides to the chosen option. */
+/** Two to four mutually exclusive views of the same data. A filled pill slides to the chosen option. Full width on a phone. */
 export function Segmented<T extends string>({
   value,
   onChange,
@@ -19,7 +19,7 @@ export function Segmented<T extends string>({
   className?: string;
 }) {
   return (
-    <Tabs.Root value={value} onValueChange={(v) => onChange(v as T)} className={className}>
+    <Tabs.Root value={value} onValueChange={(v) => onChange(v as T)} className={cx("phone:w-full", className)}>
       <Tabs.List aria-label={label} className="relative flex items-center rounded-md bg-fill p-0.5">
         {options.map((o) => (
           <Tabs.Tab

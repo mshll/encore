@@ -6,7 +6,7 @@ import { openInSpotify, usePlayback } from "../player/playback";
 import { iconButtonClass } from "./Button";
 import { cx } from "./cx";
 import { Icon } from "./Icon";
-import { ArrowUpRightIcon, DotsThreeIcon, PlayIcon, QueueIcon, VinylRecordIcon, MusicNotesIcon } from "./icons";
+import { ArrowUpRightIcon, DotsThreeIcon, MicrophoneStageIcon, MusicNoteIcon, PlayIcon, QueueIcon } from "./icons";
 import { MENU_ITEM, POPUP } from "./surfaces";
 import { artistPath, songPath } from "../app/paths";
 
@@ -28,13 +28,13 @@ function Items({ song, M }: { song: SongRef; M: typeof Menu | typeof ContextMenu
       <M.Separator className="mx-1 my-1 h-px bg-line" />
       {song.songKey && (
         <M.Item className={MENU_ITEM} onClick={() => navigate(songPath(song.songKey!))}>
-          <Icon icon={MusicNotesIcon} className="text-secondary" />
+          <Icon icon={MusicNoteIcon} className="text-secondary" />
           Go to song
         </M.Item>
       )}
       {song.artist && (
         <M.Item className={MENU_ITEM} onClick={() => navigate(artistPath(song.artist!))}>
-          <Icon icon={VinylRecordIcon} className="text-secondary" />
+          <Icon icon={MicrophoneStageIcon} className="text-secondary" />
           Go to artist
         </M.Item>
       )}

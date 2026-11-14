@@ -9,17 +9,16 @@ import { artistPath } from "../app/paths";
 import { fmtAgo, fmtDay, fmtInt } from "../lib/format";
 import { showToast } from "../lib/toast";
 import { usePlayback } from "../player/playback";
-import { AppLink } from "../ui/AppLink";
 import { Artwork } from "../ui/Artwork";
 import { Button, buttonClass, IconButton } from "../ui/Button";
 import { cx } from "../ui/cx";
 import { Icon } from "../ui/Icon";
-import { ArrowUpRightIcon, DotsThreeIcon, PlayIcon, VinylRecordIcon, WaveformIcon } from "../ui/icons";
+import { ArrowUpRightIcon, CheckIcon, DotsThreeIcon, MicrophoneStageIcon, PlayIcon, VinylRecordIcon, WaveformIcon } from "../ui/icons";
 import { MenuItem, MenuLinkItem, MenuPopup, MenuRoot, MenuTrigger } from "../ui/Menu";
-import { Page, PageHeader } from "../ui/Page";
+import { Page, PageHeader, dimWhile } from "../ui/Page";
 import { RowSkeleton } from "../ui/Rows";
 import { Segmented } from "../ui/Segmented";
-import { EmptyState, ErrorState } from "../ui/States";
+import { EmptyState, ErrorState, FirstUseState } from "../ui/States";
 import { TabNav } from "../ui/TabNav";
 
 type View = "new" | "recent";
@@ -57,7 +56,7 @@ function ReleaseRow({ release, view, onSeen, busy }: { release: Release; view: V
         <span className="truncate text-caption text-secondary">{meta}</span>
       </span>
       {view === "new" && unseen && (
-        <Button size="sm" variant="ghost" busy={busy} busyLabel="Marking…" onClick={onSeen}>
+        <Button size="sm" variant="ghost" busy={busy} busyLabel="Marking" onClick={onSeen} className="phone:hidden">
           Mark seen
         </Button>
       )}
@@ -70,7 +69,12 @@ function ReleaseRow({ release, view, onSeen, busy }: { release: Release; view: V
           <MenuItem icon={PlayIcon} onClick={() => playback.playContext(release.uri)}>
             Play
           </MenuItem>
-          <MenuItem icon={VinylRecordIcon} onClick={() => navigate(artistPath(release.artist))}>
+          {view === "new" && unseen && (
+            <MenuItem icon={CheckIcon} onClick={onSeen} className="md:hidden">
+              Mark seen
+            </MenuItem>
+          )}
+          <MenuItem icon={MicrophoneStageIcon} onClick={() => navigate(artistPath(release.artist))}>
             Go to artist
           </MenuItem>
           <MenuLinkItem icon={ArrowUpRightIcon} href={release.url} target="_blank" rel="noreferrer">
@@ -99,17 +103,7 @@ export function Releases() {
         <TabNav items={FOR_YOU_TABS} label="For you" />
       </PageHeader>
       {firstUse ? (
-        <EmptyState
-          size="page"
-          icon={WaveformIcon}
-          title="No listening yet"
-          description="Releases are watched for the artists you play. Import your history or connect Spotify first."
-          action={
-            <AppLink to="/setup" className={buttonClass({ variant: "primary" })}>
-              Set up encore
-            </AppLink>
-          }
-        />
+        <FirstUseState icon={WaveformIcon} description="Releases are watched for the artists you play. Import your history or connect Spotify first." />
       ) : (
         <section aria-label="Releases" className="flex flex-col gap-4">
           <div className="flex flex-wrap items-center justify-between gap-3">
@@ -123,7 +117,7 @@ export function Releases() {
               ]}
             />
             {view === "new" && d && d.unseenNew > 1 && (
-              <Button size="sm" busy={busy === "all"} busyLabel="Marking…" onClick={() => mark("all")}>
+              <Button size="sm" busy={busy === "all"} busyLabel="Marking" onClick={() => mark("all")}>
                 Mark all seen
               </Button>
             )}
@@ -153,7 +147,7 @@ export function Releases() {
               <EmptyState icon={VinylRecordIcon} title="No releases in the last 30 days" />
             )
           ) : (
-            <ul className={cx("flex flex-col", q.isPlaceholderData && "opacity-60")}>
+            <ul className={cx("flex flex-col", dimWhile(q.isPlaceholderData))}>
               {d.items.map((r) => (
                 <ReleaseRow key={r.id} release={r} view={view} busy={busy === r.id} onSeen={() => mark(r.id, [r.id])} />
               ))}

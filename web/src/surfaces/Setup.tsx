@@ -266,7 +266,7 @@ function ConnectStep({ o, frame, onNext, onPick }: StepProps) {
       <p className="text-body text-pretty">
         {s.done
           ? `Connected as ${s.userId ?? "your Spotify account"}. New plays are logged as you listen.`
-          : "Sign in to Spotify and allow encore to read what you play. Spotify sends you back here when you are done."}
+          : "Sign in to Spotify and allow encore to read what you play."}
       </p>
       {missing && <Notice tone="warning">Spotify has not granted {s.missingScopes.join(", ")}. Connect again to grant them.</Notice>}
       {(!s.done || missing) && (

@@ -15,7 +15,6 @@ export { InfoIcon } from "@phosphor-icons/react/dist/csr/Info";
 export { ListBulletsIcon } from "@phosphor-icons/react/dist/csr/ListBullets";
 export { MagnifyingGlassIcon } from "@phosphor-icons/react/dist/csr/MagnifyingGlass";
 export { MoonIcon } from "@phosphor-icons/react/dist/csr/Moon";
-export { MusicNotesIcon } from "@phosphor-icons/react/dist/csr/MusicNotes";
 export { NewspaperIcon } from "@phosphor-icons/react/dist/csr/Newspaper";
 export { PauseIcon } from "@phosphor-icons/react/dist/csr/Pause";
 export { PlayIcon } from "@phosphor-icons/react/dist/csr/Play";
