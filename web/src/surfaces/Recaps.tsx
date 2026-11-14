@@ -1,7 +1,7 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { ApiError, request } from "../api/client";
-import { useDigest, useDigests, useRadar, useStatus, useTimezone } from "../api/queries";
+import { useDigest, useDigests, useLifetime, useRadar, useStatus, useTimezone } from "../api/queries";
 import type { Digest, DigestItem } from "../api/types";
 import { assistantProblem } from "../lib/assistant";
 import { fmtDate, fmtDay, fmtDayRange, fmtHoursValue, fmtInt, fmtMonthLong, fmtPct } from "../lib/format";
@@ -13,7 +13,7 @@ import { ArrowLeftIcon, CaretRightIcon, NewspaperIcon } from "../ui/icons";
 import { Notice } from "../ui/Notice";
 import { Page, PageHeader, Section, useDocumentTitle } from "../ui/Page";
 import { Skeleton } from "../ui/Skeleton";
-import { EmptyState, ErrorState } from "../ui/States";
+import { EmptyState, ErrorState, FirstUseState } from "../ui/States";
 
 type Kind = DigestItem["kind"];
 
@@ -106,6 +106,8 @@ export function Recaps() {
   const timezone = useTimezone();
   const items = q.data?.items ?? [];
   const missing = (["weekly", "monthly"] as Kind[]).filter((k) => !items.some((d) => d.kind === k));
+  const lifetime = useLifetime();
+  const firstUse = lifetime.data !== undefined && !lifetime.data.firstPlayed;
   return (
     <Page width="read">
       <PageHeader title="Recaps" />
@@ -125,6 +127,8 @@ export function Recaps() {
             ))}
           </div>
         </div>
+      ) : items.length === 0 && firstUse ? (
+        <FirstUseState icon={NewspaperIcon} description="Recaps are written from what you play. Import your history or connect Spotify first." />
       ) : items.length === 0 ? (
         <EmptyState
           size="page"
