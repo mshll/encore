@@ -1,0 +1,190 @@
+:root {
+  --gray-1: #fcfcfc;
+  --gray-2: #f9f9f9;
+  --gray-3: #f0f0f0;
+  --gray-4: #e8e8e8;
+  --gray-5: #e0e0e0;
+  --gray-6: #d9d9d9;
+  --gray-7: #cecece;
+  --gray-8: #bbb;
+  --gray-9: #8d8d8d;
+  --gray-10: #838383;
+  --gray-11: #646464;
+  --gray-12: #202020;
+
+  --gray-a1: #00000003;
+  --gray-a2: #00000006;
+  --gray-a3: #0000000f;
+  --gray-a4: #00000017;
+  --gray-a5: #0000001f;
+  --gray-a6: #00000026;
+  --gray-a7: #00000031;
+  --gray-a8: #0004;
+  --gray-a9: #00000072;
+  --gray-a10: #0000007c;
+  --gray-a11: #0000009b;
+  --gray-a12: #000000df;
+
+  --black-a1: #0000000d;
+  --black-a2: #0000001a;
+  --black-a3: #00000026;
+  --black-a6: #0006;
+  --black-a7: #00000080;
+  --black-a9: #000000b3;
+  --black-a10: #000c;
+  --black-a12: #000000f2;
+  --white-a1: #ffffff0d;
+  --white-a2: #ffffff1a;
+  --white-a7: #ffffff80;
+  --white-a9: #ffffffb3;
+  --white-a10: #fffc;
+  --white-a12: #fffffff2;
+
+  --page: #fff;
+  --shell: oklch(97.3% 0 0);
+  --modal: oklch(100% 0 0);
+  --card: var(--gray-a2);
+
+  --surface-sidebar: var(--shell);
+  --surface-canvas: var(--page);
+  --surface-raised: var(--gray-3);
+  --surface-raised-hover: var(--gray-4);
+  --surface-overlay: var(--modal);
+  --nav-selected: var(--gray-a4);
+  --standout: var(--gray-12);
+  --component: var(--gray-a3);
+  --component-hover: var(--gray-a4);
+  --component-active: var(--gray-a5);
+  --component-on-sunken: #fff;
+  --component-strong: #fff;
+  --component-strong-hover: var(--gray-2);
+  --component-subtle: #fff;
+  --transparent-hover: var(--gray-a3);
+  --inverted: var(--black-a12);
+  --inverted-hover: var(--black-a10);
+  --on-inverted: #fff;
+  --disabled: var(--gray-a3);
+
+  --fg-primary: var(--gray-a12);
+  --fg-secondary: var(--gray-a11);
+  --fg-tertiary: var(--gray-a9);
+  --fg-disabled: var(--gray-a8);
+  --fg-on-standout: #fff;
+  --fg-on-standout-secondary: var(--white-a7);
+
+  --border-default: var(--gray-a3);
+  --border-subtle: var(--gray-a2);
+  --border-strong: var(--gray-a6);
+  --segment-border: var(--gray-6);
+
+  --danger-fg: #d13415;
+  --danger-subtle: #ff0a000a;
+  --warning-fg: #cc4e00;
+
+  --accent: #1ed760;
+  --accent-hover: #1fdf64;
+  --on-accent: oklch(15% 0 0);
+  --chart-key: #17a34a;
+  --chart-muted: var(--gray-6);
+  --chart-grid: var(--gray-a3);
+  --chart-axis: var(--gray-a6);
+
+  --series-1: #2a78d6;
+  --series-2: #eb6834;
+  --series-3: #1baf7a;
+  --series-4: #eda100;
+  --series-5: #e87ba4;
+  --series-6: #008300;
+  --series-7: #6250d6;
+  --series-8: #e34948;
+
+  --shadow-inner-1: #0000;
+  --shadow-drop-1: #0000000f;
+  --shadow-drop-2: #0000001a;
+  --shadow-drop-3: #0000000d;
+  --shadow-border-color: #00000012;
+  --shadow-xl-inner-1: #0000;
+  --shadow-xl-drop-1: #0000000f;
+  --shadow-xl-drop-2: #0000000d;
+  --shadow-xl-drop-3: #00000026;
+  --s-default: 0 0 0 0.5px var(--shadow-inner-1) inset, 0 0 0 0.5px var(--shadow-drop-1), 0 1px 1px -1px var(--shadow-drop-2), 0 1px 2px 0 var(--shadow-drop-3);
+  --s-large: 0 0 0 0.5px var(--gray-a3), 0 2px 3px -2px var(--gray-a3), 0 3px 12px -4px var(--black-a2), 0 4px 16px -8px var(--black-a1);
+  --s-extra-large:
+    0 0 0 0.5px var(--shadow-xl-inner-1) inset, 0 0 0 0.5px var(--shadow-xl-drop-1), 0 8px 40px 0 var(--shadow-xl-drop-2),
+    0 12px 32px -16px var(--shadow-xl-drop-3);
+  --s-border: 0 0 0 1px var(--shadow-border-color);
+
+  color-scheme: light;
+}
+
+.dark {
+  --gray-1: #111;
+  --gray-2: #191919;
+  --gray-3: #222;
+  --gray-4: #2a2a2a;
+  --gray-5: #313131;
+  --gray-6: #3a3a3a;
+  --gray-7: #484848;
+  --gray-8: #606060;
+  --gray-9: #6e6e6e;
+  --gray-10: #7b7b7b;
+  --gray-11: #b4b4b4;
+  --gray-12: #eee;
+
+  --gray-a1: #0000;
+  --gray-a2: #ffffff09;
+  --gray-a3: #ffffff12;
+  --gray-a4: #ffffff1b;
+  --gray-a5: #fff2;
+  --gray-a6: #ffffff2c;
+  --gray-a7: #ffffff3b;
+  --gray-a8: #fff5;
+  --gray-a9: #ffffff64;
+  --gray-a10: #ffffff72;
+  --gray-a11: #ffffffaf;
+  --gray-a12: #ffffffed;
+
+  --page: oklch(15% 0 0);
+  --shell: #000;
+  --modal: oklch(25.2% 0 0);
+  --surface-raised: var(--gray-3);
+  --surface-raised-hover: var(--gray-4);
+  --standout: var(--gray-3);
+  --component-on-sunken: var(--gray-4);
+  --component-strong: var(--gray-a3);
+  --component-strong-hover: var(--gray-a4);
+  --component-subtle: var(--gray-a2);
+  --transparent-hover: var(--gray-a4);
+  --inverted: var(--white-a12);
+  --inverted-hover: var(--white-a10);
+  --on-inverted: #000;
+  --disabled: var(--gray-a2);
+  --fg-on-standout: var(--gray-a12);
+  --segment-border: var(--gray-7);
+
+  --danger-fg: #ff977d;
+  --danger-subtle: #f4121209;
+  --warning-fg: #ffa057;
+
+  --chart-key: #1ed760;
+  --chart-muted: var(--gray-7);
+
+  --series-1: #3987e5;
+  --series-2: #d95926;
+  --series-3: #199e70;
+  --series-4: #c98500;
+  --series-5: #d55181;
+  --series-6: #008300;
+  --series-7: #9085e9;
+  --series-8: #e66767;
+
+  --shadow-inner-1: #ffffff12;
+  --shadow-drop-1: #0000;
+  --shadow-drop-2: #0000;
+  --shadow-drop-3: #0000;
+  --shadow-border-color: #ffffff12;
+  --shadow-xl-inner-1: #ffffff12;
+  --s-large: 0 0 0 1px var(--gray-a6), 0 2px 3px -2px var(--black-a3), 0 3px 8px -2px var(--black-a6), 0 4px 12px -4px var(--black-a7);
+
+  color-scheme: dark;
+}
