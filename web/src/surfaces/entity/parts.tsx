@@ -177,7 +177,12 @@ export function EntityMissing({ error, onRetry, title, what }: { error: unknown;
   const lifetime = useLifetime();
   if (!(error instanceof ApiError && error.status === 404)) return <ErrorState size="page" error={error} onRetry={onRetry} title={`Could not load this ${what}`} />;
   if (lifetime.data?.plays === 0)
-    return <FirstUseState icon={VinylRecordIcon} description="Import your Spotify history or connect Spotify, and every artist, album and song gets a page." />;
+    return (
+      <div className="flex flex-col gap-6">
+        <PageHeader title={title} />
+        <FirstUseState icon={VinylRecordIcon} description="Import your Spotify history or connect Spotify, and every artist, album and song gets a page." />
+      </div>
+    );
   const allTime = !range.from && !range.to;
   return (
     <div className="flex flex-col gap-6">
