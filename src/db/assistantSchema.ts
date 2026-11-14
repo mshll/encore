@@ -40,6 +40,20 @@ export const llmThreads = sqliteTable("llm_threads", {
   updatedAt: integer("updated_at").notNull(),
 });
 
+/** A structured answer (prose with visuals and their values) for one assistant message of a thread. */
+export const llmAnswers = sqliteTable(
+  "llm_answers",
+  {
+    threadId: integer("thread_id")
+      .notNull()
+      .references(() => llmThreads.id, { onDelete: "cascade" }),
+    messageIndex: integer("message_index").notNull(),
+    content: text("content", { mode: "json" }).$type<unknown>().notNull(),
+    createdAt: integer("created_at").notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.threadId, t.messageIndex] })],
+);
+
 export const sets = sqliteTable("sets", {
   id: integer("id").primaryKey({ autoIncrement: true }),
   threadId: integer("thread_id")

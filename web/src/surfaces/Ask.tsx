@@ -9,6 +9,7 @@ import { fmtAgo } from "../lib/format";
 import { useAskStarters } from "../lib/prompts";
 import { showToast } from "../lib/toast";
 import { useRun } from "../lib/useRun";
+import { AnswerView, answerFromText } from "../ui/Answer";
 import { AppLink } from "../ui/AppLink";
 import { buttonClass } from "../ui/Button";
 import { useClaudeGate } from "../ui/ClaudeNotice";
@@ -25,42 +26,6 @@ import { RunProgress } from "../ui/RunProgress";
 import { Skeleton } from "../ui/Skeleton";
 import { EmptyState, ErrorState, FirstUseState } from "../ui/States";
 import { Notice } from "../ui/Notice";
-
-/** Splits an answer into paragraphs and its closing "Based on:" line. */
-function splitAnswer(text: string) {
-  const at = text.lastIndexOf("Based on");
-  const body = at > 0 ? text.slice(0, at) : text;
-  const basis = at > 0 ? text.slice(at).replace(/^Based on:?\s*/, "") : null;
-  return {
-    paragraphs: body
-      .split(/\n+/)
-      .map((p) => p.trim())
-      .filter(Boolean),
-    basis,
-  };
-}
-
-function Answer({ text }: { text: string }) {
-  const { paragraphs, basis } = splitAnswer(text);
-  return (
-    <div className="space-y-3">
-      {paragraphs.map((p, i) => (
-        <p key={i} className="text-body text-pretty">
-          {p}
-        </p>
-      ))}
-      {basis && (
-        <details className="group text-caption text-secondary">
-          <summary className="-my-2 flex w-fit cursor-pointer py-2 phone:-my-3 phone:py-3 list-none items-center gap-1 rounded-xs hover:text-primary [&::-webkit-details-marker]:hidden">
-            Based on
-            <Icon icon={CaretRightIcon} className="transition-transform duration-150 group-open:rotate-90" />
-          </summary>
-          <p className="mt-1 max-w-[60ch] text-pretty">{basis}</p>
-        </details>
-      )}
-    </div>
-  );
-}
 
 function Question({ text }: { text: string }) {
   return <p className="max-w-[85%] self-end rounded-lg bg-fill px-3 py-2 text-body text-pretty">{text}</p>;
@@ -97,7 +62,7 @@ function Turns({ turns, lastSteps }: { turns: AskTurn[]; lastSteps: ReactNode })
           ) : (
             <>
               {i === lastAnswer && lastSteps}
-              <Answer text={t.text} />
+              <AnswerView answer={t.content ?? answerFromText(t.text)} />
             </>
           )}
         </li>
@@ -251,7 +216,7 @@ export function Ask({ id }: { id?: string }) {
         <div className="flex flex-col gap-5">
           {pending && <Question text={pending} />}
           <RunProgress run={run} title="Answering" />
-          {run.text && <Answer text={run.text} />}
+          {run.text && <AnswerView answer={answerFromText(run.text, run.visuals)} />}
         </div>
       )}
     </div>

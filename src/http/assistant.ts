@@ -18,7 +18,7 @@ import { SetItemNotFoundError, SetNotBuiltError, SetNotFoundError } from "../set
 import { SpotifyApiError, SpotifyBlockedError, SpotifyNotConnectedError } from "../spotify/errors";
 import type { Env } from "./context";
 import { ApiError } from "./errors";
-import { runs, type Run } from "./runs";
+import { runs, type Run, type RunEvent } from "./runs";
 
 export function toApiError(error: unknown): unknown {
   if (error instanceof ApiError) return error;
@@ -91,9 +91,15 @@ export function followRun(c: Context<Env>, run: Run, keepAliveMs = 5_000) {
   });
 }
 
+function runEvent(e: AgentEvent): RunEvent {
+  if (e.type === "text") return { event: "text", data: { delta: e.delta } };
+  if (e.type === "visual") return { event: "visual", data: { id: e.id, visual: e.visual } };
+  return { event: "tool", data: { name: e.name, input: e.input } };
+}
+
 /**
  * JSON by default. With `Accept: text/event-stream` the work becomes a run that continues when the client
- * disconnects: `text` and `tool` events while Claude works, then one `done` event with the same body the JSON
+ * disconnects: `text`, `tool` and `visual` events while Claude works, then one `done` event with the same body the JSON
  * response would have, or one `error` event. Only `DELETE /api/runs/:id` stops it.
  */
 export async function respond<T>(c: Context<Env>, work: (ctx: FeatureContext, onEvent?: (e: AgentEvent) => void) => Promise<T>, status: 200 | 201 = 200, keepAliveMs = 5_000) {
@@ -102,7 +108,7 @@ export async function respond<T>(c: Context<Env>, work: (ctx: FeatureContext, on
   await mapped(() => c.var.deps.services.llm.assertAvailable());
   const now = c.var.deps.now;
   const run = runs.start(c.req.path, now());
-  void work({ ...base, llm: base.llm.withSignal(run.signal) }, (e) => run.emit(e.type === "text" ? { event: "text", data: { delta: e.delta } } : { event: "tool", data: { name: e.name, input: e.input } }, now())).then(
+  void work({ ...base, llm: base.llm.withSignal(run.signal) }, (e) => run.emit(runEvent(e), now())).then(
     (result) => run.emit({ event: "done", data: result }, now()),
     (error) => {
       if (!(error instanceof LlmAbortedError)) run.emit({ event: "error", data: errorBody(error) }, now());

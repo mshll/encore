@@ -30,7 +30,7 @@ Contract between the server and the web UI. All routes are JSON over HTTP on the
 
 ## Assistant runs
 
-A request sent with `Accept: text/event-stream` to `POST /api/sets`, `POST /api/sets/:id/messages`, `POST /api/picks/generate`, `POST /api/ask` or `POST /api/library/conversations` starts a run on the server. Closing the stream does not stop it. The stream starts with `event: run` (`{ "id", "startedAt" }`), then `text` and `tool` events, then one `done` or `error`.
+A request sent with `Accept: text/event-stream` to `POST /api/sets`, `POST /api/sets/:id/messages`, `POST /api/picks/generate`, `POST /api/ask` or `POST /api/library/conversations` starts a run on the server. Closing the stream does not stop it. The stream starts with `event: run` (`{ "id", "startedAt" }`), then `text`, `tool` and (Ask) `visual` events, then one `done` or `error`.
 
 - `GET /api/runs?key=<request path>`: `{ "run": { "id", "startedAt" } | null }`, the run still working for that path.
 - `GET /api/runs/:id/events`: the same stream again from its first event. Finished runs stay readable for 10 minutes.
@@ -1086,6 +1086,7 @@ Claude-backed features: sets, weekly picks, ask, liner notes, digests, and the o
 | --- | --- |
 | `text` | `{ "delta": "..." }`: Claude's text as it is written |
 | `tool` | `{ "name": "find_songs", "input": { ... } }`: a tool Claude called |
+| `visual` | `{ "id": "v1", "visual": Visual }`: Ask only. A visual Claude drew with `show`, sent before the text that places it as `[[v1]]` |
 | `done` | The same body the JSON response would have. Last event. |
 | `error` | `{ "error": { "code", "message", "details"? } }`. Last event. |
 
@@ -1221,11 +1222,41 @@ Generates this week's picks now. `201 { "week", "picks": [Pick], "stats" }`. `40
 
 ### Ask
 
-Natural-language questions about the listening history. Claude answers from read-only analytics tools and cites the numbers it used. Answers are plain text (short paragraphs, numbers inline, no markdown; any markdown the model adds is stripped), suitable for a panel or a chat message, and end with a "Based on:" line. The tools follow the Metric definitions: skips and skip rates come from export and live rows, and API rows count as listens with no skip, device or country data.
+Natural-language questions about the listening history. Claude answers from read-only analytics tools. The tools follow the Metric definitions: skips and skip rates come from export and live rows, and API rows count as listens with no skip, device or country data.
+
+An answer is prose with visuals in it. Every tool result reaches Claude as `{ "ref": "r3", "result": ... }`. To draw numbers, Claude calls `show` with visuals that cite results by ref and path (`{ "ref": "r3", "path": "rows.0.hours" }`); the server copies the values from the results of the same run, so a visual never holds a number Claude typed. A visual citing a ref from another run, a path that holds nothing or no number, or a label or title with a number other than a year or date is rejected, and Claude is told why. Claude places each accepted visual in its text as `[[v1]]`; markers of unknown visuals are dropped. Each number in the prose is checked against every number the run's tools returned (to the precision it is written, a share also as a percentage, a list's length too); years, dates, times and days of the month are not checked. A number that matches nothing is kept and marked `unchecked`.
+
+`Answer`:
+
+```json
+{
+  "version": 1,
+  "blocks": [
+    { "type": "text", "spans": [{ "text": "You listened 36.4 hours in October " }, { "visual": "v1" }, { "text": ", and played " }, { "text": "999", "unchecked": true }, { "text": " songs twice." }] },
+    { "type": "visual", "id": "v2" }
+  ],
+  "visuals": { "v1": Visual, "v2": Visual },
+  "basis": "your plays in September and October 2026."
+}
+```
+
+`basis` is the closing "Based on:" line without its prefix, or `null`. A `text` block is a paragraph; a `{ "visual" }` span sits inside it (pair, share, series); a `visual` block stands alone (ranked, compare, or a series on a line of its own).
+
+`Visual` (`unit`: `{ "type": "hours" }`, `{ "type": "percent" }` for a share of 0 to 1, or `{ "type": "count", "noun": "plays" }`):
+
+| `kind` | Fields |
+| --- | --- |
+| `pair` | `label`, `unit`, `now`, `before`: one measure now against before |
+| `share` | `label`, `share` (0 to 1), `before` (0 to 1 or `null`) |
+| `series` | `title`, `unit`, `axis` (`year`, `month`, `week`, `day`, `hour`, `weekday`, `text`), `points: [{ "x", "y" }]` (2 to 120, in order) |
+| `ranked` | `title`, `unit`, `rows: [{ "item", "value" }]` (1 to 10). `item`: `{ "kind": "song", "name", "artist", "songKey", "uri", "art" }`, `{ "kind": "artist", "name", "art" }`, `{ "kind": "album", "name", "artist", "art" }` or `{ "kind": "label", "name" }`; `uri` and `art` are looked up by the server, `null` when unknown |
+| `compare` | `title`, `unit`, `nowLabel`, `beforeLabel`, `rows: [{ "label", "now", "before" }]` (2 to 8) |
+
+An answer is stored with its values when it is written, so it reads the same after the data changes. Answers written before answers were structured have no `content`; their `text` is the whole answer.
 
 #### `POST /api/ask`
 
-`{ "question": "Why did I stop playing Joji?", "threadId": 3 }` (`threadId` optional, continues a thread). `200 { "threadId": 3, "answer": "...", "toolCalls": [{ "name": "artist_history", "input": { "artist": "Joji" } }] }`.
+`{ "question": "Why did I stop playing Joji?", "threadId": 3 }` (`threadId` optional, continues a thread). `200 { "threadId": 3, "answer": "...", "content": Answer, "toolCalls": [{ "name": "artist_history", "input": { "artist": "Joji" } }] }`. `answer` is the answer as plain text for a chat message: prose, each block visual as lines ("1. Woods by Mac Miller: 20 plays"), then "Based on: ...".
 
 #### `GET /api/ask/threads`
 
@@ -1233,11 +1264,11 @@ Param `limit` (1-100, default 20). `{ "items": [{ "id": 3, "title": "Why did I s
 
 #### `GET /api/ask/threads/:id`
 
-`{ "id": 3, "title": "...", "createdAt": "...", "updatedAt": "...", "turns": [{ "role": "owner" | "assistant", "text": "..." }] }`. `title` is the first question (up to 120 characters), as in the list.
+`{ "id": 3, "title": "...", "createdAt": "...", "updatedAt": "...", "turns": [{ "role": "owner" | "assistant", "text": "...", "content"?: Answer }] }`. `title` is the first question (up to 120 characters), as in the list. `content` is on Claude's answers written since answers were structured; `text` is then the plain-text form.
 
 #### `DELETE /api/ask/threads/:id`
 
-`{ "deleted": true }`.
+`{ "deleted": true }`. Its answers are deleted with it.
 
 ### Liner notes
 

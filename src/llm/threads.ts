@@ -29,21 +29,26 @@ export function deleteThread(db: DbOrTx, id: number) {
 
 export const ownerMessage = (text: string) => `<owner_message>\n${text}\n</owner_message>`;
 
-/** The owner's messages and Claude's visible text replies, for display. */
-export function transcript(messages: MessageParam[]) {
-  const turns: { role: "owner" | "assistant"; text: string }[] = [];
-  for (const m of messages) {
+/** The owner's messages and Claude's visible text replies, each with the index of the message it came from. */
+export function transcriptTurns(messages: MessageParam[]) {
+  const turns: { role: "owner" | "assistant"; text: string; message: number }[] = [];
+  messages.forEach((m, message) => {
     const blocks = typeof m.content === "string" ? [{ type: "text", text: m.content } as Anthropic.Beta.BetaTextBlockParam] : (m.content ?? []);
     const text = blocks
       .filter((b): b is Anthropic.Beta.BetaTextBlockParam => b.type === "text")
       .map((b) => b.text)
       .join("")
       .trim();
-    if (!text) continue;
+    if (!text) return;
     if (m.role === "user") {
       const match = /<owner_message>\n([\s\S]*?)\n<\/owner_message>/.exec(text);
-      if (match) turns.push({ role: "owner", text: match[1]! });
-    } else turns.push({ role: "assistant", text });
-  }
+      if (match) turns.push({ role: "owner", text: match[1]!, message });
+    } else turns.push({ role: "assistant", text, message });
+  });
   return turns;
+}
+
+/** The owner's messages and Claude's visible text replies, for display. */
+export function transcript(messages: MessageParam[]) {
+  return transcriptTurns(messages).map(({ role, text }) => ({ role, text }));
 }

@@ -22,7 +22,7 @@ export function tool<S extends z.ZodType>(def: { name: string; description: stri
   return def as AgentTool;
 }
 
-export type AgentEvent = { type: "text"; delta: string } | { type: "tool"; name: string; input: unknown };
+export type AgentEvent = { type: "text"; delta: string } | { type: "tool"; name: string; input: unknown } | { type: "visual"; id: string; visual: unknown };
 
 export type AgentRun = {
   feature: LlmFeature;

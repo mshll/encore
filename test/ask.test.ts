@@ -148,7 +148,9 @@ describe("ask", () => {
     seedLibrary(db);
     const first = await ask(ctx, "what do I play most?", null);
     expect(first).toMatchObject({ answer: "Woods: 20 plays.", toolCalls: [{ name: "query_plays" }] });
-    expect((toolResults(fake.requests[1]!)[0]!.value.rows as { name: string }[]).map((r) => r.name)).toEqual(["Woods", "Surf"]);
+    const [result] = toolResults(fake.requests[1]!);
+    expect(result!.value.ref).toBe("r1");
+    expect(((result!.value.result as { rows: { name: string }[] }).rows).map((r) => r.name)).toEqual(["Woods", "Surf"]);
     expect(fake.requests[0]!.tool_choice).toBeUndefined();
 
     const second = await ask(ctx, "and Surf?", first.threadId);

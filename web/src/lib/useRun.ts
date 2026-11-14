@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { get, request } from "../api/client";
+import type { AnswerVisual } from "../api/types";
 import { followRun, streamPost, type StreamEvent, type StreamHandlers } from "../api/stream";
 import { assistantProblem, progressLine } from "./assistant";
 
@@ -7,13 +8,15 @@ export type RunState = {
   running: boolean;
   steps: string[];
   text: string;
+  /** Visuals the run has drawn so far, by the id its text places them with. */
+  visuals: Record<string, AnswerVisual>;
   searches: number;
   checked: number;
   startedAt: number | null;
   problem: string | null;
 };
 
-const IDLE: RunState = { running: false, steps: [], text: "", searches: 0, checked: 0, startedAt: null, problem: null };
+const IDLE: RunState = { running: false, steps: [], text: "", visuals: {}, searches: 0, checked: 0, startedAt: null, problem: null };
 
 type ActiveRun = { run: { id: string; startedAt: string } | null };
 
@@ -37,6 +40,7 @@ export function useRun<T>(resume?: { key: string; onDone: (result: T) => void })
     const onEvent = (e: StreamEvent) =>
       setState((s) => {
         if (e.type === "text") return { ...s, text: s.text + e.delta };
+        if (e.type === "visual") return { ...s, visuals: { ...s.visuals, [e.id]: e.visual } };
         const line = progressLine(e);
         return {
           ...s,

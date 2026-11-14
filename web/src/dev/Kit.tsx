@@ -3,11 +3,14 @@ import { BudgetBar } from "../charts/BudgetBar";
 import { DitherMeter } from "../charts/DitherMeter";
 import { HeatLegend } from "../charts/DitherHeatmap";
 import { ArtChip, InlineChange, InlineColumns, InlinePair, InlineShare } from "../charts/Inline";
+import { PairMeter } from "../charts/PairMeter";
 import { RateMeter } from "../charts/RateMeter";
+import type { Answer } from "../api/types";
 import { showToast } from "../lib/toast";
 import type { RunState } from "../lib/useRun";
 import { Artwork, type ArtBox, type ArtKind } from "../ui/Artwork";
 import { EncoreMark, Lockup } from "../ui/Brand";
+import { AnswerView, answerFromText } from "../ui/Answer";
 import { Button, IconButton } from "../ui/Button";
 
 import { Checkbox } from "../ui/Checkbox";
@@ -70,10 +73,38 @@ const RUN: RunState = {
   running: true,
   steps: ["Reading your last 90 days", "Searching your history for late-night songs", "Checking 12 new songs on Spotify"],
   text: "",
+  visuals: {},
   searches: 3,
   checked: 12,
   startedAt: Date.now() - 42_000,
   problem: null,
+};
+
+const SAMPLE_ANSWER: Answer = {
+  version: 1,
+  basis: "your plays in September and October 2026.",
+  visuals: {
+    v1: { kind: "pair", label: "Hours in October against September", unit: { type: "hours" }, now: 42, before: 30 },
+    v2: { kind: "share", label: "Skip rate in October against September", share: 0.41, before: 0.56 },
+    v3: { kind: "series", title: "Hours each day in October", unit: { type: "hours" }, axis: "day", points: Array.from({ length: 31 }, (_, i) => ({ x: `2026-10-${String(i + 1).padStart(2, "0")}`, y: (i * 7) % 5 })) },
+    v4: {
+      kind: "ranked",
+      title: "Most played songs in October",
+      unit: { type: "count", noun: "plays" },
+      rows: [
+        { item: { kind: "song", name: "Woods", artist: "Mac Miller", songKey: "woods|mac miller", uri: "spotify:track:0", art: null }, value: 24 },
+        { item: { kind: "artist", name: "Bùi Thị Xuân Hương and the Extraordinarily Long-Named Orchestra", art: BROKEN_ART }, value: 9 },
+        { item: { kind: "label", name: "night" }, value: 1 },
+      ],
+    },
+    v5: { kind: "compare", title: "Top artists, October against September", unit: { type: "hours" }, nowLabel: "October", beforeLabel: "September", rows: [{ label: "Mac Miller", now: 5.7, before: 7.7 }, { label: "Kanye West", now: 4.1, before: 1.4 }] },
+  },
+  blocks: [
+    { type: "text", spans: [{ text: "You played 42 hours in October " }, { visual: "v1" }, { text: " against 30 in September, skipping less " }, { visual: "v2" }, { text: " on fewer, longer days " }, { visual: "v3" }, { text: ". You also played " }, { text: "999", unchecked: true }, { text: " songs twice." }] },
+    { type: "visual", id: "v4" },
+    { type: "visual", id: "v5" },
+    { type: "visual", id: "v3" },
+  ],
 };
 
 /** Every primitive in its states, for the gate. Dev builds only. */
@@ -361,6 +392,25 @@ export function Kit() {
           <Row label="Artwork chip">
             <ArtChip src={null} kind="artist">Frank Ocean</ArtChip>
             <ArtChip src={BROKEN_ART} kind="artist" className="w-56">Bùi Thị Xuân Hương and the Extraordinarily Long-Named Orchestra</ArtChip>
+          </Row>
+        </Section>
+        <Section title="Answers">
+          <Row label="Pair meter">
+            <div className="flex w-48 flex-col gap-2">
+              <PairMeter now={42} before={30} max={42} />
+              <PairMeter now={9} before={30} max={42} />
+              <PairMeter now={0} before={12} max={42} />
+            </div>
+          </Row>
+          <Row label="Answer">
+            <div className="w-full max-w-[640px]">
+              <AnswerView answer={SAMPLE_ANSWER} />
+            </div>
+          </Row>
+          <Row label="Streaming">
+            <div className="w-full max-w-[640px]">
+              <AnswerView answer={answerFromText("You played 42 hours in October [[v1]] against 30.\n[[v9]]\nThen the half-written [[v", SAMPLE_ANSWER.visuals)} />
+            </div>
           </Row>
         </Section>
         <Section title="Artwork">

@@ -78,6 +78,8 @@ export function progressLine(event: Extract<StreamEvent, { type: "tool" }>): str
       return "Finding songs you play but never liked";
     case "submit_plan":
       return "Writing the plan";
+    case "show":
+      return "Drawing the numbers";
     case "artist_history":
     case "song_history":
       return `Reading your history${i.artist ? ` with ${String(i.artist)}` : ""}`;

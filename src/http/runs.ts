@@ -1,4 +1,4 @@
-export type RunEvent = { event: "text" | "tool" | "done" | "error"; data: unknown };
+export type RunEvent = { event: "text" | "tool" | "visual" | "done" | "error"; data: unknown };
 
 const RETAIN_FINISHED_MS = 10 * 60_000;
 

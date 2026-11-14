@@ -5,7 +5,7 @@ import type { LlmTransport } from "../src/llm/client";
 import { monthOf } from "../src/llm/ledger";
 import type { Env } from "../src/http/context";
 import { connectSpotify, noContent, routeFetch, testApp, TZ, uri } from "./helpers";
-import { message, scripted, seedLibrary, text } from "./llmFakes";
+import { message, scripted, seedLibrary, text, toolCall } from "./llmFakes";
 
 const ADMIN = { authorization: "Bearer admin-token-admin-token-123" };
 
@@ -115,8 +115,24 @@ describe("streaming", () => {
     expect(events).toEqual([
       { event: "run", data: { id: expect.any(String), startedAt: expect.any(String) } },
       { event: "text", data: { delta: "You played Woods 20 times." } },
-      { event: "done", data: { threadId: 1, answer: "You played Woods 20 times.", toolCalls: [] } },
+      { event: "done", data: { threadId: 1, answer: "You played Woods 20 times.", content: expect.objectContaining({ version: 1 }), toolCalls: [] } },
     ]);
+  });
+
+  test("SSE sends a visual event when show draws it, before the text that places it", async () => {
+    const { post, db } = signedIn(
+      scripted(
+        toolCall("top", { kind: "songs" }),
+        toolCall("show", { visuals: [{ kind: "ranked", title: "Most played", ref: "r1", path: "", value: "plays" }] }),
+        message([text("Woods leads.\n[[v1]]")]),
+      ).transport,
+    );
+    seedLibrary(db);
+
+    const body = await (await post("/api/ask", { question: "top song?" }, { accept: "text/event-stream" })).text();
+
+    const order = [...body.matchAll(/^event: (\w+)$/gm)].map((m) => m[1]);
+    expect(order).toEqual(["run", "tool", "tool", "visual", "text", "done"]);
   });
 
   test("a run keeps working after its client leaves; a later request follows it, and only DELETE stops it", async () => {

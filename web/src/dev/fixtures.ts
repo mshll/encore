@@ -12,9 +12,11 @@
     ?fixture=untagged plays but no tagged songs (Patterns: Taste)
     ?player=playing   a fake track and queue; player controls answer ok without calling Spotify
     ?dj=active        a DJ session playing from the newest set; starting and stopping one answer ok without calling Spotify
-    ?run=running      every Claude run (picks, sets, ask) is working: resumes on load, streams steps, never ends
+    ?run=running      every Claude run (picks, sets, ask) is working: resumes on load, streams steps, never ends (Ask: one visual,
+                      text up to a block whose visual has not arrived, which holds its place)
     ?run=starting     starting a run hangs before the server answers
-    ?run=done         a started run streams steps, then finishes with real data from the database
+    ?run=done         a started run streams steps, then finishes with real data from the database (Ask: two visuals built from
+                      real stats stream before the text that places them)
     ?run=failed       a started run streams steps, then fails (llm_failed)
     ?run=budget       the monthly Claude cap is spent (status and the run answer 402)
     ?run=unconfigured Claude has no API key (status and the run answer 503)
@@ -51,6 +53,7 @@
     ?library=disconnected Spotify reads as not connected (applying answers 409 spotify_not_connected)
     ?library=unsynced    the library has never synced
     Library fixtures answer the batch routes and Apply/Undo themselves: no Spotify call, nothing written.
+    ?ask=empty        Ask threads: every chart in a stored answer has nothing in it (series at zero, ranked and compare rows gone)
     ?recap=none       Recaps: every period has no recap yet (Write the recap)
     ?recap=facts      every recap has the numbers alone: no Claude lines
     ?recap=first      the history starts inside the period: nothing earlier to compare with
@@ -66,7 +69,7 @@
 type Json = Record<string, unknown>;
 
 const params = new URLSearchParams(location.search);
-for (const key of ["fixture", "player", "run", "dj", "settings", "history", "living", "library", "recap"]) {
+for (const key of ["fixture", "player", "run", "dj", "settings", "history", "living", "library", "recap", "ask"]) {
   const value = params.get(key);
   if (value === "off") sessionStorage.removeItem(`encore-${key}`);
   else if (value) sessionStorage.setItem(`encore-${key}`, value);
@@ -80,6 +83,7 @@ const historyFixture = sessionStorage.getItem("encore-history");
 const livingFixture = sessionStorage.getItem("encore-living");
 const libraryFixture = sessionStorage.getItem("encore-library");
 const recapFixture = sessionStorage.getItem("encore-recap");
+const askFixture = sessionStorage.getItem("encore-ask");
 
 const LONG_ARTIST = "Bùi Thị Xuân Hương and the Extraordinarily Long-Named Orchestra of Hồ Chí Minh City";
 const LONG_SONG = "Somewhere Only We Know (Live at the Royal Albert Hall, 14 February 2004) [2024 Remaster]";
@@ -130,6 +134,31 @@ function emptyFor(path: string, isNew: boolean): unknown {
   if (path === "/api/library/batches" || path === "/api/library/plans" || path === "/api/library/standing" || path === "/api/blocks") return { items: [] };
   if (path === "/api/library/analysis") return unsyncedLibrary(isNew);
   return null;
+}
+
+/** Every name in an answer's visuals at its longest, every image broken. */
+function worstAnswer(content: Json): Json {
+  const visuals = Object.fromEntries(
+    Object.entries(content.visuals as Record<string, Json>).map(([id, v]) => {
+      if (v.kind === "ranked")
+        return [id, { ...v, title: `${v.title as string}, ${LONG_ALBUM}`, rows: (v.rows as Json[]).map((r, i) => ({ ...r, value: i ? r.value : 1234567, item: { ...(r.item as Json), name: i % 2 ? LONG_ARTIST : LONG_SONG, artist: LONG_ARTIST, art: BROKEN_ART } })) }];
+      if (v.kind === "compare") return [id, { ...v, nowLabel: LONG_ALBUM, rows: (v.rows as Json[]).map((r) => ({ ...r, label: LONG_ARTIST })) }];
+      return [id, v];
+    }),
+  );
+  return { ...content, visuals };
+}
+
+/** Every chart in an answer with nothing in it. */
+function emptyAnswer(content: Json): Json {
+  const visuals = Object.fromEntries(
+    Object.entries(content.visuals as Record<string, Json>).map(([id, v]) => {
+      if (v.kind === "series") return [id, { ...v, points: (v.points as Json[]).map((p) => ({ ...p, y: 0 })) }];
+      if (v.kind === "ranked" || v.kind === "compare") return [id, { ...v, rows: [] }];
+      return [id, v];
+    }),
+  );
+  return { ...content, visuals };
 }
 
 function worsen(path: string, body: Json): unknown {
@@ -257,7 +286,7 @@ function worsen(path: string, body: Json): unknown {
     return { ...body, title: LONG_ALBUM, description: `${body.description as string} ${LONG_SONG}`, items, conversation: [...(body.conversation as Json[]), ...talk] };
   }
   if (/^\/api\/ask\/threads\/\d+$/.test(path)) {
-    const turns = body.turns as Json[];
+    const turns = (body.turns as Json[]).map((t) => (t.content ? { ...t, content: worstAnswer(t.content as Json) } : t));
     const long = Array.from({ length: 6 }, (_, i) => [{ role: "owner", text: i % 2 ? `${LONG_SONG} by ${LONG_ARTIST}: when did I play it most?` : "And on weekdays?" }, ...turns.slice(1)]).flat();
     return { ...body, turns: [...turns, ...long] };
   }
@@ -428,8 +457,29 @@ const STEPS: { name: string; input: Json }[] = [
   { name: "verify_new_song", input: { title: "Self Control", artist: "Frank Ocean" } },
 ];
 
-const ANSWER =
-  "You played Mac Miller most on weekday nights: 412 plays after 22:00 against 96 in the morning. Circles carries most of it, with Good News finished 38 times.\n\nBased on: your plays from January to November 2026.";
+type Visual = Json & { kind: string };
+
+/** An Ask answer with two visuals built from real stats, the way the server builds them from tool results. */
+async function askAnswer(): Promise<{ text: string; visuals: Record<string, Visual> }> {
+  const real = <T>(p: string) => realFetch(p).then((r) => r.json() as Promise<T>);
+  const [now, before, top] = await Promise.all([
+    real<{ hours: number }>("/api/stats/overview?from=2026-10-01&to=2026-10-31"),
+    real<{ hours: number }>("/api/stats/overview?from=2026-09-01&to=2026-09-30"),
+    real<{ items: { songKey: string; uri: string; name: string; artist: string; albumArtUrl: string | null; plays: number }[] }>("/api/stats/top/tracks?from=2026-10-01&to=2026-10-31&limit=5&sort=plays"),
+  ]);
+  const visuals: Record<string, Visual> = {
+    v1: { kind: "pair", label: "Hours in October against September", unit: { type: "hours" }, now: now.hours, before: before.hours },
+    v2: {
+      kind: "ranked",
+      title: "Most played songs in October",
+      unit: { type: "count", noun: "plays" },
+      rows: top.items.map((t) => ({ item: { kind: "song", songKey: t.songKey, uri: t.uri, name: t.name, artist: t.artist, art: t.albumArtUrl }, value: t.plays })),
+    },
+  };
+  const text = `You listened ${now.hours} hours in October [[v1]] against ${before.hours} in September, led by ${top.items[0]?.name ?? "one song"}.\n[[v2]]\nBased on: your plays in September and October 2026.`;
+  return { text, visuals };
+}
+
 
 type Frame = [event: string, data: unknown, delayMs: number];
 
@@ -473,7 +523,8 @@ async function doneBody(path: string): Promise<unknown> {
   if (path === "/api/digests/generate") return real<{ items: { id: number }[] }>("/api/digests").then((l) => (l.items[0] ? real(`/api/digests/${l.items[0].id}`) : {}));
   if (path === "/api/ask") {
     const threads = await real<{ items: { id: number }[] }>("/api/ask/threads");
-    return { threadId: threads.items[0]?.id ?? 1, answer: ANSWER };
+    const { text, visuals } = await askAnswer();
+    return { threadId: threads.items[0]?.id ?? 1, answer: text.replace(/\s*\[\[v\d+\]\]/g, ""), content: { version: 1, blocks: [], visuals, basis: null } };
   }
   const id = path.match(/^\/api\/sets\/(\d+)/)?.[1] ?? (await real<{ items: { id: number }[] }>("/api/sets")).items[0]?.id;
   return { set: await real(`/api/sets/${id}`), reply: null, changed: true };
@@ -481,13 +532,22 @@ async function doneBody(path: string): Promise<unknown> {
 
 const PAUSED_UNTIL = new Date(Date.now() + 2 * 3600_000).toISOString();
 
+let resumedKey: string | null = null;
+
+/** An Ask run part way: steps, one visual drawn, its text, then a block whose visual has not arrived. Never ends. */
+async function askRunning(): Promise<Frame[]> {
+  const { text, visuals } = await askAnswer();
+  const upToBlock = `${text.slice(0, text.indexOf("[[v2]]"))}[[v3]]\n`;
+  return [...stepFrames("/api/ask", 2), ["visual", { id: "v1", visual: visuals.v1 }, 600], ...upToBlock.match(/.{1,24}/gs)!.map((delta): Frame => ["text", { delta }, 80])];
+}
+
 const RUN_ERRORS: Record<string, [number, Json]> = {
   budget: [402, { code: "llm_budget_exceeded", message: "Monthly LLM budget spent", details: { month: "2026-11", spentUsd: 100.04, capUsd: 100 } }],
   unconfigured: [503, { code: "llm_not_configured", message: "ANTHROPIC_API_KEY is not set" }],
   paused: [503, { code: "spotify_paused", message: "Spotify calls are paused", details: { reason: "rate_limited", until: PAUSED_UNTIL } }],
 };
 
-async function runFixture(path: string, method: string, signal: AbortSignal | null | undefined): Promise<Response | null> {
+async function runFixture(path: string, query: string, method: string, signal: AbortSignal | null | undefined): Promise<Response | null> {
   if (path === "/api/status" && method === "GET") {
     const status = (await realFetch(path).then((r) => r.json())) as { llm: Json; spotify: Json };
     status.llm = { ...status.llm, configured: run !== "unconfigured" };
@@ -495,16 +555,21 @@ async function runFixture(path: string, method: string, signal: AbortSignal | nu
     if (run === "paused") status.spotify = { ...status.spotify, paused: { reason: "rate_limited", until: PAUSED_UNTIL, since: new Date().toISOString() } };
     return json(status);
   }
-  if (path === "/api/runs" && method === "GET")
+  if (path === "/api/runs" && method === "GET") {
+    resumedKey = new URLSearchParams(query).get("key");
     return json({ run: run === "running" ? { id: RUN_ID, startedAt: new Date(Date.now() - 74_000).toISOString() } : null });
-  if (path === `/api/runs/${RUN_ID}/events`)
-    return sse([["run", { id: RUN_ID, startedAt: new Date(Date.now() - 74_000).toISOString() }, 0], ...stepFrames("", 4)], signal, true);
+  }
+  if (path === `/api/runs/${RUN_ID}/events`) {
+    const opened: Frame = ["run", { id: RUN_ID, startedAt: new Date(Date.now() - 74_000).toISOString() }, 0];
+    return sse(resumedKey === "/api/ask" ? [opened, ...(await askRunning())] : [opened, ...stepFrames("", 4)], signal, true);
+  }
   if (path === `/api/runs/${RUN_ID}` && method === "DELETE") return json({ cancelled: true });
   if (method !== "POST" || !RUN_PATHS.some((r) => r.test(path))) return null;
   const error = RUN_ERRORS[run!];
   if (error) return json({ error: error[1] }, error[0]);
   if (run === "starting") return new Promise<Response>(() => {});
   const opened: Frame = ["run", { id: RUN_ID, startedAt: new Date().toISOString() }, 0];
+  if (run === "running" && path === "/api/ask") return sse([opened, ...(await askRunning())], signal, true);
   if (run === "running") return sse([opened, ...stepFrames(path, STEPS.length)], signal, true);
   if (run === "failed")
     return sse(
@@ -512,8 +577,12 @@ async function runFixture(path: string, method: string, signal: AbortSignal | nu
       signal,
       false,
     );
-  const text: Frame[] = path === "/api/ask" ? ANSWER.match(/.{1,24}/gs)!.map((delta): Frame => ["text", { delta }, 80]) : [];
-  return sse([opened, ...stepFrames(path, STEPS.length), ...text, ["done", await doneBody(path), 600]], signal, false);
+  if (path === "/api/ask") {
+    const { text, visuals } = await askAnswer();
+    const drawn = Object.entries(visuals).map(([id, visual]): Frame => ["visual", { id, visual }, 300]);
+    return sse([opened, ...stepFrames(path, 3), ["tool", { name: "show", input: {} }, 1200], ...drawn, ...text.match(/.{1,24}/gs)!.map((delta): Frame => ["text", { delta }, 80]), ["done", await doneBody(path), 600]], signal, false);
+  }
+  return sse([opened, ...stepFrames(path, STEPS.length), ["done", await doneBody(path), 600]], signal, false);
 }
 
 const LIVING_TARGET: Record<string, string> = { fresh: "most-played", deferred: "most-played", failed: "most-played", empty: "most-played", removed: "forgotten" };
@@ -754,7 +823,7 @@ window.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
     if (path === "/api/dj/stop" && method === "POST") return json({ stopped: true });
   }
   if (run) {
-    const answer = await runFixture(path, method, init?.signal);
+    const answer = await runFixture(path, url.search.slice(1), method, init?.signal);
     if (answer) return answer;
   }
   if (settingsFixture) {
@@ -772,6 +841,12 @@ window.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
   if (libraryFixture) {
     const answer = await libraryFixtureAnswer(path, method);
     if (answer) return answer;
+  }
+  if (askFixture === "empty" && /^\/api\/ask\/threads\/\d+$/.test(path)) {
+    const res = await realFetch(input, init);
+    if (!res.ok) return res;
+    const body = (await res.json()) as { turns: Json[] };
+    return json({ ...body, turns: body.turns.map((t) => (t.content ? { ...t, content: emptyAnswer(t.content as Json) } : t)) });
   }
   if (recapFixture || fixture === "worst") {
     const answer = await recapAnswer(path, method);

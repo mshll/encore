@@ -178,8 +178,36 @@ export type PicksWeek = { week: string; picks: Pick[]; stats: PickStats };
 export type Block = { id: number; kind: "song" | "artist"; key: string; label: string; reason: string; createdAt: string };
 
 export type AskThread = { id: number; title: string; createdAt: string; updatedAt: string };
-export type AskTurn = { role: "owner" | "assistant"; text: string };
-export type AskResult = { threadId: number; answer: string };
+/** How a value in an answer is printed: hours, a share of 0 to 1, or a count of `noun` ("plays"). */
+export type AnswerUnit = { type: "hours" } | { type: "percent" } | { type: "count"; noun: string };
+
+export type AnswerItem =
+  | { kind: "song"; name: string; artist: string; songKey: string; uri: string | null; art: string | null }
+  | { kind: "artist"; name: string; art: string | null }
+  | { kind: "album"; name: string; artist: string; art: string | null }
+  | { kind: "label"; name: string };
+
+export type AnswerAxis = "year" | "month" | "week" | "day" | "hour" | "weekday" | "text";
+
+/** A chart in an answer. Every value was copied by the server from a tool result of the run that wrote it. */
+export type AnswerVisual =
+  | { kind: "pair"; label: string; unit: AnswerUnit; now: number; before: number }
+  | { kind: "share"; label: string; share: number; before: number | null }
+  | { kind: "series"; title: string; unit: AnswerUnit; axis: AnswerAxis; points: { x: string; y: number }[] }
+  | { kind: "ranked"; title: string; unit: AnswerUnit; rows: { item: AnswerItem; value: number }[] }
+  | { kind: "compare"; title: string; unit: AnswerUnit; nowLabel: string; beforeLabel: string; rows: { label: string; now: number; before: number }[] };
+
+/** Prose; `unchecked` marks a number no tool returned in that run. `visual` is an inline visual's id. */
+export type AnswerSpan = { text: string; unchecked?: true } | { visual: string };
+
+export type AnswerBlock = { type: "text"; spans: AnswerSpan[] } | { type: "visual"; id: string };
+
+/** A structured answer: prose with visuals in it, the visuals' values, and the closing "Based on" line. */
+export type Answer = { version: 1; blocks: AnswerBlock[]; visuals: Record<string, AnswerVisual>; basis: string | null };
+
+/** `content` is absent on answers written before answers were structured: `text` is all there is. */
+export type AskTurn = { role: "owner" | "assistant"; text: string; content?: Answer };
+export type AskResult = { threadId: number; answer: string; content: Answer };
 
 export type Note = Artwork & {
   songKey: string;

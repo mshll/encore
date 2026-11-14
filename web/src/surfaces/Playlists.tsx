@@ -192,15 +192,9 @@ function Cover({ playlist, news, shelf }: { playlist: LivingPlaylist; news: stri
         </span>
       </AppLink>
       {playable(playlist) && (
-        <IconButton
-          icon={PlayIcon}
-          fill
-          label={`Play ${playlist.name}`}
-          variant="accent"
-          size="lg"
-          onClick={() => void play(playlist)}
-          className="absolute top-[calc(100%-theme(spacing.3))] right-3 rounded-full opacity-0 shadow-overlay transition-opacity duration-150 group-hover:opacity-100 focus-visible:opacity-100 phone:hidden"
-        />
+        <span className="absolute top-2 right-2 hidden translate-y-1 opacity-0 transition-[opacity,translate] duration-(--dur-hover) ease-out group-hover:translate-y-0 group-hover:opacity-100 focus-within:translate-y-0 focus-within:opacity-100 can-hover:block">
+          <IconButton icon={PlayIcon} fill label={`Play ${playlist.name}`} variant="accent" size="lg" onClick={() => void play(playlist)} className="rounded-full! shadow-overlay" />
+        </span>
       )}
     </li>
   );
