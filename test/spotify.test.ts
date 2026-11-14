@@ -241,6 +241,15 @@ describe("enrichment", () => {
     expect(calls).toHaveLength(3);
   });
 
+  test("a pause recorded for another Spotify app does not block this one", async () => {
+    const { db, client, now } = setup(() => jsonResponse({ id: "me" }));
+    connect(db, now() + 3_600_000);
+    setJobState(db, "spotify", { data: { reason: "quota_exceeded", blockedUntil: now() + 60_000, at: now(), clientId: "other-app" } });
+    expect(client.gate()).toBeNull();
+    setJobState(db, "spotify", { data: { reason: "quota_exceeded", blockedUntil: now() + 60_000, at: now(), clientId: "test-client" } });
+    await expect(client.me()).rejects.toBeInstanceOf(SpotifyBlockedError);
+  });
+
   test("Web API calls are counted per UTC day; oEmbed calls are not", async () => {
     const { db, client, now } = setup((url) => jsonResponse(url.includes("oembed") ? { thumbnail_url: "https://thumb/1" } : { id: "me" }));
     connect(db, now() + 3_600_000);

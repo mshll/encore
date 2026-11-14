@@ -12,13 +12,13 @@ const defaultRetryAfterSeconds = 60;
 const CALLS_STATE = "spotify_calls";
 const utcDay = (ms: number) => new Date(ms).toISOString().slice(0, 10);
 
-export type SpotifyGate = { blockedUntil: number; reason: BlockReason; at: number };
+export type SpotifyGate = { blockedUntil: number; reason: BlockReason; at: number; clientId?: string };
 
 export class SpotifyClient {
   constructor(
     private readonly db: Db,
     private readonly auth: SpotifyAuth,
-    private readonly config: Pick<Config, "quotaBackoffMs" | "spotifyIntervalMs">,
+    private readonly config: Pick<Config, "quotaBackoffMs" | "spotifyIntervalMs" | "spotifyClientId">,
     private readonly fetchFn: typeof fetch = fetch,
     private readonly now: () => number = Date.now,
     readonly pacer: SpotifyPacer = new SpotifyPacer(config.spotifyIntervalMs, now),
@@ -26,7 +26,7 @@ export class SpotifyClient {
 
   gate(): SpotifyGate | null {
     const data = getJobState(this.db, "spotify")?.data as SpotifyGate | null | undefined;
-    return data && data.blockedUntil > this.now() ? data : null;
+    return data && data.blockedUntil > this.now() && data.clientId === this.config.spotifyClientId ? data : null;
   }
 
   me() {
@@ -121,7 +121,7 @@ export class SpotifyClient {
     const retryAfter = Number(res.headers.get("retry-after"));
     const retryAfterMs = (Number.isFinite(retryAfter) && retryAfter > 0 ? retryAfter : defaultRetryAfterSeconds) * 1000;
     const waitMs = quota ? Math.max(this.config.quotaBackoffMs, retryAfterMs) : retryAfterMs;
-    const gate: SpotifyGate = { reason: quota ? "quota_exceeded" : "rate_limited", blockedUntil: this.now() + waitMs, at: this.now() };
+    const gate: SpotifyGate = { reason: quota ? "quota_exceeded" : "rate_limited", blockedUntil: this.now() + waitMs, at: this.now(), clientId: this.config.spotifyClientId };
     setJobState(this.db, "spotify", { lastError: `${gate.reason} until ${new Date(gate.blockedUntil).toISOString()}`, data: gate });
     if (quota) console.error(`Spotify QUOTA_EXCEEDED after ${this.callsToday()} calls today (UTC): all Spotify calls paused until ${new Date(gate.blockedUntil).toISOString()}`);
     return new SpotifyBlockedError(gate.reason, gate.blockedUntil);
