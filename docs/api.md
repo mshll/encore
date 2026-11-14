@@ -124,6 +124,7 @@ Artist rows (top artists, eras, skips, search, the artist page, the overview's `
   "tags": { "songs": 5055, "tagged": 0, "coverage": 0 },
   "plays": { "plays": 39821, "music": 39338, "api": 10, "live": 152 },
   "live": { "watch": { "lastRunAt": "...", "...": "same shape as poll" }, "radar": { "...": "..." }, "library": { "...": "..." } },
+  "integrations": { "discord": false, "mcp": true },
   "llm": {
     "configured": true, "model": "claude-opus-5-5", "month": "2026-11",
     "spentUsd": 1.18, "capUsd": 100, "remainingUsd": 98.82, "exhausted": false,
@@ -141,6 +142,7 @@ Artist rows (top artists, eras, skips, search, the artist page, the overview's `
 - `poll.lastResult` also has `skippedCoveredByLive` (API plays the watcher already stored). It may be `{ "skipped": "spotify_not_connected" }`. `lastRunAt`/`lastSuccessAt` are `null` before the first run. `import` is `null` before the first import.
 - `enrichment.failed`: tracks given up on after 3 failed lookups. `withArt`: tracks with an `albumArtUrl`.
 - Enrichment makes one Web API call per run (`ENRICH_INTERVAL_SECONDS`, default 10): `GET /tracks/{id}` (metadata, 640 px art, artist ids) or `GET /artists/{id}` (image), whichever pending item has more listens. `enrichment.art` is the oEmbed job (`ART_INTERVAL_SECONDS`, default 4). Both stop while `spotify.paused` is set.
+- `integrations`: whether the Discord endpoint (`DISCORD_APPLICATION_ID`, `DISCORD_PUBLIC_KEY`, `DISCORD_OWNER_ID`) and `/mcp` (`MCP_TOKEN`) are configured.
 - `enrichment.artists`: artists learned from enriched or polled tracks; `fetched` had their `GET /artists/{id}` lookup.
 - `tags`: `songs` known (distinct song keys in `tracks`), `tagged` songs with tags, `coverage` = tagged / songs (0..1, not rounded).
 - `plays`: stored rows: all kinds, music only, and rows by source `api` and `live` (the rest are `export`).
@@ -428,6 +430,14 @@ Newest first. Params (all optional): `from`, `to`, `kind` (default `track`), `ar
 ```
 
 For episodes, `name` is the episode, `artist` the show, `uri` the episode URI, `songKey` `null`. `ts` is the end of the play (Spotify's export and recently-played both report end time).
+
+## Tracks
+
+### `GET /api/tracks?uri=spotify:track:...&uri=...`
+
+Identities for 1-500 track URIs (repeat `uri`), for lists that arrive as URIs only (DJ sessions). Unknown URIs are left out; order is not kept.
+
+`{ "items": [{ "uri": "spotify:track:...", "songKey": "glimpse of us|joji", "name": "Glimpse of Us", "artist": "Joji", "album": "SMITHEREENS", "albumArtUrl": "..." }] }`
 
 ## Tags
 
