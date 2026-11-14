@@ -165,9 +165,9 @@ export default function Ask() {
         </nav>
         <div className="flex max-w-3xl min-w-0 flex-col gap-8">
           {threadId && thread.isPending ? <SkeletonRows rows={4} /> : <Turns turns={turns} />}
-          {pending && (
+          {(pending || run.running) && (
             <div className="flex flex-col gap-6">
-              <p className="max-w-[85%] self-end rounded-2xl bg-component px-3.5 py-2 text-pretty">{pending}</p>
+              {pending && <p className="max-w-[85%] self-end rounded-2xl bg-component px-3.5 py-2 text-pretty">{pending}</p>}
               {run.text ? <Answer text={run.text} /> : run.running && <RunProgress run={run} title="Looking through your listening" onCancel={run.cancel} />}
             </div>
           )}

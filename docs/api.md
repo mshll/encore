@@ -28,6 +28,16 @@ Contract between the server and the web UI. All routes are JSON over HTTP on the
 | `period` | `day` \| `week` \| `month` \| `year` | Bucket size. Default `month`. `week` labels are the Monday date (`YYYY-MM-DD`), `month` is `YYYY-MM`, `year` is `YYYY`. |
 | `limit`, `offset` | integers | Paging. Limits are per endpoint. |
 
+## Assistant runs
+
+A request sent with `Accept: text/event-stream` to `POST /api/sets`, `POST /api/sets/:id/messages`, `POST /api/picks/generate` or `POST /api/ask` starts a run on the server. Closing the stream does not stop it. The stream starts with `event: run` (`{ "id", "startedAt" }`), then `text` and `tool` events, then one `done` or `error`.
+
+- `GET /api/runs?key=<request path>`: `{ "run": { "id", "startedAt" } | null }`, the run still working for that path.
+- `GET /api/runs/:id/events`: the same stream again from its first event. Finished runs stay readable for 10 minutes.
+- `DELETE /api/runs/:id`: stops the run and its Claude request. `{ "cancelled": true }`.
+
+Runs live in memory: a restart ends them.
+
 ## Metric definitions
 
 - **Music play**: a row with `kind = "track"` from the audio export or the API. Podcast episodes, audiobooks, and every row from `Streaming_History_Video_*.json` (music videos included) are stored but excluded from all `/api/stats/*` and `/api/entities/*` numbers. `/api/history` can show them with `kind`.
