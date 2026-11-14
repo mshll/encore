@@ -1,49 +1,81 @@
-import type { IconSvgElement } from "@hugeicons/react";
+import type { IconGlyph } from "../ui/Icon";
 import {
-  Airplane01Icon,
-  BubbleChatQuestionIcon,
-  Clock01Icon,
-  CompassIcon,
-  Delete02Icon,
-  GiftIcon,
-  Home01Icon,
-  HourglassIcon,
-  Layers01Icon,
-  LeftToRightListBulletIcon,
-  MusicNoteSquare01Icon,
-  NewReleasesIcon,
-  NextIcon,
-  Radio01Icon,
-  Settings01Icon,
-} from "../ui/Icon";
+  BroomIcon,
+  ChartBarIcon,
+  ChatCircleTextIcon,
+  GearSixIcon,
+  HouseIcon,
+  ListBulletsIcon,
+  NewspaperIcon,
+  PlaylistIcon,
+  RocketLaunchIcon,
+  SparkleIcon,
+  VinylRecordIcon,
+} from "../ui/icons";
 
-export type NavItem = { path: string; label: string; icon: IconSvgElement; match: (location: string) => boolean; group?: string };
+/** Where a surface sits in navigation: the short primary list, the More menu, or the foot of the sidebar. */
+export type NavPlace = "listening" | "play" | "more" | "foot";
+
+export type Surface = {
+  id: string;
+  path: string;
+  label: string;
+  icon: IconGlyph;
+  place: NavPlace;
+  /** Second key of the `G` then key shortcut. */
+  key?: string;
+  match: (location: string) => boolean;
+};
 
 const exact = (path: string) => (location: string) => location === path;
-const prefix =
-  (...paths: string[]) =>
-  (location: string) =>
-    paths.some((p) => location === p || location.startsWith(`${p}/`));
+const under = (path: string) => (location: string) => location === path || location.startsWith(`${path}/`);
 
-export const NAV: NavItem[] = [
-  { path: "/", label: "Overview", icon: Home01Icon, match: exact("/") },
-  { path: "/eras", label: "Eras", icon: Layers01Icon, match: exact("/eras") },
-  { path: "/clock", label: "Clock", icon: Clock01Icon, match: exact("/clock") },
-  { path: "/skips", label: "Skips", icon: NextIcon, match: exact("/skips") },
-  { path: "/forgotten", label: "Forgotten", icon: HourglassIcon, match: exact("/forgotten") },
-  { path: "/trips", label: "Trips", icon: Airplane01Icon, match: exact("/trips") },
-  { path: "/history", label: "History", icon: LeftToRightListBulletIcon, match: exact("/history") },
-  { path: "/explore", label: "Explore", icon: CompassIcon, match: prefix("/explore", "/artist", "/album", "/song"), group: "Play" },
-  { path: "/sets", label: "Sets", icon: MusicNoteSquare01Icon, match: prefix("/sets"), group: "Play" },
-  { path: "/picks", label: "Picks", icon: GiftIcon, match: exact("/picks"), group: "Play" },
-  { path: "/ask", label: "Ask", icon: BubbleChatQuestionIcon, match: exact("/ask"), group: "Play" },
-  { path: "/session", label: "Session", icon: Radio01Icon, match: exact("/session"), group: "Play" },
-  { path: "/releases", label: "Releases", icon: NewReleasesIcon, match: exact("/releases"), group: "Play" },
-  { path: "/cleanup", label: "Cleanup", icon: Delete02Icon, match: exact("/cleanup"), group: "Library" },
+/** The new information architecture. DESIGN.md, section 1, describes what each surface answers. */
+export const SURFACES: Surface[] = [
+  { id: "overview", path: "/", label: "Overview", icon: HouseIcon, place: "listening", key: "o", match: exact("/") },
+  { id: "plays", path: "/plays", label: "Plays", icon: ListBulletsIcon, place: "listening", key: "p", match: under("/plays") },
+  { id: "music", path: "/music", label: "Music", icon: VinylRecordIcon, place: "listening", key: "m", match: under("/music") },
+  { id: "patterns", path: "/patterns", label: "Patterns", icon: ChartBarIcon, place: "listening", key: "t", match: under("/patterns") },
+  { id: "for-you", path: "/for-you", label: "For you", icon: SparkleIcon, place: "play", key: "f", match: under("/for-you") },
+  { id: "sets", path: "/sets", label: "Sets", icon: PlaylistIcon, place: "play", key: "s", match: under("/sets") },
+  { id: "ask", path: "/ask", label: "Ask", icon: ChatCircleTextIcon, place: "play", key: "a", match: under("/ask") },
+  { id: "recaps", path: "/recaps", label: "Recaps", icon: NewspaperIcon, place: "more", key: "r", match: under("/recaps") },
+  { id: "library", path: "/library", label: "Library", icon: BroomIcon, place: "more", key: "l", match: under("/library") },
+  { id: "setup", path: "/setup", label: "Setup", icon: RocketLaunchIcon, place: "more", match: under("/setup") },
+  { id: "settings", path: "/settings", label: "Settings", icon: GearSixIcon, place: "foot", key: ",", match: under("/settings") },
 ];
 
-export const NAV_GROUPS = [...new Set(NAV.map((n) => n.group))].map((group) => ({ group, items: NAV.filter((n) => n.group === group) }));
+export const byPlace = (place: NavPlace) => SURFACES.filter((s) => s.place === place);
 
-export const SETTINGS: NavItem = { path: "/settings", label: "Settings", icon: Settings01Icon, match: exact("/settings") };
+/** Phone tab bar: the listening surfaces; everything else sits in the More sheet. */
+export const PHONE_TABS = byPlace("listening");
+export const PHONE_MORE = SURFACES.filter((s) => s.place !== "listening");
 
-export const TAB_PATHS = ["/", "/skips", "/history", "/explore"];
+export const MUSIC_TABS = [
+  { path: "/music/artists", label: "Artists" },
+  { path: "/music/albums", label: "Albums" },
+  { path: "/music/songs", label: "Songs" },
+  { path: "/music/forgotten", label: "Forgotten" },
+];
+
+export const PATTERN_TABS = [
+  { path: "/patterns/when", label: "When" },
+  { path: "/patterns/eras", label: "Eras" },
+  { path: "/patterns/taste", label: "Taste" },
+  { path: "/patterns/skips", label: "Skips" },
+  { path: "/patterns/places", label: "Places" },
+];
+
+export const FOR_YOU_TABS = [
+  { path: "/for-you/picks", label: "Picks" },
+  { path: "/for-you/releases", label: "Releases" },
+];
+
+export const SETTINGS_TABS = [
+  { path: "/settings/general", label: "General" },
+  { path: "/settings/spotify", label: "Spotify" },
+  { path: "/settings/claude", label: "Claude" },
+  { path: "/settings/integrations", label: "Integrations" },
+  { path: "/settings/jobs", label: "Jobs" },
+  { path: "/settings/account", label: "Account" },
+];

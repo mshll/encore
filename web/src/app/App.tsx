@@ -1,66 +1,107 @@
 import { lazy, Suspense } from "react";
-import { Route, Switch } from "wouter";
+import { Redirect, Route, Switch } from "wouter";
 import { useSession } from "../api/queries";
-import { SignIn } from "../screens/SignIn";
-import { ErrorState } from "../ui/states";
+import { ErrorState } from "../ui/States";
+import { Placeholder } from "../surfaces/Placeholder";
+import { RangePicker } from "../ui/RangePicker";
+import { FOR_YOU_TABS, MUSIC_TABS, PATTERN_TABS, SETTINGS_TABS } from "./nav";
 import { Shell } from "./Shell";
 
-const Overview = lazy(() => import("../screens/Overview"));
-const Eras = lazy(() => import("../screens/Eras"));
-const Clock = lazy(() => import("../screens/Clock"));
-const Skips = lazy(() => import("../screens/Skips"));
-const Forgotten = lazy(() => import("../screens/Forgotten"));
-const Trips = lazy(() => import("../screens/Trips"));
-const History = lazy(() => import("../screens/History"));
-const Explore = lazy(() => import("../screens/Explore"));
-const Entity = lazy(() => import("../screens/Entity"));
-const Settings = lazy(() => import("../screens/Settings"));
-const Session = lazy(() => import("../screens/Session"));
-const Sets = lazy(() => import("../screens/Sets"));
-const SetPage = lazy(() => import("../screens/SetPage"));
-const Picks = lazy(() => import("../screens/Picks"));
-const Ask = lazy(() => import("../screens/Ask"));
-const Releases = lazy(() => import("../screens/Releases"));
-const Cleanup = lazy(() => import("../screens/Cleanup"));
+const Overview = lazy(() => import("../surfaces/Overview").then((m) => ({ default: m.Overview })));
+const Plays = lazy(() => import("../surfaces/Plays").then((m) => ({ default: m.Plays })));
+const When = lazy(() => import("../surfaces/When").then((m) => ({ default: m.When })));
+const SignIn = lazy(() => import("../surfaces/SignIn").then((m) => ({ default: m.SignIn })));
+const Kit = import.meta.env.DEV ? lazy(() => import("../dev/Kit").then((m) => ({ default: m.Kit }))) : null;
+
+const range = <RangePicker />;
 
 export function App() {
   const session = useSession();
   if (session.isPending) return null;
   if (session.isError)
     return (
-      <div className="mx-auto max-w-md safe-x pt-24">
+      <div className="mx-auto max-w-md px-5 pt-24">
         <ErrorState error={session.error} onRetry={() => session.refetch()} title="encore is not reachable" />
       </div>
     );
-  if (!session.data.authenticated) return <SignIn setupRequired={session.data.setupRequired} />;
+  if (!session.data.authenticated)
+    return (
+      <Suspense fallback={null}>
+        <SignIn setupRequired={session.data.setupRequired} />
+      </Suspense>
+    );
   return (
     <Shell>
       <Suspense fallback={null}>
         <Switch>
           <Route path="/" component={Overview} />
-          <Route path="/eras" component={Eras} />
-          <Route path="/clock" component={Clock} />
-          <Route path="/skips" component={Skips} />
-          <Route path="/forgotten" component={Forgotten} />
-          <Route path="/trips" component={Trips} />
-          <Route path="/history" component={History} />
-          <Route path="/explore" component={Explore} />
-          <Route path="/artist/:name">{(p) => <Entity kind="artist" artist={decodeURIComponent(p.name)} />}</Route>
-          <Route path="/album/:artist/:album">{(p) => <Entity kind="album" artist={decodeURIComponent(p.artist)} album={decodeURIComponent(p.album)} />}</Route>
-          <Route path="/song/:songKey">{(p) => <Entity kind="song" songKey={decodeURIComponent(p.songKey)} />}</Route>
-          <Route path="/sets" component={Sets} />
-          <Route path="/sets/:id">{(p) => <SetPage key={p.id} id={Number(p.id)} />}</Route>
-          <Route path="/picks" component={Picks} />
-          <Route path="/ask" component={Ask} />
-          <Route path="/session" component={Session} />
-          <Route path="/releases" component={Releases} />
-          <Route path="/cleanup" component={Cleanup} />
-          <Route path="/settings" component={Settings} />
+          <Route path="/plays" component={Plays} />
+
+          <Route path="/music">
+            <Redirect to="/music/artists" replace />
+          </Route>
+          <Route path="/music/artist/:name">
+            {(p) => <Placeholder title={decodeURIComponent(p.name)} description="One artist: time listened, songs and albums ranked, when you play them, skips and new releases." actions={range} />}
+          </Route>
+          <Route path="/music/album/:artist/:album">
+            {(p) => <Placeholder title={decodeURIComponent(p.album)} description={`Album by ${decodeURIComponent(p.artist)}: every song with plays and skips, and listening over time.`} actions={range} />}
+          </Route>
+          <Route path="/music/song/:songKey">
+            {() => <Placeholder title="Song" description="One song: plays over time, where it gets skipped and where it sticks, versions, and liner notes." actions={range} />}
+          </Route>
+          <Route path="/music/:tab">
+            <Placeholder title="Music" description="Everything you have played, ranked: artists, albums and songs, and favourites you stopped playing." tabs={MUSIC_TABS} actions={range} />
+          </Route>
+
+          <Route path="/patterns">
+            <Redirect to="/patterns/when" replace />
+          </Route>
+          <Route path="/patterns/when" component={When} />
+          <Route path="/patterns/:tab">
+            <Placeholder title="Patterns" description="How your listening is shaped: by hour, by era, by taste, by skips and by place." tabs={PATTERN_TABS} actions={range} />
+          </Route>
+
+          <Route path="/for-you">
+            <Redirect to="/for-you/picks" replace />
+          </Route>
+          <Route path="/for-you/:tab">
+            <Placeholder title="For you" description="This week's picks from Claude and new releases from artists you play." tabs={FOR_YOU_TABS} />
+          </Route>
+
+          <Route path="/sets/:id">{() => <Placeholder title="Set" description="One set: its tracks, the reasons, and a chat to change it." />}</Route>
+          <Route path="/sets">
+            <Placeholder title="Sets" description="Playlists Claude builds from a prompt and your history, played as a session that adapts to skips." />
+          </Route>
+
+          <Route path="/ask/:id">{() => <Placeholder title="Ask" description="A conversation about your listening." />}</Route>
+          <Route path="/ask">
+            <Placeholder title="Ask" description="Questions about your listening, answered from your history." />
+          </Route>
+
+          <Route path="/recaps/:id">{() => <Placeholder title="Recap" description="One weekly or monthly recap." />}</Route>
+          <Route path="/recaps">
+            <Placeholder title="Recaps" description="Weekly and monthly write-ups of your listening." />
+          </Route>
+
+          <Route path="/library">
+            <Placeholder title="Library" description="Proposals to tidy saved songs and playlists, what you applied and can undo, and what you blocked." />
+          </Route>
+
+          <Route path="/setup">
+            <Placeholder title="Setup" description="Connect Spotify, import your history and turn on the optional integrations." />
+          </Route>
+
+          <Route path="/settings">
+            <Redirect to="/settings/general" replace />
+          </Route>
+          <Route path="/settings/:section">
+            <Placeholder title="Settings" description="How encore runs: time zone, Spotify, Claude and its budget, Discord and MCP, jobs, and your passkeys." tabs={SETTINGS_TABS} />
+          </Route>
+
+          {Kit && <Route path="/dev/kit" component={Kit} />}
+
           <Route>
-            <div className="safe-x pt-10 md:px-10">
-              <h1 className="text-heading-5 font-semibold">Page not found</h1>
-              <p className="mt-2 text-secondary">This address does not match any page in encore.</p>
-            </div>
+            <Placeholder title="Page not found" description="This address does not match a page in encore." />
           </Route>
         </Switch>
       </Suspense>
