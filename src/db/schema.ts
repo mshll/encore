@@ -111,3 +111,4 @@ export const jobState = sqliteTable("job_state", {
   lastError: text("last_error"),
   data: text("data", { mode: "json" }).$type<Record<string, unknown>>(),
 });
+export * from "./assistantSchema";
