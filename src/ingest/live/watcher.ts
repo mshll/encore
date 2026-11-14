@@ -117,12 +117,13 @@ export class Watcher {
 
   private advance(state: PlaybackState | null, now: number): LiveResult & { playing: boolean } {
     const snap = snapshotOf(state);
-    const { watcherIdleMs, timezone } = this.settings.get();
+    const settings = this.settings.get();
+    const { watcherIdleMs } = settings;
     const staleMs = 2 * watcherIdleMs + 30_000;
     const { current, finished } = step(this.current, snap, now, staleMs);
     const started = current && current.startedAt !== this.current?.startedAt ? current : null;
     if (started && state?.item) saveSpotifyTrack(this.db, state.item);
-    const result = finished.length ? recordLivePlays(this.db, finished, timezone) : { inserted: 0, replacedApi: 0, coveredByExport: 0 };
+    const result = finished.length ? recordLivePlays(this.db, finished, settings) : { inserted: 0, replacedApi: 0, coveredByExport: 0 };
     this.current = current;
     for (const play of finished) this.emit({ type: "finished", play });
     if (started) this.emit({ type: "started", observation: started });

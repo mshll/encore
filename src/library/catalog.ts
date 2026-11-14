@@ -30,10 +30,10 @@ export type Catalog = { version: string; songs: Map<string, CatalogSong> };
 let cached: { db: Db; catalog: Catalog } | null = null;
 
 function dataVersion(db: Db): string {
-  const row = db.all<{ plays: number; tags: number; tagged: number }>(
-    sql`select (select max(id) from plays) as plays, (select count(*) from track_tags) as tags, (select max(tagged_at) from track_tags) as tagged`,
+  const row = db.all<{ plays: number; played: number; tags: number; tagged: number }>(
+    sql`select (select max(id) from plays) as plays, (select count(*) from plays) as played, (select count(*) from track_tags) as tags, (select max(tagged_at) from track_tags) as tagged`,
   )[0]!;
-  return `${row.plays}:${row.tags}:${row.tagged}`;
+  return `${row.plays}:${row.played}:${row.tags}:${row.tagged}`;
 }
 
 export function loadCatalog(db: Db, weekendDays: readonly number[]): Catalog {

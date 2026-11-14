@@ -71,7 +71,7 @@ describe("export parsing", () => {
   test("never persists ip_addr anywhere in the database", () => {
     const path = join(mkdtempSync(join(tmpdir(), "encore-")), "test.db");
     const db = openDb(path);
-    importExport(db, [file("Streaming_History_Audio_2026.json", [row(), episode])], TZ);
+    importExport(db, [file("Streaming_History_Audio_2026.json", [row(), episode])], { timezone: TZ });
     const dump = new Database(path)
       .query("select * from plays")
       .all()
@@ -86,8 +86,8 @@ describe("export import", () => {
   test("re-importing the same export inserts nothing new", () => {
     const db = openDb(":memory:");
     const files = [file("Streaming_History_Audio_2026.json", [row(), row({ ts: "2026-01-07T10:00:00Z" }), episode])];
-    const first = importExport(db, files, TZ);
-    const second = importExport(db, files, TZ);
+    const first = importExport(db, files, { timezone: TZ });
+    const second = importExport(db, files, { timezone: TZ });
     expect(first.inserted).toBe(3);
     expect(second.inserted).toBe(0);
     expect(second.alreadyPresent).toBe(3);
@@ -97,14 +97,14 @@ describe("export import", () => {
   test("keeps identical rows inside one export as separate plays, idempotently", () => {
     const db = openDb(":memory:");
     const files = [file("Streaming_History_Audio_2021.json", [row(), row()])];
-    expect(importExport(db, files, TZ).inserted).toBe(2);
-    expect(importExport(db, files, TZ).inserted).toBe(0);
+    expect(importExport(db, files, { timezone: TZ }).inserted).toBe(2);
+    expect(importExport(db, files, { timezone: TZ }).inserted).toBe(0);
   });
 
   test("a newer, larger export adds only the new rows", () => {
     const db = openDb(":memory:");
-    importExport(db, [file("Streaming_History_Audio_2026.json", [row()])], TZ);
-    const result = importExport(db, [file("Streaming_History_Audio_2026.json", [row(), row({ ts: "2026-03-01T10:00:00Z" })])], TZ);
+    importExport(db, [file("Streaming_History_Audio_2026.json", [row()])], { timezone: TZ });
+    const result = importExport(db, [file("Streaming_History_Audio_2026.json", [row(), row({ ts: "2026-03-01T10:00:00Z" })])], { timezone: TZ });
     expect(result.inserted).toBe(1);
   });
 
@@ -115,7 +115,7 @@ describe("export import", () => {
       [track("a1", "Song A", "Artist X", "Album 1")],
       [play("2026-01-06T10:00:00Z", uri("a1"), null), play("2026-01-07T10:00:00.400Z", uri("a1"), null), play("2026-01-08T10:00:00Z", uri("a1"), null)],
     );
-    const result = importExport(db, [file("Streaming_History_Audio_2026.json", [row(), row({ ts: "2026-01-07T10:00:00Z" })])], TZ);
+    const result = importExport(db, [file("Streaming_History_Audio_2026.json", [row(), row({ ts: "2026-01-07T10:00:00Z" })])], { timezone: TZ });
     expect(result.apiPlaysRemoved).toBe(2);
     const left = db.all<{ source: string; ts: number }>(sql`select source, ts from plays order by ts`);
     expect(left.map((p) => p.source)).toEqual(["export", "export", "api"]);
@@ -132,15 +132,26 @@ describe("export import", () => {
         file("Streaming_History_Audio_2026_2.json", [row({ ts: "2026-06-05T10:00:00Z" }), row({ ts: "2026-06-07T10:00:00Z" })]),
         file("Streaming_History_Video_2026.json", [row({ ts: "2026-01-01T10:00:00Z" }), row({ ts: "2026-12-01T10:00:00Z" })]),
       ],
-      TZ,
+      { timezone: TZ },
     );
     expect(result.apiPlaysRemoved).toBe(2);
     expect(db.all<{ ts: number }>(sql`select ts from plays where source = 'api'`).map((p) => p.ts)).toEqual([Date.parse("2026-03-01T10:00:00Z")]);
   });
 
+  test("skips plays before the history start and reports them apart from the ones already stored", () => {
+    const db = openDb(":memory:");
+    const files = [file("Streaming_History_Audio_2026.json", [row({ ts: "2023-12-31T20:59:59Z" }), row({ ts: "2023-12-31T21:00:00Z" }), row({ ts: "2026-01-05T10:00:00Z" })])];
+    importExport(db, files, { timezone: TZ, historyStart: "2024-01-01" });
+
+    const again = importExport(db, files, { timezone: TZ, historyStart: "2024-01-01" });
+
+    expect(again).toMatchObject({ inserted: 0, alreadyPresent: 2, beforeHistoryStart: 1, range: { from: "2023-12-31T21:00:00.000Z", to: "2026-01-05T10:00:00.000Z" } });
+    expect(db.all(sql`select day from plays order by ts`)).toEqual([{ day: "2024-01-01" }, { day: "2026-01-05" }]);
+  });
+
   test("stores local Kuwait day, hour and weekday", () => {
     const db = openDb(":memory:");
-    importExport(db, [file("Streaming_History_Audio_2026.json", [row({ ts: "2026-01-04T22:30:00Z" })])], TZ);
+    importExport(db, [file("Streaming_History_Audio_2026.json", [row({ ts: "2026-01-04T22:30:00Z" })])], { timezone: TZ });
     expect(db.all(sql`select day, hour, weekday from plays`)).toEqual([{ day: "2026-01-05", hour: 1, weekday: 1 }]);
   });
 });

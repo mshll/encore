@@ -1,9 +1,10 @@
 import { z } from "zod";
+import { localTime } from "../plays/localTime";
 
-export const SETTING_GROUPS = ["spotify", "locale", "claude", "picks", "digest", "dj", "discord", "mcp", "access", "jobs"] as const;
+export const SETTING_GROUPS = ["spotify", "locale", "claude", "picks", "digest", "dj", "discord", "mcp", "access", "jobs", "history"] as const;
 export type SettingGroup = (typeof SETTING_GROUPS)[number];
 
-export type SettingType = "string" | "integer" | "number" | "boolean" | "enum" | "timezone" | "weekdays";
+export type SettingType = "string" | "integer" | "number" | "boolean" | "enum" | "timezone" | "weekdays" | "date";
 export type SettingUnit = "ms" | "seconds" | "minutes" | "hours" | "days" | "usd" | "weekday" | "hour";
 export type SettingValue = string | number | boolean | number[];
 
@@ -31,6 +32,20 @@ const isTimezone = (tz: string) => {
 };
 
 const TIMEZONES = Intl.supportedValuesOf("timeZone");
+
+const isCalendarDay = (day: string) => {
+  const ms = Date.parse(`${day}T00:00:00Z`);
+  return !Number.isNaN(ms) && new Date(ms).toISOString().startsWith(day);
+};
+
+/** Today where it is latest on Earth (UTC+14). The store checks against the configured zone before it saves. */
+const latestToday = () => localTime(Date.now(), "Etc/GMT-14").day;
+
+const localDay = z
+  .string()
+  .regex(/^\d{4}-\d{2}-\d{2}$/, "expected a date as YYYY-MM-DD")
+  .refine(isCalendarDay, "not a real date")
+  .refine((day) => day <= latestToday(), "must not be in the future");
 
 type Base = Pick<SettingField, "key" | "group" | "env">;
 
@@ -133,6 +148,8 @@ export function settingFields(models: readonly [string, ...string[]]): SettingFi
     text({ key: "mcpToken", group: "mcp", env: "MCP_TOKEN" }, token, { secret: true }),
 
     text({ key: "adminToken", group: "access", env: "ADMIN_TOKEN" }, token, { secret: true }),
+
+    { key: "historyStart", group: "history", env: "HISTORY_START", type: "date", secret: false, default: null, schema: localDay },
 
     numeric({ key: "pollIntervalSeconds", group: "jobs", env: "POLL_INTERVAL_SECONDS" }, "integer", 300, { min: 60, unit: "seconds" }),
     numeric({ key: "enrichIntervalSeconds", group: "jobs", env: "ENRICH_INTERVAL_SECONDS" }, "number", 120, { min: 1, unit: "seconds" }),

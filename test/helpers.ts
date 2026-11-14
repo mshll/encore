@@ -60,7 +60,7 @@ export function play(ts: string, trackUri: string, msPlayed: number | null, extr
 
 export function seed(db: Db, tracks: TrackInput[], plays: PlayInput[]) {
   upsertTracks(db, tracks);
-  insertPlays(db, plays, TZ);
+  insertPlays(db, plays, { timezone: TZ });
 }
 
 export function jsonResponse(body: unknown, status = 200, headers: Record<string, string> = {}) {

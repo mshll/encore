@@ -31,7 +31,7 @@ export const importRoutes = new Hono<Env>()
   const contents: { name: string; content: string }[] = [];
   for (const f of files) contents.push({ name: f.name, content: await f.text() });
   try {
-    return c.json(importExport(db, contents, settings.get().timezone, now()));
+    return c.json(importExport(db, contents, settings.get(), now()));
   } catch (error) {
     if (error instanceof ExportFormatError || error instanceof EmptyImportError) throw new ApiError(400, "invalid_export", error.message);
     throw error;

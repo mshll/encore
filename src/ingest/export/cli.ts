@@ -16,5 +16,5 @@ const config = loadConfig();
 const names = (await readdir(dir)).filter((name) => exportFileKind(name));
 const files = await Promise.all(names.map(async (name) => ({ name, content: await Bun.file(join(dir, name)).text() })));
 const db = openDb(config.databasePath);
-const result = importExport(db, files, new SettingsStore(db, config).get().timezone);
+const result = importExport(db, files, new SettingsStore(db, config).get());
 console.log(JSON.stringify(result, null, 2));

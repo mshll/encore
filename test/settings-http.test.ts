@@ -35,7 +35,7 @@ describe("GET /api/settings", () => {
 
     const view = (await (await get("/api/settings")).json()) as SettingsView;
 
-    expect(view.groups.map((g) => g.id)).toEqual(["spotify", "locale", "claude", "picks", "digest", "dj", "discord", "mcp", "access", "jobs"]);
+    expect(view.groups.map((g) => g.id)).toEqual(["spotify", "locale", "claude", "picks", "digest", "dj", "discord", "mcp", "access", "jobs", "history"]);
     expect(field(view, "homeCountry")).toMatchObject({ value: "KW", source: "env", locked: true, env: "HOME_COUNTRY" });
     expect(field(view, "pollIntervalSeconds")).toMatchObject({ value: 300, default: 300, source: "default", locked: false, min: 60, unit: "seconds", type: "integer" });
     expect(field(view, "claudeModel").options).toContain("claude-opus-5-5");

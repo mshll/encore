@@ -3,6 +3,7 @@ import { z } from "zod";
 import { canRegisterCommands, registerCommands } from "../../discord";
 import { DiscordApiError } from "../../discord/rest";
 import { LlmKeyRejectedError } from "../../llm/client";
+import { applyHistoryStart, backupDirFor, playsBefore, SnapshotError } from "../../plays/historyStart";
 import { applySettings } from "../../settings/apply";
 import { settingsView } from "../../settings/view";
 import type { Env } from "../context";
@@ -10,6 +11,9 @@ import { ApiError, jsonBody, parse } from "../errors";
 
 const patchBody = z.record(z.string(), z.unknown());
 const verifyBody = z.object({ apiKey: z.string().min(1).optional() });
+const day = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "expected a date as YYYY-MM-DD");
+const historyQuery = z.object({ before: day });
+const historyBody = z.object({ historyStart: day });
 
 export const settingsRoutes = new Hono<Env>()
   .get("/", (c) => c.json(settingsView(c.var.deps.settings)))
@@ -20,6 +24,18 @@ export const settingsRoutes = new Hono<Env>()
   .post("/adopt-env", (c) => {
     const result = c.var.deps.settings.adoptEnv();
     return c.json({ ...settingsView(c.var.deps.settings), ...result });
+  })
+  .get("/history-start", (c) => c.json(playsBefore(c.var.deps.db, parse(historyQuery, c.req.query()).before)))
+  .post("/history-start", async (c) => {
+    const { db, settings, config, now } = c.var.deps;
+    const { historyStart } = parse(historyBody, await jsonBody(c));
+    try {
+      const { removed, snapshot } = applyHistoryStart({ db, settings, backupDir: backupDirFor(config.databasePath), now }, historyStart);
+      return c.json({ ...settingsView(settings), removed, snapshot });
+    } catch (error) {
+      if (error instanceof SnapshotError) throw new ApiError(500, "snapshot_failed", "Could not write a snapshot of the database, so nothing was deleted");
+      throw error;
+    }
   })
   .post("/claude/verify", async (c) => {
     const { settings, services } = c.var.deps;

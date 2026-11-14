@@ -199,14 +199,15 @@ export type ImportResult = {
   invalidRows: number;
   inserted: number;
   alreadyPresent: number;
+  beforeHistoryStart: number;
   apiPlaysRemoved: number;
   range: { from: string; to: string } | null;
 };
 
 export type Session = { authenticated: boolean; setupRequired: boolean; setupTokenConfigured: boolean };
 
-export type SettingGroup = "spotify" | "locale" | "claude" | "picks" | "digest" | "dj" | "discord" | "mcp" | "access" | "jobs";
-export type SettingType = "string" | "integer" | "number" | "boolean" | "enum" | "timezone" | "weekdays";
+export type SettingGroup = "spotify" | "locale" | "claude" | "picks" | "digest" | "dj" | "discord" | "mcp" | "access" | "jobs" | "history";
+export type SettingType = "string" | "integer" | "number" | "boolean" | "enum" | "timezone" | "weekdays" | "date";
 export type SettingUnit = "ms" | "seconds" | "minutes" | "hours" | "days" | "usd" | "weekday" | "hour";
 export type SettingValue = string | number | boolean | number[];
 export type SettingSource = "env" | "db" | "default";
@@ -232,6 +233,9 @@ export type SettingField = {
 
 export type SecretStorage = { available: boolean; envVar: "SECRETS_KEY" };
 export type Settings = { groups: { id: SettingGroup; fields: SettingField[] }[]; secretStorage: SecretStorage };
+
+export type PlaysBefore = { plays: number; firstDay: string | null; lastDay: string | null; hours: number };
+export type HistoryStartResult = Settings & { removed: PlaysBefore; snapshot: string | null };
 
 export type SettingsEffect =
   | { type: "spotify_disconnected" }

@@ -28,6 +28,8 @@ export type Settings = {
   timezone: string;
   homeCountry?: string;
   weekendDays: number[];
+  /** Plays before this local day (YYYY-MM-DD) are never stored. */
+  historyStart?: string;
   pollIntervalMs: number;
   enrichIntervalMs: number;
   enrichBatchSize: number;
@@ -64,6 +66,7 @@ export type RawSettings = {
   timezone: string;
   homeCountry?: string;
   weekendDays: number[];
+  historyStart?: string;
   claudeApiKey?: string;
   claudeModel: string;
   monthlyBudgetUsd: number;
@@ -114,6 +117,7 @@ export function resolveSettings(v: RawSettings, prices: Record<string, ModelPric
     timezone: v.timezone,
     homeCountry: v.homeCountry,
     weekendDays: v.weekendDays,
+    historyStart: v.historyStart,
     pollIntervalMs: v.pollIntervalSeconds * SECOND,
     enrichIntervalMs: v.enrichIntervalSeconds * SECOND,
     enrichBatchSize: v.enrichBatchSize,
