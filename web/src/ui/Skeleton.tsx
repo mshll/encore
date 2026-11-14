@@ -12,12 +12,13 @@ const BARS = [38, 52, 46, 61, 74, 58, 49, 67, 82, 63, 47, 40, 55, 71, 60, 45];
  * A chart or heatmap that is still loading, in the chart's own box: thin bars rising from the baseline, or the
  * rows of a grid. Never one filled slab, which reads as a card set inside the page.
  */
-export function ChartSkeleton({ shape = "bars", className }: { shape?: "bars" | "grid"; className?: string }) {
+export function ChartSkeleton({ shape = "bars", phoneRows = 7, className }: { shape?: "bars" | "grid"; phoneRows?: number; className?: string }) {
+  // A grid has 7 rows (weekdays) from md; on a phone a heatmap turns on its side and has `phoneRows` thin rows.
   if (shape === "grid")
     return (
       <div aria-hidden className={cx("flex flex-col gap-1", className)}>
-        {Array.from({ length: 7 }, (_, i) => (
-          <Skeleton key={i} className="min-h-2 flex-1" />
+        {Array.from({ length: Math.max(7, phoneRows) }, (_, i) => (
+          <Skeleton key={i} className={cx("min-h-2 flex-1", i >= phoneRows && "phone:hidden", i >= 7 && "md:hidden")} />
         ))}
       </div>
     );

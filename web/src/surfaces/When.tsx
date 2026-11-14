@@ -161,7 +161,7 @@ function ClockView({ range }: { range: Range }) {
             </div>
           ))}
         </div>
-        <ChartSkeleton shape="grid" className="h-[480px] md:h-[226px]" />
+        <ChartSkeleton shape="grid" phoneRows={24} className="h-[480px] md:h-[226px]" />
       </div>
     );
 

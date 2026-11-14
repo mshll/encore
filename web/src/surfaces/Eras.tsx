@@ -170,7 +170,7 @@ function ErasView({ range }: { range: Range }) {
     return (
       <div aria-busy className="flex flex-col gap-4">
         <Skeleton className="h-5 w-full max-w-md" />
-        <ChartSkeleton shape="grid" className="h-[960px] md:h-[268px]" />
+        <ChartSkeleton shape="grid" phoneRows={24} className="h-[960px] md:h-[268px]" />
       </div>
     );
   if (!shape) return <EmptyState size="section" title="No plays in this range" description="Pick a wider range to see which artists defined each month." action={<RangePicker />} />;
