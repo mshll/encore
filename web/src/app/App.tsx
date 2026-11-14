@@ -20,6 +20,10 @@ const Releases = lazy(() => import("../surfaces/Releases").then((m) => ({ defaul
 const Sets = lazy(() => import("../surfaces/Sets").then((m) => ({ default: m.Sets })));
 const SetPage = lazy(() => import("../surfaces/SetPage").then((m) => ({ default: m.SetPage })));
 const Ask = lazy(() => import("../surfaces/Ask").then((m) => ({ default: m.Ask })));
+const Eras = lazy(() => import("../surfaces/Eras").then((m) => ({ default: m.Eras })));
+const Taste = lazy(() => import("../surfaces/Taste").then((m) => ({ default: m.Taste })));
+const Skips = lazy(() => import("../surfaces/Skips").then((m) => ({ default: m.Skips })));
+const Places = lazy(() => import("../surfaces/Places").then((m) => ({ default: m.Places })));
 const SignIn = lazy(() => import("../surfaces/SignIn").then((m) => ({ default: m.SignIn })));
 const Kit = import.meta.env.DEV ? lazy(() => import("../dev/Kit").then((m) => ({ default: m.Kit }))) : null;
 
@@ -64,6 +68,10 @@ export function App() {
             <Redirect to="/patterns/when" replace />
           </Route>
           <Route path="/patterns/when" component={When} />
+          <Route path="/patterns/eras" component={Eras} />
+          <Route path="/patterns/taste" component={Taste} />
+          <Route path="/patterns/skips" component={Skips} />
+          <Route path="/patterns/places" component={Places} />
           <Route path="/patterns/:tab">
             <Placeholder title="Patterns" description="How your listening is shaped: by hour, by era, by taste, by skips and by place." tabs={PATTERN_TABS} actions={range} />
           </Route>

@@ -1,4 +1,4 @@
-import { useId, type KeyboardEvent } from "react";
+import { useId, type KeyboardEvent, type ReactNode } from "react";
 import { cx } from "../ui/cx";
 import { DITHER_LEVELS, ditherTile, TILE_STYLE } from "./ditherTile";
 
@@ -11,7 +11,8 @@ type Props = {
   /** Row-major values: `values[row][col]`. */
   values: number[][];
   rowLabels: string[];
-  colLabels: string[];
+  /** Text, or a small element such as an avatar; hidden from assistive tech either way, since cells carry their own labels. */
+  colLabels: ReactNode[];
   /** Which column labels to print; all columns stay navigable. */
   showCol?: (col: number) => boolean;
   showRow?: (row: number) => boolean;
@@ -77,8 +78,8 @@ export function DitherHeatmap({ values, rowLabels, colLabels, showCol = () => tr
       >
         {values.map((row, r) => (
           <div key={r} role="row" className="contents">
-            <span role="rowheader" className="flex items-center text-caption text-tertiary tabular" style={{ height: cellHeight }}>
-              <span className={showRow(r) ? undefined : "sr-only"}>{rowLabels[r]}</span>
+            <span role="rowheader" className="flex min-w-0 items-center text-caption text-tertiary tabular" style={{ height: cellHeight }}>
+              <span className={showRow(r) ? "truncate" : "sr-only"}>{rowLabels[r]}</span>
             </span>
             {row.map((v, c) => {
               const isSel = selected?.row === r && selected.col === c;

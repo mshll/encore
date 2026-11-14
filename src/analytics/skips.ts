@@ -60,6 +60,23 @@ export function skips(db: Db, { range, minPlays, limit }: { range: Range; minPla
   };
 }
 
+const POSITION_BUCKETS = 10;
+
+/** Where skips land: skipped plays by the share of the song played, in tenths. Songs without a known duration are left out. */
+function skipPositions(db: Db, where: SQL) {
+  const rows = db.all<{ bucket: number; skips: number }>(sql`
+    select min(${POSITION_BUCKETS - 1}, cast(${POSITION_BUCKETS} * p.ms_played / t.duration_ms as integer)) as bucket, count(*) as skips
+    from ${MUSIC} where ${where} and p.skipped = 1 and t.duration_ms > 0 and p.ms_played is not null
+    group by bucket`);
+  const counts = new Map(rows.map((r) => [r.bucket, r.skips]));
+  return Array.from({ length: POSITION_BUCKETS }, (_, i) => ({ start: i / POSITION_BUCKETS, end: (i + 1) / POSITION_BUCKETS, skips: counts.get(i) ?? 0 }));
+}
+
+export function skipContext(db: Db, { range, weekendDays }: { range: Range; weekendDays: readonly number[] }) {
+  const where = musicWhere(range);
+  return { profile: skipProfile(db, where, weekendDays), positions: skipPositions(db, where) };
+}
+
 export function classify(skipRate: number, contexts: ContextStat[]): MomentClass {
   const works = contexts.some((c) => c.skipRate <= SPLIT_RULES.worksAtMost);
   const fails = contexts.some((c) => c.skipRate >= SPLIT_RULES.failsAtLeast);

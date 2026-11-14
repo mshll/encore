@@ -140,7 +140,7 @@ export function contextLabel(dimension: ContextDimension, value: string): string
 
 export const CLASS_LABELS: Record<MomentClass, string> = {
   wrong_moment: "Wrong moment",
-  dislike: "Dislike",
+  dislike: "Skipped everywhere",
   keeper: "Keeper",
   mixed: "Mixed",
 };

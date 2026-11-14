@@ -7,6 +7,7 @@
     ?fixture=empty    a range with no plays
     ?fixture=new      a fresh install: nothing imported yet
     ?fixture=worst    real data bent to the limits: long names, huge counts, one-row lists, broken art
+    ?fixture=untagged plays but no tagged songs (Patterns: Taste)
     ?player=playing   a fake track and queue; player controls answer ok without calling Spotify
     ?dj=active        a DJ session playing from the newest set; starting and stopping one answer ok without calling Spotify
     ?run=running      every Claude run (picks, sets, ask) is working: resumes on load, streams steps, never ends
@@ -42,6 +43,8 @@ const BROKEN_ART = "data:image/png;base64,AAAA";
 
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
 
+const SPLIT_PARAMS = { params: { minPlays: 8, minContextPlays: 5, keeperBelow: 0.25, dislikeAtLeast: 0.75, worksAtMost: 1 / 3, failsAtLeast: 2 / 3 } };
+
 const ZERO_STATS = { hours: 0, plays: 0, listens: 0, skips: 0, skipRate: null, quickSkips: 0, firstPlayed: null, lastPlayed: null };
 
 function emptyFor(path: string, isNew: boolean): unknown {
@@ -61,6 +64,24 @@ function emptyFor(path: string, isNew: boolean): unknown {
   if (path === "/api/blocks") return { items: [] };
   if (path === "/api/sets") return { items: [], total: 0, limit: 100, offset: 0 };
   if (path === "/api/ask/threads") return { items: [] };
+  if (path === "/api/stats/eras") return { months: [], series: [], artists: [] };
+  if (path === "/api/stats/skips")
+    return {
+      minPlays: 10,
+      summary: { plays: 0, skips: 0, skipRate: null, quickSkips: 0 },
+      mostSkippedTracks: [],
+      mostSkippedArtists: [],
+      quickSkips: [],
+      neverSkipped: [],
+      profile: { hourBucket: [], dayType: [], shuffle: [], device: [], startMode: [] },
+      positions: Array.from({ length: 10 }, (_, i) => ({ start: i / 10, end: (i + 1) / 10, skips: 0 })),
+    };
+  if (path === "/api/stats/skips/split") return { ...SPLIT_PARAMS, eligibleSongs: 0, counts: { keeper: 0, wrong_moment: 0, dislike: 0, mixed: 0 }, songs: [] };
+  if (path === "/api/stats/trips") return { homeCountry: "KW", trips: [] };
+  if (path === "/api/stats/devices") return { period: "year", totals: [], series: [] };
+  if (path === "/api/stats/tags/genres" || path === "/api/stats/tags/moods") return { period: "month", coverage: { hoursTagged: 0, hoursTotal: 0, share: null }, totals: [], series: [] };
+  if (path === "/api/stats/tags/energy") return { coverage: { hoursTagged: 0, hoursTotal: 0, share: null }, hours: Array.from({ length: 24 }, (_, hour) => ({ hour, energy: null, valence: null, listens: 0 })) };
+  if (path === "/api/tags/pending") return { items: [], total: 0, limit: 1, offset: 0 };
   if (path === "/api/cleanup") return { counts: { saved_never_played: 0, saved_dislike: 0, playlist_skipped: 0, playlist_duplicate: 0 }, library: { savedTracks: 0, playlists: 0, syncing: false, lastSyncAt: null }, total: 0, limit: 500, offset: 0, items: [] };
   return null;
 }
@@ -108,6 +129,29 @@ function worsen(path: string, body: Json): unknown {
   if (path === "/api/stats/forgotten") {
     const items = (body.items as Json[]).slice(0, 1).map((it) => ({ ...it, name: LONG_SONG, artist: LONG_ARTIST, albumArtUrl: BROKEN_ART, listens: 1234567 }));
     return { ...body, items };
+  }
+  if (path === "/api/stats/eras") {
+    const artists = (body.artists as Json[]).slice(0, 2).map((a, i) => (i === 0 ? { ...a, artist: LONG_ARTIST, imageUrl: null, hours: 98765.4, peakMonthHours: 98765.4 } : a));
+    const series = (body.series as { artist: string; hours: number[] }[]).slice(0, 2).map((x, i) => ({ artist: i === 0 ? LONG_ARTIST : x.artist, hours: i === 0 ? [98765.4] : x.hours.slice(-1) }));
+    return { months: (body.months as string[]).slice(-1), series, artists };
+  }
+  if (path === "/api/stats/skips") return { ...body, summary: { plays: 9876543, skips: 4938271, skipRate: 0.5, quickSkips: 4938271 } };
+  if (path === "/api/stats/skips/split") {
+    const songs = (body.songs as Json[]).slice(0, 1).map((x) => ({ ...x, name: LONG_SONG, artist: LONG_ARTIST, albumArtUrl: BROKEN_ART, plays: 98765 }));
+    return { ...body, eligibleSongs: 1234567, counts: { keeper: 123456, wrong_moment: 987654, dislike: 1, mixed: 0 }, songs };
+  }
+  if (path === "/api/stats/trips") {
+    const trip = (body.trips as Json[])[0];
+    if (!trip) return body;
+    const countries = ["GB", "TR", "BA", "VN", "TH", "XK"].map((country, i) => ({ country, plays: 98765 - i * 1000 }));
+    const topTracks = (trip.topTracks as Json[]).slice(0, 1).map((t) => ({ ...t, name: LONG_SONG, artist: LONG_ARTIST, albumArtUrl: BROKEN_ART, plays: 98765 }));
+    return { ...body, trips: [{ ...trip, days: 365, plays: 987654, hours: 12345.6, countries, topTracks }] };
+  }
+  if (path === "/api/stats/devices") return { ...body, totals: [{ device: "other", hours: 123456.7, plays: 9876543, share: 1 }] };
+  if (path === "/api/stats/tags/genres" || path === "/api/stats/tags/moods") {
+    const top = (body.totals as Json[])[0];
+    if (!top) return body;
+    return { ...body, coverage: { hoursTagged: 123456.7, hoursTotal: 123456.7, share: 1 }, totals: [{ ...top, value: "singer-songwriter", hours: 98765.4 }], series: (body.series as Json[]).filter((p) => p.value === top.value).map((p) => ({ ...p, value: "singer-songwriter" })) };
   }
   if (path === "/api/history") {
     const items = (body.items as Json[]).map((it, i) =>
@@ -315,13 +359,26 @@ window.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
 
   if (fixture === "loading") return new Promise<Response>(() => {});
   if (fixture === "error") return json({ error: { code: "internal", message: "The database is locked by another process." } }, 500);
+  const lifetime = path === "/api/stats/overview" && !url.searchParams.has("from") && !url.searchParams.has("to");
+  if (fixture === "empty" && lifetime) return realFetch(input, init);
   if (fixture === "empty" || fixture === "new") {
     if (path.startsWith("/api/entities/")) return json({ error: { code: "not_found", message: "No music plays in this range." } }, 404);
     const body = emptyFor(path, fixture === "new");
     if (body !== null) return json(body);
     return realFetch(input, init);
   }
+  if (fixture === "untagged") {
+    if (path === "/api/stats/tags/genres" || path === "/api/stats/tags/moods") return json({ period: "month", coverage: { hoursTagged: 0, hoursTotal: 1444.74, share: 0 }, totals: [], series: [] });
+    if (path === "/api/stats/tags/energy") return json({ coverage: { hoursTagged: 0, hoursTotal: 1444.74, share: 0 }, hours: Array.from({ length: 24 }, (_, hour) => ({ hour, energy: null, valence: null, listens: 0 })) });
+    if (path === "/api/tags/pending") return json({ items: [], total: 5055, limit: 1, offset: 0 });
+    return realFetch(input, init);
+  }
   if (fixture === "worst") {
+    if (path === "/api/entities/artist" && url.searchParams.get("name") === LONG_ARTIST) {
+      const profile = { hourBucket: [], dayType: [], shuffle: [], device: [], startMode: [] };
+      const song = { songKey: "worst|worst", uri: "spotify:track:0000000000000000000000", name: LONG_SONG, artist: LONG_ARTIST, album: LONG_ALBUM, albumArtUrl: BROKEN_ART, ...ZERO_STATS, hours: 98765.4, plays: 1234567 };
+      return json({ artist: LONG_ARTIST, imageUrl: null, totals: { ...ZERO_STATS, hours: 98765.4, plays: 1234567 }, timeline: [], skipProfile: profile, tracks: [song], albums: [] });
+    }
     const res = await realFetch(input, init);
     if (!res.ok) return res;
     return json(worsen(path, (await res.json()) as Json));

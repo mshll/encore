@@ -9,6 +9,7 @@ export { ClockIcon } from "@phosphor-icons/react/dist/csr/Clock";
 export { DotsThreeIcon } from "@phosphor-icons/react/dist/csr/DotsThree";
 export { FingerprintIcon } from "@phosphor-icons/react/dist/csr/Fingerprint";
 export { GearSixIcon } from "@phosphor-icons/react/dist/csr/GearSix";
+export { GlobeHemisphereWestIcon } from "@phosphor-icons/react/dist/csr/GlobeHemisphereWest";
 export { HouseIcon } from "@phosphor-icons/react/dist/csr/House";
 export { InfoIcon } from "@phosphor-icons/react/dist/csr/Info";
 export { ListBulletsIcon } from "@phosphor-icons/react/dist/csr/ListBullets";
