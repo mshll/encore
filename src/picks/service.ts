@@ -146,11 +146,24 @@ function historyText(db: Db, now: number): string {
     .join("\n");
 }
 
+const generating = new Set<string>();
+
+const weekHasPicks = (db: Pick<Db, "select">, week: string) => Boolean(db.select({ id: picks.id }).from(picks).where(eq(picks.week, week)).get());
+
 export async function generatePicks(ctx: FeatureContext, onEvent?: (e: AgentEvent) => void) {
+  const week = weekOf(ctx.now(), ctx.config.timezone);
+  if (weekHasPicks(ctx.db, week) || generating.has(week)) throw new PicksExistError(week);
+  generating.add(week);
+  try {
+    return await generateWeek(ctx, week, onEvent);
+  } finally {
+    generating.delete(week);
+  }
+}
+
+async function generateWeek(ctx: FeatureContext, week: string, onEvent?: (e: AgentEvent) => void) {
   const { db, config, llm, spotify } = ctx;
   const now = ctx.now();
-  const week = weekOf(now, config.timezone);
-  if (db.select({ id: picks.id }).from(picks).where(eq(picks.week, week)).get()) throw new PicksExistError(week);
   llm.assertAvailable();
   const { picksPerWeek: count, picksFarOut: far } = config.llm;
   const blocked = blockedSets(db);
@@ -182,6 +195,7 @@ export async function generatePicks(ctx: FeatureContext, onEvent?: (e: AgentEven
       const { errors, rows } = validatePicks(db, blocked, verifier, input, { count, far }, week, ctx.now(), searchSources(messages));
       if (errors.length) return { accepted: false, errors };
       db.transaction((tx) => {
+        if (weekHasPicks(tx, week)) throw new PicksExistError(week);
         tx.insert(picks).values(rows).run();
       });
       saved = rows;

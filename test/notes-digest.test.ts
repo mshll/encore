@@ -75,7 +75,7 @@ describe("digest numbers", () => {
 
 function insertPick(db: Db, createdAt: number) {
   db.insert(picks)
-    .values({ week: "w", position: 1, uri: uri(`p${createdAt}`), songKey: `k${createdAt}`, name: "n", artist: "a", album: null, releaseDate: null, reason: "r", distance: "near", state: "new", stateAt: 0, createdAt })
+    .values({ week: `w${createdAt}`, position: 1, uri: uri(`p${createdAt}`), songKey: `k${createdAt}`, name: "n", artist: "a", album: null, releaseDate: null, reason: "r", distance: "near", state: "new", stateAt: 0, createdAt })
     .run();
 }
 

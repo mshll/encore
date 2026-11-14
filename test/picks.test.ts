@@ -251,3 +251,31 @@ describe("picks playlist mirror", () => {
     expect(spotifyCalls[3]!.body).toEqual({ uris: [keep.uri] });
   });
 });
+
+describe("concurrent generation", () => {
+  test("a second run for the same week is refused at once and makes no model call", async () => {
+    let release!: () => void;
+    const held = new Promise<void>((resolve) => (release = resolve));
+    let calls = 0;
+    const { ctx } = featureCtx(async () => {
+      calls++;
+      await held;
+      return message([toolUse("noop", {})], "end_turn");
+    });
+    const first = generatePicks(ctx).catch((e) => e);
+    await expect(generatePicks(ctx)).rejects.toBeInstanceOf(PicksExistError);
+    expect(calls).toBe(1);
+    release();
+    await first;
+    const after = calls;
+    await generatePicks(ctx).catch(() => {});
+    expect(calls).toBeGreaterThan(after);
+  });
+
+  test("two rows cannot share a week and position", () => {
+    const { db } = featureCtx(null);
+    const row = { week: "2026-02-02", position: 1, uri: "spotify:track:x", songKey: "x|y", name: "X", artist: "Y", reason: "r", distance: "near" as const, stateAt: 0, createdAt: 0 };
+    db.insert(picks).values(row).run();
+    expect(() => db.insert(picks).values(row).run()).toThrow();
+  });
+});

@@ -141,7 +141,7 @@ export const picks = sqliteTable(
     inLibrary: integer("in_library", { mode: "boolean" }),
     firstPlayedAt: integer("first_played_at"),
   },
-  (t) => [index("picks_week").on(t.week, t.position), index("picks_song").on(t.songKey)],
+  (t) => [uniqueIndex("picks_week").on(t.week, t.position), index("picks_song").on(t.songKey)],
 );
 
 export const blocks = sqliteTable(
