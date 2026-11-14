@@ -97,6 +97,15 @@ CREATE TABLE `set_items` (
 --> statement-breakpoint
 CREATE INDEX `set_items_set` ON `set_items` (`set_id`,`position`);--> statement-breakpoint
 CREATE INDEX `set_items_song` ON `set_items` (`song_key`);--> statement-breakpoint
+CREATE TABLE `set_sessions` (
+	`session_id` integer PRIMARY KEY NOT NULL,
+	`set_id` integer NOT NULL,
+	`version` integer NOT NULL,
+	`started_at` integer NOT NULL,
+	FOREIGN KEY (`set_id`) REFERENCES `sets`(`id`) ON UPDATE no action ON DELETE cascade
+);
+--> statement-breakpoint
+CREATE INDEX `set_sessions_set` ON `set_sessions` (`set_id`);--> statement-breakpoint
 CREATE TABLE `sets` (
 	`id` integer PRIMARY KEY AUTOINCREMENT NOT NULL,
 	`thread_id` integer NOT NULL,

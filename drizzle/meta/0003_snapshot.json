@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "8f1503dd-9dc6-4dc3-a6ac-d0423e49fdc6",
+  "id": "a51c59a9-be13-4c7b-b8e7-dda5c4ad1f8b",
   "prevId": "dc2e2e38-7f6c-48b9-8d04-84970ae0d29e",
   "tables": {
     "app_playlists": {
@@ -1933,6 +1933,66 @@
         "set_items_set_id_sets_id_fk": {
           "name": "set_items_set_id_sets_id_fk",
           "tableFrom": "set_items",
+          "tableTo": "sets",
+          "columnsFrom": [
+            "set_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "set_sessions": {
+      "name": "set_sessions",
+      "columns": {
+        "session_id": {
+          "name": "session_id",
+          "type": "integer",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "set_id": {
+          "name": "set_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "version": {
+          "name": "version",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "started_at": {
+          "name": "started_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "set_sessions_set": {
+          "name": "set_sessions_set",
+          "columns": [
+            "set_id"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "set_sessions_set_id_sets_id_fk": {
+          "name": "set_sessions_set_id_sets_id_fk",
+          "tableFrom": "set_sessions",
           "tableTo": "sets",
           "columnsFrom": [
             "set_id"

@@ -1,6 +1,6 @@
 import { index, integer, real, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
 
-export const LLM_FEATURES = ["sets", "picks", "ask", "notes", "digest"] as const;
+export const LLM_FEATURES = ["sets", "picks", "ask", "notes", "digest", "dj"] as const;
 export type LlmFeature = (typeof LLM_FEATURES)[number];
 
 export const PICK_STATES = ["new", "saved", "not_now", "never"] as const;
@@ -76,6 +76,20 @@ export const setItems = sqliteTable(
     firstPlayedAt: integer("first_played_at"),
   },
   (t) => [index("set_items_set").on(t.setId, t.position), index("set_items_song").on(t.songKey)],
+);
+
+/** DJ sessions started from a set, so the set can show what was finished and skipped when played through. */
+export const setSessions = sqliteTable(
+  "set_sessions",
+  {
+    sessionId: integer("session_id").primaryKey(),
+    setId: integer("set_id")
+      .notNull()
+      .references(() => sets.id, { onDelete: "cascade" }),
+    version: integer("version").notNull(),
+    startedAt: integer("started_at").notNull(),
+  },
+  (t) => [index("set_sessions_set").on(t.setId)],
 );
 
 export const picks = sqliteTable(

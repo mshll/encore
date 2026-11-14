@@ -137,7 +137,8 @@ export function fakeSpotifyFetch(catalog: FakeSpotifyTrack[]) {
       return json({ tracks: { items } });
     }
     if (url.pathname === "/v1/me/playlists" && method === "POST") return json({ id: "pl1", external_urls: { spotify: "https://open.spotify.com/playlist/pl1" } }, 201);
-    if (url.pathname.endsWith("/items") && method === "PUT") return json({ snapshot_id: "snap" });
+    if (url.pathname.endsWith("/items") && ["PUT", "POST", "DELETE"].includes(method)) return json({ snapshot_id: "snap" });
+    if (url.pathname.startsWith("/v1/me/player")) return new Response(null, { status: 204 });
     if (url.pathname.startsWith("/v1/playlists/") && method === "PUT") return new Response(null, { status: 200 });
     if (url.pathname === "/v1/me/library/contains") return json(url.searchParams.get("uris")!.split(",").map((u) => u.endsWith("1")));
     return json({ error: { message: "not found" } }, 404);

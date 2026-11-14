@@ -8,7 +8,9 @@ import { listBlocks, removeBlock } from "../../library/blocks";
 import { cachedNote, trackNote } from "../../notes/service";
 import { generatePicks, pickViews, pickWeeks, picksPlaylist, syncPicksPlaylist, weekOf, weekPicks } from "../../picks/service";
 import { setPickState } from "../../picks/state";
+import { playSet } from "../../sets/play";
 import { saveSetPlaylist } from "../../sets/playlist";
+import { djSessionView } from "./dj";
 import { createSet, deleteSet, getSet, listSets, refineSet } from "../../sets/service";
 import { featureContext, mapped, respond } from "../assistant";
 import type { Env } from "../context";
@@ -42,6 +44,12 @@ export const setRoutes = new Hono<Env>()
     const { db, spotify, now } = c.var.deps;
     const setId = parse(id, c.req.param()).id;
     return c.json(await mapped(() => saveSetPlaylist(db, spotify, setId, now())));
+  })
+  .post("/:id/play", async (c) => {
+    const { db, services } = c.var.deps;
+    const setId = parse(id, c.req.param()).id;
+    const body = parse(z.object({ deviceId: z.string().min(1).max(100).optional() }).strict(), await jsonBody(c).catch(() => ({})));
+    return c.json({ session: djSessionView(await mapped(() => playSet(db, services.dj, setId, body.deviceId))) });
   })
   .delete("/:id", async (c) => {
     await mapped(() => deleteSet(c.var.deps.db, parse(id, c.req.param()).id));

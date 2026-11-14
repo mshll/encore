@@ -13,6 +13,7 @@ import { loadCatalog, type CatalogSong } from "../library/catalog";
 import { MOODS } from "../tags/vocabulary";
 import { libraryTools, verifyTool } from "../library/tools";
 import { tasteProfile } from "../taste/profile";
+import { setDjOutcomes } from "./play";
 import { SETS_SYSTEM } from "./prompt";
 
 const MAX_SEARCHES_PER_RUN = 30;
@@ -264,8 +265,10 @@ export function getSet(db: Db, setId: number) {
   const row = getSetRow(db, setId);
   if (!row) return null;
   const items = db.select().from(setItems).where(eq(setItems.setId, setId)).orderBy(asc(setItems.position)).all();
+  const dj = setDjOutcomes(db, setId);
   return {
     ...summary(row),
+    djSessions: dj.sessions,
     items: withArtwork(
       db,
       items.map((i) => ({
@@ -279,6 +282,7 @@ export function getSet(db: Db, setId: number) {
         albumArtUrl: i.albumArtUrl,
         reason: i.reason,
         outcome: { plays: i.playsAfter, finished: i.finished, skipped: i.skipped, firstPlayedAt: i.firstPlayedAt ? new Date(i.firstPlayedAt).toISOString() : null },
+        dj: dj.byUri.get(i.uri) ?? { finished: 0, skipped: 0 },
       })),
     ),
     conversation: transcript(getThread(db, row.threadId)?.messages ?? []),
