@@ -1,0 +1,7 @@
+services:
+  encore:
+    ports:
+      - "127.0.0.1:8888:3000"
+    environment:
+      PUBLIC_BASE_URL: http://localhost:8888
+      SPOTIFY_REDIRECT_URI: http://127.0.0.1:8888/callback

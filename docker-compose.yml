@@ -1,0 +1,23 @@
+services:
+  encore:
+    build: .
+    restart: unless-stopped
+    expose:
+      - "3000"
+    environment:
+      SPOTIFY_CLIENT_ID: ${SPOTIFY_CLIENT_ID:?SPOTIFY_CLIENT_ID is required}
+      PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-https://spotify.mshl.me}
+      SPOTIFY_REDIRECT_URI: ${SPOTIFY_REDIRECT_URI:-}
+      SETUP_TOKEN: ${SETUP_TOKEN:-}
+      ADMIN_TOKEN: ${ADMIN_TOKEN:-}
+      TIMEZONE: ${TIMEZONE:-Asia/Kuwait}
+      HOME_COUNTRY: ${HOME_COUNTRY:-KW}
+      POLL_INTERVAL_SECONDS: ${POLL_INTERVAL_SECONDS:-300}
+      ENRICH_INTERVAL_SECONDS: ${ENRICH_INTERVAL_SECONDS:-60}
+      ENRICH_BATCH_SIZE: ${ENRICH_BATCH_SIZE:-3}
+      QUOTA_BACKOFF_HOURS: ${QUOTA_BACKOFF_HOURS:-12}
+    volumes:
+      - encore-data:/data
+
+volumes:
+  encore-data:
