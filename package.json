@@ -6,6 +6,7 @@
     "dev": "bun --watch src/main.ts",
     "start": "bun src/main.ts",
     "import": "bun src/ingest/export/cli.ts",
+    "discord:register": "bun src/discord/register.ts",
     "db:generate": "drizzle-kit generate",
     "typecheck": "tsc --noEmit",
     "test": "bun test"
