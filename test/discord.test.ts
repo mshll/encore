@@ -140,7 +140,7 @@ describe("discord commands", () => {
     const { post, calls } = setup();
     expect(((await (await post(command("releases"))).json()) as { data: { content: string } }).data.content).toBe("No new releases.");
     const cleanup = (await (await post(command("cleanup"))).json()) as { data: { embeds: { title: string }[]; components: { components: { style: number; url: string }[] }[] } };
-    expect(cleanup.data.embeds[0]!.title).toBe("No cleanup proposals");
+    expect(cleanup.data.embeds[0]!.title).toBe("Nothing to clean up");
     expect(cleanup.data.components[0]!.components[0]).toMatchObject({ style: 5, url: "http://localhost:8888" });
     expect(calls).toHaveLength(0);
   });

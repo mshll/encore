@@ -62,6 +62,26 @@ async function builtSet() {
 }
 
 describe("set building tool loop", () => {
+  test("find_songs tells Claude how a song is played in words, and a reason carrying an internal id is sent back", async () => {
+    const fake = scripted(
+      toolCall("find_songs", { artists: ["Mac Miller"] }),
+      toolCall("submit_set", { title: "Night", description: "Late.", items: [{ source: "library", songKey: WOODS, reason: "A wrong_moment song that works at night." }] }),
+      toolCall("submit_set", { title: "Night", description: "Late.", items: [{ source: "library", songKey: WOODS, reason: "Played through at night, skipped in the morning." }] }),
+    );
+    const env = featureCtx(fake.transport, CATALOG);
+    seedLibrary(env.db);
+
+    await createSet(env.ctx, "late night");
+    const found = toolResults(fake.requests[1]!)[0]!.value.songs as { name: string; pattern: string }[];
+    const rejected = toolResults(fake.requests[2]!)[0]!.value;
+
+    expect([found.find((s) => s.name === "Woods")!.pattern, rejected.accepted, rejected.errors]).toEqual([
+      "played through at some times, skipped at others",
+      false,
+      ["Track 1: write the reason in plain words, without tool names, field names or ids such as wrong_moment."],
+    ]);
+  });
+
   test("a hallucinated song fails verification and is never accepted", async () => {
     const { fake } = await builtSet();
     const [found, hallucinated, heard, fresh] = toolResults(fake.requests[1]!);

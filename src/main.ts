@@ -8,6 +8,8 @@ import { IMPORT_BODY_BYTES } from "./http/bodyLimits";
 import { createAssistantJobs } from "./jobs/assistant";
 import { createJobs, enabledJobs } from "./jobs/definitions";
 import { startScheduler } from "./jobs/scheduler";
+import { recoverInterrupted } from "./library/apply";
+import { refreshProposals } from "./library/rules";
 import { createServices } from "./services";
 import { SettingsStore } from "./settings/store";
 import { SpotifyAuth } from "./spotify/auth";
@@ -16,6 +18,9 @@ import { SpotifyClient } from "./spotify/client";
 const config = loadConfig();
 const db = openDb(config.databasePath);
 const settings = new SettingsStore(db, config);
+recoverInterrupted(db, Date.now());
+// Rule plans follow the current rules from the first load, not only after the next sync pass.
+refreshProposals(db, Date.now(), settings.get());
 const spotifyAuth = new SpotifyAuth(db, config, settings);
 const spotify = new SpotifyClient(db, spotifyAuth, settings);
 const services = createServices(db, config, settings, spotify);
@@ -30,7 +35,7 @@ const assistantJobs = createAssistantJobs(services.assistant, spotifyAuth, publi
 const app = createApp({ db, config, settings, passkeys: new Passkeys(db, config), spotifyAuth, spotify, jobs, services, discord, now: Date.now });
 
 const server = Bun.serve({ hostname: config.host, port: config.port, fetch: app.fetch, maxRequestBodySize: IMPORT_BODY_BYTES });
-const scheduler = config.jobsEnabled ? startScheduler(db, [...enabledJobs(jobs, config), assistantJobs.picks, assistantJobs.digest, assistantJobs.outcomes]) : null;
+const scheduler = config.jobsEnabled ? startScheduler(db, [...enabledJobs(jobs, config), assistantJobs.picks, assistantJobs.digest, assistantJobs.outcomes, assistantJobs.library]) : null;
 settings.subscribe(() => scheduler?.reschedule());
 console.log(`encore listening on http://${server.hostname}:${server.port} (public ${config.publicBaseUrl})`);
 const startupDiscord = discord.current();

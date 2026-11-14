@@ -67,6 +67,17 @@ export function progressLine(event: Extract<StreamEvent, { type: "tool" }>): str
       return "Putting the set in order";
     case "submit_picks":
       return "Choosing this week’s picks";
+    case "library_overview":
+      return "Reading your library";
+    case "find_library_songs": {
+      const where = typeof i.where === "string" ? (i.where === "liked" ? "your liked songs" : i.where) : "your library";
+      const what = [list(i.artists), list(i.lastPlayed) && `last played ${list(i.lastPlayed)}`, typeof i.text === "string" ? `“${i.text}”` : null].filter(Boolean).join(", ");
+      return `Looking through ${where}${what ? `: ${what}` : ""}`;
+    }
+    case "played_not_liked":
+      return "Finding songs you play but never liked";
+    case "submit_plan":
+      return "Writing the plan";
     case "artist_history":
     case "song_history":
       return `Reading your history${i.artist ? ` with ${String(i.artist)}` : ""}`;

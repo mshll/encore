@@ -11,7 +11,16 @@ import { loadCatalog, type CatalogSong, type ContextCounts, type DayType, type H
 
 const day = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 const HOUR_BUCKETS = ["night", "morning", "afternoon", "evening"] as const;
-const CLASSES = ["keeper", "wrong_moment", "dislike", "mixed", "unclassified"] as const;
+/** Moment classes in the words Claude sees, so an internal id never ends up in text the owner reads. */
+const PATTERNS = {
+  keeper: "usually played through",
+  wrong_moment: "played through at some times, skipped at others",
+  dislike: "skipped nearly everywhere",
+  mixed: "skipped often, no clear pattern",
+  unclassified: "too few plays to tell",
+} as const;
+const PATTERN_WORDS = Object.values(PATTERNS) as [string, ...string[]];
+const patternOf = (cls: CatalogSong["class"]) => PATTERNS[cls ?? "unclassified"];
 
 export const findSongsInput = z.strictObject({
   artists: z.array(z.string()).optional().describe("Exact artist names (case-insensitive)."),
@@ -25,7 +34,7 @@ export const findSongsInput = z.strictObject({
   language: z.string().optional().describe("ISO 639-1 code or 'instrumental'."),
   playedFrom: day.optional().describe("Only songs listened to on or after this local day (YYYY-MM-DD); stats then cover this window."),
   playedTo: day.optional().describe("Only songs listened to on or before this local day; stats then cover this window."),
-  classes: z.array(z.enum(CLASSES)).optional().describe("Moment classes; 'unclassified' means fewer than 8 plays with skip data."),
+  patterns: z.array(z.enum(PATTERN_WORDS)).optional().describe("How the owner plays the song across contexts; 'too few plays to tell' means fewer than 8 plays with skip data."),
   maxSkipRate: z.number().min(0).max(1).optional(),
   minListens: z.number().int().min(0).optional(),
   notPlayedForDays: z.number().int().min(1).optional().describe("Only songs not played in the last N days."),
@@ -73,7 +82,7 @@ export function findSongs(db: Db, blocked: Blocked, input: FindSongsInput, now: 
       if (input.valenceMin && t.valence < input.valenceMin) return false;
       if (input.valenceMax && t.valence > input.valenceMax) return false;
     }
-    if (input.classes && !input.classes.includes(s.class ?? "unclassified")) return false;
+    if (input.patterns && !input.patterns.includes(patternOf(s.class))) return false;
     if (input.maxSkipRate !== undefined && s.skipRate !== null && s.skipRate > input.maxSkipRate) return false;
     if (input.minListens !== undefined && (window?.get(s.songKey)?.listens ?? s.listens) < input.minListens) return false;
     if (cutoff !== null && s.lastPlayed >= cutoff) return false;
@@ -99,7 +108,7 @@ export function findSongs(db: Db, blocked: Blocked, input: FindSongsInput, now: 
       listens: listens(s),
       ...(window ? { listensAllTime: s.listens } : {}),
       skipRate: s.skipRate,
-      class: s.class,
+      pattern: patternOf(s.class),
       ...(input.hourBucket || input.dayType ? { contextSkipRate: contextRate(s) } : {}),
       firstPlayed: iso(s.firstPlayed),
       lastPlayed: iso(s.lastPlayed),
@@ -134,7 +143,7 @@ export function artistProfile(db: Db, name: string, weekendDays: readonly number
     topSongs: songs
       .sort((a, b) => b.listens - a.listens)
       .slice(0, 12)
-      .map((s) => ({ songKey: s.songKey, name: s.name, album: s.album, listens: s.listens, skipRate: s.skipRate, class: s.class })),
+      .map((s) => ({ songKey: s.songKey, name: s.name, album: s.album, listens: s.listens, skipRate: s.skipRate, pattern: patternOf(s.class) })),
   };
 }
 
@@ -143,7 +152,7 @@ export function libraryTools(db: Db, blocked: Blocked, now: number, weekendDays:
     tool({
       name: "find_songs",
       description:
-        "Search the owner's own listening history (songs they have played). Use it to find songs that fit a request by tags, artist, era, moment class or time-of-day fit, and to check what the owner already knows. Filters combine with AND. Returns at most 40 songs plus the total match count.",
+        "Search the owner's own listening history (songs they have played). Use it to find songs that fit a request by tags, artist, era, how they play it or time-of-day fit, and to check what the owner already knows. Filters combine with AND. Returns at most 40 songs plus the total match count.",
       schema: findSongsInput,
       run: (input) => findSongs(db, blocked, input, now, weekendDays),
     }),

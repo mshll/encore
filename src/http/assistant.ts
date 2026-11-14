@@ -2,6 +2,9 @@ import Anthropic from "@anthropic-ai/sdk";
 import type { Context } from "hono";
 import { streamSSE } from "hono/streaming";
 import { DigestNotFoundError } from "../digest/service";
+import { PlanNotFoundError } from "../library/plans";
+import { PlanNotBuiltError } from "../library/planner";
+import { StandingNotFoundError } from "../library/standing";
 import { ThreadNotFoundError } from "../ask/service";
 import type { AgentEvent } from "../llm/agent";
 import type { FeatureContext } from "../llm/context";
@@ -22,7 +25,7 @@ export function toApiError(error: unknown): unknown {
   if (error instanceof LlmBudgetExceededError)
     return new ApiError(402, "llm_budget_exceeded", error.message, { month: error.month, spentUsd: Math.round(error.spentUsd * 100) / 100, capUsd: error.capUsd });
   if (error instanceof LlmRefusalError) return new ApiError(422, "llm_refused", error.message, { category: error.category });
-  if (error instanceof LlmTruncatedError || error instanceof LlmIncompleteError || error instanceof SetNotBuiltError || error instanceof PicksNotSubmittedError)
+  if (error instanceof LlmTruncatedError || error instanceof LlmIncompleteError || error instanceof SetNotBuiltError || error instanceof PicksNotSubmittedError || error instanceof PlanNotBuiltError)
     return new ApiError(502, "llm_incomplete", error.message);
   if (error instanceof Anthropic.APIError) return new ApiError(502, "llm_failed", `Claude API error ${error.status ?? ""}`.trim());
   if (error instanceof SpotifyNotConnectedError) return new ApiError(409, "spotify_not_connected", error.message);
@@ -30,6 +33,7 @@ export function toApiError(error: unknown): unknown {
   if (error instanceof SpotifyApiError) return new ApiError(502, "spotify_failed", error.message);
   if (error instanceof SetNotFoundError || error instanceof SetItemNotFoundError || error instanceof ThreadNotFoundError || error instanceof PickNotFoundError || error instanceof DigestNotFoundError)
     return new ApiError(404, "not_found", "Not found");
+  if (error instanceof PlanNotFoundError || error instanceof StandingNotFoundError) return new ApiError(404, "not_found", "Not found");
   if (error instanceof NoteSubjectNotFoundError) return new ApiError(404, "not_found", error.message);
   if (error instanceof PicksExistError) return new ApiError(409, "picks_exist", error.message, { week: error.week });
   if (error instanceof EmptySetError) return new ApiError(409, "set_empty", error.message);

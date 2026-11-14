@@ -71,6 +71,13 @@
       "when": 1794688589395,
       "tag": "0009_living_playlists",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "6",
+      "when": 1794693512280,
+      "tag": "0010_library_plans",
+      "breakpoints": true
     }
   ]
 }

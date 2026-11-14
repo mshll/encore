@@ -1,7 +1,7 @@
 import { blob, index, integer, real, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
 import { COVER_STYLES } from "../covers/style";
 
-export const LLM_FEATURES = ["sets", "picks", "ask", "notes", "digest", "dj"] as const;
+export const LLM_FEATURES = ["sets", "picks", "ask", "notes", "digest", "dj", "library"] as const;
 export type LlmFeature = (typeof LLM_FEATURES)[number];
 
 export const PICK_STATES = ["new", "saved", "not_now", "never"] as const;

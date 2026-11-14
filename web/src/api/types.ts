@@ -62,7 +62,7 @@ export type Status = {
   llm: LlmStatus;
 };
 
-export type LlmFeature = "sets" | "picks" | "ask" | "notes" | "digest" | "dj";
+export type LlmFeature = "sets" | "picks" | "ask" | "notes" | "digest" | "dj" | "library";
 
 export type Budget = { month: string; spentUsd: number; capUsd: number; remainingUsd: number; exhausted: boolean };
 
@@ -470,42 +470,58 @@ export type Release = {
 
 export type Radar = { artists: number; withId: number; checkedRecently: number; unseenNew: number; lastRunAt: string | null; items: Release[] };
 
-export type CleanupKind = "saved_never_played" | "saved_dislike" | "playlist_skipped" | "playlist_duplicate";
+export type PlayClass = "active" | "fading" | "dormant" | "never";
+export type ClassCounts = Record<PlayClass, number>;
+export type LibraryPlace = { kind: "liked" } | { kind: "playlist"; id: string; name: string };
 
-export type CleanupProposal = {
-  id: number;
-  kind: CleanupKind;
-  playlistId: string | null;
-  uri: string;
-  status: "open" | "dismissed" | "applied";
-  updatedAt: string;
-  evidence: {
+export type LibraryAnalysis = {
+  library: { savedTracks: number; playlists: number; syncing: boolean; lastSyncAt: string | null };
+  historyStart: string | null;
+  rules: { fadingAfterDays: number; dormantAfterDays: number; unsavedMinListens: number };
+  liked: { total: number; classes: ClassCounts };
+  savedMonths: ({ month: string } & ClassCounts)[];
+  artists: ({ artist: string; total: number } & ClassCounts)[];
+  playlists: {
+    id: string;
     name: string;
-    artist: string;
-    albumArtUrl: string | null;
-    songKey: string | null;
-    plays: number;
-    listens: number;
-    skips: number;
-    skipRate: number | null;
+    items: number;
+    songs: number;
+    duplicates: number;
+    classes: ClassCounts;
     lastPlayed: string | null;
-    savedAt?: string | null;
-    class?: MomentClass | null;
-    playlistName?: string;
-    duplicates?: { position: number; uri: string }[];
-  };
+    overlap: { id: string; name: string; shared: number } | null;
+  }[];
+  overlaps: { a: { id: string; name: string }; b: { id: string; name: string }; shared: number }[];
+  unsaved: { total: number; songs: { songKey: string; uri: string; name: string; artist: string; albumArtUrl: string | null; listens: number; lastPlayed: string | null }[] };
 };
 
-export type Cleanup = {
-  counts: Record<CleanupKind, number>;
-  library: { savedTracks: number; playlists: number; syncing: boolean; lastSyncAt: string | null };
+/** The songs behind one figure of the analysis; also the body of "make a plan from this group". */
+export type SongGroup =
+  | { kind: "songs"; where: string; classes?: PlayClass[]; artist?: string; savedMonth?: string }
+  | { kind: "duplicates"; where: string }
+  | { kind: "unsaved" };
+
+export type SongEvidence = {
+  name: string;
+  artist: string;
+  album?: string | null;
+  albumArtUrl: string | null;
+  songKey: string | null;
+  plays: number;
+  listens: number;
+  lastPlayed: string | null;
+  finishedShare?: number | null;
+  addedAt?: string | null;
+  playClass?: PlayClass;
+};
+
+export type LibrarySongs = {
+  group: SongGroup;
   total: number;
   limit: number;
   offset: number;
-  items: CleanupProposal[];
+  items: (SongEvidence & { uri: string; where: LibraryPlace; positions: number[]; reason: string })[];
 };
-
-export type CleanupBatch = { id: number; proposalIds: number[]; actions: number; appliedAt: string; undoneAt: string | null };
 
 export type LivingKind = "picks" | "forgotten" | "most-played" | "new-releases" | "this-month";
 export type LivingStatus = "refreshed" | "unchanged" | "empty" | "deferred" | "failed" | "removed";
@@ -551,3 +567,65 @@ export type LivingRefresh = { id: number; at: string; trigger: LivingTrigger; it
 export type LivingOutcome = { kind: LivingKind; status: LivingStatus | "off"; calls: number; cover?: "uploaded" | "unchanged" | "missing_scope" | "failed" };
 
 export type LivingUpdate = { outcome: LivingOutcome; playlist: LivingDetail };
+
+export type PlanAction = "archive" | "remove" | "save" | "add" | "dedupe";
+export type PlanSource = "rule" | "analysis" | "claude" | "standing";
+export type ItemStatus = "open" | "dismissed" | "applied" | "skipped";
+
+export type PlanSummary = {
+  id: number;
+  source: PlanSource;
+  ruleKind: string | null;
+  title: string;
+  summary: string;
+  request: string | null;
+  threadId: number | null;
+  standingId: number | null;
+  status: "open" | "applied" | "dismissed";
+  counts: { open: number; selected: number; dismissed: number; applied: number; skipped: number };
+  runningBatchId: number | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type PlanItem = { id: number; action: PlanAction; where: LibraryPlace; uri: string; included: boolean; status: ItemStatus; reason: string; evidence: SongEvidence };
+
+export type PlanDetail = PlanSummary & {
+  groups: { action: PlanAction; where: LibraryPlace; items: number; selected: number }[];
+  page: { status: ItemStatus; total: number; limit: number; offset: number };
+  items: PlanItem[];
+};
+
+export type BatchSong = { id: number; name: string; artist: string; action: PlanAction };
+
+export type Batch = {
+  id: number;
+  planId: number | null;
+  planTitle: string | null;
+  status: "running" | "done" | "partial" | "failed";
+  selected: number;
+  applied: number;
+  actions: Record<PlanAction, number>;
+  skipped: (BatchSong & { reason: string })[];
+  notApplied: BatchSong[];
+  error: string | null;
+  calls: number;
+  canUndo: boolean;
+  undo: { status: null | "running" | "done" | "failed"; error: string | null; undoneAt: string | null };
+  appliedAt: string;
+  finishedAt: string | null;
+};
+
+export type PlanTurn = { planId: number | null; threadId: number; reply: string | null; songs: number };
+export type PlanConversation = { threadId: number; planId: number | null; turns: { role: "owner" | "assistant"; text: string }[] };
+
+export type Standing = {
+  id: number;
+  instruction: string;
+  cadence: "weekly" | "monthly";
+  enabled: boolean;
+  lastRunAt: string | null;
+  nextRunAt: string | null;
+  lastPlanId: number | null;
+  lastError: string | null;
+};

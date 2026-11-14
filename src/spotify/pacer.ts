@@ -7,6 +7,9 @@ const priority = new AsyncLocalStorage<Priority>();
 /** Spotify calls made inside `fn` (and anything it awaits) queue behind interactive ones. */
 export const inBackground = <T>(fn: () => T): T => priority.run("background", fn);
 
+/** Spotify calls made inside `fn` queue ahead of background ones, even when `fn` was started from a job. */
+export const inForeground = <T>(fn: () => T): T => priority.run("interactive", fn);
+
 export const currentPriority = (): Priority => priority.getStore() ?? "interactive";
 
 type Waiter = { fn: () => Promise<unknown>; resolve: (v: unknown) => void; reject: (e: unknown) => void };

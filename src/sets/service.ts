@@ -6,6 +6,7 @@ import { setChanges, setItems, sets, type SetChangeMove, type SetChangeTrack } f
 import { runAgent, tool, type AgentEvent } from "../llm/agent";
 import type { MessageParam } from "../llm/client";
 import { localNow, tagged, type FeatureContext } from "../llm/context";
+import { leaksInternals } from "../llm/plainText";
 import { createThread, deleteThread, getThread, ownerMessage, saveThreadMessages, transcript } from "../llm/threads";
 import { blockedSets, isBlocked, type Blocked } from "../library/blocks";
 import { CandidateVerifier } from "../library/candidates";
@@ -83,6 +84,7 @@ export function validateSubmission(
   const seen = new Set<string>();
   input.items.forEach((item, i) => {
     const n = i + 1;
+    if (leaksInternals(item.reason)) return errors.push(`Track ${n}: write the reason in plain words, without tool names, field names or ids such as wrong_moment.`);
     if (item.source === "library") {
       const song = item.songKey ? catalog.songs.get(item.songKey) : undefined;
       if (!song) return errors.push(`Track ${n}: songKey ${JSON.stringify(item.songKey)} is not in the owner's history; use a songKey returned by find_songs.`);
