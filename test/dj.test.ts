@@ -71,6 +71,28 @@ describe("dj session", () => {
     expect(dj.active()).toMatchObject({ uris: [...set.slice(0, 3), set[5], uri("9"), set[4]], position: 2, replans: 1, skipStreak: 0 });
   });
 
+  test("a re-plan keeps the track that became current while it was computing", async () => {
+    let dj!: DjService;
+    const env = setup(async () => {
+      dj.onWatchEvent(started(set[3]!));
+      return [set[3]!, set[5]!, uri("9")];
+    });
+    dj = env.dj;
+    await dj.start(set);
+    env.calls.length = 0;
+    dj.onWatchEvent(started(set[0]!));
+    dj.onWatchEvent(finished(set[0]!, true));
+    dj.onWatchEvent(started(set[1]!));
+    dj.onWatchEvent(finished(set[1]!, true));
+    dj.onWatchEvent(started(set[2]!));
+    await dj.whenIdle();
+    expect(env.calls.map((c) => [c.method, c.body])).toEqual([
+      ["DELETE", { items: set.slice(4).map((u) => ({ uri: u })) }],
+      ["POST", { uris: [set[5], uri("9")] }],
+    ]);
+    expect(dj.active()).toMatchObject({ uris: [...set.slice(0, 4), set[5], uri("9")], position: 3 });
+  });
+
   test("a finished song resets the streak", async () => {
     const { dj, calls } = setup(async () => []);
     await dj.start(set);

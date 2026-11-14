@@ -99,23 +99,27 @@ export class DjService {
   private async replan(id: number) {
     const session = this.db.select().from(djSessions).where(eq(djSessions.id, id)).get();
     if (!session || session.status !== "active") return;
-    const played = session.uris.slice(0, session.position + 1);
-    const tail = session.uris.slice(session.position + 1);
     try {
       const proposed = await this.replanner({
         finished: session.outcomes.filter((o) => o.outcome === "finished").map((o) => o.uri),
         skipped: session.outcomes.filter((o) => o.outcome === "skipped").map((o) => o.uri),
         current: session.uris[session.position] ?? null,
-        upcoming: tail,
-        exclude: played,
+        upcoming: session.uris.slice(session.position + 1),
+        exclude: session.uris.slice(0, session.position + 1),
         now: this.now(),
       });
+      // Playback may have moved on while the re-planner ran (an LLM call takes seconds): the track that is
+      // current now must stay, so the tail is cut at the position read after the re-plan, not before it.
+      const fresh = this.db.select().from(djSessions).where(eq(djSessions.id, id)).get();
+      if (!fresh || fresh.status !== "active") return;
+      const played = fresh.uris.slice(0, fresh.position + 1);
+      const tail = fresh.uris.slice(fresh.position + 1);
       const playedSet = new Set(played);
       const next = [...new Set(proposed)].filter((u) => TRACK_URI.test(u) && !playedSet.has(u)).slice(0, MAX_SET_SIZE - played.length);
       await this.playlists.remove(session.playlistId, tail);
       this.update(id, { uris: played });
       await this.playlists.append(session.playlistId, next);
-      this.update(id, { uris: [...played, ...next], replans: session.replans + 1, skipStreak: 0 });
+      this.update(id, { uris: [...played, ...next], replans: fresh.replans + 1, skipStreak: 0 });
     } catch (error) {
       console.error(`[dj] re-plan failed: ${error instanceof Error ? error.message : error}`);
     }
