@@ -26,31 +26,6 @@ type Entry = {
   song?: { uri: string; name: string };
 };
 
-/** `G` then a letter jumps to a surface, as listed in the palette. Ignored while typing in a field. */
-function useGoKeys(navigate: (path: string) => void) {
-  useEffect(() => {
-    let armed = 0;
-    const onKey = (e: KeyboardEvent) => {
-      const t = e.target as HTMLElement;
-      if (e.metaKey || e.ctrlKey || e.altKey || t.closest("input,textarea,select,[contenteditable=true]")) return;
-      if (e.key === "g") {
-        armed = Date.now();
-        return;
-      }
-      if (Date.now() - armed < 1000) {
-        const hit = SURFACES.find((s) => s.key === e.key);
-        armed = 0;
-        if (hit) {
-          e.preventDefault();
-          navigate(hit.path);
-        }
-      }
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [navigate]);
-}
-
 /** Search and go: surfaces, then artists, songs and albums from your history, then a question for Ask. */
 export function CommandPalette({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
   const [query, setQuery] = useState("");
@@ -61,19 +36,6 @@ export function CommandPalette({ open, onOpenChange }: { open: boolean; onOpenCh
   const href = useRangeHref();
   const playback = usePlayback();
   const listRef = useRef<HTMLDivElement>(null);
-  useGoKeys((path) => navigate(href(path)));
-
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
-        e.preventDefault();
-        onOpenChange(!open);
-      }
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [open, onOpenChange]);
-
   const entries = useMemo<Entry[]>(() => {
     const q = deferred.toLowerCase();
     const pages: Entry[] = SURFACES.filter((s) => !q || s.label.toLowerCase().includes(q)).map((s) => ({

@@ -1,15 +1,24 @@
-import { createContext, useContext, useEffect, useRef, useState, type ReactNode, type RefObject } from "react";
+import { createContext, lazy, Suspense, useCallback, useContext, useEffect, useRef, useState, type ReactNode, type RefObject } from "react";
 import { useLocation, useSearchParams } from "wouter";
 import { useDesktop } from "../lib/useMedia";
 import { showToast } from "../lib/toast";
 import { MiniPlayer, PlayerBar } from "../player/PlayerBar";
-import { NowPlayingSheet } from "../player/NowPlayingSheet";
-import { QueuePanel } from "../player/QueuePanel";
 import { Toaster } from "../ui/Toast";
 import { TooltipProvider } from "../ui/Tooltip";
-import { CommandPalette } from "./CommandPalette";
 import { PhoneNav } from "./PhoneNav";
+import { useShortcuts } from "./shortcuts";
 import { Sidebar } from "./Sidebar";
+
+const CommandPalette = lazy(() => import("./CommandPalette").then((m) => ({ default: m.CommandPalette })));
+const QueuePanel = lazy(() => import("../player/QueuePanel").then((m) => ({ default: m.QueuePanel })));
+const NowPlayingSheet = lazy(() => import("../player/NowPlayingSheet").then((m) => ({ default: m.NowPlayingSheet })));
+
+/** True from the first time `open` is true: an overlay loads on first use, then stays mounted so it can animate closed. */
+function useOnceOpen(open: boolean) {
+  const [opened, setOpened] = useState(open);
+  if (open && !opened) setOpened(true);
+  return opened;
+}
 
 const ScrollContext = createContext<RefObject<HTMLElement | null>>({ current: null });
 
@@ -69,8 +78,11 @@ export function Shell({ children }: { children: ReactNode }) {
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [queueOpen, setQueueOpen] = useState(false);
   const [sheetOpen, setSheetOpen] = useState(false);
+  const paletteLoaded = useOnceOpen(paletteOpen);
+  const sheetLoaded = useOnceOpen(sheetOpen);
   useSpotifyNotice();
   useRouteReset(main);
+  useShortcuts(useCallback(() => setPaletteOpen((o) => !o), []));
 
   return (
     <TooltipProvider delay={500}>
@@ -92,7 +104,11 @@ export function Shell({ children }: { children: ReactNode }) {
                 <QueueOpener.Provider value={desktop ? () => setQueueOpen(true) : () => setSheetOpen(true)}>{children}</QueueOpener.Provider>
               </main>
               <div className={queueOpen ? "mt-(--inset) mr-(--inset) ml-(--inset) min-h-0" : "w-(--inset)"}>
-                {queueOpen && <QueuePanel onClose={() => setQueueOpen(false)} />}
+                {queueOpen && (
+                  <Suspense fallback={null}>
+                    <QueuePanel onClose={() => setQueueOpen(false)} />
+                  </Suspense>
+                )}
               </div>
               <div className="col-span-3">
                 <PlayerBar queueOpen={queueOpen} onToggleQueue={() => setQueueOpen((o) => !o)} />
@@ -109,10 +125,18 @@ export function Shell({ children }: { children: ReactNode }) {
                 </div>
                 <PhoneNav onSearch={() => setPaletteOpen(true)} />
               </div>
-              <NowPlayingSheet open={sheetOpen} onOpenChange={setSheetOpen} />
+              {sheetLoaded && (
+                <Suspense fallback={null}>
+                  <NowPlayingSheet open={sheetOpen} onOpenChange={setSheetOpen} />
+                </Suspense>
+              )}
             </div>
           )}
-          <CommandPalette open={paletteOpen} onOpenChange={setPaletteOpen} />
+          {paletteLoaded && (
+            <Suspense fallback={null}>
+              <CommandPalette open={paletteOpen} onOpenChange={setPaletteOpen} />
+            </Suspense>
+          )}
         </ScrollContext.Provider>
       </Toaster>
     </TooltipProvider>
