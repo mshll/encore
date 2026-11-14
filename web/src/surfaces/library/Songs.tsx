@@ -19,13 +19,15 @@ const ACTION_LABEL = { songs: "Plan to archive these", duplicates: "Plan to remo
 export function LibrarySongs() {
   const search = useSearch();
   const group = groupFromSearch(search);
-  const analysis = useLibraryAnalysis().data;
+  const analysisQuery = useLibraryAnalysis();
+  const analysis = analysisQuery.data;
   const q = useLibrarySongs(group);
   const queryClient = useQueryClient();
   const [, navigate] = useLocation();
   const [making, setMaking] = useState(false);
   const playlist = group.kind !== "unsaved" && group.where !== "liked" ? analysis?.playlists.find((p) => p.id === group.where)?.name : undefined;
   const title = songGroupTitle(group, analysis?.rules, playlist);
+  const crumb = q.isError ? null : group.kind === "unsaved" || analysis || analysisQuery.isError ? title : undefined;
   const items = q.data?.pages.flatMap((p) => p.items) ?? [];
   const total = q.data?.pages[0]?.total;
 
@@ -42,7 +44,7 @@ export function LibrarySongs() {
   };
 
   return (
-    <Page>
+    <Page crumb={crumb}>
       <PageHeader
         title={title}
         description={total !== undefined && total > 0 ? songs(total) : undefined}

@@ -141,7 +141,7 @@ export function LibraryInstructions() {
   const q = useStanding();
   const scheduled = useStatus().data?.llm.schedule.enabled;
   return (
-    <LibraryFrame>
+    <LibraryFrame width="read">
       <Section
         title="Standing instructions"
         description="Claude makes a plan on this schedule for you to review. Nothing is applied on its own, and each run counts toward the monthly Claude budget."

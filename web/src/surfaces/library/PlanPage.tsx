@@ -5,22 +5,22 @@ import { useBatches, usePlan, useStatus } from "../../api/queries";
 import type { Batch, ItemStatus, PlanAction, PlanDetail, PlanItem } from "../../api/types";
 import { fmtInt, fmtMonth } from "../../lib/format";
 import { showToast } from "../../lib/toast";
-import { useMedia } from "../../lib/useMedia";
 import { AppLink } from "../../ui/AppLink";
 import { Button, buttonClass } from "../../ui/Button";
 import { Checkbox } from "../../ui/Checkbox";
-import { Confirm, Dialog } from "../../ui/Dialog";
+import { useDocked } from "../../ui/Conversation";
+import { Confirm } from "../../ui/Dialog";
 import { BroomIcon, ChatCircleTextIcon } from "../../ui/icons";
 import { MenuItem, MenuPopup, MenuRoot, MoreTrigger } from "../../ui/Menu";
 import { Notice } from "../../ui/Notice";
-import { dimWhile, Page, PageHeader, Section, useDocumentTitle } from "../../ui/Page";
+import { dimWhile, Page, PageHeader, Section, useDocumentTitle, type HeaderAction } from "../../ui/Page";
 import { RowSkeleton } from "../../ui/Rows";
 import { TabList, TabsRoot } from "../../ui/Segmented";
 import { Select } from "../../ui/Select";
 import { Skeleton } from "../../ui/Skeleton";
 import { describeError, EmptyState, ErrorState } from "../../ui/States";
 import { BatchStatus, useBatchCache, useBatchEndings, useUndo } from "./batch";
-import { PlanThread } from "./PlanThread";
+import { PlanThread, usePlanTurn } from "./PlanThread";
 import { SongLine } from "./rows";
 import { changes, consequences, groupTitle, SOURCE_LABEL, songs } from "./words";
 
@@ -213,29 +213,21 @@ function ApplyButton({ plan, latest, connected }: { plan: PlanDetail; latest: Ba
   );
 }
 
-function PlanMenu({ plan, edits }: { plan: PlanDetail; edits: ReturnType<typeof usePlanEdits> }) {
+function dismissAction(plan: PlanDetail, edits: ReturnType<typeof usePlanEdits>): HeaderAction | null {
   const rule = plan.source === "rule";
   if (plan.status === "dismissed" || (rule && plan.counts.open === 0)) return null;
-  return (
-    <MenuRoot>
-      <MoreTrigger label="More for this plan" size="md" />
-      <MenuPopup>
-        <MenuItem
-          onClick={async () => {
-            if (await edits.dismiss("all"))
-              showToast(rule ? `Dismissed ${songs(plan.counts.open)}` : "Plan dismissed", "info", { label: "Undo", onClick: () => void edits.restore("all") });
-          }}
-        >
-          {rule ? `Dismiss all ${fmtInt(plan.counts.open)}` : "Dismiss plan"}
-        </MenuItem>
-      </MenuPopup>
-    </MenuRoot>
-  );
+  return {
+    label: rule ? `Dismiss all ${fmtInt(plan.counts.open)}` : "Dismiss plan",
+    onClick: () =>
+      void edits.dismiss("all").then((dismissed) => {
+        if (dismissed) showToast(rule ? `Dismissed ${songs(plan.counts.open)}` : "Plan dismissed", "info", { label: "Undo", onClick: () => void edits.restore("all") });
+      }),
+  };
 }
 
 function PlanSkeleton() {
   return (
-    <Page>
+    <Page crumb={undefined}>
       <div aria-hidden className="flex flex-col gap-2">
         <Skeleton className="h-9 w-72" />
         <Skeleton className="h-4 w-96 max-w-full" />
@@ -254,14 +246,15 @@ export function PlanPage({ id }: { id: number }) {
   const spotify = useStatus().data?.spotify;
   const { undo, pending } = useUndo();
   const edits = usePlanEdits(id);
-  const wide = useMedia("(min-width: 1024px)");
+  const docked = useDocked();
   useBatchEndings(batches.data?.items, (b) => void undo(b));
   const plan = q.data?.pages[0];
+  const turn = usePlanTurn(id, Boolean(plan?.threadId));
   useDocumentTitle(plan?.title ?? "Plan");
 
   if (q.isError)
     return (
-      <Page>
+      <Page crumb={null}>
         <PageHeader title="Plan" />
         {q.error instanceof ApiError && q.error.status === 404 ? (
           <EmptyState
@@ -284,17 +277,17 @@ export function PlanPage({ id }: { id: number }) {
   const latest = batches.data?.items.find((b) => b.planId === id);
   const tabs = (["open", "applied", "skipped", "dismissed"] as const).filter((s) => s === "open" || plan.counts[s] > 0);
   const thread = plan.threadId;
+  const secondary = [
+    thread && !docked ? { label: turn.run.running ? "Changing…" : "Change with Claude", icon: ChatCircleTextIcon, onClick: () => setTalking(true) } : null,
+    dismissAction(plan, edits),
+  ].filter((a): a is HeaderAction => a !== null);
   const main = (
     <div className="flex min-w-0 flex-col gap-8">
       <PageHeader
         title={plan.title}
         description={plan.summary || (plan.source === "rule" ? undefined : SOURCE_LABEL[plan.source])}
-        actions={
-          <>
-            <ApplyButton plan={plan} latest={latest} connected={spotify?.connected !== false} />
-            <PlanMenu plan={plan} edits={edits} />
-          </>
-        }
+        actions={<ApplyButton plan={plan} latest={latest} connected={spotify?.connected !== false} />}
+        secondary={secondary}
       />
       {plan.status === "dismissed" && (
         <Notice
@@ -318,11 +311,6 @@ export function PlanPage({ id }: { id: number }) {
         >
           Spotify is not connected, so this plan cannot be applied.
         </Notice>
-      )}
-      {thread && !wide && (
-        <Button className="self-start" icon={ChatCircleTextIcon} onClick={() => setTalking(true)}>
-          Change with Claude
-        </Button>
       )}
       {latest && <BatchStatus batch={latest} onUndo={() => void undo(latest.id)} undoing={pending === latest.id} />}
       <Section>
@@ -349,25 +337,12 @@ export function PlanPage({ id }: { id: number }) {
     </div>
   );
 
-  if (!thread) return <Page>{main}</Page>;
-  if (!wide)
-    return (
-      <Page>
-        {main}
-        <Dialog open={talking} onOpenChange={setTalking} title="Conversation" width={560}>
-          <div className="flex h-[70dvh] flex-col pb-5">
-            <PlanThread threadId={thread} planId={plan.id} contained />
-          </div>
-        </Dialog>
-      </Page>
-    );
+  if (!thread) return <Page crumb={plan.title}>{main}</Page>;
   return (
-    <Page>
-      <div className="grid gap-10 md:gap-12 lg:grid-cols-[minmax(0,1fr)_minmax(0,360px)]">
+    <Page crumb={plan.title}>
+      <div className="grid gap-10 md:gap-12 lg:grid-cols-[minmax(0,1fr)_var(--panel-w)]">
         {main}
-        <Section title="Conversation" className="lg:sticky lg:top-8 lg:h-[calc(100dvh-var(--bottom-chrome)-var(--inset)-64px)]">
-          <PlanThread threadId={thread} planId={plan.id} contained={wide} />
-        </Section>
+        <PlanThread threadId={thread} planId={plan.id} turn={turn} title="Change the plan" sheet={docked ? undefined : { open: talking, onOpenChange: setTalking }} />
       </div>
     </Page>
   );
