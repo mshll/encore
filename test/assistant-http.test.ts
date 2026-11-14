@@ -165,7 +165,8 @@ describe("SSE keep-alive", () => {
     const { respond } = await import("../src/http/assistant");
     const app = new Hono<Env>()
       .use(async (c, next) => {
-        c.set("deps", { services: { llm: { assertAvailable: () => {} } } } as unknown as Env["Variables"]["deps"]);
+        const llm = { assertAvailable: () => {}, withSignal: () => llm };
+        c.set("deps", { services: { llm, assistant: { llm } } } as unknown as Env["Variables"]["deps"]);
         await next();
       })
       .post("/", (c) => respond(c, () => new Promise((resolve) => setTimeout(() => resolve({ ok: true }), 60)), 200, 20));
