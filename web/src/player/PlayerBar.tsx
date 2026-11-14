@@ -6,6 +6,8 @@ import { cx } from "../ui/cx";
 import { Icon } from "../ui/Icon";
 import { ArrowUpRightIcon, PauseIcon, PlayIcon, QueueIcon, ShuffleIcon, SkipForwardIcon } from "../ui/icons";
 import { Tooltip } from "../ui/Tooltip";
+import { AppLink } from "../ui/AppLink";
+import { useTrackLinks } from "./links";
 import { openInSpotify, usePlayback } from "./playback";
 import { useProgress } from "./progress";
 
@@ -25,6 +27,7 @@ export function PlayerBar({ queueOpen, onToggleQueue }: { queueOpen: boolean; on
   const track = now.data?.track ?? null;
   const playing = Boolean(now.data?.playing);
   const device = now.data?.device?.name;
+  const links = useTrackLinks(track?.uri);
   return (
     <section aria-label="Player" className="grid h-(--player-h) grid-cols-[minmax(0,1fr)_minmax(0,520px)_minmax(0,1fr)] items-center gap-6 px-4">
       <div className="flex min-w-0 items-center gap-3">
@@ -32,9 +35,21 @@ export function PlayerBar({ queueOpen, onToggleQueue }: { queueOpen: boolean; on
           <>
             <Artwork src={track.albumArtUrl} name={track.name} box={48} />
             <div className="flex min-w-0 flex-col">
-              <span className="truncate text-primary">{track.name}</span>
+              {links ? (
+                <AppLink to={links.song} className="truncate text-primary hover:underline">
+                  {track.name}
+                </AppLink>
+              ) : (
+                <span className="truncate text-primary">{track.name}</span>
+              )}
               <span className="truncate text-caption text-secondary">
-                {track.artist}
+                {links ? (
+                  <AppLink to={links.artist} className="-mx-1 px-1 py-1 hover:text-primary hover:underline">
+                    {track.artist}
+                  </AppLink>
+                ) : (
+                  track.artist
+                )}
                 {device && <span className="text-tertiary"> · {device}</span>}
               </span>
             </div>
