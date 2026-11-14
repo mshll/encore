@@ -19,7 +19,7 @@ export const queryPlaysInput = z.strictObject({
   hours: z.array(z.number().int().min(0).max(23)).optional().describe("Local hours 0-23."),
   weekdays: z.array(z.number().int().min(1).max(7)).optional().describe("ISO weekdays, 1 = Monday."),
   devices: z.array(z.enum(DEVICES)).optional(),
-  skipped: z.boolean().optional().describe("Only plays with this skip flag (export rows only; API rows have no flag)."),
+  skipped: z.boolean().optional().describe("Only plays with this skip flag (export and live rows; API rows have no flag)."),
   shuffle: z.boolean().optional(),
   source: z.enum(PLAY_SOURCES).optional(),
   country: z.string().length(2).optional().describe("Two-letter country code (export rows only)."),

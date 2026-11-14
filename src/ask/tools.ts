@@ -39,7 +39,7 @@ export function askTools(db: Db, homeCountry: string, now: number): AgentTool[] 
     tool({
       name: "query_plays",
       description:
-        "Flexible aggregate over music plays: filter, group by up to three keys, and choose metrics. Use it for any count, trend or comparison the other tools don't answer directly. Listens = plays of 30 s or more (all API rows count). hours = time played. skipRate covers export rows only. All days and hours are local time.",
+        "Flexible aggregate over music plays: filter, group by up to three keys, and choose metrics. Use it for any count, trend or comparison the other tools don't answer directly. Listens = plays of 30 s or more (all API rows count). hours = time played. skipRate covers export and live rows (API rows have no skip flag). All days and hours are local time.",
       schema: queryPlaysInput,
       run: (input) => queryPlays(db, { ...input, ...checkRange(input) }),
     }),

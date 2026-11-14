@@ -3,16 +3,16 @@ import type { Db } from "../db/client";
 
 export type PlayOutcome = "finished" | "skipped" | "unknown";
 
-type Row = { ts: number; day: string; source: "export" | "api"; ms_played: number | null; skipped: number | null; reason_end: string | null; duration_ms: number | null; prev_ts: number | null };
+type Row = { ts: number; day: string; source: "export" | "api" | "live"; ms_played: number | null; skipped: number | null; reason_end: string | null; duration_ms: number | null; prev_ts: number | null };
 
 const FINISHED_SHARE = 0.8;
 
 /**
- * Export rows carry Spotify's own skip flag. API rows (recently-played) have no ms_played, so the
- * listened time is estimated as the gap since the previous play ended.
+ * Export rows carry Spotify's skip flag and live rows an observed time played with an inferred one.
+ * API rows (recently-played) have neither, so the listened time is estimated as the gap since the previous play.
  */
 export function outcomeOf(r: Row): PlayOutcome {
-  if (r.source === "export") {
+  if (r.source !== "api") {
     if (r.skipped === 1) return "skipped";
     if (r.reason_end === "trackdone") return "finished";
     if (r.ms_played != null && r.duration_ms) return r.ms_played >= FINISHED_SHARE * r.duration_ms ? "finished" : "skipped";
