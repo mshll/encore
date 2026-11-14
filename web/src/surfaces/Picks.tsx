@@ -260,7 +260,7 @@ export function Picks() {
   const pickWeek = (w: string) => setParams(w === current ? {} : { week: w }, { replace: true });
 
   return (
-    <Page width="read">
+    <Page>
       <PageHeader title="For you" actions={current && week && !firstUse && <WeekPicker current={current} value={week} onChange={pickWeek} />}>
         <TabNav items={FOR_YOU_TABS} label="For you" />
       </PageHeader>

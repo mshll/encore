@@ -90,19 +90,19 @@ export function ArtistPage({ name }: { name: string }) {
   useDocumentTitle(name);
   if (q.isError)
     return (
-      <Page>
+      <Page crumb={name}>
         <EntityMissing error={q.error} onRetry={() => q.refetch()} title={name} what="artist" />
       </Page>
     );
   if (!q.data)
     return (
-      <Page>
+      <Page crumb={name}>
         <EntityLoading round />
       </Page>
     );
   const d = q.data;
   return (
-    <Page className={dimWhile(q.isPlaceholderData)}>
+    <Page crumb={name} className={dimWhile(q.isPlaceholderData)}>
       <EntityHeader
         title={d.artist}
         art={d.imageUrl}

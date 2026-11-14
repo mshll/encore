@@ -346,9 +346,11 @@ export function Ask({ id }: { id?: string }) {
     />
   );
 
+  const crumb = thread.data?.title ?? (thread.isError ? null : undefined);
+
   if (firstUse)
     return (
-      <Page width="read">
+      <Page>
         <PageHeader title="Ask" />
         <FirstUseState icon={WaveformIcon} description="Answers come from your history. Import it or connect Spotify first." />
       </Page>
@@ -356,7 +358,7 @@ export function Ask({ id }: { id?: string }) {
 
   if (desktop)
     return (
-      <Page className={cx("min-h-full", messages && !missing && "pb-0!")}>
+      <Page crumb={crumb} className={cx("min-h-full", messages && !missing && "pb-0!")}>
         {header}
         <div className="grid flex-1 grid-cols-[220px_minmax(0,1fr)] gap-12">
           <nav aria-label="Your questions" className="flex min-w-0 flex-col gap-2 pb-16">
@@ -369,7 +371,7 @@ export function Ask({ id }: { id?: string }) {
     );
 
   return (
-    <Page width="read" className={cx("min-h-full", messages && !missing && "pb-0!")}>
+    <Page crumb={crumb} className={cx("min-h-full", messages && !missing && "pb-0!")}>
       {header}
       {main}
     </Page>

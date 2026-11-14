@@ -348,7 +348,7 @@ function summary(set: SetDetail): string {
 
 function SetSkeleton() {
   return (
-    <Page>
+    <Page crumb={undefined}>
       <EntityHeaderSkeleton />
       <RowSkeleton rows={8} rank />
     </Page>
@@ -378,7 +378,7 @@ export function SetPage({ id }: { id: number }) {
 
   if (q.isError)
     return q.error instanceof ApiError && q.error.status === 404 ? (
-      <Page>
+      <Page crumb={null}>
         <PageHeader title="Set" />
         <EmptyState
           size="page"
@@ -392,7 +392,7 @@ export function SetPage({ id }: { id: number }) {
         />
       </Page>
     ) : (
-      <Page>
+      <Page crumb={null}>
         <PageHeader title="Set" />
         <ErrorState error={q.error} onRetry={() => q.refetch()} />
       </Page>
@@ -407,7 +407,7 @@ export function SetPage({ id }: { id: number }) {
   const playing = session?.status === "active" && session.set?.id === set.id ? session : null;
 
   return (
-    <Page>
+    <Page crumb={set.title}>
       <div className="grid gap-10 md:gap-12 lg:grid-cols-[minmax(0,1fr)_minmax(0,360px)]">
         <div className="flex min-w-0 flex-col gap-10 md:gap-12">
           <EntityHeader

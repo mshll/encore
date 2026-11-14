@@ -210,7 +210,7 @@ export function Playlists() {
   const d = q.data;
   const noneOn = d ? d.items.every((p) => !p.enabled) : false;
   return (
-    <Page width="read">
+    <Page>
       <PageHeader title="For you">
         <TabNav items={FOR_YOU_TABS} label="For you" />
       </PageHeader>
@@ -387,7 +387,7 @@ function PlaylistDetail({ kind }: { kind: LivingKind }) {
 
   if (q.isError)
     return (
-      <Page>
+      <Page crumb={null}>
         <PageHeader title="Playlist" />
         <ErrorState error={q.error} onRetry={() => q.refetch()} />
       </Page>
@@ -398,7 +398,7 @@ function PlaylistDetail({ kind }: { kind: LivingKind }) {
   const shown = p.items.length ? p.items : p.preview;
   const gate = list.data?.spotify;
   return (
-    <Page>
+    <Page crumb={p.name}>
       <div className={SIDE_COLUMNS}>
         <div className="flex min-w-0 flex-col gap-10 md:gap-12">
           <EntityHeader
@@ -433,7 +433,7 @@ function PlaylistDetail({ kind }: { kind: LivingKind }) {
 export function PlaylistPage({ kind }: { kind: string }) {
   if (!isKind(kind))
     return (
-      <Page>
+      <Page crumb={null}>
         <PageHeader title="Playlist" />
         <EmptyState
           size="page"

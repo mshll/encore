@@ -51,14 +51,17 @@ export const byPlace = (place: NavPlace) => SURFACES.filter((s) => s.place === p
 export const PHONE_TABS = byPlace("listening");
 export const PHONE_MORE = SURFACES.filter((s) => s.place !== "listening");
 
-export const MUSIC_TABS = [
-  { path: "/music/artists", label: "Artists" },
-  { path: "/music/albums", label: "Albums" },
-  { path: "/music/songs", label: "Songs" },
+/** A tab under a surface. `owns` is the path prefix of the detail pages that sit under the tab in the breadcrumb trail. */
+export type SurfaceTab = { path: string; label: string; owns?: string };
+
+export const MUSIC_TABS: SurfaceTab[] = [
+  { path: "/music/artists", label: "Artists", owns: "/music/artist/" },
+  { path: "/music/albums", label: "Albums", owns: "/music/album/" },
+  { path: "/music/songs", label: "Songs", owns: "/music/song/" },
   { path: "/music/forgotten", label: "Forgotten" },
 ];
 
-export const PATTERN_TABS = [
+export const PATTERN_TABS: SurfaceTab[] = [
   { path: "/patterns/when", label: "When" },
   { path: "/patterns/eras", label: "Eras" },
   { path: "/patterns/taste", label: "Taste" },
@@ -66,13 +69,13 @@ export const PATTERN_TABS = [
   { path: "/patterns/places", label: "Places" },
 ];
 
-export const FOR_YOU_TABS = [
+export const FOR_YOU_TABS: SurfaceTab[] = [
   { path: "/for-you/picks", label: "Picks" },
   { path: "/for-you/releases", label: "Releases" },
-  { path: "/for-you/playlists", label: "Playlists" },
+  { path: "/for-you/playlists", label: "Playlists", owns: "/for-you/playlists/" },
 ];
 
-export const SETTINGS_TABS = [
+export const SETTINGS_TABS: SurfaceTab[] = [
   { path: "/settings/general", label: "General" },
   { path: "/settings/spotify", label: "Spotify" },
   { path: "/settings/claude", label: "Claude" },
@@ -80,3 +83,20 @@ export const SETTINGS_TABS = [
   { path: "/settings/jobs", label: "Jobs" },
   { path: "/settings/account", label: "Account" },
 ];
+
+const TABS: Record<string, SurfaceTab[]> = { music: MUSIC_TABS, patterns: PATTERN_TABS, "for-you": FOR_YOU_TABS, settings: SETTINGS_TABS };
+
+export type Crumb = { label: string; path: string };
+
+/**
+ * The levels above a page: its surface, then the tab that owns it. Null for a top-level page and for a tab of one,
+ * where the sidebar and the tab strip already say where you are.
+ */
+export function trailFor(location: string): Crumb[] | null {
+  const surface = SURFACES.find((s) => s.path !== "/" && s.match(location));
+  if (!surface || location === surface.path) return null;
+  const tabs = TABS[surface.id] ?? [];
+  if (tabs.some((t) => t.path === location)) return null;
+  const tab = tabs.find((t) => t.owns && location.startsWith(t.owns));
+  return [{ label: surface.label, path: surface.path }, ...(tab ? [{ label: tab.label, path: tab.path }] : [])];
+}

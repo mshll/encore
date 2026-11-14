@@ -95,7 +95,7 @@ export function Releases() {
   const d = q.data;
 
   return (
-    <Page width="read">
+    <Page>
       <PageHeader title="For you">
         <TabNav items={FOR_YOU_TABS} label="For you" />
       </PageHeader>
