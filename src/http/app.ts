@@ -35,6 +35,17 @@ export function createApp(deps: Deps) {
     await next();
   });
   app.onError((error, c) => errorResponse(c, error));
+  // Pages on an old address move to the public one. Other methods are served where they arrive, so webhooks and MCP
+  // clients still pointed at the old address keep working.
+  if (deps.config.redirectHosts.length > 0) {
+    app.use(async (c, next) => {
+      const url = new URL(c.req.url);
+      if ((c.req.method === "GET" || c.req.method === "HEAD") && deps.config.redirectHosts.includes(url.hostname.toLowerCase())) {
+        return c.redirect(`${deps.config.publicBaseUrl}${url.pathname}${url.search}`, 301);
+      }
+      await next();
+    });
+  }
   app.use("/s/*", async (c, next) => {
     await next();
     for (const [k, v] of Object.entries(PUBLIC_SHARE_HEADERS)) c.res.headers.set(k, v);

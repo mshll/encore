@@ -6,6 +6,7 @@ const schema = z.object({
   PORT: z.coerce.number().int().min(1).max(65535).default(8888),
   DATABASE_PATH: z.string().default("./data/encore.db"),
   PUBLIC_BASE_URL: z.url().default("http://localhost:8888"),
+  REDIRECT_HOSTS: z.string().default(""),
   SPOTIFY_REDIRECT_URI: z.url().optional(),
   SETUP_TOKEN: z.string().min(24, "must be at least 24 characters").optional(),
   SECRETS_KEY: z.string().min(32, "must be at least 32 characters").optional(),
@@ -21,6 +22,8 @@ export type Config = {
   port: number;
   databasePath: string;
   publicBaseUrl: string;
+  /** Old host names: page requests to them move permanently to the same path on `publicBaseUrl`. */
+  redirectHosts: string[];
   rpId: string;
   secureCookies: boolean;
   spotifyRedirectUri: string;
@@ -103,6 +106,7 @@ export function loadConfig(rawEnv: Record<string, string | undefined> = process.
     port: e.PORT,
     databasePath: e.DATABASE_PATH,
     publicBaseUrl: base.origin,
+    redirectHosts: e.REDIRECT_HOSTS.split(",").map((host) => host.trim().toLowerCase()).filter(Boolean),
     rpId: base.hostname,
     secureCookies: base.protocol === "https:",
     spotifyRedirectUri: e.SPOTIFY_REDIRECT_URI ?? `${base.origin}/callback`,

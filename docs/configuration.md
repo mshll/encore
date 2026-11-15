@@ -2,7 +2,7 @@
 
 Two kinds of configuration:
 
-- Boot config is env only, read once at start: `HOST`, `PORT`, `DATABASE_PATH`, `WEB_DIST`, `PUBLIC_BASE_URL`, `SPOTIFY_REDIRECT_URI`, `SETUP_TOKEN`, `SECRETS_KEY`, `JOBS_ENABLED`, `JOBS_DISABLED`, `LLM_PRICES`.
+- Boot config is env only, read once at start: `HOST`, `PORT`, `DATABASE_PATH`, `WEB_DIST`, `PUBLIC_BASE_URL`, `REDIRECT_HOSTS`, `SPOTIFY_REDIRECT_URI`, `SETUP_TOKEN`, `SECRETS_KEY`, `JOBS_ENABLED`, `JOBS_DISABLED`, `LLM_PRICES`.
 - Every other variable below is a setting. Settings live in the `settings` table and are edited in the dashboard (`GET`/`PATCH /api/settings`); services read them on each use, so a change applies without a restart. An env var of the same name, when set, overrides the stored value and locks the field in the dashboard. With no env var and nothing stored, the default applies.
 
 To move settings from env vars to the dashboard, use Save them here in Settings (`POST /api/settings/adopt-env`): it stores the current env values without changing them. Then remove those env vars and restart; the stored values apply from then on.
@@ -14,6 +14,7 @@ All env values are validated at boot (the process exits on invalid values). See 
 | Var | Default | Notes |
 | --- | --- | --- |
 | `PUBLIC_BASE_URL` | `http://localhost:8888` | Browser origin. Sets passkey RP ID, cookie `Secure` (https), and post-OAuth redirect |
+| `REDIRECT_HOSTS` | unset | Comma-separated old host names. GET and HEAD requests to them answer 301 to the same path on `PUBLIC_BASE_URL`; other methods are served there, so webhooks and MCP clients keep working. Passkeys belong to one host: after a move, add a new passkey on the new one |
 | `SPOTIFY_REDIRECT_URI` | `PUBLIC_BASE_URL/callback` | Must be registered in the Spotify app |
 | `SETUP_TOKEN` | unset | Min 24 chars. Needed to register the first passkey |
 | `SECRETS_KEY` | unset | Min 32 chars. Encrypts secrets stored from the dashboard |
