@@ -3,7 +3,6 @@ import { useState } from "react";
 import { useDigests, useLifetime, useLiving, useOnThisDay, useOverview, useStatus, useTimeSeries, useTimezone, useTopAlbums, useTopArtists, useTopTracks, useWeek } from "../api/queries";
 import type { Overview as OverviewData, Status, WeekSoFar } from "../api/types";
 import { artistPath, recapPath, songPath } from "../app/paths";
-import { useChat } from "../chat/state";
 import { DitherArea, DitherBars } from "../charts/Dither";
 import { InlineChange, InlinePair } from "../charts/Inline";
 import { periodTick, periodTitle } from "../charts/ticks";
@@ -15,14 +14,12 @@ import { useDesktop } from "../lib/useMedia";
 import { AppLink } from "../ui/AppLink";
 import { Artwork } from "../ui/Artwork";
 import { buttonClass } from "../ui/Button";
-import { useClaudeGate } from "../ui/ClaudeNotice";
-import { Composer } from "../ui/Composer";
 import { WaveformIcon } from "../ui/icons";
 import { Notice } from "../ui/Notice";
 import { Page, PageHeader, SIDE_COLUMNS, Section, dimWhile } from "../ui/Page";
 import { RangePicker, useRangeLabel } from "../ui/RangePicker";
 import { AlbumRow, ArtistRow, Row, RowList, RowSkeleton, TrackRow } from "../ui/Rows";
-import { Segmented, TabList, TabPanel, TabsRoot } from "../ui/Segmented";
+import { TabList, TabPanel, TabsRoot } from "../ui/Segmented";
 import { ChartSkeleton, Skeleton } from "../ui/Skeleton";
 import { StatStrip, type StatItem } from "../ui/Stat";
 import { EmptyState, ErrorState, FirstUseState } from "../ui/States";
@@ -328,46 +325,6 @@ function Top({ range, overview }: { range: Range; overview: OverviewData | undef
 
 const plural = (n: number, one: string, many: string) => `${fmtInt(n)} ${n === 1 ? one : many}`;
 
-/** One composer that routes to Ask or Sets: the page there starts the run, so its progress and result live where they belong. */
-function AskOrSet() {
-  const [text, setText] = useState("");
-  const [mode, setMode] = useState<"ask" | "set">("ask");
-  const gate = useClaudeGate({ needsSpotify: mode === "set" });
-  const chat = useChat();
-  const go = () => {
-    chat.show({ thread: null, mode, send: text.trim() });
-    setText("");
-  };
-  return (
-    <Composer
-      label={mode === "ask" ? "Ask about your listening" : "Describe a set"}
-      placeholder={mode === "ask" ? "Why did I stop playing…, what do I play when…" : "A late drive home, songs I finished at night, a few I’ve never heard"}
-      value={text}
-      onChange={setText}
-      onSubmit={go}
-      maxLength={mode === "ask" ? 1000 : 2000}
-      disabled={Boolean(gate.blocked)}
-      notice={gate.blocked ?? (mode === "set" ? gate.warning : null)}
-      footer={
-        <span className="flex items-center gap-3">
-          <span className="w-44 shrink-0">
-            <Segmented
-              label="Send to"
-              value={mode}
-              onChange={setMode}
-              options={[
-                { value: "ask", label: "Ask" },
-                { value: "set", label: "Make a set" },
-              ]}
-            />
-          </span>
-          {gate.spend && <span className="truncate phone:hidden">{gate.spend}</span>}
-        </span>
-      }
-    />
-  );
-}
-
 /** The playlists encore keeps, small: what is new in each (picks, releases) is its line. */
 function MadeForYou() {
   const q = useLiving();
@@ -391,22 +348,26 @@ function LatestRecap() {
   const recap = q.data?.items[0];
   if (!recap) return null;
   return (
-    <AppLink to={recapPath(recap.kind, recap.periodKey)} className="-mx-2 flex min-h-(--row-h) flex-col justify-center rounded-md px-2 py-1.5 transition-colors duration-150 hover:bg-fill">
+    <section aria-labelledby="latest-recap" className="flex min-w-0 flex-col gap-2">
+      <div className="flex min-h-(--control-h-sm) items-center">
+        <h2 id="latest-recap" className="font-medium text-secondary">
+          Latest recap
+        </h2>
+      </div>
+      <AppLink to={recapPath(recap.kind, recap.periodKey)} className="-mx-2 flex min-h-(--row-h) flex-col justify-center rounded-md px-2 py-1.5 transition-colors duration-150 hover:bg-fill">
       <span className="truncate text-primary">{recap.headline}</span>
       <span className="truncate text-caption text-secondary">{`${recap.title} · ${fmtAgo(recap.createdAt)}`}</span>
-    </AppLink>
+      </AppLink>
+    </section>
   );
 }
 
-/** What to play next, after the stats: the playlists, one composer for Ask or Sets, the latest recap. */
+/** What to play next, after the stats: the playlists and the latest recap. Questions go to the chat panel. */
 function PlayNext() {
   return (
     <div className={SIDE_COLUMNS}>
       <MadeForYou />
-      <div className="flex min-w-0 flex-col gap-3">
-        <AskOrSet />
-        <LatestRecap />
-      </div>
+      <LatestRecap />
     </div>
   );
 }
