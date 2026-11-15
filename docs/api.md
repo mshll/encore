@@ -1089,9 +1089,18 @@ Seams for other modules (`src/discord/`): `DiscordRegistry.addCommand({ definiti
 | `on_this_day` | `date?`, `limit?` |
 | `forgotten` | `days?`, `minListens?`, `limit?` |
 | `now_playing` | none |
-| `releases` | `status?` (`new`, `recent`), `days?` |
+| `releases` | `status?` (`new`, `recent`), `days?`, `includeSeen?` (default `false`), `includeReissues?` (default `false`) |
+| `mark_release_seen` | `ids` (release ids, album URIs or links) or `all: true` (every unseen release). `{ "marked": 2 }` |
+| `create_playlist` | `name`, `description?`, `public?` (default `false`), `tracks?`. `{ "id", "url", "added" }` |
+| `add_to_playlist` | `playlist` (id, URI or link), `tracks` (1-500). `{ "added", "alreadyInPlaylist" }` |
 | `play` | `uris` (1-50 track URIs) |
 | `add_to_queue` | `uri` |
+| `pause`, `resume`, `skip_next`, `skip_previous` | `device_id?` (default: the active device). `{ "ok": true }` |
+| `devices` | none. `{ "devices": [{ "id", "name", "type", "active", "restricted", "volume" }] }` |
+
+`tracks` takes track ids, `spotify:track` URIs, `open.spotify.com` track links, or song objects with a `uri`, so the `items` of `forgotten`, `top` or `history` can be passed as they are. Repeated tracks are sent once; `add_to_playlist` reads the playlist first and skips tracks it already holds. Tracks go to Spotify 100 per request.
+
+Spotify tools check the stored grant first: playlist tools need `playlist-modify-private` and `playlist-modify-public`, playback controls `user-modify-playback-state`, `devices` `user-read-playback-state`. A missing scope returns a tool error, `Re-authorize Encore to grant <scope>: connect Spotify again in encore Settings.`, without calling Spotify. No active device, Spotify Premium missing, and Spotify not connected or paused also return tool errors that say what to do. When a new playlist's tracks fail to add, the error names the playlist that was made.
 
 There are no library or playlist removal tools.
 
@@ -1112,7 +1121,7 @@ Codes and tokens are stored as SHA-256 hashes only. The redirect after consent c
 
 Session routes for the consent page and Settings (cookie, same-origin JSON writes like the rest of `/api`):
 
-- `GET /api/mcp/requests/:id`: `{ "clientName": "Claude", "redirectHost": "claude.ai", "loopback": false, "tools": { "read": ["overview", ...], "playback": ["play", "add_to_queue"] } }`. `clientName` is what the client registered, not verified. `loopback`: the redirect goes to this computer. `404 oauth_request_not_found` once expired or answered.
+- `GET /api/mcp/requests/:id`: `{ "clientName": "Claude", "redirectHost": "claude.ai", "loopback": false, "tools": { "read": ["overview", ...], "playback": ["play", ...], "write": ["create_playlist", "add_to_playlist", "mark_release_seen"] } }`. `clientName` is what the client registered, not verified. `loopback`: the redirect goes to this computer. `404 oauth_request_not_found` once expired or answered.
 - `POST /api/mcp/requests/:id` `{ "decision": "allow" | "deny" }`: `{ "redirectTo": "<redirect URI with code or error, state, iss>" }`. The page navigates there.
 - `GET /api/mcp/connections`: `{ "connections": [{ "id": 3, "clientName": "Claude", "redirectHost": "claude.ai", "connectedAt": "...", "lastUsedAt": "..." | null }] }`, newest first. One per allowed sign-in; `lastUsedAt` has one-minute resolution.
 - `DELETE /api/mcp/connections/:id`: `{ "disconnected": true }`. Deletes the connection and its tokens; the client must sign in again. `404` when unknown.

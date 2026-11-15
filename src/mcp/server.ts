@@ -8,27 +8,72 @@ import { forgotten, onThisDay } from "../analytics/recall";
 import { search } from "../analytics/search";
 import { topAlbums, topArtists, topTracks } from "../analytics/top";
 import type { Db } from "../db/client";
+import { MissingScopeError } from "../living/refresh";
+import { NoActiveDeviceError, PremiumRequiredError } from "../player/api";
 import { localTime } from "../plays/localTime";
-import { listReleases } from "../radar/radar";
+import { listReleases, markReleasesSeen } from "../radar/radar";
 import type { Services } from "../services";
 import type { SettingsSource } from "../settings/settings";
+import type { SpotifyClient } from "../spotify/client";
+import { SpotifyApiError, SpotifyBlockedError, SpotifyNotConfiguredError, SpotifyNotConnectedError } from "../spotify/errors";
+import { addToPlaylist, createPlaylist, PlaylistTracksError, playlistIdOf, trackUris } from "./playlists";
 
 /** What each tool can do, for the OAuth consent page. A test keeps it in step with the registered tools. */
 export const MCP_TOOLS = {
-  read: ["overview", "top", "history", "lookup", "on_this_day", "forgotten", "now_playing", "releases"],
-  playback: ["play", "add_to_queue"],
+  read: ["overview", "top", "history", "lookup", "on_this_day", "forgotten", "now_playing", "releases", "devices"],
+  playback: ["play", "add_to_queue", "pause", "resume", "skip_next", "skip_previous"],
+  write: ["create_playlist", "add_to_playlist", "mark_release_seen"],
 } as const;
 
-export type McpDeps = { db: Db; settings: SettingsSource; services: Services; now: () => number };
+export type McpDeps = { db: Db; settings: SettingsSource; services: Services; spotify: SpotifyClient; now: () => number };
+
+const PLAYLIST_SCOPES = ["playlist-modify-private", "playlist-modify-public"];
+const CONTROL_SCOPES = ["user-modify-playback-state"];
+const DEVICE_SCOPES = ["user-read-playback-state"];
 
 const day = z.string().regex(/^\d{4}-\d{2}-\d{2}$/).describe("YYYY-MM-DD, local time");
 const range = { from: day.optional(), to: day.optional() };
 const trackUri = z.string().regex(/^spotify:track:[A-Za-z0-9]{22}$/);
 
 const json = (value: unknown) => ({ content: [{ type: "text" as const, text: JSON.stringify(value) }] });
+const failure = (text: string) => ({ content: [{ type: "text" as const, text }], isError: true });
+const deviceId = z.string().min(1).max(100).optional().describe("A device id from the devices tool; default is the active device");
+const trackRefs = z
+  .array(z.union([z.string(), z.object({ uri: z.string().nullable().optional() }).passthrough()]))
+  .max(500)
+  .describe("Track ids, spotify:track URIs, open.spotify.com track links, or song objects with a uri (the items forgotten, top or history return)");
 
-export function createEncoreMcpServer({ db, settings, services, now }: McpDeps): McpServer {
+const reauthorize = (scopes: string) => `Re-authorize Encore to grant ${scopes}: connect Spotify again in encore Settings.`;
+
+/** What the person can do about a failed Spotify action, or null for an error that is not theirs to fix. */
+function spotifyFailure(error: unknown): string | null {
+  if (error instanceof MissingScopeError) return reauthorize(error.scope);
+  if (error instanceof NoActiveDeviceError) return "No active Spotify device. Open Spotify on a phone, computer or speaker and play something there, or pass device_id from the devices tool.";
+  if (error instanceof PremiumRequiredError) return "Spotify Premium is required to control playback.";
+  if (error instanceof SpotifyNotConnectedError || error instanceof SpotifyNotConfiguredError) return "Spotify is not connected. Connect it in encore Settings.";
+  if (error instanceof SpotifyBlockedError) return `Spotify asked encore to pause its calls until ${new Date(error.blockedUntil).toISOString()}. Try again after that.`;
+  if (error instanceof SpotifyApiError && error.status === 403 && /scope/i.test(error.message)) return reauthorize("the missing Spotify permission");
+  return null;
+}
+
+export function createEncoreMcpServer({ db, settings, services, spotify, now }: McpDeps): McpServer {
   const server = new McpServer({ name: "encore", version: "1.0.0" });
+
+  async function spotifyAction(scopes: string[], action: () => Promise<unknown>) {
+    const missing = scopes.filter((scope) => !spotify.hasScope(scope));
+    if (missing.length) return failure(reauthorize(missing.join(" and ")));
+    try {
+      return json(await action());
+    } catch (error) {
+      if (error instanceof PlaylistTracksError) {
+        const cause = error.cause instanceof Error ? error.cause.message : String(error.cause);
+        return failure(`${error.message}: ${spotifyFailure(error.cause) ?? cause}`);
+      }
+      const text = spotifyFailure(error);
+      if (text === null) throw error;
+      return failure(text);
+    }
+  }
 
   server.registerTool(
     "overview",
@@ -107,29 +152,96 @@ export function createEncoreMcpServer({ db, settings, services, now }: McpDeps):
 
   server.registerTool(
     "releases",
-    { description: "Releases found by the release radar: unseen new ones, or all from the last N days.", inputSchema: z.object({ status: z.enum(["new", "recent"]).default("new"), days: z.number().int().min(1).max(365).default(30) }) },
-    async ({ status, days }) => {
+    {
+      description:
+        "Releases found by the release radar: new ones, or all from the last N days. Leaves out releases marked seen and re-releases (remasters, live recordings, anniversary and deluxe editions, re-recordings, compilations) unless asked.",
+      inputSchema: z.object({
+        status: z.enum(["new", "recent"]).default("new"),
+        days: z.number().int().min(1).max(365).default(30),
+        includeSeen: z.boolean().default(false),
+        includeReissues: z.boolean().default(false),
+      }),
+    },
+    async ({ status, days, includeSeen, includeReissues }) => {
       const since = new Date(now() - days * 86_400_000).toISOString().slice(0, 10);
-      return json(listReleases(db, { status, since, limit: 50 }));
+      return json(listReleases(db, { status, since, limit: 50, includeSeen, includeReissues }));
+    },
+  );
+
+  server.registerTool(
+    "mark_release_seen",
+    {
+      description: "Mark release radar items as seen, so releases no longer lists them. Pass ids (from releases), or all: true for every unseen release.",
+      inputSchema: z.object({ ids: z.array(z.string().min(1).max(200)).min(1).max(500).optional().describe("Release ids, spotify:album URIs or album links"), all: z.boolean().optional() }),
+    },
+    async ({ ids, all }) => {
+      if (Boolean(ids) === Boolean(all)) return failure("Pass either ids or all: true.");
+      const target = ids ? ids.map((id) => id.trim().match(/([A-Za-z0-9]{22})(?:[/?#].*)?$/)?.[1] ?? id) : "all";
+      return json({ marked: markReleasesSeen(db, target, now()) });
+    },
+  );
+
+  server.registerTool(
+    "create_playlist",
+    {
+      description: "Create a Spotify playlist, private unless public is true, optionally with tracks. Returns its id and URL.",
+      inputSchema: z.object({
+        name: z.string().trim().min(1).max(100),
+        description: z.string().max(300).default(""),
+        public: z.boolean().default(false),
+        tracks: trackRefs.default([]),
+      }),
+    },
+    async ({ name, description, public: isPublic, tracks }) => {
+      const { uris, invalid } = trackUris(tracks);
+      if (invalid.length) return failure(`Not Spotify tracks: ${invalid.slice(0, 5).join(", ")}`);
+      return spotifyAction(PLAYLIST_SCOPES, () => createPlaylist(spotify, { name, description, public: isPublic, uris }));
+    },
+  );
+
+  server.registerTool(
+    "add_to_playlist",
+    {
+      description: "Add tracks to a Spotify playlist you own or collaborate on. Repeated tracks and tracks already in the playlist are skipped.",
+      inputSchema: z.object({ playlist: z.string().min(1).max(200).describe("Playlist id, spotify:playlist URI or link"), tracks: trackRefs.min(1) }),
+    },
+    async ({ playlist, tracks }) => {
+      const playlistId = playlistIdOf(playlist);
+      if (!playlistId) return failure(`Not a Spotify playlist: ${playlist}`);
+      const { uris, invalid } = trackUris(tracks);
+      if (invalid.length) return failure(`Not Spotify tracks: ${invalid.slice(0, 5).join(", ")}`);
+      return spotifyAction(PLAYLIST_SCOPES, () => addToPlaylist(spotify, playlistId, uris));
     },
   );
 
   server.registerTool(
     "play",
     { description: "Start playing one or more tracks on the active Spotify device. Replaces what is playing.", inputSchema: z.object({ uris: z.array(trackUri).min(1).max(50) }) },
-    async ({ uris }) => {
-      await services.player.play({ uris });
-      return json({ ok: true });
-    },
+    async ({ uris }) => spotifyAction(CONTROL_SCOPES, () => services.player.play({ uris }).then(() => ({ ok: true }))),
   );
 
   server.registerTool(
     "add_to_queue",
     { description: "Add a track to the Spotify playback queue.", inputSchema: z.object({ uri: trackUri }) },
-    async ({ uri }) => {
-      await services.player.addToQueue(uri);
-      return json({ ok: true });
-    },
+    async ({ uri }) => spotifyAction(CONTROL_SCOPES, () => services.player.addToQueue(uri).then(() => ({ ok: true }))),
+  );
+
+  const controls = [
+    ["pause", "Pause Spotify playback.", (id?: string) => services.player.pause(id)],
+    ["resume", "Resume Spotify playback where it was paused.", (id?: string) => services.player.resume(id)],
+    ["skip_next", "Skip to the next track.", (id?: string) => services.player.next(id)],
+    ["skip_previous", "Go back to the previous track.", (id?: string) => services.player.previous(id)],
+  ] as const;
+  for (const [name, description, command] of controls) {
+    server.registerTool(name, { description, inputSchema: z.object({ device_id: deviceId }) }, async ({ device_id }) =>
+      spotifyAction(CONTROL_SCOPES, () => command(device_id).then(() => ({ ok: true }))),
+    );
+  }
+
+  server.registerTool("devices", { description: "Spotify devices available for playback, and which one is active." }, async () =>
+    spotifyAction(DEVICE_SCOPES, async () => ({
+      devices: (await services.player.devices()).map((d) => ({ id: d.id, name: d.name, type: d.type, active: d.is_active, restricted: d.is_restricted, volume: d.volume_percent })),
+    })),
   );
 
   return server;

@@ -58,8 +58,16 @@ export class PlayerApi {
     return this.write("PUT", withDevice("/me/player/pause", deviceId));
   }
 
+  resume(deviceId?: string) {
+    return this.write("PUT", withDevice("/me/player/play", deviceId));
+  }
+
   next(deviceId?: string) {
     return this.write("POST", withDevice("/me/player/next", deviceId));
+  }
+
+  previous(deviceId?: string) {
+    return this.write("POST", withDevice("/me/player/previous", deviceId));
   }
 
   addToQueue(uri: string, deviceId?: string) {
