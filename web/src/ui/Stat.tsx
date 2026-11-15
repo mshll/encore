@@ -1,4 +1,4 @@
-import { Tabs } from "@base-ui/react/tabs";
+import { Tabs, TabsIndicator, TabsList, TabsPanel, TabsTab } from "@ui-sdk/react/tabs";
 import type { ReactNode } from "react";
 import { AnimatedNumber } from "./AnimatedNumber";
 import { cx } from "./cx";
@@ -69,22 +69,22 @@ export function StatStrip<T extends string>({
   children: ReactNode;
 }) {
   return (
-    <Tabs.Root value={value} onValueChange={(v) => onChange(v as T)} className="flex flex-col gap-4">
-      <Tabs.List aria-label={label} className="relative grid grid-cols-3 gap-x-2 md:flex md:gap-x-10">
+    <Tabs activation="manual" value={value} onValueChange={(v) => onChange(v as T)} className="flex flex-col gap-4">
+      <TabsList aria-label={label} className="relative grid grid-cols-3 gap-x-2 md:flex md:gap-x-10">
         {items.map((item) => (
-          <Tabs.Tab
+          <TabsTab
             key={item.id}
             value={item.id}
-            className="group flex min-w-0 flex-col items-start gap-0.5 pb-3 text-left outline-offset-4 [&>span:first-child]:transition-colors data-[active]:[&>span:first-child]:text-primary hover:[&>span:first-child]:text-primary"
+            className="group flex min-w-0 flex-col items-start gap-0.5 pb-3 text-left outline-offset-4 [&>span:first-child]:transition-colors data-[selected]:[&>span:first-child]:text-primary hover:[&>span:first-child]:text-primary"
           >
             <Figure item={item} />
-          </Tabs.Tab>
+          </TabsTab>
         ))}
-        <Tabs.Indicator className="absolute bottom-0 left-0 h-0.5 w-(--active-tab-width) translate-x-(--active-tab-left) rounded-full bg-chart-key transition-[translate,width] duration-300 ease-out motion-reduce:transition-none" />
-      </Tabs.List>
-      <Tabs.Panel value={value} keepMounted={false}>
+        <TabsIndicator className="absolute bottom-0 left-0 h-0.5 w-(--active-tab-width) translate-x-(--active-tab-left) rounded-full bg-chart-key transition-[translate,width] duration-300 ease-out motion-reduce:transition-none" />
+      </TabsList>
+      <TabsPanel value={value}>
         {children}
-      </Tabs.Panel>
-    </Tabs.Root>
+      </TabsPanel>
+    </Tabs>
   );
 }

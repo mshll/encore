@@ -1,4 +1,4 @@
-import { Checkbox as Base } from "@base-ui/react/checkbox";
+import { Checkbox as Root, CheckboxIndicator } from "@ui-sdk/react/checkbox";
 import { cx } from "./cx";
 import { Icon } from "./Icon";
 import { CheckIcon, MinusIcon } from "./icons";
@@ -23,11 +23,10 @@ export function Checkbox({
   className?: string;
 }) {
   return (
-    <Base.Root
+    <Root
       id={id}
-      checked={checked}
-      indeterminate={indeterminate}
-      onCheckedChange={onChange}
+      checked={indeterminate ? "indeterminate" : checked}
+      onCheckedChange={(next) => onChange(next === true)}
       aria-label={label}
       className={cx("group grid size-6 shrink-0 place-items-center rounded-sm outline-none phone:-m-2.5 phone:size-11", className)}
     >
@@ -37,10 +36,10 @@ export function Checkbox({
           "group-data-[checked]:bg-accent group-data-[indeterminate]:bg-accent group-focus-visible:shadow-[0_0_0_1.5px_var(--focus-ring)]",
         )}
       >
-        <Base.Indicator className="flex">
+        <CheckboxIndicator className="flex">
           <Icon icon={indeterminate ? MinusIcon : CheckIcon} />
-        </Base.Indicator>
+        </CheckboxIndicator>
       </span>
-    </Base.Root>
+    </Root>
   );
 }

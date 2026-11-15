@@ -24,7 +24,7 @@ function ModePicker() {
   const { mode, setMode } = useChat();
   return (
     <MenuRoot>
-      <MenuTrigger className="press -ml-0.5 flex h-7 items-center gap-1 rounded-md px-1.5 text-caption font-medium text-secondary transition-colors duration-150 hover:bg-fill hover:text-primary data-[popup-open]:bg-fill data-[popup-open]:text-primary phone:-my-2 phone:h-11">
+      <MenuTrigger className="press -ml-0.5 flex h-7 items-center gap-1 rounded-md px-1.5 text-caption font-medium text-secondary transition-colors duration-150 hover:bg-fill hover:text-primary data-[open]:bg-fill data-[open]:text-primary phone:-my-2 phone:h-11">
         {MODE_LABELS[mode]}
         <Icon icon={CaretDownIcon} className="text-tertiary" />
       </MenuTrigger>

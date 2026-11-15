@@ -1,5 +1,4 @@
-import { Toggle } from "@base-ui/react/toggle";
-import { ToggleGroup } from "@base-ui/react/toggle-group";
+import { Toggle, ToggleGroup } from "@ui-sdk/react/toggle";
 import { WEEKDAYS, WEEKDAYS_SHORT } from "../lib/format";
 import { cx } from "./cx";
 
@@ -27,7 +26,7 @@ export function WeekdayPicker({
       aria-label={label}
       aria-describedby={describedBy}
       value={value.map(String)}
-      onValueChange={(next: string[]) => onChange(next.map(Number).sort((a, b) => a - b))}
+      onValueChange={(next) => onChange(next.map(Number).sort((a, b) => a - b))}
       className="flex w-full max-w-sm gap-1 data-[disabled]:opacity-50"
     >
       {WEEKDAYS_SHORT.map((short, i) => (

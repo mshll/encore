@@ -1,20 +1,20 @@
-import { Menu as Base } from "@base-ui/react/menu";
+import { Menu, MenuContent, MenuItem as Item, MenuSeparator as Separator, MenuTrigger as Trigger } from "@ui-sdk/react/menu";
 import type { ComponentProps, ReactNode } from "react";
 import { iconButtonClass } from "./Button";
 import { cx } from "./cx";
 import { Icon, type IconGlyph } from "./Icon";
 import { DotsThreeIcon } from "./icons";
-import { MENU_ITEM, POPUP } from "./surfaces";
+import { LAYER, MENU_ITEM, POPUP } from "./surfaces";
 
-export const MenuRoot = Base.Root;
-export const MenuTrigger = Base.Trigger;
+export const MenuRoot = Menu;
+export const MenuTrigger = Trigger;
 
 /** The "more" button that opens a row's or a page's menu. `label` names what it is for ("More for Woods"). */
 export function MoreTrigger({ label, size = "sm", className }: { label: string; size?: "sm" | "md"; className?: string }) {
   return (
-    <Base.Trigger className={iconButtonClass({ size, className })} aria-label={label}>
+    <Trigger className={iconButtonClass({ size, className })} aria-label={label}>
       <Icon icon={DotsThreeIcon} size="md" />
-    </Base.Trigger>
+    </Trigger>
   );
 }
 
@@ -30,37 +30,51 @@ export function MenuPopup({
   className?: string;
 }) {
   return (
-    <Base.Portal>
-      <Base.Positioner side={side} align={align} sideOffset={6} collisionPadding={8} className="z-50">
-        <Base.Popup className={cx(POPUP, "flex max-h-(--available-height) min-w-52 flex-col overflow-y-auto p-1", className)}>{children}</Base.Popup>
-      </Base.Positioner>
-    </Base.Portal>
+    <MenuContent
+      container={LAYER}
+      side={side}
+      align={align}
+      sideOffset={6}
+      collisionPadding={8}
+      className={cx(POPUP, "flex max-h-(--available-height) min-w-52 flex-col overflow-y-auto p-1", className)}
+    >
+      {children}
+    </MenuContent>
   );
 }
 
 type ItemProps = { icon?: IconGlyph; danger?: boolean; children: ReactNode; hint?: ReactNode };
 
-export function MenuItem({ icon, danger, children, hint, className, ...props }: ItemProps & Omit<ComponentProps<typeof Base.Item>, "children">) {
+/** `onClick` runs for a click, Enter or Space alike. */
+export function MenuItem({
+  icon,
+  danger,
+  children,
+  hint,
+  className,
+  onClick,
+  ...props
+}: ItemProps & { onClick?: () => void } & Omit<ComponentProps<typeof Item>, "children" | "onClick" | "onSelect">) {
   return (
-    <Base.Item className={cx(MENU_ITEM, danger && "text-danger", className)} {...props}>
+    <Item className={cx(MENU_ITEM, danger && "text-danger", className)} onSelect={onClick} {...props}>
       {icon && <Icon icon={icon} className={danger ? "" : "text-secondary"} />}
       <span className="min-w-0 flex-1 truncate">{children}</span>
       {hint && <span className="text-caption text-tertiary">{hint}</span>}
-    </Base.Item>
+    </Item>
   );
 }
 
-export function MenuLinkItem({ icon, children, className, ...props }: ItemProps & Omit<ComponentProps<typeof Base.LinkItem>, "children">) {
+export function MenuLinkItem({ icon, children, className, href, target, rel }: Omit<ItemProps, "danger" | "hint"> & { className?: string; href: string; target?: string; rel?: string }) {
   return (
-    <Base.LinkItem className={cx(MENU_ITEM, className)} {...props}>
+    <Item className={cx(MENU_ITEM, className)} render={<a href={href} target={target} rel={rel} />}>
       {icon && <Icon icon={icon} className="text-secondary" />}
       <span className="min-w-0 flex-1 truncate">{children}</span>
-    </Base.LinkItem>
+    </Item>
   );
 }
 
 export function MenuSeparator() {
-  return <Base.Separator className="mx-1 my-1 h-px bg-line" />;
+  return <Separator className="mx-1 my-1 h-px bg-line" />;
 }
 
 export function MenuLabel({ children }: { children: ReactNode }) {

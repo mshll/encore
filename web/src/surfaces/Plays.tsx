@@ -106,7 +106,7 @@ function DesktopRow({ item, timezone, columns, style, home }: { item: HistoryIte
     ending: skipLabel(item) && <span className="text-secondary">{skipLabel(item)}</span>,
     where: <span className="truncate text-secondary">{where(item, home)}</span>,
     actions: song ? (
-      <span className="flex justify-end can-hover:opacity-0 transition-opacity duration-150 group-hover:opacity-100 group-focus-within:opacity-100 has-[[data-popup-open]]:opacity-100">
+      <span className="flex justify-end can-hover:opacity-0 transition-opacity duration-150 group-hover:opacity-100 group-focus-within:opacity-100 has-[[data-open]]:opacity-100">
         <IconButton icon={PlayIcon} label={`Play ${song.name}`} size="sm" onClick={() => playback.play([song.uri])} />
         <SongMenu song={song} />
       </span>

@@ -124,7 +124,7 @@ The full list, with defaults: [docs/configuration.md](docs/configuration.md). Th
 
 ## Development
 
-Stack: Bun, TypeScript, Hono, SQLite (bun:sqlite with Drizzle), passkeys through SimpleWebAuthn. The UI in `web/` is Vite, React, Tailwind, Base UI and Phosphor icons, with halftone charts drawn by a vendored dither kit.
+Stack: Bun, TypeScript, Hono, SQLite (bun:sqlite with Drizzle), passkeys through SimpleWebAuthn. The UI in `web/` is Vite, React, Tailwind, UI SDK and Phosphor icons, with halftone charts drawn by a vendored dither kit.
 
 ```sh
 bun install

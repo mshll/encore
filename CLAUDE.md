@@ -30,6 +30,6 @@ Self-hosted, single-user Spotify dashboard. Read [README.md](README.md) for setu
 
 - Backend: Bun, Hono, bun:sqlite with Drizzle. Analytics are pure functions in `src/analytics`. Routes stay thin.
 - Long Claude runs (picks, sets, ask) are owned by the server (`src/http/runs.ts`). The client follows them with `web/src/lib/useRun.ts`; leaving a page stops listening, not the run. Only Cancel stops it.
-- UI: `web/` (Vite, React 19, Tailwind, Base UI, Phosphor icons, TanStack Query). Design rules, tokens and the information architecture live in [DESIGN.md](DESIGN.md). Types for API responses live in `web/src/api/types.ts`; keep them in step with `docs/api.md`.
+- UI: `web/` (Vite, React 19, Tailwind, UI SDK, Phosphor icons, TanStack Query). Design rules, tokens and the information architecture live in [DESIGN.md](DESIGN.md). Types for API responses live in `web/src/api/types.ts`; keep them in step with `docs/api.md`.
 - The Content Security Policy allows no inline scripts and no third-party script origins.
 - Update `docs/api.md` in the same commit as any API change.

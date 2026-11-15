@@ -1,6 +1,6 @@
-import { Toast } from "@base-ui/react/toast";
+import { createToaster } from "@ui-sdk/react/toast";
 
-export const toastManager = Toast.createToastManager();
+export const toaster = createToaster();
 
 export type ToastTone = "info" | "problem";
 export type ToastAction = { label: string; onClick: () => void };
@@ -13,22 +13,13 @@ const ACTION_MS = 8000;
  * showing. Info goes after 4 s, a toast with an action (Undo) after 8 s, a problem stays until dismissed.
  * Hover, focus or a finger on the toast pauses the timer.
  */
-export function showToast(message: string, tone: ToastTone = "info", action?: ToastAction) {
-  toastManager.close();
-  const id = toastManager.add({
+export function showToast(message: string, tone: ToastTone = "info", action?: ToastAction): string {
+  toaster.dismiss();
+  return toaster({
     title: message,
-    type: tone,
-    priority: tone === "problem" ? "high" : "low",
-    timeout: tone === "problem" ? 0 : action ? ACTION_MS : INFO_MS,
-    actionProps: action
-      ? {
-          children: action.label,
-          onClick: () => {
-            toastManager.close(id);
-            action.onClick();
-          },
-        }
-      : undefined,
+    type: tone === "problem" ? "error" : "info",
+    priority: tone === "problem" ? "assertive" : "polite",
+    duration: tone === "problem" ? Infinity : action ? ACTION_MS : INFO_MS,
+    action: action ? { label: action.label, dismiss: true, onAction: () => action.onClick() } : undefined,
   });
-  return id;
 }

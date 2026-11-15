@@ -5,7 +5,6 @@ import { useDesktop } from "../lib/useMedia";
 import { showToast } from "../lib/toast";
 import { PlayerBar } from "../player/PlayerBar";
 import { Toaster } from "../ui/Toast";
-import { TooltipProvider } from "../ui/Tooltip";
 import { useDockCollapse } from "./dock";
 import { useSoftKeyboard } from "./keyboard";
 import { PhoneNav } from "./PhoneNav";
@@ -118,70 +117,68 @@ export function Shell({ children }: { children: ReactNode }) {
   useShortcuts(useCallback(() => setPaletteOpen((o) => !o), []));
 
   return (
-    <TooltipProvider delay={500}>
-      <Toaster>
-        <ScrollContext.Provider value={main}>
-          <ChatProvider open={side === "chat"} onOpenChange={setChatOpen}>
-          <a
-            href="#main"
-            className="fixed top-3 left-3 z-[80] -translate-y-[200%] rounded-md bg-overlay px-3 py-2 font-medium shadow-overlay focus-visible:translate-y-0"
-          >
-            Skip to content
-          </a>
-          {desktop ? (
-            <div className="grid h-dvh grid-cols-[var(--sidebar-w)_minmax(0,1fr)_auto] grid-rows-[minmax(0,1fr)_var(--player-h)] pr-[env(safe-area-inset-right)] pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)]">
-              <Sidebar onSearch={() => setPaletteOpen(true)} />
-              <main ref={main} id="main" tabIndex={-1} data-crop className="relative mt-(--inset) overflow-y-auto overscroll-contain rounded-xl bg-page shadow-panel outline-none">
-                <QueueOpener.Provider value={desktop ? () => setQueueOpen(true) : () => setSheetOpen(true)}>{children}</QueueOpener.Provider>
-              </main>
-              <div className={queueOpen || chatShown ? "mt-(--inset) mr-(--inset) ml-(--inset) min-h-0" : "w-(--inset)"}>
-                <Suspense fallback={null}>
-                  {queueOpen && <QueuePanel onClose={() => setQueueOpen(false)} />}
-                  {chatShown && <ChatPanel place="dock" />}
-                </Suspense>
-              </div>
-              <div className="col-span-3">
-                <PlayerBar queueOpen={queueOpen} onToggleQueue={() => setQueueOpen(!queueOpen)} />
-              </div>
+    <Toaster>
+      <ScrollContext.Provider value={main}>
+        <ChatProvider open={side === "chat"} onOpenChange={setChatOpen}>
+        <a
+          href="#main"
+          className="fixed top-3 left-3 z-[80] -translate-y-[200%] rounded-md bg-overlay px-3 py-2 font-medium shadow-overlay focus-visible:translate-y-0"
+        >
+          Skip to content
+        </a>
+        {desktop ? (
+          <div className="grid h-dvh grid-cols-[var(--sidebar-w)_minmax(0,1fr)_auto] grid-rows-[minmax(0,1fr)_var(--player-h)] pr-[env(safe-area-inset-right)] pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)]">
+            <Sidebar onSearch={() => setPaletteOpen(true)} />
+            <main ref={main} id="main" tabIndex={-1} data-crop className="relative mt-(--inset) overflow-y-auto overscroll-contain rounded-xl bg-page shadow-panel outline-none">
+              <QueueOpener.Provider value={desktop ? () => setQueueOpen(true) : () => setSheetOpen(true)}>{children}</QueueOpener.Provider>
+            </main>
+            <div className={queueOpen || chatShown ? "mt-(--inset) mr-(--inset) ml-(--inset) min-h-0" : "w-(--inset)"}>
+              <Suspense fallback={null}>
+                {queueOpen && <QueuePanel onClose={() => setQueueOpen(false)} />}
+                {chatShown && <ChatPanel place="dock" />}
+              </Suspense>
             </div>
-          ) : (
-            <div className="group/shell relative top-(--app-top,0px) h-(--app-h,100dvh) overflow-hidden bg-page">
-              {/* Under the chat sheet the page is out of reach; it hides once the sheet has slid over it, and shows while the sheet is dragged down. */}
-              <main
-                ref={main}
-                id="main"
-                tabIndex={-1}
-                data-crop
-                inert={chatShown}
-                className={cx(
-                  "relative h-full overflow-y-auto overscroll-contain pt-[env(safe-area-inset-top)] pr-[env(safe-area-inset-right)] pb-(--dock-h) pl-[env(safe-area-inset-left)] outline-none",
-                  chatShown &&
-                    "invisible transition-[visibility] delay-(--dur-modal) group-has-data-chat-dragging/shell:visible group-has-data-chat-dragging/shell:delay-0",
-                )}
-              >
-                <QueueOpener.Provider value={desktop ? () => setQueueOpen(true) : () => setSheetOpen(true)}>{children}</QueueOpener.Provider>
-              </main>
-              <PhoneNav onSearch={() => setPaletteOpen(true)} onOpenPlayer={() => setSheetOpen(true)} collapsed={dock.collapsed} onExpand={dock.expand} inert={chatShown} />
-              {chatShown && (
-                <Suspense fallback={null}>
-                  <ChatPanel place="sheet" />
-                </Suspense>
-              )}
-              {sheetLoaded && (
-                <Suspense fallback={null}>
-                  <NowPlayingSheet open={sheetOpen} onOpenChange={setSheetOpen} />
-                </Suspense>
-              )}
+            <div className="col-span-3">
+              <PlayerBar queueOpen={queueOpen} onToggleQueue={() => setQueueOpen(!queueOpen)} />
             </div>
-          )}
-          {paletteLoaded && (
-            <Suspense fallback={null}>
-              <CommandPalette open={paletteOpen} onOpenChange={setPaletteOpen} />
-            </Suspense>
-          )}
-          </ChatProvider>
-        </ScrollContext.Provider>
-      </Toaster>
-    </TooltipProvider>
+          </div>
+        ) : (
+          <div className="group/shell relative top-(--app-top,0px) h-(--app-h,100dvh) overflow-hidden bg-page">
+            {/* Under the chat sheet the page is out of reach; it hides once the sheet has slid over it, and shows while the sheet is dragged down. */}
+            <main
+              ref={main}
+              id="main"
+              tabIndex={-1}
+              data-crop
+              inert={chatShown}
+              className={cx(
+                "relative h-full overflow-y-auto overscroll-contain pt-[env(safe-area-inset-top)] pr-[env(safe-area-inset-right)] pb-(--dock-h) pl-[env(safe-area-inset-left)] outline-none",
+                chatShown &&
+                  "invisible transition-[visibility] delay-(--dur-modal) group-has-data-chat-dragging/shell:visible group-has-data-chat-dragging/shell:delay-0",
+              )}
+            >
+              <QueueOpener.Provider value={desktop ? () => setQueueOpen(true) : () => setSheetOpen(true)}>{children}</QueueOpener.Provider>
+            </main>
+            <PhoneNav onSearch={() => setPaletteOpen(true)} onOpenPlayer={() => setSheetOpen(true)} collapsed={dock.collapsed} onExpand={dock.expand} inert={chatShown} />
+            {chatShown && (
+              <Suspense fallback={null}>
+                <ChatPanel place="sheet" />
+              </Suspense>
+            )}
+            {sheetLoaded && (
+              <Suspense fallback={null}>
+                <NowPlayingSheet open={sheetOpen} onOpenChange={setSheetOpen} />
+              </Suspense>
+            )}
+          </div>
+        )}
+        {paletteLoaded && (
+          <Suspense fallback={null}>
+            <CommandPalette open={paletteOpen} onOpenChange={setPaletteOpen} />
+          </Suspense>
+        )}
+        </ChatProvider>
+      </ScrollContext.Provider>
+    </Toaster>
   );
 }

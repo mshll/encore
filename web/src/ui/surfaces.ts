@@ -1,11 +1,11 @@
-import type { RefObject } from "react";
-
 /**
- * Opened by touch, a sheet focuses itself rather than its first control, which Safari would draw a focus ring on.
- * A sheet opened from outside its Dialog.Trigger gets no open type, so a touch screen counts as touch unless a key opened it.
+ * A sheet opened from state, not its trigger, counts as opened from code, which focuses its first control. On a touch
+ * screen it focuses itself instead, as a tap on a trigger would, so Safari draws no focus ring and no keyboard opens.
  */
-export const focusSheetOnTouch = (sheet: RefObject<HTMLElement | null>) => (openType: string) =>
-  openType === "touch" || (openType !== "keyboard" && window.matchMedia("(pointer: coarse)").matches) ? sheet.current : true;
+export const sheetFocus = (): "content" | "auto" => (window.matchMedia("(pointer: coarse)").matches ? "content" : "auto");
+
+/** Popups render into body, so they inherit nothing from where their trigger sits. */
+export const LAYER = document.body;
 
 /** Shared class strings for floating surfaces, so every menu, popover and select reads the same. */
 export const POPUP =
@@ -16,3 +16,6 @@ export const MENU_ITEM =
 
 export const BACKDROP =
   "fixed inset-0 z-50 bg-backdrop transition-opacity duration-200 ease-out data-[ending-style]:opacity-0 data-[starting-style]:opacity-0";
+
+/** A drawer sets its backdrop's opacity as it moves, so this one only gives the colour. */
+export const SHEET_BACKDROP = "fixed inset-0 bg-backdrop";

@@ -13,7 +13,7 @@ const VARIANT: Record<ButtonVariant, string> = {
   accent: "bg-accent text-on-accent hover:bg-accent-hover",
   secondary: "bg-fill-raised text-primary shadow-control hover:bg-fill-raised-hover",
   ghost:
-    `text-secondary hover:bg-fill-hover hover:text-primary data-[popup-open]:bg-fill-hover data-[popup-open]:text-primary ${PRESSED}`,
+    `text-secondary hover:bg-fill-hover hover:text-primary data-[open]:bg-fill-hover data-[open]:text-primary ${PRESSED}`,
   danger: "bg-danger-subtle text-danger hover:bg-fill-hover",
   standout: "text-on-standout hover:bg-fill-on-standout",
 };
@@ -24,7 +24,7 @@ const SIZE: Record<ButtonSize, string> = {
   lg: "h-(--control-h-lg) gap-2 px-4 text-body",
 };
 
-/** Class string for anything that should look like a button: links, Base UI triggers. */
+/** Class string for anything that should look like a button: links, UI SDK triggers. */
 export function buttonClass({ variant = "secondary", size = "md", className }: { variant?: ButtonVariant; size?: ButtonSize; className?: string } = {}) {
   return cx(
     "press inline-flex max-w-full shrink-0 items-center justify-center rounded-md font-medium tracking-[-0.005em] whitespace-nowrap",

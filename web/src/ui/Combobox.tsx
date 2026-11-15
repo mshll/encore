@@ -1,8 +1,8 @@
-import { Combobox as Base } from "@base-ui/react/combobox";
+import { Combobox as Root, ComboboxContent, ComboboxEmpty, ComboboxInput, ComboboxItem, ComboboxItemIndicator, ComboboxList, ComboboxTrigger } from "@ui-sdk/react/combobox";
 import { cx } from "./cx";
 import { Icon } from "./Icon";
 import { CaretDownIcon, CheckIcon } from "./icons";
-import { MENU_ITEM, POPUP } from "./surfaces";
+import { LAYER, MENU_ITEM, POPUP } from "./surfaces";
 
 export type ComboboxOption = { value: string; label: string; detail?: string };
 
@@ -26,14 +26,12 @@ export function Combobox({
   emptyText?: string;
   "aria-describedby"?: string;
 }) {
-  const selected = options.find((o) => o.value === value) ?? null;
   return (
-    <Base.Root
+    <Root
       items={options}
-      value={selected}
-      onValueChange={(next) => next && onChange(next.value)}
-      itemToStringLabel={(o) => o.label}
-      isItemEqualToValue={(a, b) => a.value === b.value}
+      value={value}
+      onValueChange={(next) => next && onChange(next)}
+      itemToLabel={(v) => options.find((o) => o.value === v)?.label ?? v}
     >
       <div
         className={cx(
@@ -42,7 +40,7 @@ export function Combobox({
           invalid && "shadow-[0_0_0_1px_var(--danger)]",
         )}
       >
-        <Base.Input
+        <ComboboxInput
           id={id}
           aria-describedby={describedBy}
           aria-invalid={invalid || undefined}
@@ -52,28 +50,32 @@ export function Combobox({
           spellCheck={false}
           className="h-full min-w-0 flex-1 bg-transparent text-body-sm outline-none placeholder:text-tertiary"
         />
-        <Base.Trigger aria-label="Show options" className="touch-target grid size-(--control-h-sm) shrink-0 place-items-center rounded-sm text-tertiary hover:text-primary">
+        <ComboboxTrigger aria-label="Show options" className="touch-target grid size-(--control-h-sm) shrink-0 place-items-center rounded-sm text-tertiary hover:text-primary">
           <Icon icon={CaretDownIcon} />
-        </Base.Trigger>
+        </ComboboxTrigger>
       </div>
-      <Base.Portal>
-        <Base.Positioner sideOffset={6} align="start" collisionPadding={8} className="z-50">
-          <Base.Popup className={cx(POPUP, "max-h-[min(var(--available-height),320px)] w-(--anchor-width) min-w-64 overflow-y-auto p-1")}>
-            <Base.Empty className="px-2.5 py-2 text-secondary empty:hidden">{emptyText}</Base.Empty>
-            <Base.List>
-              {(o: ComboboxOption) => (
-                <Base.Item key={o.value} value={o} className={cx(MENU_ITEM, "pr-2 data-[selected]:font-medium")}>
-                  <span className="min-w-0 flex-1 truncate">{o.label}</span>
-                  {o.detail && <span className="shrink-0 text-caption text-tertiary tabular">{o.detail}</span>}
-                  <Base.ItemIndicator className="flex text-accent-text">
-                    <Icon icon={CheckIcon} />
-                  </Base.ItemIndicator>
-                </Base.Item>
-              )}
-            </Base.List>
-          </Base.Popup>
-        </Base.Positioner>
-      </Base.Portal>
-    </Base.Root>
+      <ComboboxContent
+        container={LAYER}
+        sideOffset={6}
+        align="start"
+        collisionPadding={8}
+        className={cx(POPUP, "max-h-[min(var(--available-height),320px)] w-(--anchor-width) min-w-64 overflow-y-auto p-1")}
+      >
+        <ComboboxEmpty className="px-2.5 py-2 text-secondary">{emptyText}</ComboboxEmpty>
+        <ComboboxList>
+          {(state) =>
+            (state.items as ComboboxOption[]).map((o) => (
+              <ComboboxItem key={o.value} value={o.value} label={o.label} className={cx(MENU_ITEM, "pr-2 data-[selected]:font-medium")}>
+                <span className="min-w-0 flex-1 truncate">{o.label}</span>
+                {o.detail && <span className="shrink-0 text-caption text-tertiary tabular">{o.detail}</span>}
+                <ComboboxItemIndicator className="flex text-accent-text">
+                  <Icon icon={CheckIcon} />
+                </ComboboxItemIndicator>
+              </ComboboxItem>
+            ))
+          }
+        </ComboboxList>
+      </ComboboxContent>
+    </Root>
   );
 }

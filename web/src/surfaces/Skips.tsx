@@ -88,7 +88,7 @@ function SongRow({ song }: { song: SkipSplit["songs"][number] }) {
         <span className="tabular">{fmtPct(song.skipRate)}</span>
         <span className="text-caption text-secondary tabular">of {fmtInt(song.plays)}</span>
       </span>
-      <SongMenu song={ref} className="relative self-start md:can-hover:opacity-0 md:transition-opacity md:duration-150 md:group-hover:opacity-100 md:focus-visible:opacity-100 md:data-[popup-open]:opacity-100" />
+      <SongMenu song={ref} className="relative self-start md:can-hover:opacity-0 md:transition-opacity md:duration-150 md:group-hover:opacity-100 md:focus-visible:opacity-100 md:data-[open]:opacity-100" />
     </SongContext>
   );
 }

@@ -1,18 +1,16 @@
-import { Popover as Base } from "@base-ui/react/popover";
+import { Popover, PopoverClose as Close, PopoverContent, PopoverTrigger as Trigger } from "@ui-sdk/react/popover";
 import type { ReactNode } from "react";
 import { cx } from "./cx";
-import { POPUP } from "./surfaces";
+import { LAYER, POPUP } from "./surfaces";
 
-export const PopoverRoot = Base.Root;
-export const PopoverTrigger = Base.Trigger;
-export const PopoverClose = Base.Close;
+export const PopoverRoot = Popover;
+export const PopoverTrigger = Trigger;
+export const PopoverClose = Close;
 
 export function PopoverPopup({ children, align = "end", className }: { children: ReactNode; align?: "start" | "center" | "end"; className?: string }) {
   return (
-    <Base.Portal>
-      <Base.Positioner sideOffset={6} align={align} collisionPadding={8} className="z-50">
-        <Base.Popup className={cx(POPUP, "max-h-(--available-height) overflow-y-auto", className)}>{children}</Base.Popup>
-      </Base.Positioner>
-    </Base.Portal>
+    <PopoverContent container={LAYER} sideOffset={6} align={align} collisionPadding={8} className={cx(POPUP, "max-h-(--available-height) overflow-y-auto", className)}>
+      {children}
+    </PopoverContent>
   );
 }
