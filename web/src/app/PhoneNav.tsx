@@ -1,45 +1,125 @@
 import { Dialog } from "@base-ui/react/dialog";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { useLocation } from "wouter";
 import { useChat } from "../chat/state";
+import { MiniPlayer } from "../player/PlayerBar";
 import { AppLink } from "../ui/AppLink";
+import { PRESSED } from "../ui/Button";
 import { cx } from "../ui/cx";
 import { Icon } from "../ui/Icon";
 import { ChatCircleTextIcon, DotsThreeIcon, MagnifyingGlassIcon } from "../ui/icons";
 import { BACKDROP, focusSheetOnTouch } from "../ui/surfaces";
 import { PHONE_MORE, PHONE_TABS } from "./nav";
 
-const TAB = "press flex h-full flex-1 flex-col items-center justify-center gap-0.5 text-label font-medium";
+const TAB = "press relative flex h-full flex-1 flex-col items-center justify-center gap-0.5 rounded-full text-label font-medium text-primary";
+const MOVE = "duration-(--dur-move) ease-(--ease-move)";
+const MORE = { label: "More", icon: DotsThreeIcon };
 
-/** Phone: four listening tabs, Chat and More. More opens a sheet with search and every other surface. A tab shows its page, so it closes the chat. */
-export function PhoneNav({ onSearch }: { onSearch: () => void }) {
+/** The tab the route belongs to: a tab's index, the More slot for a page reached from More, or none (an unknown page). */
+function useCurrentTab(location: string) {
+  const index = PHONE_TABS.findIndex((s) => s.match(location));
+  const tab = PHONE_TABS[index];
+  if (tab) return { index, surface: tab };
+  const more = PHONE_MORE.find((s) => s.match(location));
+  return more ? { index: PHONE_TABS.length, surface: more } : { index: -1, surface: MORE };
+}
+
+/**
+ * Phone: a floating dock over the page. A glass pill holds Home, Plays, Music and More, with the current tab on a soft
+ * capsule; the round Chat button sits beside it, the mini player above. Scrolling down collapses the pill to the
+ * current tab's icon and moves the mini player between it and Chat. More opens a sheet with search and every other
+ * surface. A tab shows its page, so it closes the chat.
+ */
+export function PhoneNav({ onSearch, onOpenPlayer, collapsed, onExpand, inert }: { onSearch: () => void; onOpenPlayer: () => void; collapsed: boolean; onExpand: () => void; inert: boolean }) {
   const [location] = useLocation();
   const [open, setOpen] = useState(false);
   const sheet = useRef<HTMLDivElement>(null);
   const chat = useChat();
   const chatOpen = chat.open && !location.startsWith("/ask");
-  const moreActive = !chatOpen && PHONE_MORE.some((s) => s.match(location));
+  const current = useCurrentTab(location);
+  const chatButton = useRef<HTMLButtonElement>(null);
+  const openedAt = useRef<string | null>(null);
+  useEffect(() => {
+    if (chatOpen) {
+      openedAt.current = location;
+      return;
+    }
+    if (openedAt.current === location) chatButton.current?.focus({ preventScroll: true });
+    openedAt.current = null;
+  }, [chatOpen, location]);
+
   return (
     <>
-      <nav aria-label="Main" className="flex h-(--tabbar-h) bg-shell pr-[env(safe-area-inset-right)] pl-[env(safe-area-inset-left)] hairline-t">
-        {PHONE_TABS.map((s) => {
-          const active = !chatOpen && s.match(location);
-          return (
-            <AppLink key={s.id} to={s.path} onClick={chat.close} aria-current={active ? "page" : undefined} className={cx(TAB, active ? "text-primary" : "text-tertiary")}>
-              <Icon icon={s.icon} size="md" fill={active} />
-              <span className="text-center">{s.label}</span>
-            </AppLink>
-          );
-        })}
-        <button type="button" aria-pressed={chatOpen} onClick={chat.toggle} className={cx(TAB, chatOpen ? "text-primary" : "text-tertiary")}>
-          <Icon icon={ChatCircleTextIcon} size="md" fill={chatOpen} />
-          <span className="text-center">Chat</span>
+      <div
+        data-dock
+        data-collapsed={collapsed || undefined}
+        inert={inert}
+        className="group/dock absolute right-[calc(var(--gutter)+env(safe-area-inset-right,0px))] bottom-(--dock-bottom) left-[calc(var(--gutter)+env(safe-area-inset-left,0px))] pointer-events-none z-20 h-(--tabbar-h) *:pointer-events-auto [--pill-w:calc(100vw-2*var(--gutter)-env(safe-area-inset-left,0px)-env(safe-area-inset-right,0px)-var(--tabbar-h)-var(--dock-gap))] in-data-keyboard-open:hidden"
+      >
+        <MiniPlayer
+          onOpen={onOpenPlayer}
+          className={cx(
+            "absolute right-0 bottom-[calc(var(--tabbar-h)+var(--dock-gap))] left-0 h-(--mini-player-h) transition-[left,right,bottom,height]",
+            "group-data-collapsed/dock:right-[calc(var(--tabbar-h-collapsed)+var(--dock-gap))] group-data-collapsed/dock:bottom-0 group-data-collapsed/dock:left-[calc(var(--tabbar-h-collapsed)+var(--dock-gap))] group-data-collapsed/dock:h-(--tabbar-h-collapsed)",
+            MOVE,
+          )}
+        />
+        <nav
+          aria-label="Main"
+          className={cx(
+            "glass absolute bottom-0 left-0 h-(--tabbar-h) w-(--pill-w) overflow-hidden rounded-full shadow-overlay transition-[width,height]",
+            "group-data-collapsed/dock:h-(--tabbar-h-collapsed) group-data-collapsed/dock:w-(--tabbar-h-collapsed)",
+            MOVE,
+          )}
+        >
+          <div inert={collapsed} className={cx("absolute bottom-0 left-0 flex h-(--tabbar-h) w-(--pill-w) p-1 transition-opacity group-data-collapsed/dock:opacity-0", MOVE)}>
+            {current.index >= 0 && (
+              <span
+                aria-hidden
+                style={{ "--tab": current.index } as CSSProperties}
+                className="absolute inset-y-1 left-1 w-[calc((100%-8px)/4)] translate-x-[calc(var(--tab)*100%)] rounded-full bg-fill-active transition-transform duration-(--dur-swap) ease-out"
+              />
+            )}
+            {PHONE_TABS.map((s, i) => {
+              const active = i === current.index;
+              return (
+                <AppLink key={s.id} to={s.path} onClick={chat.close} aria-current={active ? "page" : undefined} className={TAB}>
+                  <Icon icon={s.icon} size="md" fill={active} />
+                  <span>{s.label}</span>
+                </AppLink>
+              );
+            })}
+            <button type="button" aria-haspopup="dialog" aria-current={current.index === PHONE_TABS.length || undefined} onClick={() => setOpen(true)} className={TAB}>
+              <Icon icon={DotsThreeIcon} size="md" />
+              <span>More</span>
+            </button>
+          </div>
+          <button
+            type="button"
+            inert={!collapsed}
+            aria-label={`${current.surface.label}, show tabs`}
+            onClick={onExpand}
+            className={cx("press absolute inset-0 flex items-center justify-center rounded-full text-primary opacity-0 transition-opacity group-data-collapsed/dock:opacity-100", MOVE)}
+          >
+            <Icon icon={current.surface.icon} size="md" fill={current.index >= 0 && current.index < PHONE_TABS.length} />
+          </button>
+        </nav>
+        <button
+          ref={chatButton}
+          type="button"
+          aria-label="Chat"
+          aria-pressed={chatOpen}
+          onClick={chat.toggle}
+          className={cx(
+            "press glass absolute right-0 bottom-0 flex size-(--tabbar-h) items-center justify-center rounded-full text-primary shadow-overlay transition-[width,height,color]",
+            "group-data-collapsed/dock:size-(--tabbar-h-collapsed)",
+            PRESSED,
+            MOVE,
+          )}
+        >
+          <Icon icon={ChatCircleTextIcon} size="lg" fill={chatOpen} />
         </button>
-        <button type="button" aria-haspopup="dialog" onClick={() => setOpen(true)} className={cx(TAB, moreActive ? "text-primary" : "text-tertiary")}>
-          <Icon icon={DotsThreeIcon} size="md" />
-          <span className="text-center">More</span>
-        </button>
-      </nav>
+      </div>
       <Dialog.Root open={open} onOpenChange={setOpen}>
         <Dialog.Portal>
           <Dialog.Backdrop className={BACKDROP} />

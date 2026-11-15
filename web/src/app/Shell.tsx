@@ -3,9 +3,10 @@ import { useLocation, useSearchParams } from "wouter";
 import { ChatProvider } from "../chat/ChatProvider";
 import { useDesktop } from "../lib/useMedia";
 import { showToast } from "../lib/toast";
-import { MiniPlayer, PlayerBar } from "../player/PlayerBar";
+import { PlayerBar } from "../player/PlayerBar";
 import { Toaster } from "../ui/Toast";
 import { TooltipProvider } from "../ui/Tooltip";
+import { useDockCollapse } from "./dock";
 import { useSoftKeyboard } from "./keyboard";
 import { PhoneNav } from "./PhoneNav";
 import { cx } from "../ui/cx";
@@ -87,8 +88,8 @@ function useRouteReset(main: RefObject<HTMLElement | null>) {
 
 /**
  * Desktop: sidebar on the shell ground, the page as an inset panel, the queue or the chat as a second panel on the
- * right (one at a time), the player docked across the bottom. Phone: the page edge to edge, a mini player and the tab
- * bar at the foot; the chat is a sheet over the page, above them.
+ * right (one at a time), the player docked across the bottom. Phone: the page edge to edge under a floating dock (tab
+ * bar, Chat, mini player); the chat is a full-screen sheet over both.
  */
 export function Shell({ children }: { children: ReactNode }) {
   const desktop = useDesktop();
@@ -113,6 +114,7 @@ export function Shell({ children }: { children: ReactNode }) {
   useSpotifyNotice();
   useRouteReset(main);
   useSoftKeyboard(!desktop, main);
+  const dock = useDockCollapse(main, !desktop);
   useShortcuts(useCallback(() => setPaletteOpen((o) => !o), []));
 
   return (
@@ -143,34 +145,28 @@ export function Shell({ children }: { children: ReactNode }) {
               </div>
             </div>
           ) : (
-            <div className="relative top-(--app-top,0px) flex h-(--app-h,100dvh) flex-col bg-page">
-              <div className="relative min-h-0 flex-1 bg-page">
-                {/* Under the chat sheet the page is out of reach; it hides once the sheet has slid over it. */}
-                <main
-                  ref={main}
-                  id="main"
-                  tabIndex={-1}
-                  data-crop
-                  inert={chatShown}
-                  className={cx(
-                    "relative h-full overflow-y-auto overscroll-contain pt-[env(safe-area-inset-top)] pr-[env(safe-area-inset-right)] pl-[env(safe-area-inset-left)] outline-none",
-                    chatShown && "invisible transition-[visibility] delay-(--dur-modal)",
-                  )}
-                >
-                  <QueueOpener.Provider value={desktop ? () => setQueueOpen(true) : () => setSheetOpen(true)}>{children}</QueueOpener.Provider>
-                </main>
-                {chatShown && (
-                  <Suspense fallback={null}>
-                    <ChatPanel place="sheet" />
-                  </Suspense>
+            <div className="group/shell relative top-(--app-top,0px) h-(--app-h,100dvh) overflow-hidden bg-page">
+              {/* Under the chat sheet the page is out of reach; it hides once the sheet has slid over it, and shows while the sheet is dragged down. */}
+              <main
+                ref={main}
+                id="main"
+                tabIndex={-1}
+                data-crop
+                inert={chatShown}
+                className={cx(
+                  "relative h-full overflow-y-auto overscroll-contain pt-[env(safe-area-inset-top)] pr-[env(safe-area-inset-right)] pb-(--dock-h) pl-[env(safe-area-inset-left)] outline-none",
+                  chatShown &&
+                    "invisible transition-[visibility] delay-(--dur-modal) group-has-data-chat-dragging/shell:visible group-has-data-chat-dragging/shell:delay-0",
                 )}
-              </div>
-              <div className="shrink-0 bg-shell pb-[env(safe-area-inset-bottom)] in-data-keyboard-open:hidden">
-                <div className="bg-page">
-                  <MiniPlayer onOpen={() => setSheetOpen(true)} />
-                </div>
-                <PhoneNav onSearch={() => setPaletteOpen(true)} />
-              </div>
+              >
+                <QueueOpener.Provider value={desktop ? () => setQueueOpen(true) : () => setSheetOpen(true)}>{children}</QueueOpener.Provider>
+              </main>
+              <PhoneNav onSearch={() => setPaletteOpen(true)} onOpenPlayer={() => setSheetOpen(true)} collapsed={dock.collapsed} onExpand={dock.expand} inert={chatShown} />
+              {chatShown && (
+                <Suspense fallback={null}>
+                  <ChatPanel place="sheet" />
+                </Suspense>
+              )}
               {sheetLoaded && (
                 <Suspense fallback={null}>
                   <NowPlayingSheet open={sheetOpen} onOpenChange={setSheetOpen} />

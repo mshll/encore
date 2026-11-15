@@ -39,7 +39,7 @@ export function Toaster({ children }: { children: React.ReactNode }) {
     <Toast.Provider toastManager={toastManager} limit={1}>
       {children}
       <Toast.Portal>
-        <Toast.Viewport className="fixed right-[max(16px,env(safe-area-inset-right))] bottom-[calc(var(--bottom-chrome)+12px)] left-[max(16px,env(safe-area-inset-left))] z-[70] mx-auto max-w-[420px] outline-none">
+        <Toast.Viewport className="fixed right-[max(16px,env(safe-area-inset-right))] bottom-[calc(var(--bottom-chrome)+12px)] left-[max(16px,env(safe-area-inset-left))] z-[70] transition-[bottom] duration-(--dur-move) ease-(--ease-move) mx-auto max-w-[420px] outline-none">
           <ToastList />
         </Toast.Viewport>
       </Toast.Portal>

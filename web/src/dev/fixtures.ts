@@ -10,7 +10,7 @@
                       a spent Claude budget, an unreadable stored key, long library plans, playlists and songs,
                       a finished setup
     ?fixture=untagged plays but no tagged songs (Patterns: Taste)
-    ?player=playing   a fake track and queue; player controls answer ok without calling Spotify
+    ?player=playing   a fake track and queue; player controls answer ok without calling Spotify (with ?fixture=worst, the longest names)
     ?dj=active        a DJ session playing from the newest set; starting and stopping one answer ok without calling Spotify
     ?run=running      every Claude run (picks, sets, ask) is working: resumes on load, streams steps, never ends (Ask: one visual,
                       text up to a block whose visual has not arrived, which holds its place)
@@ -904,7 +904,10 @@ window.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
   if (method === "GET" && failing.some((f) => path.startsWith(`/api/${f}`))) return json({ error: { code: "internal", message: "The database is locked by another process." } }, 500);
 
   if (player === "playing") {
-    if (path === "/api/player/now") return json({ ...PLAYING_NOW, fetchedAt: new Date().toISOString() });
+    if (path === "/api/player/now") {
+      const now = fixture === "worst" ? { ...PLAYING_NOW, track: { ...PLAYING_NOW.track, name: LONG_SONG, artist: LONG_ARTIST } } : PLAYING_NOW;
+      return json({ ...now, fetchedAt: new Date().toISOString() });
+    }
     if (path === "/api/player/queue") {
       const top = await realFetch("/api/stats/top/tracks?limit=8").then((r) => r.json() as Promise<{ items: Json[] }>);
       return json({ current: null, queue: top.items.map((s) => ({ uri: s.uri, name: s.name, artist: s.artist, albumArtUrl: s.albumArtUrl })) });

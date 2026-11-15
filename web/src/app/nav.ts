@@ -13,7 +13,7 @@ import {
   type IconGlyph,
 } from "../ui/icons";
 
-/** Where a surface sits in navigation: a sidebar group (the third sits under More on a phone), or the foot of the sidebar. */
+/** Where a surface sits in the sidebar: a group, or its foot. */
 export type NavPlace = "listening" | "play" | "secondary" | "foot";
 
 export type Surface = {
@@ -47,9 +47,11 @@ export const SURFACES: Surface[] = [
 
 export const byPlace = (place: NavPlace) => SURFACES.filter((s) => s.place === place);
 
-/** Phone tab bar: the listening surfaces; everything else sits in the More sheet. */
-export const PHONE_TABS = byPlace("listening");
-export const PHONE_MORE = SURFACES.filter((s) => s.place !== "listening");
+const PHONE_TAB_IDS = ["home", "plays", "music"];
+
+/** Phone tab bar: Home, Plays and Music; everything else, Patterns first, sits in the More sheet. */
+export const PHONE_TABS = SURFACES.filter((s) => PHONE_TAB_IDS.includes(s.id));
+export const PHONE_MORE = SURFACES.filter((s) => !PHONE_TAB_IDS.includes(s.id));
 
 /** A tab under a surface. `owns` holds the path prefixes of the detail pages that sit under the tab in the breadcrumb trail. */
 export type SurfaceTab = { path: string; label: string; owns?: string[] };

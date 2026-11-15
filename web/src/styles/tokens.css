@@ -17,6 +17,11 @@
   --surface-overlay: #ffffff;
   --surface-standout: #1f1f1f;
   --backdrop: #00000047;
+  /* Glass: the phone's floating tab bar, Chat button and mini player only (DESIGN.md, Phone dock). Opaque enough that
+     text-primary and text-on-glass-secondary keep AA over a black backdrop; solid where blur is off or unsupported. */
+  --surface-glass: #ffffffcc;
+  --surface-glass-solid: #ffffff;
+  --glass-filter: blur(16px) saturate(150%);
 
   /* Component fills: translucent, so they work on any surface. */
   --fill: #0000000d;
@@ -36,6 +41,7 @@
   --text-inverted: #ffffff;
   --text-on-standout: #eeeeee;
   --text-on-standout-secondary: #a5a5a5;
+  --text-on-glass-secondary: #525252;
 
   /* Lines. Structural lines are 0.5px. */
   --line: #0000001a;
@@ -79,8 +85,10 @@
   --panel-w: 360px;
   --chat-w: 400px;
   --player-h: 72px;
-  --tabbar-h: 56px;
-  --mini-player-h: 64px;
+  --tabbar-h: 60px;
+  --tabbar-h-collapsed: 48px;
+  --mini-player-h: 56px;
+  --dock-gap: 8px;
   --page-max: 1200px;
   --measure: 720px;
   --gutter: 32px;
@@ -109,6 +117,8 @@
   --surface-overlay: #1f1f1f;
   --surface-standout: #2a2a2a;
   --backdrop: #000000a6;
+  --surface-glass: #1f1f1fcc;
+  --surface-glass-solid: #1f1f1f;
 
   --fill: #ffffff12;
   --fill-hover: #ffffff1b;
@@ -125,6 +135,7 @@
   --text-inverted: #000000;
   --text-on-standout: #eeeeee;
   --text-on-standout-secondary: #a5a5a5;
+  --text-on-glass-secondary: #c2c2c2;
 
   --line: #ffffff1a;
   --line-subtle: #ffffff0d;
@@ -160,12 +171,20 @@
     --row-h-compact: 48px;
     --gutter: 20px;
     --inset: 0px;
-    --bottom-chrome: calc(var(--tabbar-h) + env(safe-area-inset-bottom, 0px));
+    /* The floating dock: its foot sits on the home indicator's safe area. --dock-h is its expanded height, which the
+       page reserves at its foot; --bottom-chrome follows it as it collapses on scroll. */
+    --dock-bottom: max(var(--gutter), env(safe-area-inset-bottom, 0px));
+    --dock-h: calc(var(--dock-bottom) + var(--tabbar-h));
+    --bottom-chrome: var(--dock-h);
   }
   :root:has([data-mini-player]) {
-    --bottom-chrome: calc(var(--tabbar-h) + var(--mini-player-h) + env(safe-area-inset-bottom, 0px));
+    --dock-h: calc(var(--dock-bottom) + var(--tabbar-h) + var(--dock-gap) + var(--mini-player-h));
+  }
+  :root[data-dock-collapsed] {
+    --bottom-chrome: calc(var(--dock-bottom) + var(--tabbar-h-collapsed));
   }
   :root[data-keyboard-open] {
+    --dock-h: 0px;
     --bottom-chrome: var(--keyboard-inset);
   }
 }
@@ -257,6 +276,7 @@
   --color-inverted: var(--text-inverted);
   --color-on-standout: var(--text-on-standout);
   --color-on-standout-secondary: var(--text-on-standout-secondary);
+  --color-on-glass-secondary: var(--text-on-glass-secondary);
 
   --color-line: var(--line);
   --color-line-subtle: var(--line-subtle);

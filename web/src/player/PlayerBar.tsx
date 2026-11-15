@@ -134,30 +134,35 @@ function ChatToggle() {
   );
 }
 
-/** Phone: a compact bar above the tab bar while something plays. Tapping it opens the full player. */
-export function MiniPlayer({ onOpen }: { onOpen: () => void }) {
+/**
+ * Phone: a glass pill in the dock while something plays: above the tab bar, or between the collapsed tab and Chat.
+ * Tapping it opens the full player.
+ */
+export function MiniPlayer({ onOpen, className }: { onOpen: () => void; className?: string }) {
   const now = usePlayerNow();
   const playback = usePlayback();
-  const progress = useProgress(now.data);
   const track = now.data?.track;
   if (!track) return null;
   const playing = Boolean(now.data?.playing);
   return (
-    <section aria-label="Player" data-mini-player className="relative mx-2 mb-2 overflow-hidden rounded-lg bg-overlay shadow-overlay">
-      <div className="flex h-14 items-center gap-1 pr-1 pl-2">
-        <button type="button" onClick={onOpen} className="flex h-full min-w-0 flex-1 items-center gap-3 text-left" aria-label={`Open player: ${track.name} by ${track.artist}`}>
-          <Artwork src={track.albumArtUrl} kind="song" box={40} />
-          <span className="flex min-w-0 flex-col">
-            <span className="truncate">{track.name}</span>
-            <span className="truncate text-caption text-secondary">{track.artist}</span>
-          </span>
-        </button>
-        <IconButton icon={playing ? PauseIcon : PlayIcon} label={playing ? "Pause" : "Play"} fill onClick={() => (playing ? playback.pause() : playback.resume())} />
-        <IconButton icon={SkipForwardIcon} label="Next" fill onClick={() => playback.next()} />
-      </div>
-      <span className="absolute inset-x-0 bottom-0">
-        <ProgressLine share={progress.share} className="h-0.5" />
-      </span>
+    <section aria-label="Player" data-mini-player className={cx("glass flex items-center gap-1 overflow-hidden rounded-full pr-1.5 pl-2 shadow-overlay group-data-collapsed/dock:pl-1.5", className)}>
+      <button type="button" onClick={onOpen} className="press flex h-full min-w-0 flex-1 items-center gap-3 text-left" aria-label={`Open player: ${track.name} by ${track.artist}`}>
+        <span className="size-10 shrink-0 transition-[width,height] duration-(--dur-move) ease-(--ease-move) group-data-collapsed/dock:size-9">
+          <Artwork src={track.albumArtUrl} kind="song" box="fill" />
+        </span>
+        <span className="flex min-w-0 flex-col">
+          <span className="truncate text-primary">{track.name}</span>
+          <span className="truncate text-caption text-on-glass-secondary group-data-collapsed/dock:hidden">{track.artist}</span>
+        </span>
+      </button>
+      <button
+        type="button"
+        aria-label={playing ? "Pause" : "Play"}
+        onClick={() => (playing ? playback.pause() : playback.resume())}
+        className="press flex size-11 shrink-0 items-center justify-center rounded-full text-primary transition-colors duration-(--dur-hover) hover:bg-fill-hover"
+      >
+        <Icon icon={playing ? PauseIcon : PlayIcon} size="md" fill />
+      </button>
     </section>
   );
 }
