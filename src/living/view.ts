@@ -8,6 +8,8 @@ import { currentItems, livingRow, livingRows, nextItems, WRITE_SCOPE, type Livin
 import { nextRefreshDay, type LivingRow } from "./schedule";
 
 const HISTORY = 30;
+/** Songs the list shows of each playlist. */
+const LIST_SONGS = 5;
 const iso = (ts: number | null) => (ts === null ? null : new Date(ts).toISOString());
 
 function lastChange(db: Db, row: LivingRow) {
@@ -24,12 +26,18 @@ function lastChange(db: Db, row: LivingRow) {
 }
 
 function summary(deps: LivingDeps, row: LivingRow) {
+  return withSongs(deps, row, 0).summary;
+}
+
+/** The playlist's summary and its first `songs` songs: what is in it now, else what a refresh would put in it. */
+function withSongs(deps: LivingDeps, row: LivingRow, songs: number) {
   const spec = LIVING[row.kind];
   const now = deps.now();
   const { timezone } = deps.settings.get();
   const live = row.removedAt === null ? row.playlistId : null;
   const next = nextItems(deps, row);
-  return {
+  const current = currentItems(deps.db, row.kind, live);
+  const summary = {
     kind: row.kind,
     name: spec.name,
     about: spec.about({ now, timezone }),
@@ -46,16 +54,20 @@ function summary(deps: LivingDeps, row: LivingRow) {
     checkedAt: iso(row.checkedAt),
     changedAt: iso(live ? lastChange(deps.db, row) : null),
     nextRefresh: row.enabled ? nextRefreshDay(spec.schedule, row.checkedAt, now, timezone) : null,
-    count: currentItems(deps.db, row.kind, live).length,
+    count: current.length,
     available: next.length,
   };
+  return { summary, songs: songs ? withArtwork(deps.db, (current.length ? current : next).slice(0, songs)) : [] };
 }
 
 export function livingList(deps: LivingDeps) {
   const { spotify } = deps;
   return {
     spotify: { connected: spotify.connected(), canWrite: spotify.hasScope(WRITE_SCOPE), canUploadCovers: spotify.hasScope("ugc-image-upload") },
-    items: livingRows(deps.db, deps.now()).map((row) => summary(deps, row)),
+    items: livingRows(deps.db, deps.now()).map((row) => {
+      const s = withSongs(deps, row, LIST_SONGS);
+      return { ...s.summary, songs: s.songs };
+    }),
   };
 }
 

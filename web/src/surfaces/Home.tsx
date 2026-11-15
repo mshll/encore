@@ -1,147 +1,123 @@
 import { useState } from "react";
 import { useLocation } from "wouter";
-import {
-  useDigests,
-  useLifetime,
-  useLiving,
-  useOnThisDay,
-  useOverview,
-  usePicks,
-  useRadar,
-  useSets,
-  useStatus,
-  useTimeSeries,
-  useTimezone,
-  useTopAlbums,
-  useTopArtists,
-  useTopTracks,
-} from "../api/queries";
-import type { Overview as OverviewData, Status } from "../api/types";
-import { recapPath, songPath } from "../app/paths";
-import { DitherArea } from "../charts/Dither";
-import { periodTick, periodTitle } from "../charts/ticks";
-import { addDays, daysBetween, todayIn } from "../lib/dates";
-import { fmtAgo, fmtCompact, fmtDay, fmtDayShort, fmtHour, fmtHours, fmtHoursValue, fmtInt, WEEKDAYS } from "../lib/format";
-import { periodFor, useRange, type Range } from "../lib/range";
-import { fillPeriods } from "../lib/series";
+import { useDigests, useLifetime, useLiving, useOnThisDay, useOverview, usePicks, useRadar, useStatus, useTopAlbums, useTopArtists, useTopTracks, useWeek } from "../api/queries";
+import type { Overview as OverviewData, Status, WeekSoFar } from "../api/types";
+import { artistPath, recapPath, songPath } from "../app/paths";
+import { DitherBars } from "../charts/Dither";
+import { InlineChange, InlinePair } from "../charts/Inline";
+import { fmtAgo, fmtCompact, fmtDay, fmtDayShort, fmtHour, fmtHours, fmtHoursValue, fmtInt, hoursParts, WEEKDAYS, WEEKDAYS_SHORT } from "../lib/format";
+import { useRange, type Range } from "../lib/range";
 import { useDesktop } from "../lib/useMedia";
-import { usePlayback } from "../player/playback";
 import { AppLink } from "../ui/AppLink";
 import { Artwork } from "../ui/Artwork";
-import { buttonClass, IconButton } from "../ui/Button";
+import { buttonClass } from "../ui/Button";
 import { useClaudeGate } from "../ui/ClaudeNotice";
 import { Composer } from "../ui/Composer";
-import { PlayIcon, WaveformIcon } from "../ui/icons";
+import { WaveformIcon } from "../ui/icons";
 import { Notice } from "../ui/Notice";
 import { Page, PageHeader, SIDE_COLUMNS, Section, dimWhile } from "../ui/Page";
 import { RangePicker } from "../ui/RangePicker";
-import { AlbumRow, ArtistRow, RowList, RowSkeleton, TrackRow } from "../ui/Rows";
+import { AlbumRow, ArtistRow, Row, RowList, RowSkeleton, TrackRow } from "../ui/Rows";
 import { Segmented, TabList, TabPanel, TabsRoot } from "../ui/Segmented";
 import { ChartSkeleton, Skeleton } from "../ui/Skeleton";
-import { StatStrip, type StatItem } from "../ui/Stat";
 import { EmptyState, ErrorState, FirstUseState } from "../ui/States";
 import { StartSessionButton } from "../ui/StartSessionButton";
+import { PickPreviews } from "./Picks";
 import { CoversSkeleton, PlaylistCovers } from "./Playlists";
 
-type Metric = "hours" | "plays" | "listens";
+const weekdayShort = (day: string) => WEEKDAYS_SHORT[(new Date(`${day}T00:00:00Z`).getUTCDay() + 6) % 7]!;
+const shortHours = (h: number) => (h * 60 < 60 ? `${Math.round(h * 60)} min` : `${fmtHoursValue(h)} h`);
+const hoursText = (h: number) => {
+  const p = hoursParts(h);
+  return `${p.value} ${p.unit}`;
+};
 
-const METRIC_LABEL: Record<Metric, string> = { hours: "Hours", plays: "Plays", listens: "Listens" };
-
-/** The range of the same length right before this one. All time has none. */
-function previousRange(range: Range): Range | null {
-  if (!range.from || !range.to) return null;
-  const days = daysBetween(range.from, range.to);
-  return { from: addDays(range.from, -days), to: addDays(range.from, -1) };
-}
-
-const change = (now: number, before: number | undefined) => (before === undefined || before === 0 ? null : (now - before) / before);
-
-function figures(o: OverviewData, before: OverviewData | undefined): StatItem<Metric>[] {
-  return [
-    {
-      id: "hours",
-      label: "Time listened",
-      value: fmtHoursValue(o.hours),
-      unit: "hours",
-      delta: change(o.hours, before?.hours),
-      compare: before ? `from ${fmtHoursValue(before.hours)}` : undefined,
-    },
-    { id: "plays", label: "Plays", value: fmtCompact(o.plays), delta: change(o.plays, before?.plays), compare: before ? `from ${fmtCompact(before.plays)}` : undefined },
-    {
-      id: "listens",
-      label: "Listens",
-      value: fmtCompact(o.listens),
-      delta: change(o.listens, before?.listens),
-      compare: before ? `from ${fmtCompact(before.listens)}` : undefined,
-    },
-  ];
-}
-
-function Chart({ metric, range }: { metric: Metric; range: Range }) {
-  const timezone = useTimezone();
-  const today = todayIn(timezone);
-  const lifetime = useLifetime();
-  const desktop = useDesktop();
-  const firstDay = lifetime.data?.firstPlayed?.slice(0, 10) ?? null;
-  const period = periodFor(range, firstDay, today);
-  const q = useTimeSeries(range, period);
-  const height = desktop ? 180 : 140;
-  if (q.isError) return <ErrorState error={q.error} onRetry={() => q.refetch()} title="Could not load the chart" />;
-  if (!q.data) return <Skeleton className="w-full" style={{ height }} />;
-  if (q.data.points.length === 0) return <EmptyState size="section" title="No plays in this range" />;
-  const unit = q.data.period === "day" ? "per day" : q.data.period === "week" ? "per week" : "per month";
-  const rows = fillPeriods(q.data.points, q.data.period, range, today, (p) => ({ period: p, hours: 0, plays: 0, listens: 0 })).map((p) => ({
-    period: p.period,
-    title: periodTitle(p.period, q.data.period),
-    value: p[metric],
-  }));
+/** This week so far against the usual, then each of the last 30 days. */
+function WeekLine({ week }: { week: WeekSoFar }) {
+  const { usual } = week;
+  if (week.hours === 0)
+    return <p className="text-secondary text-pretty">{usual && usual.hours > 0 ? `Nothing played yet. By now you usually have ${shortHours(usual.hours)}.` : "Nothing played yet."}</p>;
+  if (!usual) return <p className="text-secondary">{plural(week.listens, "play", "plays")}</p>;
   return (
-    <div className={dimWhile(q.isPlaceholderData)}>
-      <DitherArea
-        label={`${METRIC_LABEL[metric]} ${unit}`}
-        rows={rows}
-        xKey="period"
-        tipLabel="title"
-        valueKey="value"
-        valueLabel={METRIC_LABEL[metric]}
-        xFormat={(p) => periodTick(p, q.data.period)}
-        format={metric === "hours" ? fmtHours : fmtInt}
-        height={height}
-      />
+    <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-body text-primary">
+      <InlinePair now={week.hours} before={usual.hours} label={`${hoursText(week.hours)}, against a usual ${hoursText(usual.hours)} by now`} />
+      <InlineChange now={week.hours} before={usual.hours} />
+      <span className="min-w-0 text-secondary">against a usual {shortHours(usual.hours)} by now</span>
+    </p>
+  );
+}
+
+function WeekChart({ days }: { days: WeekSoFar["days"] }) {
+  const desktop = useDesktop();
+  return (
+    <DitherBars
+      label="Hours each day, the last 30 days"
+      rows={days.map((d) => ({ day: d.day, title: fmtDayShort(d.day), hours: d.hours }))}
+      xKey="day"
+      tipLabel="title"
+      valueKey="hours"
+      valueLabel="Hours"
+      xFormat={(d) => fmtDayShort(d)}
+      format={fmtHours}
+      height={desktop ? 120 : 96}
+    />
+  );
+}
+
+function WeekTop({ week }: { week: WeekSoFar }) {
+  const { topArtist: artist, topTrack: song } = week;
+  if (!artist && !song) return null;
+  return (
+    <div className="flex min-w-0 flex-col gap-2">
+      <h3 className="font-medium text-primary">Top this week</h3>
+      <RowList label="Top this week">
+        {artist && <Row to={artistPath(artist.artist)} title={artist.artist} subtitle={plural(artist.listens, "play", "plays")} art={{ src: artist.imageUrl, kind: "artist" }} value={fmtHours(artist.hours)} />}
+        {song && (
+          <Row
+            to={songPath(song.songKey)}
+            title={song.name}
+            subtitle={song.artist}
+            art={{ src: song.albumArtUrl, kind: "song" }}
+            value={fmtHours(song.hours)}
+            song={{ uri: song.uri, name: song.name, songKey: song.songKey, artist: song.artist }}
+          />
+        )}
+      </RowList>
     </div>
   );
 }
 
-function Headline({ range }: { range: Range }) {
-  const q = useOverview(range);
-  const prev = previousRange(range);
-  const before = useOverview(prev ?? range);
-  const [metric, setMetric] = useState<Metric>("hours");
-  if (q.isError) return <ErrorState error={q.error} onRetry={() => q.refetch()} />;
-  if (!q.data)
-    return (
-      <div aria-busy className="flex flex-col gap-4">
-        <div className="grid grid-cols-3 gap-2 md:flex md:gap-10">
-          {[0, 1, 2].map((i) => (
-            <div key={i} className="flex flex-col gap-2 pb-3">
-              <Skeleton className="h-3 w-20" />
-              <Skeleton className="h-8 w-24" />
-              <Skeleton className="h-3 w-16" />
-            </div>
-          ))}
-        </div>
-        <ChartSkeleton className="h-[140px] md:h-[180px]" />
-      </div>
-    );
-  if (q.data.plays === 0)
-    return <EmptyState size="section" title="No plays in this range" description="Pick a wider range to see your listening." action={<RangePicker />} />;
-  const compare = prev && before.data && !before.isPlaceholderData ? before.data : undefined;
+/** How much the owner listened this week against their usual: it leads Home because it changes every day. */
+function ThisWeek() {
+  const q = useWeek();
+  const week = q.data;
   return (
-    <div className={dimWhile(q.isPlaceholderData)}>
-      <StatStrip items={figures(q.data, compare)} value={metric} onChange={setMetric} label="Listening figures">
-        <Chart metric={metric} range={range} />
-      </StatStrip>
-    </div>
+    <Section title="This week" description={week ? `${weekdayShort(week.from)} ${fmtDayShort(week.from)} – ${weekdayShort(week.to)} ${fmtDayShort(week.to)}` : undefined}>
+      {q.isError ? (
+        <ErrorState size="inline" error={q.error} onRetry={() => q.refetch()} />
+      ) : !week ? (
+        <div aria-busy className={SIDE_COLUMNS}>
+          <div className="flex flex-col gap-3">
+            <Skeleton className="h-8 w-32" />
+            <Skeleton className="h-4 w-64" />
+            <ChartSkeleton className="h-[96px] md:h-[120px]" />
+          </div>
+          <RowSkeleton rows={2} />
+        </div>
+      ) : (
+        <div className={SIDE_COLUMNS}>
+          <div className="flex min-w-0 flex-col gap-3">
+            <p className="flex items-baseline gap-1.5">
+              <span className="font-display text-figure text-primary tabular">{hoursParts(week.hours).value}</span>
+              <span className="text-secondary">{hoursParts(week.hours).unit}</span>
+            </p>
+            <WeekLine week={week} />
+            <WeekChart days={week.days} />
+          </div>
+          <WeekTop week={week} />
+        </div>
+      )}
+    </Section>
   );
 }
 
@@ -239,7 +215,6 @@ function WeekPicks() {
   const q = usePicks();
   const status = useStatus();
   const gate = useClaudeGate({ needsSpotify: true });
-  const playback = usePlayback();
   const picks = q.data?.picks ?? [];
   const schedule = status.data?.llm.schedule;
   return (
@@ -261,19 +236,7 @@ function WeekPicks() {
           {gate.blocked ?? (schedule?.enabled ? `No picks yet this week. Claude picks them on ${WEEKDAYS[schedule.picks.weekday - 1]} at ${fmtHour(schedule.picks.hour)}.` : "No picks yet this week.")}
         </p>
       ) : (
-        <ol className="flex flex-col gap-1">
-          {picks.slice(0, 3).map((p) => (
-            <li key={p.id} className="group -mx-2 flex gap-3 rounded-md px-2 py-2 transition-colors duration-150 hover:bg-fill">
-              <Artwork src={p.albumArtUrl} kind="song" box={48} />
-              <span className="flex min-w-0 flex-1 flex-col gap-0.5">
-                <span className="truncate text-primary">{p.name}</span>
-                <span className="truncate text-caption text-secondary">{p.artist}</span>
-                <span className="mt-1 line-clamp-2 text-caption text-pretty text-secondary">{p.reason}</span>
-              </span>
-              <IconButton icon={PlayIcon} label={`Play ${p.name}`} size="sm" onClick={() => playback.play([p.uri])} />
-            </li>
-          ))}
-        </ol>
+        <PickPreviews picks={picks.slice(0, 3)} />
       )}
     </Section>
   );
@@ -293,13 +256,11 @@ function SideRow({ to, art, kind, title, detail }: { to: string; art: string | n
   );
 }
 
-/** New releases not yet seen, the latest set and the latest recap: each only when there is one. */
-function Lately() {
+/** New releases not yet seen and the latest recap by its headline: each only when there is one. */
+function WhatsNew() {
   const radar = useRadar("new");
-  const sets = useSets();
   const digests = useDigests();
   const releases = (radar.data?.items ?? []).filter((r) => !r.seen).slice(0, 3);
-  const set = sets.data?.items[0];
   const recap = digests.data?.items[0];
   return (
     <>
@@ -316,19 +277,6 @@ function Lately() {
             {releases.map((r) => (
               <SideRow key={r.id} to="/for-you/new-releases" art={r.imageUrl} kind="album" title={r.name} detail={`${r.artist} · ${fmtDay(r.releaseDate)}`} />
             ))}
-          </ul>
-        </Section>
-      )}
-      {set && (
-        <Section title="Latest set">
-          <ul className="flex flex-col">
-            <SideRow
-              to={`/sets/${set.id}`}
-              art={set.coverUrl}
-              kind="playlist"
-              title={set.title}
-              detail={[set.version === 0 ? "Waiting for your answer" : plural(set.tracks, "song", "songs"), fmtAgo(set.updatedAt)].join(" · ")}
-            />
           </ul>
         </Section>
       )}
@@ -356,7 +304,7 @@ function MadeForYou() {
         </AppLink>
       }
     >
-      {q.isError ? <ErrorState size="inline" error={q.error} onRetry={() => q.refetch()} /> : !q.data ? <CoversSkeleton /> : <PlaylistCovers list={q.data} shelf />}
+      {q.isError ? <ErrorState size="inline" error={q.error} onRetry={() => q.refetch()} /> : !q.data ? <CoversSkeleton compact /> : <PlaylistCovers list={q.data} compact />}
     </Section>
   );
 }
@@ -417,9 +365,9 @@ function StatusNotice() {
 }
 
 /**
- * Home: what to listen to now and what is new, first (the playlists encore keeps, this week's picks, new releases, the
- * latest set, one composer for Ask or Sets); how the owner has been listening, second, compact (Music and Patterns hold
- * the full answers).
+ * Home: this week against the usual first, since it changes every day; then the playlists encore keeps, one composer for
+ * Ask or Sets beside what is new (this week's picks, new releases, the latest recap); then the top lists for any range
+ * beside On this day. Music and Patterns hold the full answers.
  */
 export function Home() {
   const { range } = useRange();
@@ -432,11 +380,12 @@ export function Home() {
       {firstUse ? (
         <FirstUseState
           icon={WaveformIcon}
-          description="Import your Spotify history or connect Spotify. Then Home fills with playlists made from your listening, Claude’s picks for the week, and how you have been listening."
+          description="Import your Spotify history or connect Spotify. Then Home shows how much you listen each week, playlists made from your listening and Claude’s picks."
         />
       ) : (
         <>
           <StatusNotice />
+          <ThisWeek />
           <MadeForYou />
           <div className={SIDE_COLUMNS}>
             <div className="flex min-w-0 flex-col gap-10">
@@ -444,18 +393,15 @@ export function Home() {
               <WeekPicks />
             </div>
             <div className="flex min-w-0 flex-col gap-10">
-              <Lately />
+              <WhatsNew />
             </div>
           </div>
-          <Section labelledBy="listening-title" title="Your listening" actions={<RangePicker />}>
-            <div className="flex flex-col gap-10">
-              <Headline range={range} />
-              <div className={SIDE_COLUMNS}>
-                <Top range={range} overview={overview.data} />
-                <OnThisDay />
-              </div>
-            </div>
-          </Section>
+          <div className={SIDE_COLUMNS}>
+            <Section title="Most played" description={overview.data && overview.data.plays > 0 ? `${hoursText(overview.data.hours)}, ${plural(overview.data.listens, "play", "plays")}` : undefined} actions={<RangePicker />}>
+              <Top range={range} overview={overview.data} />
+            </Section>
+            <OnThisDay />
+          </div>
         </>
       )}
     </Page>

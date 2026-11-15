@@ -411,6 +411,22 @@ All under `/api/stats`. All accept `from`/`to` unless noted.
 
 `uniqueTracks` counts songs (merged). `topArtist`/`topTrack` are by hours and are `null` for an empty range.
 
+### `GET /api/stats/week`
+
+This week so far against the owner's usual. No params.
+
+```json
+{
+  "from": "2026-11-13", "to": "2026-11-19", "today": "2026-11-15",
+  "hours": 6.4, "plays": 141, "listens": 98,
+  "usual": { "hours": 8.2, "plays": 180, "listens": 121, "weeks": 4 },
+  "topArtist": <as in overview> | null, "topTrack": <as in overview> | null,
+  "days": [{ "day": "2026-10-17", "hours": 1.03 }]
+}
+```
+
+The week is the recap week that holds today (`from` to `to`; weeks end the day before the recap weekday, as weekly recaps do); the figures cover `from` to now. `usual` is the mean of the same stretch, up to the same local hour, of the four weeks before, counting only weeks the history covers whole (`weeks` says how many); `null` when the history starts inside that span. `days` is the last 30 local days, today last, zeros included.
+
 ### `GET /api/stats/timeseries`
 
 Params: `period`. Only buckets with plays are returned (fill gaps on the client).
@@ -816,7 +832,7 @@ Living playlist shape:
 
 ### `GET /api/living`
 
-`{ "spotify": { "connected": true, "canWrite": true, "canUploadCovers": true }, "items": [LivingPlaylist] }`, in the order of the table above.
+`{ "spotify": { "connected": true, "canWrite": true, "canUploadCovers": true }, "items": [LivingPlaylist & { "songs": [Song] }] }`, in the order of the table above. `songs` is the first five songs (`{ uri, songKey, name, artist, album, albumArtUrl, artistImageUrl }`): what is in the playlist now, else what a refresh would put in it; empty when there is nothing to put in it.
 
 ### `GET /api/living/:kind`
 
@@ -1325,6 +1341,10 @@ The list item plus `text` (plain text for a chat message, dates written out), `f
 - Sections appear only when the numbers support them, in the order above: `listening` always; `months` for a year with two or more months of listening; `artists`, `songs` (the period's playlist: most listens, then most time, at least 2 listens, at most 15, 25 or 50 songs for a week, month or year; skips never lower a song), `taste` (only with a comparison, tags whose share moved 5 points or more), `finds` (songs and artists first played in the period and listened to again on another day of it; needs earlier history), `rhythm` (busiest day and hour). `quiet: true` (fewer than 5 listens or under half an hour) keeps only `listening`.
 - `before` values are the compared period's. `share` values are 0 to 1. `byHour` is hours per local hour 0-23; `daily` hours per day of the period.
 - Recaps stored before recaps were pages (`facts` without `version: 2`) open with the same sections from their stored numbers: `headlineBy: "text"`, `compare.scaled: true` (their comparison was a typical period, scaled), `daily` and `byHour` null, and `legacyText` holds the text Claude wrote then, ISO dates written out.
+
+#### `GET /api/digests/playlists`
+
+Every period playlist encore made in Spotify, newest first: `{ "items": [{ "kind": "monthly", "key": "2026-10", "label": "October 2026", "url": "https://open.spotify.com/playlist/...", "source": "recap" | "living", "savedAt": "...", "songs": 25, "coverUrl": "/api/digests/periods/monthly/2026-10/cover?v=..." | null }] }`. `source` is `recap` for one saved from a recap, `living` for a year's This year so far kept when the year ended. `songs` counts the period's songs today (the `songs` section rule); `coverUrl` is null when there are none. Read from the database only; whether the playlist still exists in Spotify is not checked.
 
 #### `GET /api/digests/periods/:kind/:key`
 

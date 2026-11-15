@@ -6,7 +6,7 @@ import { CARD_FORMATS, makeCard } from "../../covers/card";
 import { recapCardInput } from "../../digest/card";
 import { recapCover, recapCoverSource } from "../../digest/cover";
 import { RECAP_KINDS, latestKey } from "../../digest/periods";
-import { recapPlaylistSongs, saveRecapPlaylist } from "../../digest/playlist";
+import { listRecapPlaylists, recapPlaylistSongs, saveRecapPlaylist } from "../../digest/playlist";
 import { generateDigest, getDigest, listDigests, recapPeriod, renderDigest } from "../../digest/service";
 import { localTime } from "../../plays/localTime";
 import { budgetStatus, spendDetail } from "../../llm/ledger";
@@ -154,6 +154,10 @@ export const digestRoutes = new Hono<Env>()
   .get("/", (c) => {
     const q = parse(z.object({ kind: kind.optional(), limit: z.coerce.number().int().min(1).max(100).default(20) }), c.req.query());
     return c.json({ items: listDigests(c.var.deps.db, q.kind, q.limit) });
+  })
+  .get("/playlists", (c) => {
+    const { db, now, settings } = c.var.deps;
+    return c.json({ items: listRecapPlaylists(db, localTime(now(), settings.get().timezone).day) });
   })
   .get("/periods/:kind/:key", async (c) => {
     const { db, now, settings } = c.var.deps;

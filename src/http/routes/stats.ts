@@ -10,6 +10,7 @@ import { search } from "../../analytics/search";
 import { energyByHour, genreSeries, moodSeries } from "../../analytics/tags";
 import { eras, topAlbums, topArtists, topTracks } from "../../analytics/top";
 import { trips } from "../../analytics/trips";
+import { weekSoFar } from "../../analytics/week";
 import { DEVICES, PLAY_KINDS, PLAY_SOURCES } from "../../db/schema";
 import { localTime } from "../../plays/localTime";
 import type { Env } from "../context";
@@ -35,6 +36,11 @@ function found<T>(value: T | null): T {
 
 export const statsRoutes = new Hono<Env>()
   .get("/overview", (c) => c.json(overview(c.var.deps.db, { range: range(parse(ranged({}), c.req.query())) })))
+  .get("/week", (c) => {
+    const { db, settings, now } = c.var.deps;
+    const { timezone, llm } = settings.get();
+    return c.json(weekSoFar(db, { now: localTime(now(), timezone), recapWeekday: llm.digestSlot.weekday }));
+  })
   .get("/timeseries", (c) => {
     const q = parse(ranged({ period }), c.req.query());
     return c.json(timeSeries(c.var.deps.db, { range: range(q), period: q.period }));

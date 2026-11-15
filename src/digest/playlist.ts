@@ -1,12 +1,12 @@
-import { and, eq } from "drizzle-orm";
+import { and, desc, eq } from "drizzle-orm";
 import type { Db } from "../db/client";
 import { recapPlaylists } from "../db/schema";
 import { MissingScopeError, WRITE_SCOPE } from "../living/refresh";
 import { playlistDescription } from "../sets/playlist";
 import type { SpotifyClient } from "../spotify/client";
 import { SpotifyApiError, SpotifyNotConnectedError } from "../spotify/errors";
-import { recapPlaylistAbout, recapPlaylistName, recapPlaylistRow, uploadRecapCover, type RecapPlaylistRow } from "./cover";
-import { coveredSpan, isRecapKey, type RecapKind } from "./periods";
+import { recapCoverSource, recapCoverUrl, recapPlaylistAbout, recapPlaylistName, recapPlaylistRow, uploadRecapCover, type RecapPlaylistRow } from "./cover";
+import { coveredSpan, isRecapKey, periodLabel, type RecapKind } from "./periods";
 import { RecapPeriodError } from "./service";
 import { definingSongs, type DefiningSong } from "./songs";
 
@@ -60,4 +60,27 @@ export async function saveRecapPlaylist(deps: RecapPlaylistDeps, kind: RecapKind
     .run();
   const cover = await uploadRecapCover(deps, row, songs);
   return { playlistId: row.playlistId, playlistUrl: row.playlistUrl, tracks: songs.length, cover: { status: cover } };
+}
+
+/** Every period playlist encore made in Spotify, newest first: saved from a recap, or a year's living playlist frozen when it ended. */
+export function listRecapPlaylists(db: Db, today: string) {
+  return db
+    .select()
+    .from(recapPlaylists)
+    .orderBy(desc(recapPlaylists.savedAt))
+    .all()
+    .map((row) => {
+      const span = coveredSpan(row.kind, row.periodKey, today);
+      const songs = span && !span.inProgress ? definingSongs(db, row.kind, span) : [];
+      return {
+        kind: row.kind,
+        key: row.periodKey,
+        label: periodLabel(row.kind, row.periodKey),
+        url: row.playlistUrl,
+        source: row.source,
+        savedAt: new Date(row.savedAt).toISOString(),
+        songs: songs.length,
+        coverUrl: songs.length ? recapCoverUrl(row.kind, row.periodKey, recapCoverSource(row.kind, row.periodKey, songs).key) : null,
+      };
+    });
 }

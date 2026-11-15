@@ -41,6 +41,7 @@
     ?living=removed    Forgotten favourites was deleted in Spotify
     ?living=scope      Spotify connected without permission to change playlists
     ?living=refreshing switching on or off and Refresh now never answer
+    ?living=kept       every playlist is on and kept in Spotify, updated two days ago
     Living fixtures answer PATCH /api/living/:kind and POST /api/living/:kind/refresh themselves: nothing is written, no Spotify call.
     ?library=apply       Spotify reads as connected; Apply and Undo are answered here and the batch runs for about 6 s, then ends
     ?library=running     the newest open plan has an apply in progress (5 of its songs done)
@@ -54,6 +55,10 @@
     ?library=unsynced    the library has never synced
     Library fixtures answer the batch routes and Apply/Undo themselves: no Spotify call, nothing written.
     ?ask=empty        Ask threads: every chart in a stored answer has nothing in it (series at zero, ranked and compare rows gone)
+    ?picks=none       this week has no picks yet (Home, For you, Weekly picks)
+    ?playlists=saved  For you, From your recaps: three period playlists, one saved from a recap, one kept when a year ended, one with no cover
+    ?week=quiet       Home, This week: nothing played yet this week (the usual stays)
+    ?week=first       Home, This week: the history starts this week, so there is no usual to compare with
     ?recap=none       Recaps: every period has no recap yet (Write the recap)
     ?recap=facts      every recap has the numbers alone: no Claude lines
     ?recap=first      the history starts inside the period: nothing earlier to compare with
@@ -69,7 +74,7 @@
 type Json = Record<string, unknown>;
 
 const params = new URLSearchParams(location.search);
-for (const key of ["fixture", "player", "run", "dj", "settings", "history", "living", "library", "recap", "ask"]) {
+for (const key of ["fixture", "player", "run", "dj", "settings", "history", "living", "library", "recap", "ask", "week", "picks", "playlists"]) {
   const value = params.get(key);
   if (value === "off") sessionStorage.removeItem(`encore-${key}`);
   else if (value) sessionStorage.setItem(`encore-${key}`, value);
@@ -84,6 +89,25 @@ const livingFixture = sessionStorage.getItem("encore-living");
 const libraryFixture = sessionStorage.getItem("encore-library");
 const recapFixture = sessionStorage.getItem("encore-recap");
 const askFixture = sessionStorage.getItem("encore-ask");
+const weekFixture = sessionStorage.getItem("encore-week");
+const picksFixture = sessionStorage.getItem("encore-picks");
+const playlistsFixture = sessionStorage.getItem("encore-playlists");
+
+const SAVED_PLAYLISTS = [
+  { kind: "monthly", key: "2026-10", label: "October 2026", url: "https://open.spotify.com/", source: "recap", savedAt: "2026-11-02T09:00:00.000Z", songs: 25, coverUrl: "/api/digests/periods/monthly/2026-10/cover" },
+  { kind: "yearly", key: "2025", label: "2025", url: "https://open.spotify.com/", source: "living", savedAt: "2026-01-01T08:00:00.000Z", songs: 50, coverUrl: "/api/digests/periods/yearly/2025/cover" },
+  { kind: "weekly", key: "2026-08-13", label: "7 – 13 Aug 2026", url: "https://open.spotify.com/", source: "recap", savedAt: "2026-08-14T09:00:00.000Z", songs: 0, coverUrl: null },
+];
+
+/** For you's own fixtures: no picks this week, and saved period playlists. Nothing is written. */
+async function forYouAnswer(path: string): Promise<Response | null> {
+  if (picksFixture === "none" && path === "/api/picks") {
+    const body = (await (await realFetch(path)).json()) as Json;
+    return json({ ...body, picks: [] });
+  }
+  if (playlistsFixture === "saved" && path === "/api/digests/playlists") return json({ items: SAVED_PLAYLISTS });
+  return null;
+}
 
 const LONG_ARTIST = "Bùi Thị Xuân Hương and the Extraordinarily Long-Named Orchestra of Hồ Chí Minh City";
 const LONG_SONG = "Somewhere Only We Know (Live at the Royal Albert Hall, 14 February 2004) [2024 Remaster]";
@@ -97,10 +121,24 @@ const SPLIT_PARAMS = { params: { minPlays: 8, minContextPlays: 5, keeperBelow: 0
 
 const ZERO_STATS = { hours: 0, plays: 0, listens: 0, skips: 0, skipRate: null, earlySkips: 0, firstPlayed: null, lastPlayed: null };
 
+function quietWeek(usual: Json | null): Json {
+  const days = Array.from({ length: 30 }, (_, i) => ({ day: new Date(Date.UTC(2026, 9, 17 + i)).toISOString().slice(0, 10), hours: 0 }));
+  return { from: "2026-11-13", to: "2026-11-19", today: "2026-11-15", hours: 0, plays: 0, listens: 0, usual, topArtist: null, topTrack: null, days };
+}
+
+/** This week bent: nothing played yet (`quiet`), or no earlier weeks to compare with (`first`). */
+async function weekAnswer(path: string): Promise<Response | null> {
+  if (path !== "/api/stats/week") return null;
+  const body = (await (await realFetch(path)).json()) as Json;
+  if (weekFixture === "first") return json({ ...body, usual: null });
+  return json({ ...quietWeek(body.usual as Json | null), days: (body.days as Json[]).map((d, i, all) => (i >= all.length - 3 ? { ...d, hours: 0 } : d)) });
+}
+
 function emptyFor(path: string, isNew: boolean): unknown {
   if (path === "/api/stats/overview")
     return { ...ZERO_STATS, uniqueTracks: 0, uniqueArtists: 0, shuffleRate: null, topArtist: null, topTrack: null, firstPlayed: isNew ? null : "2021-05-16T06:56:32.000Z" };
   if (path === "/api/stats/timeseries") return { period: "day", points: [] };
+  if (path === "/api/stats/week") return quietWeek(isNew ? null : { hours: 8.2, plays: 180, listens: 121, weeks: 4 });
   if (path.startsWith("/api/stats/top/")) return { items: [] };
   if (path === "/api/stats/clock") return { cells: Array.from({ length: 168 }, (_, i) => ({ weekday: Math.floor(i / 24) + 1, hour: i % 24, hours: 0, plays: 0 })) };
   if (path === "/api/stats/on-this-day") return { date: "2026-11-14", years: [] };
@@ -162,6 +200,15 @@ function emptyAnswer(content: Json): Json {
 }
 
 function worsen(path: string, body: Json): unknown {
+  if (path === "/api/stats/week")
+    return {
+      ...body,
+      hours: 98765.4,
+      listens: 1234567,
+      usual: { hours: 0.01, plays: 1, listens: 1, weeks: 1 },
+      topArtist: { artist: LONG_ARTIST, imageUrl: BROKEN_ART, hours: 98765.4, listens: 1234567 },
+      topTrack: body.topTrack ? { ...(body.topTrack as Json), name: LONG_SONG, artist: LONG_ARTIST, albumArtUrl: BROKEN_ART, hours: 98765.4 } : null,
+    };
   if (path === "/api/stats/overview")
     return {
       ...body,
@@ -257,7 +304,16 @@ function worsen(path: string, body: Json): unknown {
     return { ...body, picks, stats: { settled: 123456, played: 98765, hits: 54321, hitRate: 0.44 } };
   }
   if (path === "/api/picks/weeks") return { items: (body.items as Json[]).concat({ week: "2026-11-02", picks: 1, played: 1 }) };
-  if (path === "/api/living") return { ...body, items: (body.items as Json[]).map((p, i) => (i === 1 ? { ...p, count: 1, available: 1 } : p)) };
+  if (path === "/api/living")
+    return {
+      ...body,
+      items: (body.items as Json[]).map((p, i) => ({
+        ...p,
+        ...(i === 1 ? { count: 1, available: 1, songs: (p.songs as Json[]).slice(0, 1) } : {}),
+        songs: (i === 1 ? (p.songs as Json[]).slice(0, 1) : (p.songs as Json[])).map((x, j) => (j === 0 ? { ...x, name: LONG_SONG, artist: LONG_ARTIST, album: LONG_ALBUM, albumArtUrl: BROKEN_ART } : x)),
+      })),
+    };
+  if (path === "/api/digests/playlists") return { items: SAVED_PLAYLISTS.map((p, i) => (i === 0 ? { ...p, label: LONG_ALBUM, coverUrl: BROKEN_ART } : p)) };
   if (/^\/api\/living\/[a-z-]+$/.test(path)) {
     const items = (body.items as Json[]).slice(0, 2).map((s, i) => (i === 0 ? { ...s, name: LONG_SONG, artist: LONG_ARTIST, album: LONG_ALBUM, albumArtUrl: BROKEN_ART } : s));
     const history = (body.history as Json[]).slice(0, 1).map((h) => ({ ...h, count: 1, added: Array.from({ length: 1284 }, () => ({})), removed: Array.from({ length: 999 }, () => ({})) }));
@@ -593,12 +649,15 @@ function bendLiving(p: Json, state: string): Json {
   const detail = "items" in p;
   if (state === "first") return { ...p, enabled: false, playlist: null, status: null, count: 0, changedAt: null, checkedAt: null, nextRefresh: null, ...(detail ? { preview: (p.items as Json[]).length ? p.items : p.preview, items: [], history: [] } : {}) };
   if (state === "empty" && kind === "this-month")
-    return { ...p, enabled: true, status: "empty", count: 0, available: 0, ...(detail ? { items: [], preview: [], history: [] } : {}) };
+    return { ...p, enabled: true, status: "empty", count: 0, available: 0, ...(detail ? { items: [], preview: [], history: [] } : { songs: [] }) };
+  if (state === "kept")
+    return { ...p, enabled: true, playlist: { id: "fixture", url: "https://open.spotify.com/" }, status: "refreshed", count: p.available, changedAt: new Date(Date.now() - 2 * 86_400_000).toISOString() };
   if (LIVING_TARGET[state] !== kind) return p;
   if (state === "fresh") return { ...p, enabled: true, playlist: null, status: null, count: 0, changedAt: null, checkedAt: null, ...(detail ? { preview: p.items, items: [], history: [] } : {}) };
-  if (state === "deferred") return { ...p, status: "deferred" };
-  if (state === "failed") return { ...p, status: "failed", error: "Spotify API 502: Bad gateway", attemptedAt: new Date().toISOString() };
-  if (state === "empty") return { ...p, status: "empty", available: 0 };
+  const kept = { enabled: true, playlist: p.playlist ?? { id: "fixture", url: "https://open.spotify.com/" } };
+  if (state === "deferred") return { ...p, ...kept, status: "deferred" };
+  if (state === "failed") return { ...p, ...kept, status: "failed", error: "Spotify API 502: Bad gateway", attemptedAt: new Date().toISOString() };
+  if (state === "empty") return { ...p, status: "empty", available: 0, ...(!detail && !p.enabled ? { songs: [] } : {}) };
   if (state === "removed")
     return {
       ...p,
@@ -836,6 +895,14 @@ window.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
   }
   if (livingFixture) {
     const answer = await livingAnswer(path, method, init);
+    if (answer) return answer;
+  }
+  if ((picksFixture || playlistsFixture) && method === "GET") {
+    const answer = await forYouAnswer(path);
+    if (answer) return answer;
+  }
+  if (weekFixture && method === "GET") {
+    const answer = await weekAnswer(path);
     if (answer) return answer;
   }
   if (libraryFixture) {

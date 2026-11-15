@@ -12,6 +12,7 @@ import type {
   LivingDetail,
   LivingKind,
   LivingList,
+  SavedRecapPlaylist,
   LivingRefresh,
   AskThread,
   Devices,
@@ -63,6 +64,7 @@ import type {
   Status,
   TagSeries,
   TimeSeries,
+  WeekSoFar,
   TrackPage,
   Trips,
   Onboarding,
@@ -84,6 +86,8 @@ export const useTimezone = () => useStatus().data?.timezone ?? DEFAULT_TIMEZONE;
 export const useLifetime = () => useQuery({ queryKey: ["lifetime"], queryFn: () => get<Overview>("/api/stats/overview"), staleTime: 10 * 60_000 });
 
 export const useOverview = (range: Range) => useQuery(ranged<Overview>("/api/stats/overview", range));
+
+export const useWeek = () => useQuery({ queryKey: ["week"], queryFn: () => get<WeekSoFar>("/api/stats/week"), refetchInterval: 5 * 60_000 });
 
 export const useTimeSeries = (range: Range, period: Period) => useQuery(ranged<TimeSeries>("/api/stats/timeseries", range, { period }));
 
@@ -283,6 +287,8 @@ export const useAskThread = (id: number | null) =>
 
 export const useNote = (songKey: string) =>
   useQuery({ queryKey: ["note", songKey], queryFn: () => getOrNull<Note>("/api/notes", { songKey }), staleTime: Infinity });
+
+export const useRecapPlaylists = () => useQuery({ queryKey: ["recap-playlists"], queryFn: () => get<{ items: SavedRecapPlaylist[] }>("/api/digests/playlists") });
 
 export const useDigests = () => useQuery({ queryKey: ["digests"], queryFn: () => get<{ items: DigestItem[] }>("/api/digests", { limit: 30 }) });
 

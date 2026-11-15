@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { eq } from "drizzle-orm";
 import { createSession } from "../src/auth/sessions";
 import { livingPlaylists, livingRefreshes, recapPlaylists, spotifyAuth } from "../src/db/schema";
-import { EmptyRecapPlaylistError, saveRecapPlaylist } from "../src/digest/playlist";
+import { EmptyRecapPlaylistError, listRecapPlaylists, saveRecapPlaylist } from "../src/digest/playlist";
 import { appOwnedPlaylistIds } from "../src/library/owned";
 import { RecapPeriodError, recapPeriod } from "../src/digest/service";
 import { definingSongs } from "../src/digest/songs";
@@ -65,6 +65,22 @@ describe("the songs that defined a period", () => {
     seedOctober(db);
 
     expect(definingSongs(db, "monthly", { from: "2026-10-01", to: "2026-10-31" }).map((s) => s.name)).toEqual(["A", "B", "C"]);
+  });
+});
+
+describe("listing period playlists", () => {
+  test("lists every period playlist newest first, with its cover while its songs are known", async () => {
+    const { db, deps } = setup();
+    seedOctober(db);
+    db.insert(recapPlaylists).values({ kind: "yearly", periodKey: "2025", playlistId: "old", playlistUrl: "https://open.spotify.com/playlist/old", source: "living", coverUploadKey: null, savedAt: NOV_14 - 86_400_000 }).run();
+    await saveRecapPlaylist({ ...deps, today: "2026-11-14" }, "monthly", "2026-10");
+
+    const list = listRecapPlaylists(db, "2026-11-14");
+
+    expect(list.map((p) => [p.label, p.source, p.songs, p.coverUrl?.startsWith("/api/digests/periods/monthly/2026-10/cover?v=") ?? null])).toEqual([
+      ["October 2026", "recap", 3, true],
+      ["2025", "living", 0, null],
+    ]);
   });
 });
 

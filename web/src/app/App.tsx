@@ -13,7 +13,7 @@ const Music = lazy(() => import("../surfaces/Music").then((m) => ({ default: m.M
 const ArtistPage = lazy(() => import("../surfaces/entity/ArtistPage").then((m) => ({ default: m.ArtistPage })));
 const AlbumPage = lazy(() => import("../surfaces/entity/AlbumPage").then((m) => ({ default: m.AlbumPage })));
 const SongPage = lazy(() => import("../surfaces/entity/SongPage").then((m) => ({ default: m.SongPage })));
-const ForYou = lazy(() => import("../surfaces/Playlists").then((m) => ({ default: m.ForYou })));
+const ForYou = lazy(() => import("../surfaces/ForYou").then((m) => ({ default: m.ForYou })));
 const PlaylistPage = lazy(() => import("../surfaces/Playlists").then((m) => ({ default: m.PlaylistPage })));
 const Sets = lazy(() => import("../surfaces/Sets").then((m) => ({ default: m.Sets })));
 const SetPage = lazy(() => import("../surfaces/SetPage").then((m) => ({ default: m.SetPage })));

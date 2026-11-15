@@ -151,6 +151,26 @@ function PickRow({ pick }: { pick: Pick }) {
   );
 }
 
+/** Picks in short: art, name, artist and Claude's reason, with Play. Home and For you; the full rows live on Weekly picks. */
+export function PickPreviews({ picks }: { picks: Pick[] }) {
+  const playback = usePlayback();
+  return (
+    <ol className="flex flex-col gap-1">
+      {picks.map((p) => (
+        <li key={p.id} className="group -mx-2 flex gap-3 rounded-md px-2 py-2 transition-colors duration-150 hover:bg-fill">
+          <Artwork src={p.albumArtUrl} kind="song" box={48} />
+          <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+            <span className="truncate text-primary">{p.name}</span>
+            <span className="truncate text-caption text-secondary">{p.artist}</span>
+            <span className="mt-1 line-clamp-2 text-caption text-pretty text-secondary">{p.reason}</span>
+          </span>
+          <IconButton icon={PlayIcon} label={`Play ${p.name}`} size="sm" onClick={() => playback.play([p.uri])} />
+        </li>
+      ))}
+    </ol>
+  );
+}
+
 function PicksSkeleton() {
   return (
     <div aria-hidden className="flex flex-col gap-8">

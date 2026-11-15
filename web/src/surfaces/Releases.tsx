@@ -39,7 +39,7 @@ function useMarkSeen() {
   return { mark, busy };
 }
 
-function ReleaseRow({ release, view, onSeen, busy }: { release: Release; view: View; onSeen: () => void; busy: boolean }) {
+export function ReleaseRow({ release, view, onSeen, busy }: { release: Release; view: View; onSeen: () => void; busy: boolean }) {
   const playback = usePlayback();
   const [, navigate] = useLocation();
   const unseen = release.isNew && !release.seen;

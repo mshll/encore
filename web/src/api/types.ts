@@ -221,6 +221,7 @@ export type Note = Artwork & {
 };
 
 export type RecapKind = "weekly" | "monthly" | "yearly";
+export type SavedRecapPlaylist = { kind: RecapKind; key: string; label: string; url: string; source: "recap" | "living"; savedAt: string; songs: number; coverUrl: string | null };
 export type DigestItem = { id: number; kind: RecapKind; periodKey: string; from: string; to: string; label: string; title: string; headline: string; inProgress: boolean; createdAt: string };
 export type RecapSectionId = "listening" | "months" | "artists" | "songs" | "taste" | "finds" | "rhythm";
 export type RecapLines = { headline: string | null; takes: Partial<Record<RecapSectionId, string>> };
@@ -370,6 +371,19 @@ export type Overview = {
 };
 
 export type TimeSeries = { period: Period; points: TimePoint[] };
+
+export type WeekSoFar = {
+  from: string;
+  to: string;
+  today: string;
+  hours: number;
+  plays: number;
+  listens: number;
+  usual: { hours: number; plays: number; listens: number; weeks: number } | null;
+  topArtist: Overview["topArtist"];
+  topTrack: Overview["topTrack"];
+  days: { day: string; hours: number }[];
+};
 
 export type Eras = {
   months: string[];
@@ -626,7 +640,10 @@ export type LivingPlaylist = {
   available: number;
 };
 
-export type LivingList = { spotify: { connected: boolean; canWrite: boolean; canUploadCovers: boolean }; items: LivingPlaylist[] };
+/** A playlist in the list, with its first songs: what is in it now, else what a refresh would put in it. */
+export type LivingListItem = LivingPlaylist & { songs: (LivingSong & { artistImageUrl: string | null })[] };
+
+export type LivingList = { spotify: { connected: boolean; canWrite: boolean; canUploadCovers: boolean }; items: LivingListItem[] };
 
 export type LivingChange = { id: number; at: string; trigger: LivingTrigger; count: number; added: LivingSong[]; removed: LivingSong[]; current: boolean };
 

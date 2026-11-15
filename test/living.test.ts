@@ -5,6 +5,7 @@ import { createJobs, enabledJobs } from "../src/jobs/definitions";
 import { setJobState } from "../src/jobs/state";
 import { forgottenTracks, mostPlayedTracks, newReleaseTracks, picksTracks, replaceMerge, rollingMerge, thisMonthTracks } from "../src/living/build";
 import { LIVING } from "../src/living/kinds";
+import { livingList } from "../src/living/view";
 import { fetchReleaseTracks, livingRow, markRemovedPlaylists, MissingScopeError, refreshLiving, refreshPicksPlaylist, runLiving, setLivingEnabled, type LivingDeps } from "../src/living/refresh";
 import { isDue, nextRefreshDay, type LivingRow } from "../src/living/schedule";
 import { songKey } from "../src/plays/song";
@@ -383,6 +384,23 @@ describe("schedule", () => {
     const jobs = createJobs(db, settings, auth, spotify, createServices(db, config, settings, spotify, { llmTransport: null }));
 
     expect(await jobs.living.run()).toEqual({ skipped: "spotify_not_connected" });
+  });
+});
+
+describe("list", () => {
+  test("shows each playlist's first five songs: what a refresh would put in it while it is off", () => {
+    const { db, deps } = setup();
+    seed(db, ["a", "b", "c", "d", "e", "f"].map((id) => track(id, id, "A", null)), ["a", "b", "c", "d", "e", "f"].flatMap((id, i) => listens(id, 8 - i, 3)));
+
+    const mostPlayed = livingList(deps).items.find((p) => p.kind === "most-played")!;
+
+    expect([mostPlayed.available, names(mostPlayed.songs)]).toEqual([6, ["a", "b", "c", "d", "e"]]);
+  });
+
+  test("shows nothing for a playlist with nothing to put in it", () => {
+    const { deps } = setup();
+
+    expect(livingList(deps).items.map((p) => p.songs.length)).toEqual([0, 0, 0, 0, 0, 0]);
   });
 });
 
