@@ -1,9 +1,9 @@
 import type { UseQueryResult } from "@tanstack/react-query";
 import { useState } from "react";
-import { useLocation } from "wouter";
 import { useDigests, useLifetime, useLiving, useOnThisDay, useOverview, useStatus, useTimeSeries, useTimezone, useTopAlbums, useTopArtists, useTopTracks, useWeek } from "../api/queries";
 import type { Overview as OverviewData, Status, WeekSoFar } from "../api/types";
 import { artistPath, recapPath, songPath } from "../app/paths";
+import { useChat } from "../chat/state";
 import { DitherArea, DitherBars } from "../charts/Dither";
 import { InlineChange, InlinePair } from "../charts/Inline";
 import { periodTick, periodTitle } from "../charts/ticks";
@@ -333,8 +333,11 @@ function AskOrSet() {
   const [text, setText] = useState("");
   const [mode, setMode] = useState<"ask" | "set">("ask");
   const gate = useClaudeGate({ needsSpotify: mode === "set" });
-  const [, navigate] = useLocation();
-  const go = () => navigate(`${mode === "ask" ? "/ask" : "/sets"}?q=${encodeURIComponent(text.trim())}`);
+  const chat = useChat();
+  const go = () => {
+    chat.show({ thread: null, mode, send: text.trim() });
+    setText("");
+  };
   return (
     <Composer
       label={mode === "ask" ? "Ask about your listening" : "Describe a set"}

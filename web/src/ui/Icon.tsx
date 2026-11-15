@@ -1,7 +1,7 @@
-import type { Icon as PhosphorIcon } from "@phosphor-icons/react/dist/lib/types";
 import { cx } from "./cx";
+import type { IconGlyph } from "./icons";
 
-export type IconGlyph = PhosphorIcon;
+export type { IconGlyph };
 
 const SIZES = { sm: 16, md: 20, lg: 24, fill: "100%" } as const;
 export type IconSize = keyof typeof SIZES;

@@ -38,6 +38,25 @@ A request sent with `Accept: text/event-stream` to `POST /api/sets`, `POST /api/
 
 Runs live in memory: a restart ends them.
 
+### Page context
+
+`POST /api/ask`, `POST /api/sets`, `POST /api/sets/:id/messages` and `POST /api/library/conversations` take an optional `context`: the page the owner sent the message from. It holds ids and names only; Claude reads it as what "this" or "them" refers to and fetches the data with its tools. It is added to that one message (stored with the thread, never shown in a transcript). Without it nothing is added. An unknown `kind`, an extra field, a name over 300 characters or a malformed day is `400 invalid_request`.
+
+| `kind` | Fields |
+| --- | --- |
+| `artist` | `artist` |
+| `album` | `artist`, `album` |
+| `song` | `songKey`, `name`, `artist` |
+| `playlist` | `playlist` (a living playlist kind: `picks`, `forgotten`, `most-played`, `new-releases`, `this-month`, `this-year`), `name` |
+| `recap` | `period` (`weekly`, `monthly`, `yearly`), `key`, `label` ("October 2026") |
+| `patterns` | `view` (`when`, `eras`, `taste`, `skips`, `places`), `from`?, `to`? (`YYYY-MM-DD`; none for all time) |
+| `library` | `planId`?, `title`? (a plan page; none for the other Library pages) |
+| `set` | `setId`, `title` |
+
+```json
+{ "question": "When did I start playing them?", "context": { "kind": "artist", "artist": "Mac Miller" } }
+```
+
 ## Metric definitions
 
 - **Music play**: a row with `kind = "track"` from the audio export or the API. Podcast episodes, audiobooks, and every row from `Streaming_History_Video_*.json` (music videos included) are stored but excluded from all `/api/stats/*` and `/api/entities/*` numbers. `/api/history` can show them with `kind`.
@@ -980,7 +999,7 @@ Progress while running: `applied + skipped.length` of `selected`. `notApplied` i
 
 ### `POST /api/library/conversations`
 
-Body `{ "message": "clean up what I don't listen to anymore", "threadId"?: 12 }` (message 1-2000 characters). Without `threadId` it starts a conversation; with one it continues it. Claude (feature `library`, effort medium, at most 20 model calls) reads the library with tools and submits a plan; later messages change the same plan, keeping the owner's unticks and archive/remove switches on songs that stay. Supports `Accept: text/event-stream` (see [Assistant runs](#assistant-runs)). Response (or the `done` event):
+Body `{ "message": "clean up what I don't listen to anymore", "threadId"?: 12, "context"?: PageContext }` (message 1-2000 characters; `context` as in [Page context](#page-context)). Without `threadId` it starts a conversation; with one it continues it. Claude (feature `library`, effort medium, at most 20 model calls) reads the library with tools and submits a plan; later messages change the same plan, keeping the owner's unticks and archive/remove switches on songs that stay. Supports `Accept: text/event-stream` (see [Assistant runs](#assistant-runs)). Response (or the `done` event):
 
 ```json
 { "planId": 9, "threadId": 12, "reply": null, "songs": 214 }
@@ -1151,11 +1170,11 @@ Set shape (`GET /api/sets/:id`, and `set` in create/refine):
 
 #### `POST /api/sets`
 
-`{ "request": "late drive, like my Mac Miller era, half songs I've never heard" }` (1-2000 chars). `201 { "set": Set, "reply": null }`. `reply` is text when Claude asks a question instead of building; the set then has `version: 0` and no items, and the owner answers via `POST /api/sets/:id/messages`.
+`{ "request": "late drive, like my Mac Miller era, half songs I've never heard", "context"?: PageContext }` (1-2000 chars; [Page context](#page-context)). `201 { "set": Set, "reply": null }`. `reply` is text when Claude asks a question instead of building; the set then has `version: 0` and no items, and the owner answers via `POST /api/sets/:id/messages`.
 
 #### `POST /api/sets/:id/messages`
 
-`{ "message": "less sad, and swap track 3 for something more upbeat" }`. `200 { "set": Set, "changed": true, "reply": null }`. `changed: false` with a `reply` when Claude answered without changing the set.
+`{ "message": "less sad, and swap track 3 for something more upbeat", "context"?: PageContext }`. `200 { "set": Set, "changed": true, "reply": null }`. `changed: false` with a `reply` when Claude answered without changing the set.
 
 #### `GET /api/sets`
 
@@ -1272,7 +1291,7 @@ An answer is stored with its values when it is written, so it reads the same aft
 
 #### `POST /api/ask`
 
-`{ "question": "Why did I stop playing Joji?", "threadId": 3 }` (`threadId` optional, continues a thread). `200 { "threadId": 3, "answer": "...", "content": Answer, "toolCalls": [{ "name": "artist_history", "input": { "artist": "Joji" } }] }`. `answer` is the answer as plain text for a chat message: prose, each block visual as lines ("1. Woods by Mac Miller: 20 plays"), then "Based on: ...".
+`{ "question": "Why did I stop playing Joji?", "threadId": 3, "context": PageContext }` (`threadId` optional, continues a thread; `context` optional, see [Page context](#page-context)). `200 { "threadId": 3, "answer": "...", "content": Answer, "toolCalls": [{ "name": "artist_history", "input": { "artist": "Joji" } }] }`. `answer` is the answer as plain text for a chat message: prose, each block visual as lines ("1. Woods by Mac Miller: 20 plays"), then "Based on: ...".
 
 #### `GET /api/ask/threads`
 

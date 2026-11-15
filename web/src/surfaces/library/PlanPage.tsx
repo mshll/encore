@@ -8,7 +8,6 @@ import { showToast } from "../../lib/toast";
 import { AppLink } from "../../ui/AppLink";
 import { Button, buttonClass } from "../../ui/Button";
 import { Checkbox } from "../../ui/Checkbox";
-import { useDocked } from "../../ui/Conversation";
 import { Confirm } from "../../ui/Dialog";
 import { BroomIcon, ChatCircleTextIcon } from "../../ui/icons";
 import { MenuItem, MenuPopup, MenuRoot, MoreTrigger } from "../../ui/Menu";
@@ -20,7 +19,7 @@ import { Select } from "../../ui/Select";
 import { Skeleton } from "../../ui/Skeleton";
 import { describeError, EmptyState, ErrorState } from "../../ui/States";
 import { BatchStatus, useBatchCache, useBatchEndings, useUndo } from "./batch";
-import { PlanThread, usePlanTurn } from "./PlanThread";
+import { useChat } from "../../chat/state";
 import { SongLine } from "./rows";
 import { changes, consequences, groupTitle, SOURCE_LABEL, songs } from "./words";
 
@@ -240,16 +239,14 @@ function PlanSkeleton() {
 /** One plan: what it would change, grouped by action and place, with ticks, archive or remove, Apply and Undo. */
 export function PlanPage({ id }: { id: number }) {
   const [status, setStatus] = useState<ItemStatus>("open");
-  const [talking, setTalking] = useState(false);
   const q = usePlan(id, "open");
   const batches = useBatches();
   const spotify = useStatus().data?.spotify;
   const { undo, pending } = useUndo();
   const edits = usePlanEdits(id);
-  const docked = useDocked();
+  const chat = useChat();
   useBatchEndings(batches.data?.items, (b) => void undo(b));
   const plan = q.data?.pages[0];
-  const turn = usePlanTurn(id, Boolean(plan?.threadId));
   useDocumentTitle(plan?.title ?? "Plan");
 
   if (q.isError)
@@ -278,7 +275,13 @@ export function PlanPage({ id }: { id: number }) {
   const tabs = (["open", "applied", "skipped", "dismissed"] as const).filter((s) => s === "open" || plan.counts[s] > 0);
   const thread = plan.threadId;
   const secondary = [
-    thread && !docked ? { label: turn.run.running ? "Changing…" : "Change with Claude", icon: ChatCircleTextIcon, onClick: () => setTalking(true) } : null,
+    thread
+      ? {
+          label: chat.runningFor({ kind: "plan", threadId: thread }) ? "Changing…" : "Change with Claude",
+          icon: ChatCircleTextIcon,
+          onClick: () => chat.show({ thread: { kind: "plan", threadId: thread } }),
+        }
+      : null,
     dismissAction(plan, edits),
   ].filter((a): a is HeaderAction => a !== null);
   const main = (
@@ -337,13 +340,5 @@ export function PlanPage({ id }: { id: number }) {
     </div>
   );
 
-  if (!thread) return <Page crumb={plan.title}>{main}</Page>;
-  return (
-    <Page crumb={plan.title}>
-      <div className="grid gap-10 md:gap-12 lg:grid-cols-[minmax(0,1fr)_var(--panel-w)]">
-        {main}
-        <PlanThread threadId={thread} planId={plan.id} turn={turn} title="Change the plan" sheet={docked ? undefined : { open: talking, onOpenChange: setTalking }} />
-      </div>
-    </Page>
-  );
+  return <Page crumb={plan.title}>{main}</Page>;
 }

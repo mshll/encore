@@ -1,33 +1,40 @@
 import { Dialog } from "@base-ui/react/dialog";
 import { useRef, useState } from "react";
 import { useLocation } from "wouter";
+import { useChat } from "../chat/state";
 import { AppLink } from "../ui/AppLink";
 import { cx } from "../ui/cx";
 import { Icon } from "../ui/Icon";
-import { DotsThreeIcon, MagnifyingGlassIcon } from "../ui/icons";
+import { ChatCircleTextIcon, DotsThreeIcon, MagnifyingGlassIcon } from "../ui/icons";
 import { BACKDROP, focusSheetOnTouch } from "../ui/surfaces";
 import { PHONE_MORE, PHONE_TABS } from "./nav";
 
 const TAB = "press flex h-full flex-1 flex-col items-center justify-center gap-0.5 text-label font-medium";
 
-/** Phone: four listening tabs and More. More opens a sheet with search and every other surface. */
+/** Phone: four listening tabs, Chat and More. More opens a sheet with search and every other surface. A tab shows its page, so it closes the chat. */
 export function PhoneNav({ onSearch }: { onSearch: () => void }) {
   const [location] = useLocation();
   const [open, setOpen] = useState(false);
   const sheet = useRef<HTMLDivElement>(null);
-  const moreActive = PHONE_MORE.some((s) => s.match(location));
+  const chat = useChat();
+  const chatOpen = chat.open && !location.startsWith("/ask");
+  const moreActive = !chatOpen && PHONE_MORE.some((s) => s.match(location));
   return (
     <>
       <nav aria-label="Main" className="flex h-(--tabbar-h) bg-shell pr-[env(safe-area-inset-right)] pl-[env(safe-area-inset-left)] hairline-t">
         {PHONE_TABS.map((s) => {
-          const active = s.match(location);
+          const active = !chatOpen && s.match(location);
           return (
-            <AppLink key={s.id} to={s.path} aria-current={active ? "page" : undefined} className={cx(TAB, active ? "text-primary" : "text-tertiary")}>
+            <AppLink key={s.id} to={s.path} onClick={chat.close} aria-current={active ? "page" : undefined} className={cx(TAB, active ? "text-primary" : "text-tertiary")}>
               <Icon icon={s.icon} size="md" fill={active} />
               <span className="text-center">{s.label}</span>
             </AppLink>
           );
         })}
+        <button type="button" aria-pressed={chatOpen} onClick={chat.toggle} className={cx(TAB, chatOpen ? "text-primary" : "text-tertiary")}>
+          <Icon icon={ChatCircleTextIcon} size="md" fill={chatOpen} />
+          <span className="text-center">Chat</span>
+        </button>
         <button type="button" aria-haspopup="dialog" onClick={() => setOpen(true)} className={cx(TAB, moreActive ? "text-primary" : "text-tertiary")}>
           <Icon icon={DotsThreeIcon} size="md" />
           <span className="text-center">More</span>
@@ -60,7 +67,10 @@ export function PhoneNav({ onSearch }: { onSearch: () => void }) {
                     <li key={s.id}>
                       <AppLink
                         to={s.path}
-                        onClick={() => setOpen(false)}
+                        onClick={() => {
+                          setOpen(false);
+                          chat.close();
+                        }}
                         aria-current={active ? "page" : undefined}
                         className={cx("flex h-12 items-center gap-3 rounded-md px-3", active ? "bg-fill text-primary" : "text-primary")}
                       >

@@ -1,4 +1,3 @@
-import type { IconGlyph } from "../ui/Icon";
 import {
   BroomIcon,
   ChartBarIcon,
@@ -11,6 +10,7 @@ import {
   RocketLaunchIcon,
   SparkleIcon,
   VinylRecordIcon,
+  type IconGlyph,
 } from "../ui/icons";
 
 /** Where a surface sits in navigation: a sidebar group (the third sits under More on a phone), or the foot of the sidebar. */

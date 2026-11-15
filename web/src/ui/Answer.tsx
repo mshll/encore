@@ -45,7 +45,7 @@ export function answerFromText(text: string, visuals: Record<string, AnswerVisua
   return { version: 1, blocks, visuals, basis };
 }
 
-function Prose({ spans, visuals }: { spans: AnswerSpan[]; visuals: Record<string, AnswerVisual> }) {
+function Prose({ spans, visuals, caret }: { spans: AnswerSpan[]; visuals: Record<string, AnswerVisual>; caret?: boolean }) {
   return (
     <p className="text-body text-pretty">
       {spans.map((s, i) =>
@@ -64,19 +64,29 @@ function Prose({ spans, visuals }: { spans: AnswerSpan[]; visuals: Record<string
           <span key={i}>{s.text}</span>
         ),
       )}
+      {caret && <Caret />}
     </p>
   );
 }
 
 const hasUnchecked = (answer: Answer) => answer.blocks.some((b) => b.type === "text" && b.spans.some((s) => "unchecked" in s && s.unchecked));
 
-/** Claude's answer: prose with inline visuals, block visuals between paragraphs, and "Based on" folded away. */
-export function AnswerView({ answer }: { answer: Answer }) {
+/** The writing caret at the end of a streaming answer (Beautiful UI's Streaming Text, MIT, see chat/parts/LICENSE). */
+function Caret() {
+  return <span aria-hidden className="ml-0.5 inline-block h-3.5 w-0.5 translate-y-0.5 rounded-full bg-primary animate-[fade-in_150ms_var(--ease-out)_both]" />;
+}
+
+/**
+ * Claude's answer: prose with inline visuals, block visuals between paragraphs, and "Based on" folded away.
+ * `streaming` draws the caret after the last words while the text still arrives.
+ */
+export function AnswerView({ answer, streaming = false }: { answer: Answer; streaming?: boolean }) {
+  const last = answer.blocks.length - 1;
   return (
     <div className="flex flex-col gap-3">
       {answer.blocks.map((b, i) =>
         b.type === "text" ? (
-          <Prose key={i} spans={b.spans} visuals={answer.visuals} />
+          <Prose key={i} spans={b.spans} visuals={answer.visuals} caret={streaming && i === last} />
         ) : (
           <div key={i} className="my-2">
             <BlockVisual visual={answer.visuals[b.id]} />

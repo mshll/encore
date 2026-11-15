@@ -1,20 +1,13 @@
-import { useQueryClient } from "@tanstack/react-query";
-import { useEffect, useRef, useState } from "react";
-import { useLocation, useSearchParams } from "wouter";
 import { useLifetime, useSets } from "../api/queries";
-import type { SetResult, SetSummary } from "../api/types";
+import type { SetSummary } from "../api/types";
+import { useChat } from "../chat/state";
 import { fmtAgo, fmtInt } from "../lib/format";
-import { useSetStarters } from "../lib/prompts";
-import { useRun } from "../lib/useRun";
 import { AppLink } from "../ui/AppLink";
 import { Artwork } from "../ui/Artwork";
-import { useClaudeGate } from "../ui/ClaudeNotice";
-import { Composer } from "../ui/Composer";
-import { PlaylistIcon, WaveformIcon } from "../ui/icons";
+import { Button } from "../ui/Button";
+import { PlaylistIcon, PlusIcon, WaveformIcon } from "../ui/icons";
 import { Page, PageHeader, Section } from "../ui/Page";
 import { RowSkeleton } from "../ui/Rows";
-import { RunProgress } from "../ui/RunProgress";
-import { Notice } from "../ui/Notice";
 import { EmptyState, ErrorState, FirstUseState } from "../ui/States";
 
 type SetListItem = SetSummary & { tracks: number };
@@ -39,118 +32,36 @@ function SetRow({ set }: { set: SetListItem }) {
   );
 }
 
-/** The prompt, the starters from the owner's own listening, and the run while Claude builds the set. */
-function NewSet() {
-  const [text, setText] = useState("");
-  const [asked, setAsked] = useState<string | null>(null);
-  const [stopped, setStopped] = useState(false);
-  const starters = useSetStarters();
-  const gate = useClaudeGate({ needsSpotify: true });
-  const queryClient = useQueryClient();
-  const [, navigate] = useLocation();
-  const show = async (result: SetResult) => {
-    queryClient.setQueryData(["sets", result.set.id], result.set);
-    await queryClient.invalidateQueries({ queryKey: ["sets"], exact: true });
-    navigate(`/sets/${result.set.id}`);
-  };
-  const run = useRun<SetResult>({ key: "/api/sets", onDone: show });
-
-  const [params, setParams] = useSearchParams();
-  const fromHome = params.get("q");
-  const builtFromHome = useRef(false);
-  useEffect(() => {
-    if (!fromHome || builtFromHome.current || !gate.ready) return;
-    // Deferred so a mount React StrictMode tears down at once never starts, and so never abandons, a paid run.
-    const timer = setTimeout(() => {
-      builtFromHome.current = true;
-      setParams({}, { replace: true });
-      setText(fromHome);
-      if (!gate.blocked) void build(fromHome);
-    });
-    return () => clearTimeout(timer);
-  });
-
-  const build = async (request: string) => {
-    setAsked(request);
-    setStopped(false);
-    const result = await run.start("/api/sets", { request });
-    if (result) await show(result);
-  };
-
-  if (run.running)
-    return (
-      <div className="flex flex-col gap-5">
-        {asked && <p className="max-w-[60ch] text-body text-pretty">{asked}</p>}
-        <RunProgress
-          run={run}
-          title="Building your set"
-          onCancel={() => {
-            run.cancel();
-            setStopped(true);
-          }}
-        />
-      </div>
-    );
-  return (
-    <div className="flex flex-col gap-5">
-      {run.problem && (
-        <Notice tone="danger" onRetry={gate.blocked || !text.trim() ? undefined : () => build(text.trim())}>
-          {run.problem}
-        </Notice>
-      )}
-      {stopped && <p className="text-secondary">Stopped.</p>}
-      <Composer
-        label="Describe a set"
-        placeholder="A late drive home, songs I finished at night, a few I’ve never heard"
-        value={text}
-        onChange={setText}
-        onSubmit={() => build(text.trim())}
-        disabled={Boolean(gate.blocked)}
-        notice={gate.blocked ?? gate.warning}
-        footer={gate.spend}
-      />
-      {starters.length > 0 && !gate.blocked && (
-        <div className="flex flex-col gap-1">
-          <h2 className="text-caption text-secondary">From your listening</h2>
-          <ul className="flex flex-col">
-            {starters.map((s) => (
-              <li key={s}>
-                <button
-                  type="button"
-                  className="-mx-2 flex min-h-(--control-h) w-[calc(100%+16px)] items-center rounded-md px-2 py-2 text-left text-pretty transition-colors duration-150 hover:bg-fill"
-                  onClick={() => setText(s)}
-                >
-                  {s}
-                </button>
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
-    </div>
-  );
-}
-
-/** Sets: make a playlist from a prompt, and every set made so far. Primary action: make a set. */
+/** Sets: every set made so far. Primary action: make a set, in the chat. */
 export function Sets() {
   const q = useSets();
+  const chat = useChat();
+  const make = () => chat.show({ thread: null, mode: "set" });
   const lifetime = useLifetime();
   const firstUse = lifetime.data !== undefined && !lifetime.data.firstPlayed;
   return (
     <Page width="read">
-      <PageHeader title="Sets" />
+      <PageHeader
+        title="Sets"
+        actions={
+          !firstUse && (
+            <Button variant="primary" icon={PlusIcon} onClick={make}>
+              Make a set
+            </Button>
+          )
+        }
+      />
       {firstUse ? (
         <FirstUseState icon={WaveformIcon} description="Sets are built from what you play. Import your history or connect Spotify first." />
       ) : (
         <>
-          <NewSet />
           <Section title="Your sets">
             {q.isError ? (
               <ErrorState error={q.error} onRetry={() => q.refetch()} />
             ) : !q.data ? (
               <RowSkeleton rows={4} />
             ) : q.data.items.length === 0 ? (
-              <EmptyState icon={PlaylistIcon} title="No sets yet" description="Describe a moment above and the set lands here." />
+              <EmptyState icon={PlaylistIcon} title="No sets yet" />
             ) : (
               <ul className="flex flex-col">
                 {q.data.items.map((s) => (

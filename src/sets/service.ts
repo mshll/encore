@@ -6,6 +6,7 @@ import { setChanges, setItems, sets, type SetChangeMove, type SetChangeTrack } f
 import { runAgent, tool, type AgentEvent } from "../llm/agent";
 import type { MessageParam } from "../llm/client";
 import { localNow, tagged, type FeatureContext } from "../llm/context";
+import { pageContextNote, type PageContext } from "../llm/pageContext";
 import { leaksInternals } from "../llm/plainText";
 import { createThread, deleteThread, getThread, ownerMessage, saveThreadMessages, transcript } from "../llm/threads";
 import { blockedSets, isBlocked, type Blocked } from "../library/blocks";
@@ -271,13 +272,13 @@ async function converse(ctx: FeatureContext, setId: number, threadId: number, sy
   return result;
 }
 
-export async function createSet(ctx: FeatureContext, request: string, onEvent?: (e: AgentEvent) => void) {
+export async function createSet(ctx: FeatureContext, request: string, onEvent?: (e: AgentEvent) => void, context?: PageContext) {
   const { db, llm } = ctx;
   llm.assertAvailable();
   const { timezone, weekendDays } = ctx.settings.get();
   const now = ctx.now();
   const system = [SETS_SYSTEM, tagged("taste_profile", tasteProfile(db, { timezone, weekendDays }, now))];
-  const messages: MessageParam[] = [{ role: "user", content: `${ownerMessage(request)}\nOwner's local time: ${localNow({ timezone, weekendDays }, now)}.` }];
+  const messages: MessageParam[] = [{ role: "user", content: `${ownerMessage(request)}\nOwner's local time: ${localNow({ timezone, weekendDays }, now)}.${pageContextNote(context)}` }];
   const { setId, threadId } = db.transaction((tx) => {
     const threadId = createThread(tx, "sets", system, [], now);
     const setId = tx
@@ -308,7 +309,7 @@ export class SetNotBuiltError extends Error {
   }
 }
 
-export async function refineSet(ctx: FeatureContext, setId: number, message: string, onEvent?: (e: AgentEvent) => void) {
+export async function refineSet(ctx: FeatureContext, setId: number, message: string, onEvent?: (e: AgentEvent) => void, context?: PageContext) {
   const { db, llm } = ctx;
   const row = getSetRow(db, setId);
   if (!row) throw new SetNotFoundError();
@@ -317,7 +318,7 @@ export async function refineSet(ctx: FeatureContext, setId: number, message: str
   const messages = thread.messages;
   const pinned = pinnedItems(db, setId);
   const pins = pinned.length ? `\nPinned by the owner, keep in the set: ${pinned.map((i) => `${i.name} - ${i.artist} (songKey ${i.songKey})`).join("; ")}.` : "";
-  messages.push({ role: "user", content: `${ownerMessage(message)}\nOwner's local time: ${localNow(ctx.settings.get(), ctx.now())}.${pins}` });
+  messages.push({ role: "user", content: `${ownerMessage(message)}\nOwner's local time: ${localNow(ctx.settings.get(), ctx.now())}.${pins}${pageContextNote(context)}` });
   const before = row.version;
   const result = await converse(ctx, setId, row.threadId, thread.system, messages, { source: "claude", message }, onEvent);
   return { set: getSet(db, setId)!, changed: getSetRow(db, setId)!.version !== before, reply: result.terminal ? null : textReply(result.final.content) };

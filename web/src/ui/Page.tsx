@@ -29,18 +29,21 @@ export function Page({
   width = "data",
   className,
   crumb,
+  fill = false,
 }: {
   children: ReactNode;
   width?: "data" | "read";
   className?: string;
   crumb?: string | null;
+  /** Exactly the panel's height, for a body with its own scroll box (Ask). */
+  fill?: boolean;
 }) {
   const [location] = useLocation();
   const trail = trailFor(location);
   return (
-    <div className={cx("mx-auto flex w-full max-w-(--page-max) flex-col px-(--gutter) pb-16", className)}>
+    <div className={cx("mx-auto flex w-full max-w-(--page-max) flex-col px-(--gutter)", fill ? "h-full" : "pb-16", className)}>
       <div className={cx("flex items-center md:h-12", trail ? "h-12" : "h-6")}>{trail && <Breadcrumbs trail={trail} current={crumb} />}</div>
-      <div className={cx(SECTIONS, "flex-1", width === "read" && "[&>:not(header)]:max-w-(--measure)")}>{children}</div>
+      <div className={cx(SECTIONS, "flex-1", fill && "min-h-0", width === "read" && "[&>:not(header)]:max-w-(--measure)")}>{children}</div>
     </div>
   );
 }

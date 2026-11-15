@@ -20,6 +20,7 @@ import { ensureSetCover, setCoverSource } from "../../sets/cover";
 import { saveSetPlaylist } from "../../sets/playlist";
 import { djSessionView } from "./dj";
 import { createSet, deleteSet, getSet, listSets, pinSetItem, refineSet, removeSetItem } from "../../sets/service";
+import { pageContextSchema } from "../../llm/pageContext";
 import { featureContext, mapped, respond } from "../assistant";
 import type { Env } from "../context";
 import { ApiError, jsonBody, parse } from "../errors";
@@ -31,8 +32,8 @@ const text = (max: number) => z.string().trim().min(1).max(max);
 
 export const setRoutes = new Hono<Env>()
   .post("/", async (c) => {
-    const body = parse(z.object({ request: text(2000) }), await jsonBody(c));
-    return respond(c, (ctx, onEvent) => createSet(ctx, body.request, onEvent), 201);
+    const body = parse(z.object({ request: text(2000), context: pageContextSchema.optional() }), await jsonBody(c));
+    return respond(c, (ctx, onEvent) => createSet(ctx, body.request, onEvent, body.context), 201);
   })
   .get("/", (c) => {
     const q = parse(paging(100, 20), c.req.query());
@@ -56,9 +57,9 @@ export const setRoutes = new Hono<Env>()
   })
   .post("/:id/messages", async (c) => {
     const setId = parse(id, c.req.param()).id;
-    const body = parse(z.object({ message: text(2000) }), await jsonBody(c));
+    const body = parse(z.object({ message: text(2000), context: pageContextSchema.optional() }), await jsonBody(c));
     if (!getSet(c.var.deps.db, setId)) throw new ApiError(404, "not_found", "Not found");
-    return respond(c, (ctx, onEvent) => refineSet(ctx, setId, body.message, onEvent));
+    return respond(c, (ctx, onEvent) => refineSet(ctx, setId, body.message, onEvent, body.context));
   })
   .post("/:id/playlist", async (c) => {
     const { db, spotify, now } = c.var.deps;
@@ -119,8 +120,8 @@ export const blockRoutes = new Hono<Env>()
 
 export const askRoutes = new Hono<Env>()
   .post("/", async (c) => {
-    const body = parse(z.object({ question: text(1000), threadId: z.number().int().min(1).optional() }), await jsonBody(c));
-    return respond(c, (ctx, onEvent) => ask(ctx, body.question, body.threadId ?? null, onEvent));
+    const body = parse(z.object({ question: text(1000), threadId: z.number().int().min(1).optional(), context: pageContextSchema.optional() }), await jsonBody(c));
+    return respond(c, (ctx, onEvent) => ask(ctx, body.question, body.threadId ?? null, onEvent, body.context));
   })
   .get("/threads", (c) => {
     const q = parse(z.object({ limit: z.coerce.number().int().min(1).max(100).default(20) }), c.req.query());

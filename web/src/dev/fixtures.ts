@@ -16,7 +16,8 @@
                       text up to a block whose visual has not arrived, which holds its place)
     ?run=starting     starting a run hangs before the server answers
     ?run=done         a started run streams steps, then finishes with real data from the database (Ask: two visuals built from
-                      real stats stream before the text that places them)
+                      real stats stream before the text that places them; Library with no Claude plan: a conversation answered
+                      here, holding the messages sent, its plan the first open one)
     ?run=failed       a started run streams steps, then fails (llm_failed)
     ?run=budget       the monthly Claude cap is spent (status and the run answer 402)
     ?run=unconfigured Claude has no API key (status and the run answer 503)
@@ -55,6 +56,7 @@
     ?library=unsynced    the library has never synced
     Library fixtures answer the batch routes and Apply/Undo themselves: no Spotify call, nothing written.
     ?ask=empty        Ask threads: every chart in a stored answer has nothing in it (series at zero, ranked and compare rows gone)
+    ?ask=visuals      Ask threads: the newest stored answer also holds the run fixtures' two visuals, an inline pair and a ranked block
     ?picks=none       this week has no picks yet (Home, For you, Weekly picks)
     ?playlists=saved  For you, From your recaps: three period playlists, one saved from a recap, one kept when a year ended, one with no cover
     ?week=quiet       Home, This week: nothing played yet this week (the usual stays)
@@ -188,6 +190,17 @@ function worstAnswer(content: Json): Json {
     }),
   );
   return { ...content, visuals };
+}
+
+/** A stored answer with an inline pair after its first paragraph and a ranked block after that. */
+function withVisuals(turn: Json, visuals: Record<string, Visual>): Json {
+  const paragraphs = (turn.text as string).split(/\n\s*\n/).map((t) => t.trim()).filter(Boolean);
+  const basis = paragraphs.at(-1)?.startsWith("Based on:") ? paragraphs.pop()!.slice("Based on:".length).trim() : null;
+  const content = (turn.content as Json | undefined) ?? { version: 1, blocks: paragraphs.map((text) => ({ type: "text", spans: [{ text }] })), visuals: {}, basis };
+  const blocks = content.blocks as Json[];
+  const [first, ...rest] = blocks;
+  const lead = first?.type === "text" ? { ...first, spans: [...(first.spans as Json[]), { text: " " }, { visual: "v1" }] } : first;
+  return { ...content, blocks: [lead, { type: "visual", id: "v2" }, ...rest].filter(Boolean), visuals: { ...(content.visuals as Json), ...visuals } };
 }
 
 /** Every chart in an answer with nothing in it. */
@@ -575,9 +588,8 @@ async function doneBody(path: string): Promise<unknown> {
   const real = <T>(p: string) => realFetch(p).then((r) => r.json() as Promise<T>);
   if (path === "/api/picks/generate") return real("/api/picks");
   if (path === "/api/library/conversations") {
-    const plans = await real<{ items: { id: number; source: string; threadId: number | null; counts: { open: number } }[] }>("/api/library/plans");
-    const plan = plans.items.find((p) => p.source === "claude") ?? plans.items.find((p) => p.counts.open > 0);
-    return { planId: plan?.id ?? null, threadId: plan?.threadId ?? 1, reply: plan ? null : "Over 6 months, or never played too?", songs: plan?.counts.open ?? 0 };
+    const plan = await fixturePlan();
+    return { planId: plan?.id ?? null, threadId: plan?.threadId ?? PLAN_THREAD, reply: plan ? null : "Over 6 months, or never played too?", songs: plan?.counts.open ?? 0 };
   }
   if (path === "/api/digests/generate") return real<{ items: { id: number }[] }>("/api/digests").then((l) => (l.items[0] ? real(`/api/digests/${l.items[0].id}`) : {}));
   if (path === "/api/ask") {
@@ -587,6 +599,16 @@ async function doneBody(path: string): Promise<unknown> {
   }
   const id = path.match(/^\/api\/sets\/(\d+)/)?.[1] ?? (await real<{ items: { id: number }[] }>("/api/sets")).items[0]?.id;
   return { set: await real(`/api/sets/${id}`), reply: null, changed: true };
+}
+
+/** The conversation a finished plan run answers with when the database holds no Claude plan: answered here, never by the server. */
+const PLAN_THREAD = 900_001;
+let planMessages: string[] = [];
+
+/** The Claude plan a finished run made: a real one when there is one, else the first open plan. */
+async function fixturePlan() {
+  const plans = await realFetch("/api/library/plans").then((r) => r.json() as Promise<{ items: { id: number; source: string; threadId: number | null; counts: { open: number } }[] }>);
+  return plans.items.find((p) => p.source === "claude" && p.threadId) ?? plans.items.find((p) => p.counts.open > 0);
 }
 
 const PAUSED_UNTIL = new Date(Date.now() + 2 * 3600_000).toISOString();
@@ -606,7 +628,16 @@ const RUN_ERRORS: Record<string, [number, Json]> = {
   paused: [503, { code: "spotify_paused", message: "Spotify calls are paused", details: { reason: "rate_limited", until: PAUSED_UNTIL } }],
 };
 
-async function runFixture(path: string, query: string, method: string, signal: AbortSignal | null | undefined): Promise<Response | null> {
+async function runFixture(path: string, query: string, method: string, init: RequestInit | undefined): Promise<Response | null> {
+  const signal = init?.signal;
+  if (path === `/api/library/conversations/${PLAN_THREAD}` && method === "GET") {
+    const plan = await fixturePlan();
+    return json({ threadId: PLAN_THREAD, planId: plan?.id ?? null, turns: planMessages.map((text) => ({ role: "owner", text })) });
+  }
+  if (path === "/api/library/conversations" && method === "POST" && typeof init?.body === "string") {
+    const body = JSON.parse(init.body) as { message: string; threadId?: number };
+    planMessages = body.threadId === PLAN_THREAD ? [...planMessages, body.message] : [body.message];
+  }
   if (path === "/api/status" && method === "GET") {
     const status = (await realFetch(path).then((r) => r.json())) as { llm: Json; spotify: Json };
     status.llm = { ...status.llm, configured: run !== "unconfigured" };
@@ -886,7 +917,7 @@ window.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
     if (path === "/api/dj/stop" && method === "POST") return json({ stopped: true });
   }
   if (run) {
-    const answer = await runFixture(path, url.search.slice(1), method, init?.signal);
+    const answer = await runFixture(path, url.search.slice(1), method, init);
     if (answer) return answer;
   }
   if (settingsFixture) {
@@ -912,6 +943,14 @@ window.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
   if (libraryFixture) {
     const answer = await libraryFixtureAnswer(path, method);
     if (answer) return answer;
+  }
+  if (askFixture === "visuals" && /^\/api\/ask\/threads\/\d+$/.test(path)) {
+    const res = await realFetch(input, init);
+    if (!res.ok) return res;
+    const body = (await res.json()) as { turns: Json[] };
+    const last = body.turns.findLastIndex((t) => t.role === "assistant");
+    const { visuals } = await askAnswer();
+    return json({ ...body, turns: body.turns.map((t, i) => (i === last ? { ...t, content: withVisuals(t, visuals) } : t)) });
   }
   if (askFixture === "empty" && /^\/api\/ask\/threads\/\d+$/.test(path)) {
     const res = await realFetch(input, init);

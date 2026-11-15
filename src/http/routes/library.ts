@@ -9,6 +9,7 @@ import { BatchBusyError, BatchNotFoundError, getBatch, listBatches, startApply, 
 import { dismissPlan, getPlan, ITEM_STATUSES, listPlans, PlanNotFoundError, PlanSelectionError, planFromGroup, restorePlan, updateItems } from "../../library/plans";
 import { ensureRulePlans } from "../../library/rules";
 import { continuePlanConversation, planConversation, startPlanConversation } from "../../library/planner";
+import { pageContextSchema } from "../../llm/pageContext";
 import { createStanding, deleteStanding, listStanding, StandingNotFoundError, updateStanding } from "../../library/standing";
 import { respond, toApiError } from "../assistant";
 import type { Env } from "../context";
@@ -103,8 +104,10 @@ const message = z.string().trim().min(1).max(2000);
 
 export const conversationRoutes = new Hono<Env>()
   .post("/", async (c) => {
-    const body = parse(z.strictObject({ message, threadId: z.number().int().positive().optional() }), await jsonBody(c));
-    return respond(c, (ctx, onEvent) => (body.threadId ? continuePlanConversation(ctx, body.threadId, body.message, onEvent) : startPlanConversation(ctx, body.message, onEvent)));
+    const body = parse(z.strictObject({ message, threadId: z.number().int().positive().optional(), context: pageContextSchema.optional() }), await jsonBody(c));
+    return respond(c, (ctx, onEvent) =>
+      body.threadId ? continuePlanConversation(ctx, body.threadId, body.message, onEvent, body.context) : startPlanConversation(ctx, body.message, onEvent, undefined, body.context),
+    );
   })
   .get("/:id", (c) => {
     const { db } = c.var.deps;

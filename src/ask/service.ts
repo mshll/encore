@@ -8,6 +8,7 @@ import { llmThreads } from "../db/schema";
 import { runAgent, type AgentEvent } from "../llm/agent";
 import type { MessageParam } from "../llm/client";
 import { localNow, tagged, type FeatureContext } from "../llm/context";
+import { pageContextNote, type PageContext } from "../llm/pageContext";
 import { plainText } from "../llm/plainText";
 import { createThread, deleteThread, getThread, ownerMessage, saveThreadMessages, transcript, transcriptTurns } from "../llm/threads";
 import { tasteProfile } from "../taste/profile";
@@ -50,7 +51,7 @@ function knownNumbers(messages: MessageParam[], question: string): number[] {
   return known;
 }
 
-export async function ask(ctx: FeatureContext, question: string, threadId: number | null, onEvent?: (e: AgentEvent) => void) {
+export async function ask(ctx: FeatureContext, question: string, threadId: number | null, onEvent?: (e: AgentEvent) => void, context?: PageContext) {
   const { db, llm } = ctx;
   const { timezone, homeCountry, weekendDays } = ctx.settings.get();
   const now = ctx.now();
@@ -61,7 +62,7 @@ export async function ask(ctx: FeatureContext, question: string, threadId: numbe
   const messages: MessageParam[] = existing?.messages ?? [];
   const refs = new ResultRefs(maxId(messages, /"ref":"r(\d+)"/g) + 1);
   const visuals = new RunVisuals(maxId(messages, /"id":"v(\d+)"/g));
-  messages.push({ role: "user", content: `${ownerMessage(question)}\nOwner's local time: ${localNow({ timezone, weekendDays }, now)}.` });
+  messages.push({ role: "user", content: `${ownerMessage(question)}\nOwner's local time: ${localNow({ timezone, weekendDays }, now)}.${pageContextNote(context)}` });
   const turnStart = messages.length;
   const toolCalls: ToolCall[] = [];
   const result = await runAgent(llm, {

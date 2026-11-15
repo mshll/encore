@@ -1,10 +1,13 @@
+import { useLocation } from "wouter";
 import { usePlayerNow } from "../api/queries";
+import { useChat } from "../chat/state";
 import { fmtDuration } from "../lib/format";
 import { Artwork } from "../ui/Artwork";
 import { IconButton } from "../ui/Button";
 import { cx } from "../ui/cx";
 import { Icon } from "../ui/Icon";
-import { ArrowUpRightIcon, PauseIcon, PlayIcon, QueueIcon, ShuffleIcon, SkipForwardIcon } from "../ui/icons";
+import { ArrowUpRightIcon, ChatCircleTextIcon, PauseIcon, PlayIcon, QueueIcon, ShuffleIcon, SkipForwardIcon } from "../ui/icons";
+import { Kbd, MOD_KEY } from "../ui/Kbd";
 import { Tooltip } from "../ui/Tooltip";
 import { AppLink } from "../ui/AppLink";
 import { useTrackLinks } from "./links";
@@ -103,11 +106,31 @@ export function PlayerBar({ queueOpen, onToggleQueue }: { queueOpen: boolean; on
             </a>
           </Tooltip>
         )}
+        <ChatToggle />
         <Tooltip label={queueOpen ? "Hide queue" : "Queue"}>
           <IconButton icon={QueueIcon} label="Queue" aria-pressed={queueOpen} className={queueOpen ? "bg-fill" : ""} onClick={onToggleQueue} />
         </Tooltip>
       </div>
     </section>
+  );
+}
+
+/** The chat's way in on desktop, beside the queue it shares a slot with. */
+function ChatToggle() {
+  const chat = useChat();
+  const [location] = useLocation();
+  const open = chat.open && !location.startsWith("/ask");
+  return (
+    <Tooltip
+      label={
+        <span className="flex items-center gap-1.5">
+          {open ? "Hide chat" : "Chat"}
+          <Kbd className="bg-fill-on-standout text-on-standout-secondary">{`${MOD_KEY} J`}</Kbd>
+        </span>
+      }
+    >
+      <IconButton icon={ChatCircleTextIcon} label="Chat" aria-pressed={open} className={open ? "bg-fill" : ""} onClick={chat.toggle} />
+    </Tooltip>
   );
 }
 

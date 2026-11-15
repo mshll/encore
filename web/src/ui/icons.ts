@@ -1,3 +1,5 @@
+/** Every glyph the app draws, one Phosphor icon each. */
+export type { Icon as IconGlyph } from "@phosphor-icons/react/dist/lib/types";
 export { ArrowUpRightIcon } from "@phosphor-icons/react/dist/csr/ArrowUpRight";
 export { BroomIcon } from "@phosphor-icons/react/dist/csr/Broom";
 export { CaretDownIcon } from "@phosphor-icons/react/dist/csr/CaretDown";
@@ -47,3 +49,7 @@ export { ArrowLeftIcon } from "@phosphor-icons/react/dist/csr/ArrowLeft";
 export { MicrophoneStageIcon } from "@phosphor-icons/react/dist/csr/MicrophoneStage";
 export { MusicNoteIcon } from "@phosphor-icons/react/dist/csr/MusicNote";
 export { TableIcon } from "@phosphor-icons/react/dist/csr/Table";
+export { ArrowsInSimpleIcon } from "@phosphor-icons/react/dist/csr/ArrowsInSimple";
+export { ArrowsOutSimpleIcon } from "@phosphor-icons/react/dist/csr/ArrowsOutSimple";
+export { ClockCounterClockwiseIcon } from "@phosphor-icons/react/dist/csr/ClockCounterClockwise";
+export { NotePencilIcon } from "@phosphor-icons/react/dist/csr/NotePencil";

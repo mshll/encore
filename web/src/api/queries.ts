@@ -257,8 +257,9 @@ export const useBatches = () =>
     refetchInterval: (q) => (q.state.data?.items.some(busy) ? 1000 : false),
   });
 
+/** `threadId` 0 reads nothing (a caller with no planning conversation open). */
 export const usePlanConversation = (threadId: number) =>
-  useQuery({ queryKey: ["library", "conversation", threadId], queryFn: () => get<PlanConversation>(`/api/library/conversations/${threadId}`) });
+  useQuery({ queryKey: ["library", "conversation", threadId], queryFn: () => get<PlanConversation>(`/api/library/conversations/${threadId}`), enabled: threadId > 0 });
 
 export const useStanding = () => useQuery({ queryKey: ["library", "standing"], queryFn: () => get<{ items: Standing[] }>("/api/library/standing") });
 
@@ -268,7 +269,8 @@ export const useSets = () =>
     queryFn: () => get<{ items: (SetSummary & { tracks: number })[]; total: number }>("/api/sets", { limit: 100 }),
   });
 
-export const useSet = (id: number) => useQuery({ queryKey: ["sets", id], queryFn: () => get<SetDetail>(`/api/sets/${id}`), retry: false });
+/** `id` 0 reads nothing (a caller with no set open). */
+export const useSet = (id: number) => useQuery({ queryKey: ["sets", id], queryFn: () => get<SetDetail>(`/api/sets/${id}`), retry: false, enabled: id > 0 });
 
 export const usePicks = (week?: string) => useQuery({ queryKey: ["picks", week ?? "current"], queryFn: () => get<PicksWeek>("/api/picks", { week }) });
 

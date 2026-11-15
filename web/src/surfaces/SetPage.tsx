@@ -3,20 +3,17 @@ import { useState, type ReactNode } from "react";
 import { useLocation } from "wouter";
 import { ApiError, request } from "../api/client";
 import { useDj, useSet } from "../api/queries";
-import type { DjSession, SavedPlaylist, SetChange, SetDetail, SetResult, SetTrack } from "../api/types";
+import type { DjSession, SavedPlaylist, SetDetail, SetTrack } from "../api/types";
 import { useOpenQueue } from "../app/Shell";
 import { artistPath, songPath } from "../app/paths";
+import { useChat } from "../chat/state";
 import { assistantProblem } from "../lib/assistant";
 import { fmtAgo, fmtInt } from "../lib/format";
 import { showToast } from "../lib/toast";
-import { useRun } from "../lib/useRun";
 import { openInSpotify, usePlayback } from "../player/playback";
 import { AppLink } from "../ui/AppLink";
 import { Artwork } from "../ui/Artwork";
 import { Button, buttonClass, IconButton } from "../ui/Button";
-import { useClaudeGate } from "../ui/ClaudeNotice";
-import { Composer } from "../ui/Composer";
-import { ConversationPanel, DOCKED, useDocked } from "../ui/Conversation";
 import { Confirm } from "../ui/Dialog";
 import { Icon } from "../ui/Icon";
 import { ArrowUpRightIcon, ChatCircleTextIcon, MicrophoneStageIcon, MusicNoteIcon, PlayIcon, PlaylistIcon, PushPinIcon, QueueIcon, TrashIcon } from "../ui/icons";
@@ -24,41 +21,7 @@ import { MenuItem, MenuLinkItem, MenuPopup, MenuRoot, MenuSeparator, MoreTrigger
 import { EntityHeader, EntityHeaderSkeleton } from "../ui/EntityHeader";
 import { Page, PageHeader, Section, useDocumentTitle } from "../ui/Page";
 import { RowSkeleton } from "../ui/Rows";
-import { RunProgress } from "../ui/RunProgress";
-import { Notice } from "../ui/Notice";
 import { EmptyState, ErrorState } from "../ui/States";
-
-const names = (tracks: { name: string }[]) => tracks.map((t) => t.name).join(", ");
-
-function changeLines(change: SetChange): string[] {
-  if (change.source === "owner") return change.removed.length ? [`You removed ${names(change.removed)}.`] : [];
-  const lines = [
-    change.added.length > 0 && `Added ${names(change.added)}.`,
-    change.removed.length > 0 && `Removed ${names(change.removed)}.`,
-    change.moved.length > 0 && `Moved ${change.moved.map((m) => `${m.name} from ${m.from} to ${m.to}`).join(", ")}.`,
-  ].filter((l): l is string => Boolean(l));
-  return lines.length ? lines : ["Same songs, new order or reasons."];
-}
-
-type Entry = { kind: "turn"; role: "owner" | "assistant"; text: string } | { kind: "change"; change: SetChange };
-
-/** The conversation with each version change placed after the message that asked for it; owner edits in order. */
-function timeline(set: SetDetail): Entry[] {
-  const pending = [...set.changes];
-  const out: Entry[] = [];
-  const flushOwnerBefore = (version: number) => {
-    while (pending[0] && pending[0].source === "owner" && pending[0].version < version) out.push({ kind: "change", change: pending.shift()! });
-  };
-  set.conversation.forEach((turn, i) => {
-    const match = turn.role === "owner" && i > 0 ? pending.findIndex((c) => c.source === "claude" && c.message === turn.text) : -1;
-    if (match >= 0) flushOwnerBefore(pending[match]!.version);
-    out.push({ kind: "turn", role: turn.role, text: turn.text });
-    const idx = turn.role === "owner" && i > 0 ? pending.findIndex((c) => c.source === "claude" && c.message === turn.text) : -1;
-    if (idx >= 0) out.push({ kind: "change", change: pending.splice(idx, 1)[0]! });
-  });
-  for (const change of pending) out.push({ kind: "change", change });
-  return out;
-}
 
 function TrackRow({ item, added, onPin, onRemove }: { item: SetTrack; added: boolean; onPin: () => void; onRemove: () => void }) {
   const playback = usePlayback();
@@ -126,101 +89,6 @@ function TrackRow({ item, added, onPin, onRemove }: { item: SetTrack; added: boo
         </MenuRoot>
       </span>
     </li>
-  );
-}
-
-type SetRun = ReturnType<typeof useRun<SetResult>>;
-
-const messagesPath = (id: number) => `/api/sets/${id}/messages`;
-
-function SetConversation({
-  set,
-  run,
-  sheet,
-  onRefined,
-}: {
-  set: SetDetail;
-  run: SetRun;
-  sheet?: { open: boolean; onOpenChange: (open: boolean) => void };
-  onRefined: (result: SetResult) => void;
-}) {
-  const [text, setText] = useState("");
-  const [sent, setSent] = useState<string | null>(null);
-  const [stopped, setStopped] = useState(false);
-  const gate = useClaudeGate({ needsSpotify: true });
-  const path = messagesPath(set.id);
-  const entries = timeline(set);
-  const asking = set.version === 0;
-  const send = async () => {
-    const message = text.trim();
-    setSent(message);
-    setStopped(false);
-    setText("");
-    const result = await run.start(path, { message });
-    if (!result) {
-      setText(message);
-      return;
-    }
-    onRefined(result);
-  };
-  const cancel = () => {
-    run.cancel();
-    setStopped(true);
-    if (sent) setText(sent);
-  };
-  return (
-    <ConversationPanel
-      title={asking ? "Claude asks" : "Change the set"}
-      sheet={sheet}
-      className={DOCKED}
-      follow={entries.length + (run.running && sent ? 1 : 0)}
-      messages={
-        <div className="flex flex-col gap-5">
-          <ol className="flex flex-col gap-4">
-            {entries.map((e, i) =>
-              e.kind === "change" ? (
-                <li key={`c${e.change.version}`} className="flex flex-col gap-0.5 text-caption text-secondary">
-                  <span className="font-medium text-primary">Version {e.change.version}</span>
-                  {changeLines(e.change).map((l) => (
-                    <span key={l} className="text-pretty">
-                      {l}
-                    </span>
-                  ))}
-                </li>
-              ) : (
-                <li key={i} className={e.role === "owner" ? "max-w-[85%] self-end rounded-lg bg-fill px-3 py-2 text-pretty" : "text-pretty text-secondary"}>
-                  {e.text}
-                </li>
-              ),
-            )}
-            {run.running && sent && <li className="max-w-[85%] self-end rounded-lg bg-fill px-3 py-2 text-pretty">{sent}</li>}
-          </ol>
-          {run.running && <RunProgress run={run} title="Changing the set" />}
-        </div>
-      }
-      composer={
-        <>
-          {run.problem && (
-            <Notice tone="danger" onRetry={gate.blocked || !text.trim() ? undefined : send}>
-              {run.problem}
-            </Notice>
-          )}
-          {stopped && <p className="text-secondary">Stopped.</p>}
-          <Composer
-            label={asking ? "Answer" : "Change the set"}
-            placeholder={asking ? "Your answer" : "Less sad, more like track 3, a slower start"}
-            value={text}
-            onChange={setText}
-            onSubmit={send}
-            onStop={cancel}
-            running={run.running}
-            disabled={Boolean(gate.blocked)}
-            notice={gate.blocked ?? gate.warning}
-            footer={gate.spend}
-          />
-        </>
-      }
-    />
   );
 }
 
@@ -370,21 +238,19 @@ function SetSkeleton() {
   );
 }
 
-/** One set: its songs with the reasons, the session it plays as, and the conversation that changes it. */
+/** One set: its songs with the reasons and the session it plays as. Its conversation is in the chat, opened by Change. */
 export function SetPage({ id }: { id: number }) {
   const q = useSet(id);
   const dj = useDj();
   const queryClient = useQueryClient();
+  const chat = useChat();
   const [removing, setRemoving] = useState<SetTrack | null>(null);
-  const [talking, setTalking] = useState(false);
-  const docked = useDocked();
   useDocumentTitle(q.data?.title ?? "Set");
 
   const replace = (set: SetDetail) => {
     queryClient.setQueryData(["sets", id], set);
     void queryClient.invalidateQueries({ queryKey: ["sets"], exact: true });
   };
-  const run = useRun<SetResult>({ key: messagesPath(id), onDone: (r) => replace(r.set) });
   const edit = async (item: SetTrack, init: RequestInit & { json?: unknown }) => {
     try {
       replace(await request<SetDetail>(`/api/sets/${id}/items/${item.position}`, init));
@@ -423,16 +289,15 @@ export function SetPage({ id }: { id: number }) {
   const session = dj.data?.session;
   const playing = session?.status === "active" && session.set?.id === set.id ? session : null;
   const asking = set.version === 0;
-  const converse = !docked && (
-    <Button icon={ChatCircleTextIcon} onClick={() => setTalking(true)}>
-      {run.running ? "Changing…" : asking ? "Answer" : "Change"}
+  const converse = (
+    <Button icon={ChatCircleTextIcon} onClick={() => chat.show({ thread: { kind: "set", id: set.id } })}>
+      {chat.runningFor({ kind: "set", id: set.id }) ? "Changing…" : asking ? "Answer" : "Change"}
     </Button>
   );
 
   return (
     <Page crumb={set.title}>
-      <div className="grid gap-10 md:gap-12 lg:grid-cols-[minmax(0,1fr)_var(--panel-w)]">
-        <div className="flex min-w-0 flex-col gap-10 md:gap-12">
+      <div className="flex min-w-0 flex-col gap-10 md:gap-12">
           <EntityHeader
             title={set.title}
             art={set.coverUrl}
@@ -463,8 +328,6 @@ export function SetPage({ id }: { id: number }) {
               </ol>
             )}
           </Section>
-        </div>
-        <SetConversation set={set} run={run} sheet={docked ? undefined : { open: talking, onOpenChange: setTalking }} onRefined={(r) => replace(r.set)} />
       </div>
       <Confirm
         open={removing !== null}

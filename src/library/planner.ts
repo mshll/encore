@@ -5,6 +5,7 @@ import { libraryPlans, PLAN_ACTIONS, type PlanAction, type PlanSource } from "..
 import { runAgent, tool, type AgentEvent, type AgentTool } from "../llm/agent";
 import type { MessageParam } from "../llm/client";
 import { localNow, type FeatureContext } from "../llm/context";
+import { pageContextNote, type PageContext } from "../llm/pageContext";
 import { leaksInternals } from "../llm/plainText";
 import { createThread, deleteThread, getThread, ownerMessage, saveThreadMessages, transcript } from "../llm/threads";
 import { CLASS_RULES, entryEvidence, libraryAnalysis, loadLibrary, monthYear, unsavedSongs, type LibraryEntry, type LibrarySnapshot, type PlayClass } from "./analysis";
@@ -378,12 +379,18 @@ async function converse(ctx: FeatureContext, threadId: number, system: string[],
 export type PlanTurn = { planId: number | null; threadId: number; reply: string | null; songs: number };
 
 /** Starts a plan from an instruction. A turn that ends with a question and no plan keeps the conversation for the next message. */
-export async function startPlanConversation(ctx: FeatureContext, request: string, onEvent?: (e: AgentEvent) => void, standing?: { id: number }): Promise<PlanTurn> {
+export async function startPlanConversation(
+  ctx: FeatureContext,
+  request: string,
+  onEvent?: (e: AgentEvent) => void,
+  standing?: { id: number },
+  context?: PageContext,
+): Promise<PlanTurn> {
   const { db, llm } = ctx;
   llm.assertAvailable();
   const now = ctx.now();
   const system = [LIBRARY_SYSTEM];
-  const messages: MessageParam[] = [{ role: "user", content: `${ownerMessage(request)}\nOwner's local time: ${localNow(ctx.settings.get(), now)}.` }];
+  const messages: MessageParam[] = [{ role: "user", content: `${ownerMessage(request)}\nOwner's local time: ${localNow(ctx.settings.get(), now)}.${pageContextNote(context)}` }];
   const threadId = createThread(db, "library", system, [], now);
   try {
     const turn = await converse(ctx, threadId, system, messages, { planId: null, source: standing ? "standing" : "claude", request, standingId: standing?.id }, onEvent);
@@ -397,13 +404,13 @@ export async function startPlanConversation(ctx: FeatureContext, request: string
 }
 
 /** The next owner message in a planning conversation, by thread: before the first plan exists the thread is all there is. */
-export async function continuePlanConversation(ctx: FeatureContext, threadId: number, message: string, onEvent?: (e: AgentEvent) => void): Promise<PlanTurn> {
+export async function continuePlanConversation(ctx: FeatureContext, threadId: number, message: string, onEvent?: (e: AgentEvent) => void, context?: PageContext): Promise<PlanTurn> {
   const { db, llm } = ctx;
   const thread = getThread(db, threadId);
   if (!thread || thread.feature !== "library") throw new PlanNotFoundError();
   llm.assertAvailable();
   const plan = db.select().from(libraryPlans).where(eq(libraryPlans.threadId, threadId)).get();
-  thread.messages.push({ role: "user", content: `${ownerMessage(message)}\nOwner's local time: ${localNow(ctx.settings.get(), ctx.now())}.` });
+  thread.messages.push({ role: "user", content: `${ownerMessage(message)}\nOwner's local time: ${localNow(ctx.settings.get(), ctx.now())}.${pageContextNote(context)}` });
   const request = plan?.request ?? transcript(thread.messages).find((t) => t.role === "owner")?.text ?? message;
   const turn = await converse(ctx, threadId, thread.system, thread.messages, { planId: plan?.id ?? null, source: plan?.source ?? "claude", request, standingId: plan?.standingId ?? undefined }, onEvent);
   return { planId: turn.planId, threadId, reply: turn.reply, songs: turn.submitted };

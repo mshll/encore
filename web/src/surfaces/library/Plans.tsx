@@ -1,113 +1,22 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
-import { useLocation } from "wouter";
 import { request } from "../../api/client";
-import { useBatches, useLibraryAnalysis, usePlans, useStatus } from "../../api/queries";
-import type { PlanSummary, PlanTurn } from "../../api/types";
+import { useBatches, usePlans, useStatus } from "../../api/queries";
+import type { PlanSummary } from "../../api/types";
+import { useChat } from "../../chat/state";
 import { fmtAgo, fmtInt } from "../../lib/format";
 import { showToast } from "../../lib/toast";
-import { useRun } from "../../lib/useRun";
 import { AppLink } from "../../ui/AppLink";
 import { Button, buttonClass } from "../../ui/Button";
-import { useClaudeGate } from "../../ui/ClaudeNotice";
-import { Composer } from "../../ui/Composer";
+import { ChatCircleTextIcon } from "../../ui/icons";
 import { Notice } from "../../ui/Notice";
 import { Section } from "../../ui/Page";
 import { RowList, RowSkeleton } from "../../ui/Rows";
-import { RunProgress } from "../../ui/RunProgress";
 import { describeError, EmptyState, ErrorState } from "../../ui/States";
 import { BatchStatus, useBatchEndings, useUndo } from "./batch";
 import { LibraryFrame } from "./LibraryFrame";
 import { FigureRow } from "./rows";
 import { SOURCE_LABEL, songs } from "./words";
-
-export const CONVERSATIONS = "/api/library/conversations";
-
-/** Where a finished first turn goes: the plan it made, or the conversation when Claude asked a question first. */
-export const turnPath = (turn: PlanTurn) => (turn.planId ? `/library/plans/${turn.planId}` : `/library/claude/${turn.threadId}`);
-
-function useStarters(): string[] {
-  const a = useLibraryAnalysis().data;
-  const stale = a?.playlists.filter((p) => p.songs >= 20).sort((x, y) => x.classes.active / x.songs - y.classes.active / y.songs)[0];
-  return [
-    "Archive liked songs I haven’t played in a year",
-    stale && `Tidy ${stale.name}: keep what I still play`,
-    a && a.unsaved.total > 0 && "Like the songs I keep playing but never liked",
-  ].filter((s): s is string => Boolean(s));
-}
-
-function Ask() {
-  const [, navigate] = useLocation();
-  const gate = useClaudeGate({ needsSpotify: false });
-  const starters = useStarters();
-  const [text, setText] = useState("");
-  const [pending, setPending] = useState<string | null>(null);
-  const [stopped, setStopped] = useState(false);
-  const run = useRun<PlanTurn>({ key: CONVERSATIONS, onDone: (turn) => navigate(turnPath(turn)) });
-
-  const send = async (message: string) => {
-    if (!message || gate.blocked) return;
-    setPending(message);
-    setStopped(false);
-    setText("");
-    const turn = await run.start(CONVERSATIONS, { message });
-    if (turn) navigate(turnPath(turn));
-    else {
-      setText(message);
-      setPending(null);
-    }
-  };
-  const cancel = () => {
-    run.cancel();
-    setStopped(true);
-    if (pending) setText(pending);
-    setPending(null);
-  };
-
-  return (
-    <Section title="Plan with Claude" labelledBy="plan-with-claude">
-      {run.running && (
-        <div className="flex flex-col gap-4">
-          {pending && <p className="max-w-[85%] self-end rounded-lg bg-fill px-3 py-2 text-pretty">{pending}</p>}
-          <RunProgress run={run} title="Making a plan" />
-        </div>
-      )}
-      {run.problem && (
-        <Notice tone="danger" onRetry={gate.blocked || !text.trim() ? undefined : () => void send(text.trim())}>
-          {run.problem}
-        </Notice>
-      )}
-      {stopped && <p className="text-secondary">Stopped.</p>}
-      <Composer
-        label="Tell Claude what to tidy"
-        placeholder="Archive what I stopped playing, clear duplicates in…"
-        value={text}
-        onChange={setText}
-        onSubmit={() => void send(text.trim())}
-        onStop={cancel}
-        running={run.running}
-        disabled={Boolean(gate.blocked)}
-        notice={gate.blocked}
-        footer={gate.spend}
-      />
-      {!run.running && !gate.blocked && starters.length > 0 && (
-        <ul className="flex flex-col">
-          {starters.map((s) => (
-            <li key={s}>
-              <button
-                type="button"
-                className="-mx-2 flex min-h-(--control-h) w-[calc(100%+16px)] items-center rounded-md px-2 py-2 text-left text-pretty transition-colors duration-150 hover:bg-fill"
-                onClick={() => void send(s)}
-              >
-                {s}
-              </button>
-            </li>
-          ))}
-        </ul>
-      )}
-    </Section>
-  );
-}
 
 function planLine(p: PlanSummary): string {
   if (p.runningBatchId) return "Applying now";
@@ -116,11 +25,20 @@ function planLine(p: PlanSummary): string {
 }
 
 function OpenPlans({ plans }: { plans: PlanSummary[] }) {
+  const chat = useChat();
   const open = plans.filter((p) => p.status === "open" && (p.source !== "rule" || p.counts.open > 0));
   return (
-    <Section title="To review" labelledBy="open-plans">
+    <Section
+      title="To review"
+      labelledBy="open-plans"
+      actions={
+        <Button size="sm" icon={ChatCircleTextIcon} onClick={() => chat.show({ thread: null, mode: "tidy" })}>
+          Plan with Claude
+        </Button>
+      }
+    >
       {open.length === 0 ? (
-        <EmptyState size="inline" title="Nothing to review" description="Make a plan from a figure on the overview, or ask Claude above." />
+        <EmptyState size="inline" title="Nothing to review" description="Make a plan from a figure on the overview, or plan with Claude." />
       ) : (
         <RowList label="Plans to review">
           {open.map((p) => (
@@ -206,7 +124,7 @@ function Dismissed({ plans }: { plans: PlanSummary[] }) {
   );
 }
 
-/** Plans waiting for review, Claude to make a new one, applied changes with undo, and dismissed plans. */
+/** Plans waiting for review (Claude makes a new one in the chat), applied changes with undo, and dismissed plans. */
 export function LibraryPlans() {
   const q = usePlans();
   const status = useStatus().data;
@@ -224,7 +142,6 @@ export function LibraryPlans() {
           Spotify is not connected, so plans cannot be applied.
         </Notice>
       )}
-      <Ask />
       {q.isError ? (
         <ErrorState error={q.error} onRetry={() => q.refetch()} />
       ) : !q.data ? (

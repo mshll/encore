@@ -2,6 +2,7 @@ import { Dialog } from "@base-ui/react/dialog";
 import { useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { useSearch } from "../api/queries";
+import { useChat } from "../chat/state";
 import { fmtHours } from "../lib/format";
 import { usePlayback } from "../player/playback";
 import { useRangeHref } from "../ui/AppLink";
@@ -24,6 +25,8 @@ type Entry = {
   keys?: string[];
   art?: { src: string | null; kind: ArtKind };
   song?: { uri: string; name: string };
+  /** Sent to Claude in a new chat instead of going to `path`. */
+  ask?: string;
 };
 
 /** Search and go: surfaces, then artists, songs and albums from your history, then a question for Ask. */
@@ -33,6 +36,7 @@ export function CommandPalette({ open, onOpenChange }: { open: boolean; onOpenCh
   const deferred = useDeferredValue(query.trim());
   const search = useSearch(deferred, 5);
   const [, navigate] = useLocation();
+  const chat = useChat();
   const href = useRangeHref();
   const playback = usePlayback();
   const listRef = useRef<HTMLDivElement>(null);
@@ -47,7 +51,7 @@ export function CommandPalette({ open, onOpenChange }: { open: boolean; onOpenCh
       keys: s.key ? ["G", s.key.toUpperCase()] : undefined,
     }));
     if (!q) return pages;
-    const ask: Entry = { id: "ask", group: "Ask", label: `Ask “${deferred}”`, path: `/ask?q=${encodeURIComponent(deferred)}`, icon: ChatCircleTextIcon };
+    const ask: Entry = { id: "ask", group: "Ask", label: `Ask “${deferred}”`, path: "/ask", icon: ChatCircleTextIcon, ask: deferred };
     const found = search.data;
     if (!found) return [...pages, ask];
     return [
@@ -78,7 +82,8 @@ export function CommandPalette({ open, onOpenChange }: { open: boolean; onOpenCh
   };
   const go = (entry: Entry | undefined) => {
     if (!entry) return;
-    navigate(href(entry.path));
+    if (entry.ask) chat.show({ thread: null, mode: "ask", send: entry.ask });
+    else navigate(href(entry.path));
     close();
   };
   const activeSong = entries[active]?.song;

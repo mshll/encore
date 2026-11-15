@@ -720,3 +720,16 @@ export type Standing = {
   lastPlanId: number | null;
   lastError: string | null;
 };
+
+export type PatternView = "when" | "eras" | "taste" | "skips" | "places";
+
+/** The page a message to Claude was sent from (`context` on the run start routes): ids and names only. */
+export type PageContext =
+  | { kind: "artist"; artist: string }
+  | { kind: "album"; artist: string; album: string }
+  | { kind: "song"; songKey: string; name: string; artist: string }
+  | { kind: "playlist"; playlist: LivingKind; name: string }
+  | { kind: "recap"; period: RecapKind; key: string; label: string }
+  | { kind: "patterns"; view: PatternView; from?: string; to?: string }
+  | { kind: "library"; planId?: number; title?: string }
+  | { kind: "set"; setId: number; title: string };

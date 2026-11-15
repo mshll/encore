@@ -1,5 +1,6 @@
 import { createContext, lazy, Suspense, useCallback, useContext, useEffect, useRef, useState, type ReactNode, type RefObject } from "react";
 import { useLocation, useSearchParams } from "wouter";
+import { ChatProvider } from "../chat/ChatProvider";
 import { useDesktop } from "../lib/useMedia";
 import { showToast } from "../lib/toast";
 import { MiniPlayer, PlayerBar } from "../player/PlayerBar";
@@ -7,11 +8,13 @@ import { Toaster } from "../ui/Toast";
 import { TooltipProvider } from "../ui/Tooltip";
 import { useSoftKeyboard } from "./keyboard";
 import { PhoneNav } from "./PhoneNav";
+import { cx } from "../ui/cx";
 import { useShortcuts } from "./shortcuts";
 import { Sidebar } from "./Sidebar";
 
 const CommandPalette = lazy(() => import("./CommandPalette").then((m) => ({ default: m.CommandPalette })));
 const QueuePanel = lazy(() => import("../player/QueuePanel").then((m) => ({ default: m.QueuePanel })));
+const ChatPanel = lazy(() => import("../chat/ChatPanel").then((m) => ({ default: m.ChatPanel })));
 const NowPlayingSheet = lazy(() => import("../player/NowPlayingSheet").then((m) => ({ default: m.NowPlayingSheet })));
 
 /** True from the first time `open` is true: an overlay loads on first use, then stays mounted so it can animate closed. */
@@ -55,6 +58,19 @@ function useSpotifyNotice() {
   }, [result, setParams]);
 }
 
+type Side = "queue" | "chat" | null;
+
+const CHAT_OPEN = "encore-chat-open";
+
+/** On desktop the chat opens again where it was left; a phone starts on the page. */
+function initialSide(): Side {
+  try {
+    return window.matchMedia("(min-width: 768px)").matches && localStorage.getItem(CHAT_OPEN) === "1" ? "chat" : null;
+  } catch {
+    return null;
+  }
+}
+
 /** New page: back to the top, focus on the page so a screen reader starts from its title. */
 function useRouteReset(main: RefObject<HTMLElement | null>) {
   const [location] = useLocation();
@@ -70,14 +86,27 @@ function useRouteReset(main: RefObject<HTMLElement | null>) {
 }
 
 /**
- * Desktop: sidebar on the shell ground, the page as an inset panel, the queue as a second panel on the right,
- * the player docked across the bottom. Phone: the page edge to edge, a mini player and the tab bar at the foot.
+ * Desktop: sidebar on the shell ground, the page as an inset panel, the queue or the chat as a second panel on the
+ * right (one at a time), the player docked across the bottom. Phone: the page edge to edge, a mini player and the tab
+ * bar at the foot; the chat is a sheet over the page, above them.
  */
 export function Shell({ children }: { children: ReactNode }) {
   const desktop = useDesktop();
   const main = useRef<HTMLElement>(null);
   const [paletteOpen, setPaletteOpen] = useState(false);
-  const [queueOpen, setQueueOpen] = useState(false);
+  const [side, setSide] = useState<Side>(initialSide);
+  const [location] = useLocation();
+  const queueOpen = side === "queue";
+  const chatShown = side === "chat" && !location.startsWith("/ask");
+  const setQueueOpen = useCallback((open: boolean) => setSide((s) => (open ? "queue" : s === "queue" ? null : s)), []);
+  const setChatOpen = useCallback((open: boolean) => setSide((s) => (open ? "chat" : s === "chat" ? null : s)), []);
+  useEffect(() => {
+    try {
+      localStorage.setItem(CHAT_OPEN, side === "chat" ? "1" : "0");
+    } catch {
+      // Blocked storage: the chat starts closed next time.
+    }
+  }, [side]);
   const [sheetOpen, setSheetOpen] = useState(false);
   const paletteLoaded = useOnceOpen(paletteOpen);
   const sheetLoaded = useOnceOpen(sheetOpen);
@@ -90,6 +119,7 @@ export function Shell({ children }: { children: ReactNode }) {
     <TooltipProvider delay={500}>
       <Toaster>
         <ScrollContext.Provider value={main}>
+          <ChatProvider open={side === "chat"} onOpenChange={setChatOpen}>
           <a
             href="#main"
             className="fixed top-3 left-3 z-[80] -translate-y-[200%] rounded-md bg-overlay px-3 py-2 font-medium shadow-overlay focus-visible:translate-y-0"
@@ -99,31 +129,42 @@ export function Shell({ children }: { children: ReactNode }) {
           {desktop ? (
             <div className="grid h-dvh grid-cols-[var(--sidebar-w)_minmax(0,1fr)_auto] grid-rows-[minmax(0,1fr)_var(--player-h)] pr-[env(safe-area-inset-right)] pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)]">
               <Sidebar onSearch={() => setPaletteOpen(true)} />
-              <main ref={main} id="main" tabIndex={-1} data-crop className="mt-(--inset) overflow-y-auto overscroll-contain rounded-xl bg-page shadow-panel outline-none">
+              <main ref={main} id="main" tabIndex={-1} data-crop className="relative mt-(--inset) overflow-y-auto overscroll-contain rounded-xl bg-page shadow-panel outline-none">
                 <QueueOpener.Provider value={desktop ? () => setQueueOpen(true) : () => setSheetOpen(true)}>{children}</QueueOpener.Provider>
               </main>
-              <div className={queueOpen ? "mt-(--inset) mr-(--inset) ml-(--inset) min-h-0" : "w-(--inset)"}>
-                {queueOpen && (
-                  <Suspense fallback={null}>
-                    <QueuePanel onClose={() => setQueueOpen(false)} />
-                  </Suspense>
-                )}
+              <div className={queueOpen || chatShown ? "mt-(--inset) mr-(--inset) ml-(--inset) min-h-0" : "w-(--inset)"}>
+                <Suspense fallback={null}>
+                  {queueOpen && <QueuePanel onClose={() => setQueueOpen(false)} />}
+                  {chatShown && <ChatPanel place="dock" />}
+                </Suspense>
               </div>
               <div className="col-span-3">
-                <PlayerBar queueOpen={queueOpen} onToggleQueue={() => setQueueOpen((o) => !o)} />
+                <PlayerBar queueOpen={queueOpen} onToggleQueue={() => setQueueOpen(!queueOpen)} />
               </div>
             </div>
           ) : (
             <div className="relative top-(--app-top,0px) flex h-(--app-h,100dvh) flex-col bg-page">
-              <main
-                ref={main}
-                id="main"
-                tabIndex={-1}
-                data-crop
-                className="min-h-0 flex-1 overflow-y-auto overscroll-contain pt-[env(safe-area-inset-top)] pr-[env(safe-area-inset-right)] pl-[env(safe-area-inset-left)] outline-none"
-              >
-                <QueueOpener.Provider value={desktop ? () => setQueueOpen(true) : () => setSheetOpen(true)}>{children}</QueueOpener.Provider>
-              </main>
+              <div className="relative min-h-0 flex-1 bg-page">
+                {/* Under the chat sheet the page is out of reach; it hides once the sheet has slid over it. */}
+                <main
+                  ref={main}
+                  id="main"
+                  tabIndex={-1}
+                  data-crop
+                  inert={chatShown}
+                  className={cx(
+                    "relative h-full overflow-y-auto overscroll-contain pt-[env(safe-area-inset-top)] pr-[env(safe-area-inset-right)] pl-[env(safe-area-inset-left)] outline-none",
+                    chatShown && "invisible transition-[visibility] delay-(--dur-modal)",
+                  )}
+                >
+                  <QueueOpener.Provider value={desktop ? () => setQueueOpen(true) : () => setSheetOpen(true)}>{children}</QueueOpener.Provider>
+                </main>
+                {chatShown && (
+                  <Suspense fallback={null}>
+                    <ChatPanel place="sheet" />
+                  </Suspense>
+                )}
+              </div>
               <div className="shrink-0 bg-shell pb-[env(safe-area-inset-bottom)] in-data-keyboard-open:hidden">
                 <div className="bg-page">
                   <MiniPlayer onOpen={() => setSheetOpen(true)} />
@@ -142,6 +183,7 @@ export function Shell({ children }: { children: ReactNode }) {
               <CommandPalette open={paletteOpen} onOpenChange={setPaletteOpen} />
             </Suspense>
           )}
+          </ChatProvider>
         </ScrollContext.Provider>
       </Toaster>
     </TooltipProvider>
