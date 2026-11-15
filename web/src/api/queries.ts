@@ -11,6 +11,8 @@ const getOrNull = <T>(path: string, query: Record<string, string>) =>
 import type {
   LivingDetail,
   LivingKind,
+  McpConnection,
+  McpConsentRequest,
   LivingList,
   SavedRecapPlaylist,
   LivingRefresh,
@@ -306,5 +308,9 @@ export const useLatestRecapKey = (kind: RecapKind) => useQuery({ queryKey: ["dig
 export const useSpend = () => useQuery({ queryKey: ["spend"], queryFn: () => get<Spend>("/api/llm/spend", { limit: 12 }) });
 
 export const useSettings = () => useQuery({ queryKey: ["settings"], queryFn: () => get<Settings>("/api/settings") });
+
+export const useMcpConsent = (id: string) => useQuery({ queryKey: ["mcp-consent", id], queryFn: () => getOrNull<McpConsentRequest>(`/api/mcp/requests/${encodeURIComponent(id)}`, {}), retry: false, staleTime: Infinity });
+
+export const useMcpConnections = () => useQuery({ queryKey: ["mcp-connections"], queryFn: () => get<{ connections: McpConnection[] }>("/api/mcp/connections") });
 
 export const useOnboarding = () => useQuery({ queryKey: ["onboarding"], queryFn: () => get<Onboarding>("/api/onboarding") });

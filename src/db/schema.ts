@@ -381,4 +381,61 @@ export const livingRefreshes = sqliteTable(
   (t) => [index("living_refreshes_kind").on(t.kind, t.at)],
 );
 
+/** An MCP client registered through OAuth dynamic client registration (RFC 7591). Public clients only: no secret. */
+export const oauthClients = sqliteTable("oauth_clients", {
+  id: text("id").primaryKey(),
+  name: text("name").notNull(),
+  redirectUris: text("redirect_uris", { mode: "json" }).$type<string[]>().notNull(),
+  createdAt: integer("created_at").notNull(),
+});
+
+/** One connection the owner allowed: a client holding tokens for `/mcp`. Disconnecting deletes it and its tokens. */
+export const oauthGrants = sqliteTable(
+  "oauth_grants",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    clientId: text("client_id")
+      .notNull()
+      .references(() => oauthClients.id, { onDelete: "cascade" }),
+    redirectUri: text("redirect_uri").notNull(),
+    scope: text("scope").notNull(),
+    resource: text("resource").notNull(),
+    createdAt: integer("created_at").notNull(),
+    lastUsedAt: integer("last_used_at"),
+  },
+  (t) => [index("oauth_grants_client").on(t.clientId)],
+);
+
+/** Authorization codes, stored as SHA-256 hashes. A code is single use: a second use revokes what the first one issued. */
+export const oauthCodes = sqliteTable("oauth_codes", {
+  codeHash: text("code_hash").primaryKey(),
+  clientId: text("client_id")
+    .notNull()
+    .references(() => oauthClients.id, { onDelete: "cascade" }),
+  redirectUri: text("redirect_uri").notNull(),
+  codeChallenge: text("code_challenge").notNull(),
+  scope: text("scope").notNull(),
+  resource: text("resource").notNull(),
+  expiresAt: integer("expires_at").notNull(),
+  /** Set when the code is exchanged, with the grant it created. */
+  grantId: integer("grant_id"),
+  usedAt: integer("used_at"),
+});
+
+export const OAUTH_TOKEN_KINDS = ["access", "refresh"] as const;
+
+/** Access and refresh tokens, stored as SHA-256 hashes. */
+export const oauthTokens = sqliteTable(
+  "oauth_tokens",
+  {
+    tokenHash: text("token_hash").primaryKey(),
+    grantId: integer("grant_id")
+      .notNull()
+      .references(() => oauthGrants.id, { onDelete: "cascade" }),
+    kind: text("kind", { enum: OAUTH_TOKEN_KINDS }).notNull(),
+    expiresAt: integer("expires_at").notNull(),
+  },
+  (t) => [index("oauth_tokens_grant").on(t.grantId)],
+);
+
 export * from "./assistantSchema";

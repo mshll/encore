@@ -4,10 +4,10 @@ Contract between the server and the web UI. All routes are JSON over HTTP on the
 
 ## Conventions
 
-- Base path `/api`. Only exception: `GET /callback` (Spotify OAuth redirect).
-- Auth: every `/api/*` route needs a session cookie, except `/api/health`, `/api/auth/*` and `/api/discord/interactions` (Discord signature instead). `/api/tags/*`, `POST /api/import` and `POST /api/import/catalog` also accept `Authorization: Bearer <admin token>`. The admin token is rejected everywhere else. `/mcp` takes only `Authorization: Bearer <MCP token>`. Both tokens are settings (`adminToken`, `mcpToken`; see [Settings](#settings)).
+- Base path `/api`. Exceptions: `GET /callback` (Spotify OAuth redirect), `/mcp`, and the MCP OAuth endpoints under `/oauth/*` and `/.well-known/*` (see [MCP](#mcp)).
+- Auth: every `/api/*` route needs a session cookie, except `/api/health`, `/api/auth/*` and `/api/discord/interactions` (Discord signature instead). `/api/tags/*`, `POST /api/import` and `POST /api/import/catalog` also accept `Authorization: Bearer <admin token>`. The admin token is rejected everywhere else. `/mcp` takes only `Authorization: Bearer <MCP token>` or an OAuth access token issued for it. Both tokens are settings (`adminToken`, `mcpToken`; see [Settings](#settings)).
 - Session cookie: `__Host-encore_session` when `PUBLIC_BASE_URL` is https, `encore_session` otherwise; `HttpOnly`, `SameSite=Lax`, `Path=/`, 30 days, `Secure` when `PUBLIC_BASE_URL` is https. Send requests with `credentials: "same-origin"` (the default for same-origin `fetch`).
-- Writes to `/api/auth/*` are limited to 20 a minute per client address (`429 rate_limited`, with `Retry-After`).
+- Writes to `/api/auth/*` are limited to 20 a minute per client address, and `/oauth/*` and `/.well-known/*` to 30 a minute (`429 rate_limited`, with `Retry-After`).
 - Every response carries a Content-Security-Policy (scripts and connections from the same origin only, images from any https host) and `X-Frame-Options`; `/api/*` responses carry `Cache-Control: no-store`.
 - Errors: non-2xx responses have this body:
 
@@ -185,7 +185,7 @@ Artist rows (top artists, eras, skips, search, the artist page, the overview's `
 - `poll.lastResult` also has `skippedCoveredByLive` (API plays the watcher already stored). It may be `{ "skipped": "spotify_not_connected" }`. `lastRunAt`/`lastSuccessAt` are `null` before the first run. `import` is `null` before the first import.
 - `enrichment.failed`: tracks given up on after 3 failed lookups. `withArt`: tracks with an `albumArtUrl`.
 - Enrichment makes one Web API call per run (`ENRICH_INTERVAL_SECONDS`, default 120): `GET /tracks/{id}` (metadata, 640 px art, artist ids) or `GET /artists/{id}` (image), whichever pending item has more listens. `enrichment.art` is the oEmbed job (`ART_INTERVAL_SECONDS`, default 4). Spotify applies its quota per endpoint, so a `QUOTA_EXCEEDED` answer pauses only that endpoint (listed in `spotify.pausedRoutes`); `spotify.paused` is set only by an ordinary 429, which pauses every call. Enrichment stops while its endpoint is paused; the oEmbed job does not use the Web API and continues.
-- `integrations`: whether the Discord endpoint (`DISCORD_APPLICATION_ID`, `DISCORD_PUBLIC_KEY`, `DISCORD_OWNER_ID`) and `/mcp` (`MCP_TOKEN`) are configured.
+- `integrations`: whether the Discord endpoint (`DISCORD_APPLICATION_ID`, `DISCORD_PUBLIC_KEY`, `DISCORD_OWNER_ID`) and `/mcp` (`MCP_TOKEN` or `MCP_OAUTH`) are configured.
 - `enrichment.artists`: artists learned from enriched or polled tracks; `fetched` had their `GET /artists/{id}` lookup.
 - `tags`: `songs` known (distinct song keys in `tracks`), `tagged` songs with tags, `coverage` = tagged / songs (0..1, not rounded).
 - `plays`: stored rows: all kinds, music only, and rows by source `api` and `live` (the rest are `export`).
@@ -271,7 +271,7 @@ Fields by group (env var in brackets; `*` = secret):
 | `digest` | `digestWeekday`, `digestHour` [DIGEST_*] |
 | `dj` | `djReplanner`, `djReplanTimeoutSeconds`, `djSkipTrigger` [DJ_*] |
 | `discord` | `discordApplicationId`, `discordPublicKey`, `discordOwnerId`, `discordBotToken`*, `discordGuildId`, `discordChannelId` [DISCORD_*] |
-| `mcp` | `mcpToken`* [MCP_TOKEN] |
+| `mcp` | `mcpToken`* [MCP_TOKEN], `mcpOAuth` [MCP_OAUTH, `true` or `false`] |
 | `access` | `adminToken`* [ADMIN_TOKEN] |
 | `history` | `historyStart` [HISTORY_START, e.g. `2024-01-01`] |
 | `jobs` | `pollIntervalSeconds`, `enrichIntervalSeconds`, `enrichBatchSize`, `artIntervalSeconds`, `spotifyMinIntervalMs`, `quotaBackoffHours`, `watcherActiveSeconds`, `watcherIdleSeconds`, `watcherBackoffMaxSeconds`, `radarMinListens`, `radarIntervalMinutes`, `radarArtistsPerRun`, `radarRecheckDays`, `radarBaselineDays`, `librarySyncHours`, `libraryPageSeconds` |
@@ -366,7 +366,7 @@ State of each first-run step after sign-in. The steps before sign-in come from `
 - `spotifyApp`: a client id is set. Register `redirectUri` in the Spotify app. `spotifyConnect`: a grant for that client id exists; start it with `GET /api/spotify/authorize`.
 - `locale.done`: the timezone was chosen (env or stored), not left at the default. Choose it before the import; `playsStored` shows whether plays already carry buckets in the old zone.
 - `import.done`: at least one export row is stored. Upload with `POST /api/import`.
-- `claude.done`: a Claude key is set (not verified; use `POST /api/settings/claude/verify`). `discord.done`: application id, public key and owner id are set; put `interactionsUrl` in the Discord app. `mcp.done`: an MCP token is set.
+- `claude.done`: a Claude key is set (not verified; use `POST /api/settings/claude/verify`). `discord.done`: application id, public key and owner id are set; put `interactionsUrl` in the Discord app. `mcp.done`: an MCP token is set or MCP OAuth is on.
 
 ## Spotify
 
@@ -1074,7 +1074,7 @@ Seams for other modules (`src/discord/`): `DiscordRegistry.addCommand({ definiti
 
 ## MCP
 
-`/mcp` (streamable HTTP, `@modelcontextprotocol/server`, stateless) when `MCP_TOKEN` is set; `404` otherwise. Needs `Authorization: Bearer <MCP_TOKEN>` (`401` without). Tools return JSON text with the same shapes as the HTTP endpoints:
+`/mcp` (streamable HTTP, `@modelcontextprotocol/server`, stateless) when `MCP_TOKEN` is set or `MCP_OAUTH` is on; `404` otherwise. Needs `Authorization: Bearer <token>`, where the token is `MCP_TOKEN` or an OAuth access token (below). Without one: `401`; with OAuth on, the `401` carries `WWW-Authenticate: Bearer resource_metadata="<PUBLIC_BASE_URL>/.well-known/oauth-protected-resource/mcp", scope="mcp"` (plus `error="invalid_token"` when a token was sent). Tools return JSON text with the same shapes as the HTTP endpoints:
 
 | Tool | Input |
 | --- | --- |
@@ -1090,6 +1090,28 @@ Seams for other modules (`src/discord/`): `DiscordRegistry.addCommand({ definiti
 | `add_to_queue` | `uri` |
 
 There are no library or playlist removal tools.
+
+### OAuth
+
+With `MCP_OAUTH` on, encore is an OAuth 2.1 authorization server for `/mcp`, so clients that cannot send a fixed header (claude.ai custom connectors, Claude Desktop and mobile) connect by signing in with the owner's passkey. It follows the MCP authorization spec (revisions 2025-06-18 to 2026-07-28): protected resource metadata (RFC 9728), authorization server metadata (RFC 8414), dynamic client registration (RFC 7591), authorization code with PKCE `S256` only, resource indicators (RFC 8707), revocation (RFC 7009). All of it answers `404` while `MCP_OAUTH` is off. The issuer is `PUBLIC_BASE_URL`; the one resource is `PUBLIC_BASE_URL/mcp`, so a client must use that address, not one of `REDIRECT_HOSTS`. Errors from `/oauth/*` are OAuth JSON: `{ "error": "invalid_grant", "error_description": "..." }`. The `/.well-known/*` and `/oauth/register|token|revoke` responses allow any origin (CORS); none of them read cookies.
+
+| Route | Does |
+| --- | --- |
+| `GET /.well-known/oauth-protected-resource/mcp`, `GET /.well-known/oauth-protected-resource` | `{ resource, authorization_servers: [issuer], scopes_supported: ["mcp"], bearer_methods_supported: ["header"], resource_name }` |
+| `GET /.well-known/oauth-authorization-server` | `issuer`, the four endpoints below, `code_challenge_methods_supported: ["S256"]`, `token_endpoint_auth_methods_supported: ["none"]`, `scopes_supported: ["mcp", "offline_access"]`, `authorization_response_iss_parameter_supported: true` |
+| `POST /oauth/register` | JSON `{ redirect_uris, client_name? }`. `201` with `client_id`, `client_id_issued_at`, `token_endpoint_auth_method: "none"` (public clients only, no secret). Redirect URIs must be `https`, or `http` on `localhost`, `127.0.0.1` or `[::1]`, with no fragment (`400 invalid_redirect_uri`). A client that never connects is deleted after 7 days |
+| `GET /oauth/authorize` | `response_type=code`, `client_id`, `redirect_uri` (exact match; a loopback URI matches on any port), `code_challenge` + `code_challenge_method=S256`, `state?`, `scope?` (`mcp`, `offline_access`), `resource?` (must be `PUBLIC_BASE_URL/mcp`). An unknown client or redirect URI answers a `400` page and redirects nowhere. Other problems redirect with `error` (`invalid_request`, `invalid_target`, `invalid_scope`, `unsupported_response_type`). A valid request redirects to `/connect/<request id>` in the web app: sign in with the passkey if needed, then Allow or Deny. The request lives 10 minutes in memory |
+| `POST /oauth/token` | `application/x-www-form-urlencoded` only. `grant_type=authorization_code` with `client_id`, `code`, `code_verifier`, `redirect_uri`, `resource?`; or `grant_type=refresh_token` with `client_id`, `refresh_token`, `resource?`, `scope?`. `{ access_token, token_type: "Bearer", expires_in: 3600, refresh_token, scope }`, `Cache-Control: no-store`. Codes live 2 minutes and work once; a second use revokes what the first issued. Access tokens live 1 hour, refresh tokens 30 days and rotate on every use. Failures: `invalid_client` (`401`; for a refresh, an unknown client is `invalid_grant`), `invalid_grant`, `invalid_target`, `invalid_scope`, `unsupported_grant_type` |
+| `POST /oauth/revoke` | Form `token`, `client_id`. Always `200`. A refresh token ends the whole connection; an access token only itself |
+
+Codes and tokens are stored as SHA-256 hashes only. The redirect after consent carries `code` (or `error=access_denied`), `state` and `iss`.
+
+Session routes for the consent page and Settings (cookie, same-origin JSON writes like the rest of `/api`):
+
+- `GET /api/mcp/requests/:id`: `{ "clientName": "Claude", "redirectHost": "claude.ai", "loopback": false, "tools": { "read": ["overview", ...], "playback": ["play", "add_to_queue"] } }`. `clientName` is what the client registered, not verified. `loopback`: the redirect goes to this computer. `404 oauth_request_not_found` once expired or answered.
+- `POST /api/mcp/requests/:id` `{ "decision": "allow" | "deny" }`: `{ "redirectTo": "<redirect URI with code or error, state, iss>" }`. The page navigates there.
+- `GET /api/mcp/connections`: `{ "connections": [{ "id": 3, "clientName": "Claude", "redirectHost": "claude.ai", "connectedAt": "...", "lastUsedAt": "..." | null }] }`, newest first. One per allowed sign-in; `lastUsedAt` has one-minute resolution.
+- `DELETE /api/mcp/connections/:id`: `{ "disconnected": true }`. Deletes the connection and its tokens; the client must sign in again. `404` when unknown.
 
 ## Assistant (Claude)
 

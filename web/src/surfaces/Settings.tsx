@@ -24,6 +24,7 @@ import { describeError, ErrorState } from "../ui/States";
 import { TabNav } from "../ui/TabNav";
 import { SettingsBlock, useSettingsForm, type SettingsForm } from "./settings/form";
 import { HistoryStart } from "./settings/HistoryStart";
+import { McpConnections } from "./settings/McpConnections";
 
 type Tab = "general" | "spotify" | "claude" | "integrations" | "jobs" | "account";
 
@@ -394,7 +395,7 @@ const DISCORD_KEYS = ["discordApplicationId", "discordPublicKey", "discordOwnerI
 
 function IntegrationsTab({ status }: { status: Status }) {
   const discord = useSettingsForm(DISCORD_KEYS);
-  const mcp = useSettingsForm(["mcpToken"]);
+  const mcp = useSettingsForm(["mcpOAuth", "mcpToken"]);
   const onboarding = useOnboarding();
   const storage = discord.settings.data?.secretStorage.available ?? true;
   const [problem, setProblem] = useState<string | null>(null);
@@ -433,13 +434,20 @@ function IntegrationsTab({ status }: { status: Status }) {
           </SettingRow>
         )}
       </SettingsBlock>
-      <SettingsBlock title="MCP" description={status.integrations.mcp ? "MCP clients can read your listening." : "Off until a token is set."} keys={["mcpToken"]} form={mcp} storage={storage}>
+      <SettingsBlock
+        title="MCP"
+        description={status.integrations.mcp ? "MCP clients can read your listening and control playback." : "Off until OAuth sign-in is on or a token is set."}
+        keys={["mcpOAuth", "mcpToken"]}
+        form={mcp}
+        storage={storage}
+      >
         {o && (
           <SettingRow label="Address">
             {() => <CopyField value={o.mcp.url} label="MCP address" />}
           </SettingRow>
         )}
       </SettingsBlock>
+      <McpConnections oauthOn={mcp.fields.get("mcpOAuth")?.value === true} />
     </>
   );
 }

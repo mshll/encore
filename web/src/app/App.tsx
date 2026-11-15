@@ -1,5 +1,5 @@
 import { lazy, Suspense } from "react";
-import { Redirect, Route, Switch } from "wouter";
+import { Redirect, Route, Switch, useRoute } from "wouter";
 import { useSession } from "../api/queries";
 import { ErrorState } from "../ui/States";
 import { NotFound } from "../surfaces/NotFound";
@@ -34,11 +34,13 @@ const LibraryPlans = lazy(() => import("../surfaces/library/Plans").then((m) => 
 const PlanPage = lazy(() => import("../surfaces/library/PlanPage").then((m) => ({ default: m.PlanPage })));
 const PlanThreadPage = lazy(() => import("../surfaces/library/PlanThread").then((m) => ({ default: m.PlanThreadPage })));
 const LibraryInstructions = lazy(() => import("../surfaces/library/Instructions").then((m) => ({ default: m.LibraryInstructions })));
+const Connect = lazy(() => import("../surfaces/Connect").then((m) => ({ default: m.Connect })));
 const SignIn = lazy(() => import("../surfaces/SignIn").then((m) => ({ default: m.SignIn })));
 const Kit = import.meta.env.DEV ? lazy(() => import("../dev/Kit").then((m) => ({ default: m.Kit }))) : null;
 
 export function App() {
   const session = useSession();
+  const [connecting, connect] = useRoute("/connect/:id");
   if (session.isPending) return null;
   if (session.isError)
     return (
@@ -50,6 +52,12 @@ export function App() {
     return (
       <Suspense fallback={null}>
         <SignIn />
+      </Suspense>
+    );
+  if (connecting)
+    return (
+      <Suspense fallback={null}>
+        <Connect key={connect.id} id={connect.id} />
       </Suspense>
     );
   return (

@@ -89,6 +89,26 @@ The app walks you through setup:
 5. Upload the `Streaming_History_Audio_*.json` and `Streaming_History_Video_*.json` files from the export. Importing again is safe; rows already stored are skipped.
 6. Optional: add a Claude key, Discord and an MCP token.
 
+## Connect Claude (MCP)
+
+encore serves an MCP server at `/mcp` with tools over your listening (overview, top lists, history, lookup, on this day, forgotten favourites, now playing, releases) and two playback actions (play, add to queue).
+
+**claude.ai, Claude Desktop and mobile** (one connector serves all three):
+
+1. In encore, Settings › Integrations › MCP: switch on OAuth sign-in and save.
+2. In Claude, Settings › Connectors › Add custom connector. Name it `encore` and enter `https://<your host>/mcp` as the URL. Leave the OAuth client fields empty.
+3. Claude opens encore: sign in with your passkey if asked, check the app and the tools it gets, and choose Allow.
+
+Claude connects from Anthropic's servers, so encore must be reachable from the public internet over HTTPS on port 443. Disconnect a client in Settings › Integrations › MCP; it then has to sign in again.
+
+**Claude Code and other clients that can send a header**: set an MCP token in the same place, then for example
+
+```sh
+claude mcp add --transport http encore https://<your host>/mcp --header "Authorization: Bearer <MCP token>"
+```
+
+Claude Code can also use OAuth sign-in: add the server without the header and run `/mcp` to sign in.
+
 ## Configuration
 
 Settings live in the database and are edited in the dashboard; a change applies without a restart. Only boot values (address, port, database path, the three variables above) come from the environment. An environment variable with a setting's name overrides the dashboard and locks that field, which is useful for managed deployments.
@@ -144,6 +164,7 @@ src/library/             saved songs and own playlists sync, library analysis, p
                          song catalog, candidate verification, blocks, play outcomes, library tools
 src/discord/             interactions endpoint logic, REST client, command registry, built-in and assistant commands, channel posts
 src/mcp/                 MCP server (tools over analytics and playback)
+src/oauth/               OAuth 2.1 authorization server for /mcp: client registration, PKCE codes, rotating tokens
 src/spotify/             OAuth (PKCE, rotating refresh), API client, call pacing queue, rate-limit gate
 src/auth/                passkeys, sessions
 src/tags/                tag vocabulary, validation, storage

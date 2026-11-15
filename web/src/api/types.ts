@@ -733,3 +733,17 @@ export type PageContext =
   | { kind: "patterns"; view: PatternView; from?: string; to?: string }
   | { kind: "library"; planId?: number; title?: string }
   | { kind: "set"; setId: number; title: string };
+
+/** `GET /api/mcp/requests/:id`: an MCP client asking to connect through OAuth. `clientName` is what the client calls itself. */
+export type McpConsentRequest = {
+  clientName: string;
+  redirectHost: string;
+  /** The redirect goes to this computer (a native client on a loopback port). */
+  loopback: boolean;
+  tools: { read: string[]; playback: string[] };
+};
+
+export type McpConsentDecision = { redirectTo: string };
+
+/** `GET /api/mcp/connections`: one per OAuth sign-in the owner allowed. */
+export type McpConnection = { id: number; clientName: string; redirectHost: string; connectedAt: string; lastUsedAt: string | null };

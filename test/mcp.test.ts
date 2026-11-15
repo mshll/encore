@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { MCP_TOOLS } from "../src/mcp/server";
 import { play, seed, testApp, track, uri } from "./helpers";
 
 const TOKEN = "mcp-token-mcp-token-mcp-token";
@@ -34,6 +35,7 @@ describe("mcp endpoint", () => {
     expect((await app.request("/mcp", { method: "POST", body: init, headers: headers(TOKEN) })).status).toBe(200);
     const list = await body(await app.request("/mcp", { method: "POST", body: rpc("tools/list", {}, 2), headers: { ...headers(TOKEN), "mcp-protocol-version": "2025-06-18" } }));
     expect(list.result!.tools!.map((t) => t.name).sort()).toEqual(["add_to_queue", "forgotten", "history", "lookup", "now_playing", "on_this_day", "overview", "play", "releases", "top"]);
+    expect([...MCP_TOOLS.read, ...MCP_TOOLS.playback].sort() as string[]).toEqual(list.result!.tools!.map((t) => t.name).sort());
     const call = await body(
       await app.request("/mcp", { method: "POST", body: rpc("tools/call", { name: "overview", arguments: {} }, 3), headers: { ...headers(TOKEN), "mcp-protocol-version": "2025-06-18" } }),
     );

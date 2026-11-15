@@ -14,7 +14,7 @@ All env values are validated at boot (the process exits on invalid values). See 
 | Var | Default | Notes |
 | --- | --- | --- |
 | `PUBLIC_BASE_URL` | `http://localhost:8888` | Browser origin. Sets passkey RP ID, cookie `Secure` (https), and post-OAuth redirect |
-| `REDIRECT_HOSTS` | unset | Comma-separated old host names. GET and HEAD requests to them answer 301 to the same path on `PUBLIC_BASE_URL`; other methods are served there, so webhooks and MCP clients keep working. Passkeys belong to one host: after a move, add a new passkey on the new one |
+| `REDIRECT_HOSTS` | unset | Comma-separated old host names. GET and HEAD requests to them answer 301 to the same path on `PUBLIC_BASE_URL`; other methods are served there, so webhooks and MCP clients with the MCP token keep working. MCP OAuth works only on `PUBLIC_BASE_URL`: a connector added with an old address must be added again with the public one. Passkeys belong to one host: after a move, add a new passkey on the new one |
 | `SPOTIFY_REDIRECT_URI` | `PUBLIC_BASE_URL/callback` | Must be registered in the Spotify app |
 | `SETUP_TOKEN` | unset | Min 24 chars. Needed to register the first passkey |
 | `SECRETS_KEY` | unset | Min 32 chars. Encrypts secrets stored from the dashboard |
@@ -42,7 +42,8 @@ All env values are validated at boot (the process exits on invalid values). See 
 | `DISCORD_APPLICATION_ID`, `DISCORD_PUBLIC_KEY`, `DISCORD_OWNER_ID` | unset | Enable `POST /api/discord/interactions`. Only `DISCORD_OWNER_ID` may use commands |
 | `DISCORD_BOT_TOKEN`, `DISCORD_GUILD_ID` | unset | Guild command registration (at startup, or `bun run discord:register`) |
 | `DISCORD_CHANNEL_ID` | unset | With `DISCORD_BOT_TOKEN`: channel for weekly picks, the weekly digest (with new releases) and the monthly recap, each posted once |
-| `MCP_TOKEN` | unset | Min 24 chars. Bearer token for `/mcp`; unset disables it |
+| `MCP_TOKEN` | unset | Min 24 chars. Bearer token for `/mcp`, for clients that can send a header (Claude Code, scripts) |
+| `MCP_OAUTH` | `false` | OAuth sign-in for `/mcp`, for claude.ai custom connectors and other clients that cannot send a fixed token. `/mcp` is on when `MCP_TOKEN` is set or this is `true`; either way the other keeps working |
 | `ANTHROPIC_API_KEY` | unset | Enables the Claude features; without it they return `503 llm_not_configured` |
 | `LLM_MODEL` | `claude-opus-5-5` | |
 | `LLM_PRICES` | built in | JSON overrides, USD per million tokens, keyed by model |

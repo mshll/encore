@@ -13,13 +13,13 @@ import { Notice } from "../ui/Notice";
 import { useDocumentTitle } from "../ui/Page";
 
 /** The fixed-height card every step sits in, so the button never jumps between steps. */
-function Card({ step, title, children, footer }: { step?: string; title: string; children: ReactNode; footer: ReactNode }) {
+export function Card({ step, title, children, footer }: { step?: string; title: string; children: ReactNode; footer: ReactNode }) {
   useDocumentTitle(title);
   return (
     <div className="flex min-h-[340px] flex-col gap-6 rounded-xl bg-page p-6 shadow-panel phone:min-h-0 phone:flex-1 phone:bg-transparent phone:p-0 phone:[box-shadow:none]">
       <div className="flex flex-col gap-1">
         {step && <p className="text-caption text-secondary">{step}</p>}
-        <h1 className="font-display text-title text-balance text-primary">{title}</h1>
+        <h1 className="font-display text-title text-balance break-words text-primary">{title}</h1>
       </div>
       <div className="flex flex-1 flex-col gap-4">{children}</div>
       <div className="flex flex-col-reverse gap-2 md:flex-row md:items-center md:justify-between">{footer}</div>
@@ -173,11 +173,20 @@ export function SignIn() {
     <PasskeyStep token={token} supported={supported} onBack={() => setToken(null)} />
   );
   return (
-    <main className="flex min-h-dvh flex-col items-center bg-shell px-4 pt-12 pb-4 md:justify-center md:py-16">
+    <AuthPage>
+      {!supported && <Notice tone="warning">This browser cannot use passkeys. Open encore in a current version of Safari, Chrome, Firefox or Edge.</Notice>}
+      {content}
+    </AuthPage>
+  );
+}
+
+/** The page outside the shell that sign-in and the MCP consent sit on: the lockup over one card. */
+export function AuthPage({ children }: { children: ReactNode }) {
+  return (
+    <main className="flex min-h-dvh flex-col items-center bg-shell px-(--gutter) pt-12 pb-4 md:justify-center md:py-16">
       <div className="flex w-full max-w-[360px] flex-col gap-8 phone:flex-1">
         <Lockup size={32} />
-        {!supported && <Notice tone="warning">This browser cannot use passkeys. Open encore in a current version of Safari, Chrome, Firefox or Edge.</Notice>}
-        {content}
+        {children}
       </div>
     </main>
   );

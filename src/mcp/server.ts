@@ -13,6 +13,12 @@ import { listReleases } from "../radar/radar";
 import type { Services } from "../services";
 import type { SettingsSource } from "../settings/settings";
 
+/** What each tool can do, for the OAuth consent page. A test keeps it in step with the registered tools. */
+export const MCP_TOOLS = {
+  read: ["overview", "top", "history", "lookup", "on_this_day", "forgotten", "now_playing", "releases"],
+  playback: ["play", "add_to_queue"],
+} as const;
+
 export type McpDeps = { db: Db; settings: SettingsSource; services: Services; now: () => number };
 
 const day = z.string().regex(/^\d{4}-\d{2}-\d{2}$/).describe("YYYY-MM-DD, local time");

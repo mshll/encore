@@ -51,6 +51,8 @@ export type Settings = {
   llm: LlmConfig;
   discord: DiscordConfig | null;
   mcpToken?: string;
+  /** OAuth sign-in for `/mcp`, for clients such as claude.ai that cannot send a fixed token. */
+  mcpOAuth: boolean;
   adminToken?: string;
 };
 
@@ -85,6 +87,7 @@ export type RawSettings = {
   discordGuildId?: string;
   discordChannelId?: string;
   mcpToken?: string;
+  mcpOAuth: boolean;
   adminToken?: string;
   pollIntervalSeconds: number;
   enrichIntervalSeconds: number;
@@ -158,6 +161,7 @@ export function resolveSettings(v: RawSettings, prices: Record<string, ModelPric
           }
         : null,
     mcpToken: v.mcpToken,
+    mcpOAuth: v.mcpOAuth,
     adminToken: v.adminToken,
   };
 }

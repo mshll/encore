@@ -143,6 +143,7 @@ export function settingFields(models: readonly [string, ...string[]]): SettingFi
     text({ key: "discordChannelId", group: "discord", env: "DISCORD_CHANNEL_ID" }, snowflake),
 
     text({ key: "mcpToken", group: "mcp", env: "MCP_TOKEN" }, token, { secret: true }),
+    { key: "mcpOAuth", group: "mcp", env: "MCP_OAUTH", type: "boolean", secret: false, default: false, schema: z.boolean() },
 
     text({ key: "adminToken", group: "access", env: "ADMIN_TOKEN" }, token, { secret: true }),
 

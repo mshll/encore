@@ -34,7 +34,7 @@ export const onboardingRoutes = new Hono<Env>().get("/", (c) => {
       interactionsUrl: `${config.publicBaseUrl}/api/discord/interactions`,
       commandsRegistrable: Boolean(current.discord?.botToken && current.discord.guildId),
     },
-    mcp: { required: false, done: current.mcpToken !== undefined, url: `${config.publicBaseUrl}/mcp`, ...source("mcpToken") },
+    mcp: { required: false, done: current.mcpToken !== undefined || current.mcpOAuth, url: `${config.publicBaseUrl}/mcp`, ...source("mcpToken") },
   };
   return c.json({
     complete: Object.values(steps).every((step) => !step.required || step.done),

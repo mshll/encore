@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { Hono } from "hono";
 import { serveStatic } from "hono/bun";
 import { secureHeaders } from "hono/secure-headers";
+import { OAuthServer } from "../oauth/server";
 import { API_BODY_BYTES, limitBody, PRE_AUTH_BODY_BYTES } from "./bodyLimits";
 import type { Deps, Env } from "./context";
 import { ApiError, errorResponse } from "./errors";
@@ -16,6 +17,7 @@ import { importRoutes } from "./routes/imports";
 import { libraryRoutes } from "./routes/library";
 import { livingRoutes } from "./routes/living";
 import { mcpRoutes } from "./routes/mcp";
+import { mcpAccessRoutes, oauthRoutes, wellKnownRoutes } from "./routes/oauth";
 import { onboardingRoutes } from "./routes/onboarding";
 import { playerRoutes } from "./routes/player";
 import { radarRoutes } from "./routes/radar";
@@ -30,6 +32,7 @@ import { trackRoutes } from "./routes/tracks";
 
 export function createApp(deps: Deps) {
   const app = new Hono<Env>();
+  const oauth = new OAuthServer(deps.db, deps.config.publicBaseUrl, deps.now);
   app.use(async (c, next) => {
     c.set("deps", deps);
     await next();
@@ -77,6 +80,9 @@ export function createApp(deps: Deps) {
   const preAuthLimit = limitBody(PRE_AUTH_BODY_BYTES);
   const apiLimit = limitBody(API_BODY_BYTES);
   app.use("/mcp", preAuthLimit);
+  const oauthLimit = rateLimit(30, 60_000);
+  app.use("/oauth/*", preAuthLimit, oauthLimit);
+  app.use("/.well-known/*", oauthLimit);
   app.use("/api/*", (c, next) => {
     if (c.req.path === "/api/import") return next();
     return (c.req.path.startsWith("/api/auth/") || c.req.path.startsWith("/api/discord/") ? preAuthLimit : apiLimit)(c, next);
@@ -89,7 +95,9 @@ export function createApp(deps: Deps) {
   app.use("/api/auth/*", async (c, next) => (c.req.method === "GET" ? next() : authLimit(c, next)));
   app.route("/api/auth", authRoutes);
   app.route("/", callbackRoute);
-  app.route("/mcp", mcpRoutes(deps));
+  app.route("/mcp", mcpRoutes(deps, oauth));
+  app.route("/.well-known", wellKnownRoutes(oauth));
+  app.route("/oauth", oauthRoutes(oauth));
 
   app.use("/api/tags/*", requireSessionOrAdmin);
   app.route("/api/tags", tagRoutes);
@@ -121,6 +129,7 @@ export function createApp(deps: Deps) {
   app.route("/api/living", livingRoutes);
   app.route("/api/library", libraryRoutes);
   app.route("/api/shares", shareRoutes);
+  app.route("/api/mcp", mcpAccessRoutes(oauth));
   app.all("/api/*", () => {
     throw new ApiError(404, "not_found", "Unknown API route");
   });
