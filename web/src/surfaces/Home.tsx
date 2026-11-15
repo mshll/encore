@@ -418,11 +418,9 @@ export function Home() {
           <StatusNotice />
           <ThisWeek />
           <AllTime />
-          <div className={SIDE_COLUMNS}>
-            <Section title="Most played" description={overview.data && overview.data.plays > 0 ? `${hoursText(overview.data.hours)}, ${plural(overview.data.listens, "play", "plays")}` : undefined} actions={<RangePicker />}>
-              <Top range={range} overview={overview.data} />
-            </Section>
-          </div>
+          <Section title="Most played" description={overview.data && overview.data.plays > 0 ? `${hoursText(overview.data.hours)}, ${plural(overview.data.listens, "play", "plays")}` : undefined} actions={<RangePicker />}>
+            <Top range={range} overview={overview.data} />
+          </Section>
           <PlayNext />
         </>
       )}
