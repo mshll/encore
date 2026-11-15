@@ -73,7 +73,6 @@ export function PlayerBar({ queueOpen, onToggleQueue }: { queueOpen: boolean; on
               size="sm"
               aria-pressed={Boolean(now.data?.shuffle)}
               disabled={!track}
-              className={now.data?.shuffle ? "text-accent-text" : ""}
               onClick={() => playback.shuffle(!now.data?.shuffle)}
             />
           </Tooltip>
@@ -105,7 +104,7 @@ export function PlayerBar({ queueOpen, onToggleQueue }: { queueOpen: boolean; on
           </Tooltip>
         )}
         <Tooltip label={queueOpen ? "Hide queue" : "Queue"}>
-          <IconButton icon={QueueIcon} label="Queue" aria-pressed={queueOpen} className={queueOpen ? "bg-fill text-primary" : ""} onClick={onToggleQueue} />
+          <IconButton icon={QueueIcon} label="Queue" aria-pressed={queueOpen} className={queueOpen ? "bg-fill" : ""} onClick={onToggleQueue} />
         </Tooltip>
       </div>
     </section>

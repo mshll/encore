@@ -260,6 +260,7 @@ Phosphor, regular weight; `fill` only for the active nav item and the playing st
 
 The platform layer lives in `styles/app.css`, `styles/tokens.css`, `app/Shell.tsx` and `app/keyboard.ts`; a surface does not repeat it.
 
+- **A toggle that is on is green.** A ghost button with `aria-pressed="true"` (Shuffle, Queue) takes `text-accent-text`, set once in `ui/Button.tsx`; never colour a pressed button by hand.
 - **Hover only with a mouse.** `hover:` and `group-hover:` apply under `(hover: hover) and (pointer: fine)`. On a touch screen `hover:` styles show while pressed (`:active`), so every control answers a press within `--dur-hover`. Hand-written hover CSS goes in the same query. Actions revealed on hover hide only under `can-hover:`; on a touch screen they always show, in the row.
 - **Press, not release.** `press` (scale 0.97) on buttons and tabs; no feedback that waits for `click`. No tap highlight (`-webkit-tap-highlight-color: transparent` on the root).
 - **Controls are not text.** Buttons, tabs, menu items, options, switches, checkboxes and nav links take `user-select: none` and `-webkit-touch-callout: none`. Content (names, figures, errors, links in text) stays selectable. Controls and fields take `touch-action: manipulation`.

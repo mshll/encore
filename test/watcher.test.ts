@@ -212,4 +212,39 @@ describe("watcher service", () => {
     expect(now).toMatchObject({ playing: true, progressMs: 15_000, track: { uri: A, name: "Song a", albumArtUrl: "https://img/a" }, device: { name: "iPhone" } });
     expect(calls).toHaveLength(1);
   });
+
+  test("a pause the owner sent shows at once, with the progress frozen where it was", async () => {
+    const { make, calls, advance } = setup([jsonResponse(state(A, 10_000))]);
+    const watcher = make();
+    await watcher.tick();
+    advance(5_000);
+
+    watcher.applied({ playing: false });
+    advance(3_000);
+
+    expect(await watcher.nowPlaying(60_000)).toMatchObject({ playing: false, progressMs: 15_000 });
+    expect(calls).toHaveLength(1);
+  });
+
+  test("a shuffle change the owner sent shows at once", async () => {
+    const { make } = setup([jsonResponse(state(A, 10_000))]);
+    const watcher = make();
+    await watcher.tick();
+
+    watcher.applied({ shuffle: false });
+
+    expect((await watcher.nowPlaying(60_000)).shuffle).toBe(false);
+  });
+
+  test("after a command that changes the song, now playing reads Spotify again", async () => {
+    const { make, calls, advance } = setup([jsonResponse(state(A, 10_000)), jsonResponse(state(B, 0))]);
+    const watcher = make();
+    await watcher.tick();
+
+    watcher.applied();
+    advance(1_500);
+
+    expect((await watcher.nowPlaying(60_000)).track?.uri).toBe(B);
+    expect(calls).toHaveLength(2);
+  });
 });

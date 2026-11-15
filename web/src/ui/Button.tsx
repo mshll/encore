@@ -9,7 +9,8 @@ const VARIANT: Record<ButtonVariant, string> = {
   primary: "bg-fill-inverted text-inverted hover:bg-fill-inverted-hover",
   accent: "bg-accent text-on-accent hover:bg-accent-hover",
   secondary: "bg-fill-raised text-primary shadow-control hover:bg-fill-raised-hover",
-  ghost: "text-secondary hover:bg-fill-hover hover:text-primary data-[popup-open]:bg-fill-hover data-[popup-open]:text-primary",
+  ghost:
+    "text-secondary hover:bg-fill-hover hover:text-primary data-[popup-open]:bg-fill-hover data-[popup-open]:text-primary aria-pressed:text-accent-text aria-pressed:hover:text-accent-text",
   danger: "bg-danger-subtle text-danger hover:bg-fill-hover",
   standout: "text-on-standout hover:bg-fill-on-standout",
 };

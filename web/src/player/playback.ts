@@ -15,6 +15,8 @@ export function playbackProblem(error: unknown): string {
 
 export const openInSpotify = (uri: string) => `https://open.spotify.com/${uri.split(":")[1]}/${uri.split(":")[2]}`;
 
+const SETTLED_MS = 1500;
+
 export function usePlayback() {
   const queryClient = useQueryClient();
   const send = async (path: string, body: unknown, done?: string) => {
@@ -22,6 +24,8 @@ export function usePlayback() {
       await request(path, { json: body });
       if (done) showToast(done);
       await queryClient.invalidateQueries({ queryKey: ["player"] });
+      // Spotify reports a new song a moment after the command: ask once more when it has.
+      setTimeout(() => void queryClient.invalidateQueries({ queryKey: ["player"] }), SETTLED_MS);
       return true;
     } catch (error) {
       showToast(playbackProblem(error), "problem");

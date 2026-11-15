@@ -38,17 +38,22 @@ export const playerRoutes = new Hono<Env>()
     return c.json({ current: queue.currently_playing && view(queue.currently_playing), queue: queue.queue.map(view) });
   })
   .post("/play", async (c) => {
-    await c.var.deps.services.player.play(parse(playBody, await optionalBody(c)));
+    const { player, watcher } = c.var.deps.services;
+    const body = parse(playBody, await optionalBody(c));
+    await player.play(body);
+    watcher.applied(body.contextUri || body.uris ? {} : { playing: true });
     return c.json({ ok: true });
   })
   .post("/pause", async (c) => {
     const body = parse(z.object({ deviceId }).strict(), await optionalBody(c));
     await c.var.deps.services.player.pause(body.deviceId);
+    c.var.deps.services.watcher.applied({ playing: false });
     return c.json({ ok: true });
   })
   .post("/next", async (c) => {
     const body = parse(z.object({ deviceId }).strict(), await optionalBody(c));
     await c.var.deps.services.player.next(body.deviceId);
+    c.var.deps.services.watcher.applied();
     return c.json({ ok: true });
   })
   .post("/queue", async (c) => {
@@ -59,10 +64,12 @@ export const playerRoutes = new Hono<Env>()
   .post("/shuffle", async (c) => {
     const body = parse(z.object({ state: z.boolean(), deviceId }).strict(), await jsonBody(c));
     await c.var.deps.services.player.shuffle(body.state, body.deviceId);
+    c.var.deps.services.watcher.applied({ shuffle: body.state });
     return c.json({ ok: true });
   })
   .post("/transfer", async (c) => {
     const body = parse(z.object({ deviceId: z.string().min(1).max(100), play: z.boolean().default(false) }).strict(), await jsonBody(c));
     await c.var.deps.services.player.transfer(body.deviceId, body.play);
+    c.var.deps.services.watcher.applied();
     return c.json({ ok: true });
   });

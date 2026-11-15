@@ -71,7 +71,6 @@ export function NowPlayingSheet({ open, onOpenChange }: { open: boolean; onOpenC
                   label="Shuffle"
                   size="lg"
                   aria-pressed={Boolean(now.data?.shuffle)}
-                  className={now.data?.shuffle ? "text-accent-text" : ""}
                   onClick={() => playback.shuffle(!now.data?.shuffle)}
                 />
                 <button

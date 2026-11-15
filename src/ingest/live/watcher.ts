@@ -36,12 +36,17 @@ function snapshotOf(state: PlaybackState | null): Snapshot | null {
   };
 }
 
+/** After a command that changes the song, Spotify takes a moment to report it: for this long, now playing is at most this old. */
+const SETTLE_MS = 4_000;
+const SETTLE_MAX_AGE_MS = 1_000;
+
 export class Watcher {
   private current: Observation | null;
   private latest: { state: PlaybackState | null; at: number } | null = null;
   private blockedUntil = 0;
   private failures = 0;
   private inFlight: Promise<Record<string, unknown>> | null = null;
+  private settleUntil = 0;
   private readonly listeners: ((event: WatchEvent) => void)[] = [];
 
   constructor(
@@ -78,7 +83,25 @@ export class Watcher {
     return this.current?.wasPlaying ? watcherActiveMs : watcherIdleMs;
   }
 
+  /**
+   * A playback command the owner sent has succeeded. What it changed for certain (playing, shuffle) shows at once;
+   * anything else (the song after play or next) is read from Spotify again while it settles.
+   */
+  applied(change: { playing?: boolean; shuffle?: boolean } = {}) {
+    const now = this.now();
+    const state = this.latest?.state;
+    if (state) {
+      const progress = state.progress_ms !== null && state.is_playing ? state.progress_ms + (now - this.latest!.at) : state.progress_ms;
+      this.latest = {
+        at: now,
+        state: { ...state, progress_ms: progress, ...(change.playing === undefined ? {} : { is_playing: change.playing }), ...(change.shuffle === undefined ? {} : { shuffle_state: change.shuffle }) },
+      };
+    }
+    if (change.playing !== false && change.shuffle === undefined) this.settleUntil = now + SETTLE_MS;
+  }
+
   async nowPlaying(maxAgeMs: number): Promise<NowPlaying> {
+    if (this.now() < this.settleUntil) maxAgeMs = Math.min(maxAgeMs, SETTLE_MAX_AGE_MS);
     if ((!this.latest || this.now() - this.latest.at > maxAgeMs) && this.now() >= this.blockedUntil) await this.tick().catch((error: unknown) => console.error(`[watch] refresh failed: ${error instanceof Error ? error.message : error}`));
     const state = this.latest?.state ?? null;
     const item = state?.currently_playing_type === "track" ? state.item : null;
