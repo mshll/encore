@@ -49,7 +49,7 @@ export function PhoneNav({ onSearch, onOpenPlayer, collapsed, onExpand, inert }:
 
   return (
     <>
-      <div aria-hidden className="edge-blur pointer-events-none absolute inset-x-0 bottom-0 z-10 h-[calc(var(--bottom-chrome)+32px)] in-data-keyboard-open:hidden">
+      <div aria-hidden className="edge-blur pointer-events-none fixed inset-x-0 bottom-[calc(-1*env(safe-area-inset-bottom,0px)-40px)] z-10 h-[calc(var(--bottom-chrome)+env(safe-area-inset-bottom,0px)+56px)] in-data-keyboard-open:hidden">
         {Array.from({ length: 8 }, (_, i) => (
           <i key={i} />
         ))}
