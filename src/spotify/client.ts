@@ -23,6 +23,20 @@ const routeOf = (method: string, path: string) =>
     .map((segment) => (/^[0-9A-Za-z]{22}$/.test(segment) ? ":id" : segment))
     .join("/")}`;
 
+/**
+ * The parsed body of a successful response. Player commands answer 200 with a bare id that is not JSON, so a write
+ * whose body cannot be parsed has still succeeded; a read that cannot be parsed has failed.
+ */
+function readBody<T>(text: string, route: string, status: number): T {
+  if (!text) return null as T;
+  try {
+    return JSON.parse(text) as T;
+  } catch {
+    if (route.startsWith("GET ")) throw new SpotifyApiError(status, "Spotify sent a response that could not be read");
+    return null as T;
+  }
+}
+
 /** A request body sent as is, instead of as JSON. */
 class RawBody {
   constructor(
@@ -147,8 +161,7 @@ export class SpotifyClient {
       const body = (await res.json().catch(() => ({}))) as { error?: { message?: string; reason?: string } };
       throw new SpotifyApiError(res.status, body.error?.message ?? res.statusText, body.error?.reason);
     }
-    const text = await res.text();
-    return (text ? JSON.parse(text) : null) as T;
+    return readBody<T>(await res.text(), route, res.status);
   }
 
   private send(path: string, token: string, method: string, body: unknown) {

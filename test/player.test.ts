@@ -40,6 +40,19 @@ describe("player endpoints", () => {
     ]);
   });
 
+  test("a control succeeds when Spotify answers 200 with a body that is not JSON", async () => {
+    const { post } = signedIn(() => new Response("sL1_y8Fj0w3B6swawYiW1EWKYLw", { status: 200, headers: { "content-type": "application/json" } }));
+    for (const path of ["/api/player/pause", "/api/player/next"]) expect((await post(path)).status).toBe(200);
+    expect((await post("/api/player/play", { uris: [uri("a")] })).status).toBe(200);
+  });
+
+  test("an unreadable body on a read is a Spotify failure, not an internal error", async () => {
+    const { get } = signedIn(() => new Response("not json", { status: 200 }));
+    const res = await get("/api/player/devices");
+    expect(res.status).toBe(502);
+    expect(((await res.json()) as { error: { code: string } }).error.code).toBe("spotify_failed");
+  });
+
   test("invalid bodies are 400 and make no Spotify call", async () => {
     const { post, calls } = signedIn(() => noContent());
     expect((await post("/api/player/queue", { uri: "spotify:episode:x" })).status).toBe(400);
