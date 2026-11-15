@@ -4,6 +4,7 @@ import { livingPlaylists, livingRefreshes, releases, releaseTracks, settings as 
 import { getJobState } from "../jobs/state";
 import { localTime } from "../plays/localTime";
 import { songKey } from "../plays/song";
+import { isReissue } from "../radar/reissue";
 import { playlistDescription } from "../sets/playlist";
 import type { SettingsSource } from "../settings/settings";
 import type { SpotifyClient } from "../spotify/client";
@@ -254,12 +255,13 @@ export async function fetchReleaseTracks(deps: LivingDeps): Promise<{ releases: 
   const ctx = buildContext(deps);
   const since = new Date(Date.parse(`${localTime(ctx.now, ctx.timezone).day}T00:00:00Z`) - NEW_RELEASE_DAYS * 86_400_000).toISOString().slice(0, 10);
   const due = db
-    .select({ id: releases.id, artist: releases.artistName })
+    .select({ id: releases.id, artist: releases.artistName, name: releases.name, albumType: releases.albumType })
     .from(releases)
     .where(and(eq(releases.isNew, true), isNull(releases.tracksFetchedAt), gte(releases.releaseDate, since)))
     .orderBy(desc(releases.releaseDate), asc(releases.id))
-    .limit(RELEASES_PER_RUN)
-    .all();
+    .all()
+    .filter((r) => !isReissue(r))
+    .slice(0, RELEASES_PER_RUN);
   let calls = 0;
   for (const release of due) {
     const page = await spotify.albumTracks(release.id, RELEASE_TRACKS);

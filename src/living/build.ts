@@ -6,6 +6,7 @@ import type { Db } from "../db/client";
 import { picks, releases, releaseTracks, type LivingTrack } from "../db/schema";
 import { definingSongs } from "../digest/songs";
 import { localTime } from "../plays/localTime";
+import { isReissue } from "../radar/reissue";
 
 export type BuildContext = { now: number; timezone: string };
 
@@ -77,13 +78,15 @@ export function yearTracks(db: Db, span: { from: string; to: string }, cap: numb
 export function newReleaseTracks(db: Db, ctx: BuildContext): LivingTrack[] {
   const since = dayBefore(localTime(ctx.now, ctx.timezone).day, NEW_RELEASE_DAYS);
   return db
-    .select({ uri: releaseTracks.uri, songKey: releaseTracks.songKey, name: releaseTracks.name, artist: releaseTracks.artist, album: releases.name, albumArtUrl: releases.imageUrl })
+    .select({ uri: releaseTracks.uri, songKey: releaseTracks.songKey, name: releaseTracks.name, artist: releaseTracks.artist, album: releases.name, albumArtUrl: releases.imageUrl, albumType: releases.albumType })
     .from(releaseTracks)
     .innerJoin(releases, eq(releases.id, releaseTracks.releaseId))
     .where(and(eq(releases.isNew, true), gte(releases.releaseDate, since)))
     .orderBy(desc(releases.releaseDate), desc(releases.firstSeenAt), asc(releaseTracks.releaseId), asc(releaseTracks.position))
-    .limit(CANDIDATES)
-    .all();
+    .all()
+    .filter((t) => !isReissue({ name: t.album, albumType: t.albumType }))
+    .slice(0, CANDIDATES)
+    .map(({ albumType: _, ...track }) => track);
 }
 
 const distinct = (tracks: LivingTrack[]) => [...new Map(tracks.map((t) => [t.songKey, t] as const)).values()];

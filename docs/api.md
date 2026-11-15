@@ -769,7 +769,9 @@ A release is **new** when it was not stored before and its release date is on or
 
 ### `GET /api/radar`
 
-Params: `status` = `new` (default: new and not marked seen) | `recent` (released in the last `days`), `days` (1-365, default 30), `limit` (1-200, default 50). Sorted by release date, newest first.
+Params: `status` = `new` (default: flagged new) | `recent` (released in the last `days`), `days` (1-365, default 30), `limit` (1-200, default 50), `includeSeen` (`true` | `false`; default `false` for `new`, `true` for `recent`), `includeReissues` (`true` | `false`, default `false`). Sorted by release date, newest first.
+
+A **re-release** is a compilation, or a title whose version note (a bracketed part, or the part after the last ` - `) names a remaster, live recording, anniversary, deluxe edition, re-recording, reissue, expanded edition or box set, or a title that says "Remastered", "Re-recorded", "10th Anniversary" or starts with "Live at/from/in". Words in the name itself do not count, so "Live Forever" or "Anniversary" stay. Re-releases are left out of `items`, `unseenNew`, the weekly digest and the New from your artists playlist.
 
 ```json
 { "artists": 66, "withId": 47, "checkedRecently": 12, "unseenNew": 3, "lastRunAt": "...", "lastResult": { "due": 54, "checked": 2, "resolved": 0, "unresolved": 0, "found": 18, "newReleases": 1, "calls": 2 },
@@ -779,9 +781,9 @@ Params: `status` = `new` (default: new and not marked seen) | `recent` (released
 
 ### `POST /api/radar/seen`
 
-Body `{ "ids"?: [release id] }`; without `ids`, marks every unseen new release. `{ "marked": 3 }`.
+Body `{ "ids"?: [release id] }`; without `ids`, marks every unseen release flagged new. `{ "marked": 3 }`.
 
-For the weekly digest: `newReleasesSince(db, sinceMs)` in `src/radar/radar.ts` returns releases flagged new and first seen at or after `sinceMs`, seen or not.
+For the weekly digest: `newReleasesSince(db, sinceMs)` in `src/radar/radar.ts` returns releases flagged new and first seen at or after `sinceMs`, seen or not, without re-releases.
 
 ## Shares
 
@@ -822,7 +824,7 @@ Six private playlists in the owner's Spotify account that encore keeps refilling
 | `picks` | Weekly picks | The latest week of picks, without `never` picks | After a picks run, a pick state change, and every job tick | replace |
 | `forgotten` | Forgotten favourites | Songs with 10+ listens and none in 90 days (`stats/forgotten`), most listened first | Weekly (from Monday, local) | rolling, 10 per refresh |
 | `most-played` | Most played lately | Most listens in the last 28 local days, at least 2 | Daily (local) | replace |
-| `new-releases` | New from your artists | The first 3 tracks of each new release (radar) from the last 90 days, newest first | Every job tick | rolling |
+| `new-releases` | New from your artists | The first 3 tracks of each new release (radar) from the last 90 days, newest first, without re-releases | Every job tick | rolling |
 | `this-month` | This month in past years | Most listens in this calendar month of earlier years | Monthly (the 1st, local) | replace |
 | `this-year` | This year so far | The songs that defined the year so far, by the recap playlist rule (most listens, then most time, at least 2) | Weekly (from Monday, local), and on 1 January | replace |
 

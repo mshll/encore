@@ -1,4 +1,4 @@
-import { and, count, desc, eq, gte, inArray, isNull, sql } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, isNull, sql } from "drizzle-orm";
 import type { Settings } from "../settings/settings";
 import { LISTEN } from "../analytics/common";
 import type { Db } from "../db/client";
@@ -8,6 +8,7 @@ import { localTime } from "../plays/localTime";
 import type { SpotifyClient } from "../spotify/client";
 import { SpotifyApiError } from "../spotify/errors";
 import type { Page, SimplifiedAlbum } from "../spotify/types";
+import { isReissue } from "./reissue";
 
 export type RadarConfig = Pick<Settings, "timezone" | "radarMinListens" | "radarArtistsPerRun" | "radarRecheckMs" | "radarBaselineDays">;
 export type RadarCandidate = { artist: string; listens: number; artistId: string | null; lastCheckedAt: number | null };
@@ -168,29 +169,37 @@ function releaseView(r: typeof releases.$inferSelect) {
   };
 }
 
-export function listReleases(db: Db, { status, since, limit }: { status: "new" | "recent"; since: string; limit: number }) {
-  const where = status === "new" ? and(eq(releases.isNew, true), isNull(releases.seenAt)) : gte(releases.releaseDate, since);
-  return db.select().from(releases).where(where).orderBy(desc(releases.releaseDate), releases.artistName).limit(limit).all().map(releaseView);
+export type ReleaseFilter = { status: "new" | "recent"; since: string; limit: number; includeSeen?: boolean; includeReissues?: boolean };
+
+export function listReleases(db: Db, { status, since, limit, includeSeen = false, includeReissues = false }: ReleaseFilter): Release[] {
+  const where = and(status === "new" ? eq(releases.isNew, true) : gte(releases.releaseDate, since), includeSeen ? undefined : isNull(releases.seenAt));
+  return db
+    .select()
+    .from(releases)
+    .where(where)
+    .orderBy(desc(releases.releaseDate), releases.artistName)
+    .all()
+    .filter((r) => includeReissues || !isReissue(r))
+    .slice(0, limit)
+    .map(releaseView);
 }
 
-export function newReleasesSince(db: Db, since: number) {
+export function newReleasesSince(db: Db, since: number): Release[] {
   return db
     .select()
     .from(releases)
     .where(and(eq(releases.isNew, true), gte(releases.firstSeenAt, since)))
     .orderBy(desc(releases.releaseDate))
     .all()
+    .filter((r) => !isReissue(r))
     .map(releaseView);
 }
 
-export function markReleasesSeen(db: Db, ids: string[] | undefined, now: number): number {
+/** `new`: every unseen release flagged new. `all`: every unseen release. */
+export function markReleasesSeen(db: Db, target: string[] | "new" | "all", now: number): number {
   const unseen = isNull(releases.seenAt);
-  return db
-    .update(releases)
-    .set({ seenAt: now })
-    .where(ids ? and(unseen, inArray(releases.id, ids)) : and(unseen, eq(releases.isNew, true)))
-    .returning({ id: releases.id })
-    .all().length;
+  const where = Array.isArray(target) ? and(unseen, inArray(releases.id, target)) : target === "new" ? and(unseen, eq(releases.isNew, true)) : unseen;
+  return db.update(releases).set({ seenAt: now }).where(where).returning({ id: releases.id }).all().length;
 }
 
 export function radarStatus(db: Db, config: RadarConfig, now: number) {
@@ -199,6 +208,11 @@ export function radarStatus(db: Db, config: RadarConfig, now: number) {
     artists: candidates.length,
     withId: candidates.filter((c) => c.artistId).length,
     checkedRecently: candidates.filter((c) => c.lastCheckedAt !== null && c.lastCheckedAt > now - config.radarRecheckMs).length,
-    unseenNew: db.select({ n: count() }).from(releases).where(and(eq(releases.isNew, true), isNull(releases.seenAt))).get()!.n,
+    unseenNew: db
+      .select({ name: releases.name, albumType: releases.albumType })
+      .from(releases)
+      .where(and(eq(releases.isNew, true), isNull(releases.seenAt)))
+      .all()
+      .filter((r) => !isReissue(r)).length,
   };
 }
