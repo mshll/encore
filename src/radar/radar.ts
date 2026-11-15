@@ -65,15 +65,20 @@ async function resolveArtistId(db: Db, spotify: SpotifyClient, artist: string): 
   }
 }
 
+const OWN_GROUPS = new Set(["album", "single"]);
+
+/** Spotify also lists albums the artist only appears on; a release counts only when the artist is credited on the album itself. */
+const byArtist = (artistId: string) => (album: SimplifiedAlbum) => (album.album_group === undefined || OWN_GROUPS.has(album.album_group)) && album.artists.some((a) => a.id === artistId);
+
 async function fetchReleases(spotify: SpotifyClient, artistId: string): Promise<{ albums: SimplifiedAlbum[]; calls: number }> {
   const path = (groups: string) => `/artists/${encodeURIComponent(artistId)}/albums?include_groups=${groups}&limit=${ALBUM_PAGE}`;
   const first = await spotify.request<Page<SimplifiedAlbum>>("GET", path("album,single"));
-  if (first.total <= first.items.length) return { albums: first.items, calls: 1 };
+  if (first.total <= first.items.length) return { albums: first.items.filter(byArtist(artistId)), calls: 1 };
   const singles = await spotify.request<Page<SimplifiedAlbum>>("GET", path("single"));
-  return { albums: [...new Map([...first.items, ...singles.items].map((a) => [a.id, a])).values()], calls: 2 };
+  return { albums: [...new Map([...first.items, ...singles.items].map((a) => [a.id, a])).values()].filter(byArtist(artistId)), calls: 2 };
 }
 
-function storeReleases(db: Db, artistId: string, artistName: string, albums: SimplifiedAlbum[], newFrom: string, now: number): { found: number; fresh: number } {
+function storeReleases(db: Db, albums: SimplifiedAlbum[], newFrom: string, now: number): { found: number; fresh: number } {
   const known = new Set(
     albums.length
       ? db
@@ -99,8 +104,8 @@ function storeReleases(db: Db, artistId: string, artistName: string, albums: Sim
       .values({
         id: album.id,
         uri: album.uri,
-        artistId,
-        artistName: album.artists[0]?.name ?? artistName,
+        artistId: album.artists[0]!.id,
+        artistName: album.artists[0]!.name,
         name: album.name,
         albumType: album.album_type,
         releaseDate,
@@ -131,7 +136,7 @@ export async function runRadar(db: Db, spotify: SpotifyClient, config: RadarConf
     const { albums, calls } = await fetchReleases(spotify, candidate.artistId);
     result.calls += calls;
     const newFrom = candidate.lastCheckedAt === null ? dayMinus(today, config.radarBaselineDays) : dayMinus(localTime(candidate.lastCheckedAt, config.timezone).day, NEW_GRACE_DAYS);
-    const stored = storeReleases(db, candidate.artistId, candidate.artist, albums, newFrom, now);
+    const stored = storeReleases(db, albums, newFrom, now);
     db.insert(radarArtists)
       .values({ artistId: candidate.artistId, lastCheckedAt: now })
       .onConflictDoUpdate({ target: radarArtists.artistId, set: { lastCheckedAt: now } })
