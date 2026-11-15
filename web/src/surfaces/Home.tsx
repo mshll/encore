@@ -1,3 +1,4 @@
+import type { UseQueryResult } from "@tanstack/react-query";
 import { useState } from "react";
 import { useLocation } from "wouter";
 import { useDigests, useLifetime, useLiving, useOnThisDay, useOverview, useStatus, useTimeSeries, useTimezone, useTopAlbums, useTopArtists, useTopTracks, useWeek } from "../api/queries";
@@ -6,7 +7,7 @@ import { artistPath, recapPath, songPath } from "../app/paths";
 import { DitherArea, DitherBars } from "../charts/Dither";
 import { InlineChange, InlinePair } from "../charts/Inline";
 import { periodTick, periodTitle } from "../charts/ticks";
-import { todayIn } from "../lib/dates";
+import { addDays, daysBetween, todayIn } from "../lib/dates";
 import { fmtAgo, fmtCompact, fmtDayShort, fmtHours, fmtHoursValue, fmtInt, hoursParts, WEEKDAYS_SHORT } from "../lib/format";
 import { periodFor, useRange, type Range } from "../lib/range";
 import { fillPeriods } from "../lib/series";
@@ -19,7 +20,7 @@ import { Composer } from "../ui/Composer";
 import { WaveformIcon } from "../ui/icons";
 import { Notice } from "../ui/Notice";
 import { Page, PageHeader, SIDE_COLUMNS, Section, dimWhile } from "../ui/Page";
-import { RangePicker } from "../ui/RangePicker";
+import { RangePicker, useRangeLabel } from "../ui/RangePicker";
 import { AlbumRow, ArtistRow, Row, RowList, RowSkeleton, TrackRow } from "../ui/Rows";
 import { Segmented, TabList, TabPanel, TabsRoot } from "../ui/Segmented";
 import { ChartSkeleton, Skeleton } from "../ui/Skeleton";
@@ -62,6 +63,7 @@ function WeekChart({ days }: { days: WeekSoFar["days"] }) {
       valueLabel="Hours"
       xFormat={(d) => fmtDayShort(d)}
       format={fmtHours}
+      table={{ format: fmtHoursValue }}
       height={desktop ? 120 : 96}
     />
   );
@@ -128,42 +130,81 @@ type Metric = "hours" | "plays" | "listens";
 
 const METRIC_LABEL: Record<Metric, string> = { hours: "Hours", plays: "Plays", listens: "Listens" };
 
-const ALL_TIME: Range = {};
+/** The range of the same length right before this one. All time has none. */
+function previousRange(range: Range): Range | null {
+  if (!range.from || !range.to) return null;
+  const days = daysBetween(range.from, range.to);
+  return { from: addDays(range.from, -days), to: addDays(range.from, -1) };
+}
 
-function totals(o: OverviewData): StatItem<Metric>[] {
+const change = (now: number, before: number | undefined) => (before === undefined || before === 0 ? null : (now - before) / before);
+
+function figures(o: OverviewData, before: OverviewData | undefined): StatItem<Metric>[] {
   return [
-    { id: "hours", label: "Hours", value: fmtHoursValue(o.hours) },
-    { id: "plays", label: "Plays", value: fmtCompact(o.plays) },
-    { id: "listens", label: "Listens", value: fmtCompact(o.listens) },
+    { id: "hours", label: "Hours", value: fmtHoursValue(o.hours), delta: change(o.hours, before?.hours), compare: before ? `from ${fmtHoursValue(before.hours)}` : undefined },
+    { id: "plays", label: "Plays", value: fmtCompact(o.plays), delta: change(o.plays, before?.plays), compare: before ? `from ${fmtCompact(before.plays)}` : undefined },
+    { id: "listens", label: "Listens", value: fmtCompact(o.listens), delta: change(o.listens, before?.listens), compare: before ? `from ${fmtCompact(before.listens)}` : undefined },
   ];
 }
 
-function AllTimeChart({ metric, firstDay }: { metric: Metric; firstDay: string | null }) {
+function RangeChart({ metric, range, firstDay }: { metric: Metric; range: Range; firstDay: string | null }) {
   const today = todayIn(useTimezone());
   const desktop = useDesktop();
-  const q = useTimeSeries(ALL_TIME, periodFor(ALL_TIME, firstDay, today));
+  const q = useTimeSeries(range, periodFor(range, firstDay, today));
   if (q.isError) return <ErrorState size="inline" error={q.error} onRetry={() => q.refetch()} title="Could not load the chart" />;
   if (!q.data) return <ChartSkeleton className="h-[96px] md:h-[120px]" />;
-  if (q.data.points.length === 0) return <EmptyState size="section" title="No plays yet" />;
   const period = q.data.period;
   const unit = period === "day" ? "per day" : period === "week" ? "per week" : "per month";
-  const rows = fillPeriods(q.data.points, period, ALL_TIME, today, (p) => ({ period: p, hours: 0, plays: 0, listens: 0 })).map((p) => ({
+  const rows = fillPeriods(q.data.points, period, range, today, (p) => ({ period: p, hours: 0, plays: 0, listens: 0 })).map((p) => ({
     period: p.period,
     title: periodTitle(p.period, period),
     value: p[metric],
   }));
   return (
-    <DitherArea
-      label={`${METRIC_LABEL[metric]} ${unit}, all time`}
-      rows={rows}
-      xKey="period"
-      tipLabel="title"
-      valueKey="value"
-      valueLabel={METRIC_LABEL[metric]}
-      xFormat={(p) => periodTick(p, period)}
-      format={metric === "hours" ? fmtHours : fmtInt}
-      height={desktop ? 120 : 96}
-    />
+    <div className={dimWhile(q.isPlaceholderData)}>
+      <DitherArea
+        label={`${METRIC_LABEL[metric]} ${unit}`}
+        rows={rows}
+        xKey="period"
+        tipLabel="title"
+        valueKey="value"
+        valueLabel={METRIC_LABEL[metric]}
+        xFormat={(p) => periodTick(p, period)}
+        format={metric === "hours" ? fmtHours : fmtInt}
+        table={{ format: metric === "hours" ? fmtHoursValue : fmtInt }}
+        height={desktop ? 120 : 96}
+      />
+    </div>
+  );
+}
+
+/** The range's totals against the range before (when there is one), driving the chart of the range. */
+function RangeFigures({ range, overview, firstDay }: { range: Range; overview: UseQueryResult<OverviewData>; firstDay: string | null }) {
+  const prev = previousRange(range);
+  const before = useOverview(prev ?? range);
+  const [metric, setMetric] = useState<Metric>("hours");
+  if (overview.isError) return <ErrorState size="inline" error={overview.error} onRetry={() => overview.refetch()} />;
+  if (!overview.data)
+    return (
+      <div aria-busy className="flex flex-col gap-4">
+        <div className="grid grid-cols-3 gap-2 md:flex md:gap-10">
+          {[0, 1, 2].map((i) => (
+            <div key={i} className="flex flex-col gap-2 pb-3">
+              <Skeleton className="h-3 w-20" />
+              <Skeleton className="h-8 w-24" />
+            </div>
+          ))}
+        </div>
+        <ChartSkeleton className="h-[96px] md:h-[120px]" />
+      </div>
+    );
+  const compare = prev && before.data && !before.isPlaceholderData ? before.data : undefined;
+  return (
+    <div className={dimWhile(overview.isPlaceholderData)}>
+      <StatStrip items={figures(overview.data, compare)} value={metric} onChange={setMetric} label="Listening figures">
+        <RangeChart metric={metric} range={range} firstDay={firstDay} />
+      </StatStrip>
+    </div>
   );
 }
 
@@ -204,35 +245,32 @@ function OnThisDay() {
   );
 }
 
-/** The long view under This week, laid out the same: the totals drive the chart of every month, this day in earlier years beside it. */
-function AllTime() {
-  const q = useLifetime();
-  const [metric, setMetric] = useState<Metric>("hours");
+/**
+ * The long view under This week, for any range (All time first): the totals drive the chart of the range, this day
+ * in earlier years beside it, then the most played. One range picker scopes the whole group.
+ */
+function Listening({ range, overview, firstDay }: { range: Range; overview: UseQueryResult<OverviewData>; firstDay: string | null }) {
+  const title = useRangeLabel();
+  const empty = overview.data?.plays === 0;
   return (
-    <Section title="All time">
-      <div className={SIDE_COLUMNS}>
-        <div className="min-w-0">
-          {q.isError ? (
-            <ErrorState size="inline" error={q.error} onRetry={() => q.refetch()} />
-          ) : !q.data ? (
-            <div aria-busy className="flex flex-col gap-4">
-              <div className="grid grid-cols-3 gap-2 md:flex md:gap-10">
-                {[0, 1, 2].map((i) => (
-                  <div key={i} className="flex flex-col gap-2 pb-3">
-                    <Skeleton className="h-3 w-20" />
-                    <Skeleton className="h-8 w-24" />
-                  </div>
-                ))}
-              </div>
-              <ChartSkeleton className="h-[96px] md:h-[120px]" />
-            </div>
-          ) : (
-            <StatStrip items={totals(q.data)} value={metric} onChange={setMetric} label="All-time figures">
-              <AllTimeChart metric={metric} firstDay={q.data.firstPlayed?.slice(0, 10) ?? null} />
-            </StatStrip>
-          )}
+    <Section title={title} actions={<RangePicker />}>
+      <div className="flex flex-col gap-10">
+        <div className={SIDE_COLUMNS}>
+          <div className="min-w-0">
+            {empty ? (
+              <EmptyState size="section" title="No plays in this range" description="Choose a wider range to see your listening." />
+            ) : (
+              <RangeFigures range={range} overview={overview} firstDay={firstDay} />
+            )}
+          </div>
+          <OnThisDay />
         </div>
-        <OnThisDay />
+        {!empty && (
+          <div className="flex min-w-0 flex-col gap-2">
+            <h3 className="font-medium text-primary">Most played</h3>
+            <Top range={range} overview={overview.data} />
+          </div>
+        )}
       </div>
     </Section>
   );
@@ -396,8 +434,8 @@ function StatusNotice() {
 }
 
 /**
- * Home: the stats first. This week against the usual, then All time laid out the same way (the long view under the
- * short one), then the top lists for any range. What to play next follows, quieter: the playlists, the composer for
+ * Home: the stats first. This week against the usual, then the long view for any range (All time by default) laid
+ * out the same way, with the top lists of that range. What to play next follows, quieter: the playlists, the composer for
  * Ask or Sets, the latest recap. Music and Patterns hold the full answers.
  */
 export function Home() {
@@ -417,10 +455,7 @@ export function Home() {
         <>
           <StatusNotice />
           <ThisWeek />
-          <AllTime />
-          <Section title="Most played" description={overview.data && overview.data.plays > 0 ? `${hoursText(overview.data.hours)}, ${plural(overview.data.listens, "play", "plays")}` : undefined} actions={<RangePicker />}>
-            <Top range={range} overview={overview.data} />
-          </Section>
+          <Listening range={range} overview={overview} firstDay={lifetime.data?.firstPlayed?.slice(0, 10) ?? null} />
           <PlayNext />
         </>
       )}

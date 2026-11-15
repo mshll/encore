@@ -37,9 +37,9 @@ function Figure({ item }: { item: StatItem<string> }) {
         {item.unit && <span className="text-body-sm leading-none text-secondary">{item.unit}</span>}
       </span>
       {(item.delta != null || item.compare) && (
-        <span className="flex items-baseline gap-2 whitespace-nowrap">
+        <span className="flex max-w-full min-w-0 flex-wrap items-baseline gap-x-2 whitespace-nowrap">
           {item.delta != null && <Delta value={item.delta} />}
-          {item.compare && <span className="truncate text-caption text-tertiary tabular">{item.compare}</span>}
+          {item.compare && <span className="max-w-full truncate text-caption text-tertiary tabular">{item.compare}</span>}
         </span>
       )}
     </>

@@ -1,7 +1,7 @@
 import { useState, type ReactNode } from "react";
 import type { RecapPage, RecapSection, RecapShare } from "../../api/types";
 import { artistPath, songPath } from "../../app/paths";
-import { ArtChip, InlineChange, InlineColumns, InlinePair, InlineShare } from "../../charts/Inline";
+import { ArtChip, InlineChange, InlineColumns, InlineFact, InlinePair, InlineShare } from "../../charts/Inline";
 import { fmtDayShort, fmtHour, fmtHoursValue, fmtInt, fmtMonthShort, hoursParts, WEEKDAYS } from "../../lib/format";
 import { AppLink } from "../../ui/AppLink";
 import { Button } from "../../ui/Button";
@@ -251,27 +251,35 @@ function Finds({ s, page }: { s: Of<"finds">; page: RecapPage }) {
   );
 }
 
+const DAY_BARS: Record<RecapPage["kind"], number> = { weekly: 7, monthly: 31, yearly: 53 };
+
 function Rhythm({ s, page }: { s: Of<"rhythm">; page: RecapPage }) {
   const listening = page.sections.find((x): x is Of<"listening"> => x.id === "listening");
   const dayIndex = listening?.daily ? Math.round((Date.parse(`${s.day.day}T00:00:00Z`) - Date.parse(`${page.span.from}T00:00:00Z`)) / 86_400_000) : -1;
+  const each = page.kind === "yearly" ? "week" : "day";
   return (
     <Section title="When">
       <Take text={s.take} />
-      <Line>
-        <span>
-          Busiest day: {dayLong(s.day.day)}, {shortHours(s.day.hours)}
-        </span>
-        {page.kind === "weekly" && listening?.daily && dayIndex >= 0 && (
-          <InlineColumns values={listening.daily} mark={dayIndex} label={`Listening each day; the most on ${dayLong(s.day.day)}`} />
-        )}
-      </Line>
+      <InlineFact
+        label="Busiest day"
+        figure={shortHours(s.day.hours)}
+        mark={
+          listening?.daily &&
+          dayIndex >= 0 && (
+            <InlineColumns values={listening.daily} mark={dayIndex} bars={DAY_BARS[page.kind]} label={`Listening each ${each}; the most ${page.kind === "yearly" ? "in the week of" : "on"} ${dayLong(s.day.day)}`} />
+          )
+        }
+      >
+        {dayLong(s.day.day)}
+      </InlineFact>
       {s.hour && (
-        <Line>
-          <span>
-            Busiest hour: {fmtHour(s.hour.hour)} to {fmtHour((s.hour.hour + 1) % 24)}
-          </span>
-          {s.byHour && <InlineColumns values={s.byHour} mark={s.hour.hour} bars={24} label={`Listening by hour of the day; the most from ${fmtHour(s.hour.hour)}`} />}
-        </Line>
+        <InlineFact
+          label="Busiest hour"
+          figure={shortHours(s.hour.hours)}
+          mark={s.byHour && <InlineColumns values={s.byHour} mark={s.hour.hour} bars={24} label={`Listening by hour of the day; the most from ${fmtHour(s.hour.hour)}`} />}
+        >
+          {fmtHour(s.hour.hour)} to {fmtHour((s.hour.hour + 1) % 24)}
+        </InlineFact>
       )}
     </Section>
   );

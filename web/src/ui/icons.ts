@@ -46,3 +46,4 @@ export { FileTextIcon } from "@phosphor-icons/react/dist/csr/FileText";
 export { ArrowLeftIcon } from "@phosphor-icons/react/dist/csr/ArrowLeft";
 export { MicrophoneStageIcon } from "@phosphor-icons/react/dist/csr/MicrophoneStage";
 export { MusicNoteIcon } from "@phosphor-icons/react/dist/csr/MusicNote";
+export { TableIcon } from "@phosphor-icons/react/dist/csr/Table";

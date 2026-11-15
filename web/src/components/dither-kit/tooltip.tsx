@@ -1,33 +1,26 @@
 "use client"
 
-import { AnimatePresence, motion } from "motion/react"
-import { useState } from "react"
+import { AnimatePresence, motion, useReducedMotion } from "motion/react"
+import { useLayoutEffect, useRef, useState } from "react"
 import { useCommonChart } from "./common-context"
-import { cn } from "./lib"
 import { rgb } from "./palette"
 
-export type TooltipVariant = "default" | "frosted-glass"
-
-const VARIANT: Record<TooltipVariant, string> = {
-  default: "bg-popover",
-  "frosted-glass": "bg-popover/70 backdrop-blur-sm",
-}
+const GAP = 8
 
 /**
  * Floating hover tooltip. Reads the shared common context so it works in every
- * chart family. It glides between points and fades in/out (instead of snapping),
- * and dims unselected series/slices.
+ * chart family. It sizes to its content, stays inside the chart, glides between
+ * points and fades in/out, and dims unselected series/slices.
  */
 export function Tooltip({
   labelKey,
   valueFormatter,
-  variant = "default",
 }: {
   labelKey?: string
   valueFormatter?: (value: number, name: string) => string
-  variant?: TooltipVariant
 }) {
   const chart = useCommonChart()
+  const reduce = useReducedMotion()
   const show = chart.ready && chart.hoverIndex != null
 
   // Retain the last hovered index so the card keeps its content while fading
@@ -41,62 +34,39 @@ export function Tooltip({
   const heading = chart.heading(index, labelKey)
   const items = chart.itemsAt(index)
 
+  const ref = useRef<HTMLDivElement>(null)
+  const [box, setBox] = useState({ w: 0, h: 0, bound: 0 })
+  useLayoutEffect(() => {
+    const el = ref.current
+    if (!el) return
+    const next = { w: el.offsetWidth, h: el.offsetHeight, bound: el.parentElement?.clientWidth ?? 0 }
+    setBox((prev) => (prev.w === next.w && prev.h === next.h && prev.bound === next.bound ? prev : next))
+  })
+  const left = Math.max(0, Math.min(chart.tooltipLeft - box.w / 2, box.bound - box.w))
+  const top = Math.max(0, chart.tooltipTop - box.h - GAP)
+
   return (
     <AnimatePresence>
       {show && items.length > 0 && (
         <motion.div
+          ref={ref}
           key="dither-tooltip"
-          initial={{
-            opacity: 0,
-            x: "-50%",
-            y: "-115%",
-            top: chart.tooltipTop,
-            left: chart.tooltipLeft,
-          }}
-          animate={{
-            opacity: 1,
-            x: "-50%",
-            y: "-115%",
-            top: chart.tooltipTop,
-            left: chart.tooltipLeft,
-          }}
+          initial={{ opacity: 0, top, left }}
+          animate={{ opacity: 1, top, left }}
           exit={{ opacity: 0 }}
-          transition={{
-            type: "spring",
-            stiffness: 520,
-            damping: 38,
-            mass: 0.6,
-          }}
-          className={cn(
-            "pointer-events-none absolute z-10 rounded-md border px-2 py-1 shadow-sm",
-            VARIANT[variant]
-          )}
+          transition={reduce ? { duration: 0 } : { type: "spring", stiffness: 520, damping: 38, mass: 0.6 }}
+          className="pointer-events-none absolute z-10 flex w-max max-w-full flex-col gap-0.5 rounded-lg bg-overlay px-2.5 py-1.5 text-caption shadow-overlay"
         >
-          {heading && (
-            <div className="mb-0.5 font-mono text-[10px] text-muted-foreground">
-              {heading}
+          {heading && <div className="truncate text-secondary">{heading}</div>}
+          {items.map((item) => (
+            <div key={item.name} className="flex min-w-0 items-center gap-1.5" style={{ opacity: item.dimmed ? 0.4 : 1 }}>
+              <span aria-hidden className="size-2 shrink-0 rounded-[1px]" style={{ backgroundColor: rgb(item.seed.fill) }} />
+              <span className="min-w-0 truncate text-secondary">{item.label}</span>
+              <span className="ml-auto shrink-0 pl-3 font-medium whitespace-nowrap text-primary tabular">
+                {valueFormatter ? valueFormatter(item.value, item.name) : item.value.toLocaleString()}
+              </span>
             </div>
-          )}
-          <div className="flex flex-col gap-0.5">
-            {items.map((item) => (
-              <div
-                key={item.name}
-                className="flex items-center gap-1.5 font-mono text-[11px] text-popover-foreground tabular-nums"
-                style={{ opacity: item.dimmed ? 0.4 : 1 }}
-              >
-                <span
-                  className="size-2 rounded-[1px]"
-                  style={{ backgroundColor: rgb(item.seed.fill) }}
-                />
-                <span className="text-muted-foreground">{item.label}</span>
-                <span className="ml-auto pl-2 text-foreground">
-                  {valueFormatter
-                    ? valueFormatter(item.value, item.name)
-                    : item.value.toLocaleString()}
-                </span>
-              </div>
-            ))}
-          </div>
+          ))}
         </motion.div>
       )}
     </AnimatePresence>

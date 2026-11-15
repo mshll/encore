@@ -19,12 +19,19 @@ export const DITHER_SERIES: DitherColor[] = ["blue", "orange", "purple", "pink",
 type Column = { key: string; label: string };
 type Row = Record<string, string | number>;
 
+/**
+ * How the table behind a chart shows a value: a plain number, with the unit named once in the column header
+ * ("Share (%)"). Defaults to the chart's own format, for values whose unit is the column's name (Plays).
+ */
+export type TableFormat = { format: (v: number) => string; unit?: string };
+
 function Frame({
   label,
   height,
   columns,
   rows,
   format,
+  table,
   children,
 }: {
   label: string;
@@ -32,19 +39,26 @@ function Frame({
   columns: Column[];
   rows: Row[];
   format: (v: number) => string;
+  table?: TableFormat;
   children: ReactNode;
 }) {
   const [head, ...values] = columns;
+  const cell = table?.format ?? format;
   return (
-    <figure role="group" aria-label={label} className="flex w-full flex-col gap-2">
+    <figure role="group" aria-label={label} className="flex w-full flex-col gap-1">
       <div aria-hidden className="relative w-full [&_.font-mono]:font-sans [&_.font-mono]:text-label [&_.font-mono]:tabular-nums" style={{ height }}>
         {children}
       </div>
-      <DataTable
-        label={label}
-        head={columns.map((c) => c.label)}
-        rows={rows.map((r, i) => ({ key: String(i), cells: [String(r[head!.key]), ...values.map((c) => format(Number(r[c.key] ?? 0)))] }))}
-      />
+      <div className="flex justify-end">
+        <DataTable
+          label={label}
+          head={[head!.label, ...values.map((c) => (table?.unit ? `${c.label} (${table.unit})` : c.label))]}
+          rows={rows.map((r, i) => ({
+            key: String(i),
+            cells: [String(r[head!.key]), ...values.map((c) => cell(Number(r[c.key] ?? 0)))],
+          }))}
+        />
+      </div>
     </figure>
   );
 }
@@ -58,6 +72,7 @@ export function DitherBars({
   xFormat,
   tipLabel,
   format,
+  table,
   height = 220,
 }: {
   label: string;
@@ -68,6 +83,7 @@ export function DitherBars({
   xFormat: (v: string, i: number) => string;
   tipLabel: string;
   format: (v: number) => string;
+  table?: TableFormat;
   height?: number;
 }) {
   const config: ChartConfig = { [valueKey]: { label: valueLabel, color: "green" } };
@@ -82,6 +98,7 @@ export function DitherBars({
       ]}
       rows={rows}
       format={format}
+      table={table}
     >
       <BarChart data={rows} config={config} margins={{ left: 44 }} className="size-full">
         <Grid />
@@ -104,6 +121,7 @@ export function DitherArea({
   xFormat,
   tipLabel,
   format,
+  table,
   height = 240,
 }: {
   label: string;
@@ -114,6 +132,7 @@ export function DitherArea({
   xFormat: (v: string, i: number) => string;
   tipLabel: string;
   format: (v: number) => string;
+  table?: TableFormat;
   height?: number;
 }) {
   const config: ChartConfig = { [valueKey]: { label: valueLabel, color: "green" } };
@@ -128,6 +147,7 @@ export function DitherArea({
       ]}
       rows={rows}
       format={format}
+      table={table}
     >
       <AreaChart data={rows} config={config} margins={{ left: 44 }} className="size-full">
         <Grid />
@@ -148,6 +168,7 @@ export function DitherStack({
   series,
   xFormat,
   format,
+  table,
   height = 240,
 }: {
   label: string;
@@ -157,6 +178,7 @@ export function DitherStack({
   series: { key: string; label: string; color: DitherColor }[];
   xFormat: (v: string, i: number) => string;
   format: (v: number) => string;
+  table?: TableFormat;
   height?: number;
 }) {
   const config: ChartConfig = Object.fromEntries(series.map((s) => [s.key, { label: s.label, color: s.color }]));
@@ -168,6 +190,7 @@ export function DitherStack({
       columns={[{ key: tipLabel, label: "Month" }, ...series.map((s) => ({ key: s.key, label: s.label }))]}
       rows={rows}
       format={format}
+      table={table}
     >
       <AreaChart data={rows} config={config} stackType="stacked" margins={{ left: 44 }} className="size-full">
         <Grid />
@@ -191,6 +214,7 @@ export function DitherLine({
   valueLabel,
   xFormat,
   format,
+  table,
   yDomain,
   height = 200,
 }: {
@@ -203,6 +227,7 @@ export function DitherLine({
   valueLabel: string;
   xFormat: (v: string, i: number) => string;
   format: (v: number) => string;
+  table?: TableFormat;
   height?: number;
 }) {
   const config: ChartConfig = { [valueKey]: { label: valueLabel, color: "green" } };
@@ -217,6 +242,7 @@ export function DitherLine({
       ]}
       rows={rows}
       format={format}
+      table={table}
     >
       <LineChart data={rows} config={config} yDomain={yDomain} margins={{ left: 44 }} className="size-full">
         <Grid />
@@ -236,6 +262,7 @@ export function DitherRadar({
   valueKey,
   valueLabel,
   format,
+  table,
   height = 300,
 }: {
   label: string;
@@ -244,6 +271,7 @@ export function DitherRadar({
   valueKey: string;
   valueLabel: string;
   format: (v: number) => string;
+  table?: TableFormat;
   height?: number;
 }) {
   const config: ChartConfig = { [valueKey]: { label: valueLabel, color: "green" } };
@@ -257,6 +285,7 @@ export function DitherRadar({
       ]}
       rows={rows}
       format={format}
+      table={table}
     >
       <RadarChart data={rows} config={config} nameKey={nameKey} className="size-full">
         <Tooltip valueFormatter={(v) => format(v)} />

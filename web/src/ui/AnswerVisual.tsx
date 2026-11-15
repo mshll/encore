@@ -5,7 +5,7 @@ import { DitherBars } from "../charts/Dither";
 import { DitherMeter } from "../charts/DitherMeter";
 import { InlineChange, InlineColumns, InlinePair, InlineShare } from "../charts/Inline";
 import { PairMeter } from "../charts/PairMeter";
-import { fmtDay, fmtDayShort, fmtCompact, fmtHour, fmtHours, fmtInt, fmtMonth, fmtMonthLong, fmtPct, WEEKDAYS, WEEKDAYS_SHORT } from "../lib/format";
+import { fmtDay, fmtDayShort, fmtCompact, fmtHour, fmtHours, fmtHoursValue, fmtInt, fmtMonth, fmtMonthLong, fmtPct, WEEKDAYS, WEEKDAYS_SHORT } from "../lib/format";
 import { Row, RowList } from "./Rows";
 import { Skeleton } from "./Skeleton";
 
@@ -14,6 +14,15 @@ export function fmtValue(v: number, unit: AnswerUnit): string {
   if (unit.type === "percent") return fmtPct(v);
   return `${fmtInt(v)} ${v === 1 ? unit.noun.replace(/s$/, "") : unit.noun}`;
 }
+
+/** A value in a data table: a plain number, its unit named once in the column header. */
+function tableValue(v: number, unit: AnswerUnit): string {
+  if (unit.type === "hours") return fmtHoursValue(v);
+  if (unit.type === "percent") return String(Math.round(v * 100));
+  return fmtInt(v);
+}
+
+const tableUnit = (unit: AnswerUnit) => (unit.type === "hours" ? "h" : unit.type === "percent" ? "%" : unit.noun);
 
 /** A short figure for a column of numbers: the unit word is in the heading or the sentence, and huge values go compact. */
 function fmtFigure(v: number, unit: AnswerUnit): string {
@@ -126,11 +135,13 @@ function Compare({ visual }: { visual: Extract<AnswerVisual, { kind: "compare" }
           ))}
         </ol>
       </div>
-      <DataTable
-        label={visual.title}
-        head={["", visual.nowLabel, visual.beforeLabel]}
-        rows={visual.rows.map((r, i) => ({ key: String(i), cells: [r.label, fmtValue(r.now, visual.unit), fmtValue(r.before, visual.unit)] }))}
-      />
+      <div className="flex justify-end">
+        <DataTable
+          label={visual.title}
+          head={["", `${visual.nowLabel} (${tableUnit(visual.unit)})`, `${visual.beforeLabel} (${tableUnit(visual.unit)})`]}
+          rows={visual.rows.map((r, i) => ({ key: String(i), cells: [r.label, tableValue(r.now, visual.unit), tableValue(r.before, visual.unit)] }))}
+        />
+      </div>
     </>
   );
 }
@@ -173,6 +184,7 @@ export function BlockVisual({ visual }: { visual: AnswerVisual | undefined }) {
           tipLabel="period"
           xFormat={(x) => fmtX(x, visual.axis, false)}
           format={(v) => fmtFigure(v, visual.unit)}
+          table={{ format: (v) => tableValue(v, visual.unit), unit: visual.unit.type === "percent" ? "%" : undefined }}
           height={160}
         />
       </figure>

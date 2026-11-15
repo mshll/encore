@@ -76,3 +76,18 @@ export function ArtChip({ src, kind, children, className }: { src: string | null
     </span>
   );
 }
+
+/**
+ * One fact on a line: what it is, its small chart, the figure, then what it names ("Busiest day ▂▅█▃ 2.6 h Sunday
+ * 6 September"). The words carry the fact for assistive tech; the chart's own label says what it draws.
+ */
+export function InlineFact({ label, mark, figure, children, className }: { label: string; mark?: ReactNode; figure: string; children: ReactNode; className?: string }) {
+  return (
+    <p className={cx("flex flex-wrap items-center gap-x-2 gap-y-1 text-body text-primary", className)}>
+      <span className="text-secondary">{label}</span>
+      {mark}
+      <span className="font-medium whitespace-nowrap tabular">{figure}</span>
+      <span className="min-w-0">{children}</span>
+    </p>
+  );
+}

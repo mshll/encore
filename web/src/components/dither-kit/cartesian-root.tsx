@@ -5,6 +5,7 @@ import {
   type ComponentType,
   isValidElement,
   type ReactNode,
+  useEffect,
 } from "react"
 import {
   type ChartConfig,
@@ -145,6 +146,28 @@ export function CartesianRoot<TData extends Row>({
     onHoverChange?.(index)
   }
 
+  const clear = () => {
+    ctx.setMouseInChart(false)
+    ctx.setHoverIndex(null)
+    onHoverChange?.(null)
+  }
+
+  // A finger lifts off the chart as soon as it taps, so a touch keeps the
+  // tooltip until the next touch lands outside the chart.
+  const { hoverIndex, setHoverIndex, setMouseInChart } = ctx
+  useEffect(() => {
+    if (hoverIndex == null) return
+    const away = (e: PointerEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) {
+        setMouseInChart(false)
+        setHoverIndex(null)
+        onHoverChange?.(null)
+      }
+    }
+    document.addEventListener("pointerdown", away, true)
+    return () => document.removeEventListener("pointerdown", away, true)
+  }, [hoverIndex, setHoverIndex, setMouseInChart, onHoverChange, ref])
+
   return (
     <ChartContext value={ctx}>
       <CommonChartContext value={ctx.common}>
@@ -152,11 +175,11 @@ export function CartesianRoot<TData extends Row>({
           ref={ref}
           className={cn("relative h-full w-full", interactive && "touch-pan-y", className)}
           onPointerEnter={() => ctx.setMouseInChart(true)}
+          onPointerDown={interactive ? (e) => onMove(e.clientX) : undefined}
           onPointerMove={interactive ? (e) => onMove(e.clientX) : undefined}
-          onPointerLeave={() => {
-            ctx.setMouseInChart(false)
-            ctx.setHoverIndex(null)
-            onHoverChange?.(null)
+          onPointerCancel={clear}
+          onPointerLeave={(e) => {
+            if (e.pointerType !== "touch") clear()
           }}
         >
           {ctx.ready && backChildren.length > 0 && (

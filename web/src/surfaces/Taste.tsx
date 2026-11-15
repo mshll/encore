@@ -3,6 +3,7 @@ import { useEnergy, usePendingTags, useTagSeries, useTimeSeries } from "../api/q
 import type { Energy, TagSeries } from "../api/types";
 import { DitherArea, DitherLine } from "../charts/Dither";
 import { DitherMeter } from "../charts/DitherMeter";
+import { InlineFact, InlineShare } from "../charts/Inline";
 import { periodTick } from "../charts/ticks";
 import { monthSequence } from "../lib/dates";
 import { fmtHour, fmtHours, fmtInt, fmtMonth, fmtMonthLong, fmtPct } from "../lib/format";
@@ -85,6 +86,7 @@ function TagTrend({ data, tag, range }: { data: TagSeries; tag: string; range: R
         valueLabel={tagLabel(tag)}
         xFormat={(m) => periodTick(m, "month")}
         format={pct}
+        table={{ format: (v) => String(Math.round(v)), unit: "%" }}
       />
       {trend.from && <p className="text-caption text-secondary">Starts {fmtMonthLong(trend.from)}; the quiet months before it are left out.</p>}
     </>
@@ -175,9 +177,14 @@ function TasteView({ range }: { range: Range }) {
           ]}
           className="w-full max-w-60"
         />
-        <p className="text-body text-pretty">
-          Top {noun}: <span className="font-medium">{tagLabel(lead.value)}</span>, in {fmtPct(lead.hours / coverage.hoursTagged)} of tagged listening ({fmtHours(lead.hours)}).
-        </p>
+        <InlineFact
+          label={`Top ${noun}`}
+          figure={fmtPct(lead.hours / coverage.hoursTagged)}
+          mark={<InlineShare share={lead.hours / coverage.hoursTagged} label={`${tagLabel(lead.value)}: ${fmtPct(lead.hours / coverage.hoursTagged)} of tagged listening`} />}
+        >
+          {tagLabel(lead.value)}
+          <span className="text-secondary">, {fmtHours(lead.hours)} of tagged listening</span>
+        </InlineFact>
         <div className={SIDE_COLUMNS}>
           <div className="flex min-w-0 flex-col gap-3 max-lg:order-2">
             <h2 className="text-heading font-medium">{tagLabel(tag)} over time</h2>

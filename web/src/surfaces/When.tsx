@@ -4,6 +4,7 @@ import type { Clock } from "../api/types";
 import { DataTable } from "../charts/DataTable";
 import { DitherHeatmap, HeatLegend, type HeatCell } from "../charts/DitherHeatmap";
 import { DitherMeter } from "../charts/DitherMeter";
+import { InlineColumns, InlineFact } from "../charts/Inline";
 import { fmtHour, fmtHours, fmtHoursValue, fmtCompact, fmtInt, WEEKDAYS, WEEKDAYS_SHORT } from "../lib/format";
 import { useRange, type Range } from "../lib/range";
 import { useDesktop } from "../lib/useMedia";
@@ -181,11 +182,22 @@ function ClockView({ range }: { range: Range }) {
     <div className={cx(SECTIONS, dimWhile(q.isPlaceholderData))}>
       <StatStrip items={figures} value={metric} onChange={setMetric} label="Listening figures">
         <div className="flex flex-col gap-4 pt-5">
-          <p className="text-body text-pretty">
-            Busiest: <span className="font-medium">{slotTitle(top)}</span>, {fmtValue(valueOf(top, metric), metric)}.
-          </p>
+          <InlineFact
+            label="Busiest hour"
+            figure={fmtValue(valueOf(top, metric), metric)}
+            mark={
+              <InlineColumns
+                values={days[top.weekday - 1]!.map((c) => valueOf(c, metric))}
+                mark={top.hour}
+                bars={24}
+                label={`${plural(top.weekday)} hour by hour; the most from ${fmtHour(top.hour)}`}
+              />
+            }
+          >
+            {slotTitle(top)}
+          </InlineFact>
           <Heatmap days={days} metric={metric} selected={slot} onSelect={setPicked} />
-          <div className="flex flex-wrap items-start justify-between gap-x-6 gap-y-2">
+          <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-2">
             <HeatLegend />
             <DataTable
               label="Listening by weekday and hour"

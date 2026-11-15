@@ -194,7 +194,7 @@ function ErasView({ range }: { range: Range }) {
           </p>
         )}
         <ErasChart eras={eras} months={months} hours={hours} pick={pick} onPick={setPicked} />
-        <div className="flex flex-wrap items-start justify-between gap-x-6 gap-y-2">
+        <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-2">
           <HeatLegend />
           <DataTable
             label="Hours by artist and month"

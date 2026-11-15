@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useLifetime, useTimezone } from "../api/queries";
 import { todayIn } from "../lib/dates";
-import { presets, rangeLabel, useRange, type Range } from "../lib/range";
+import { presets, rangeLabel, useRange, type Preset, type Range } from "../lib/range";
 import { Button, buttonClass } from "./Button";
 import { cx } from "./cx";
 import { Icon } from "./Icon";
@@ -10,14 +10,23 @@ import { Input } from "./Field";
 import { PopoverPopup, PopoverRoot, PopoverTrigger } from "./Popover";
 import { MENU_ITEM } from "./surfaces";
 
+function usePresets(): Preset[] {
+  const today = todayIn(useTimezone());
+  const lifetime = useLifetime();
+  return presets(today, Number((lifetime.data?.firstPlayed ?? today).slice(0, 4)));
+}
+
+/** The current range's name, as the picker shows it ("All time", "Last 30 days", "2025"). */
+export function useRangeLabel(): string {
+  const { range } = useRange();
+  return rangeLabel(range, usePresets());
+}
+
 /** The date scope for a surface. Lives in the URL (`from`, `to`) so links and reloads keep it. */
 export function RangePicker({ className }: { className?: string }) {
   const { range, setRange } = useRange();
-  const timezone = useTimezone();
-  const lifetime = useLifetime();
-  const today = todayIn(timezone);
-  const firstYear = Number((lifetime.data?.firstPlayed ?? today).slice(0, 4));
-  const list = presets(today, firstYear);
+  const today = todayIn(useTimezone());
+  const list = usePresets();
   const [open, setOpen] = useState(false);
   const [custom, setCustom] = useState<Range>(range);
   const isSelected = (r: Range) => r.from === range.from && r.to === range.to;

@@ -75,6 +75,7 @@ export function Listening({ totals, timeline }: { totals: Stats; timeline: TimeP
           valueLabel={METRIC_LABEL[metric]}
           xFormat={(p) => periodTick(p, period)}
           format={metric === "hours" ? fmtHours : fmtInt}
+          table={{ format: metric === "hours" ? fmtHoursValue : fmtInt }}
           height={desktop ? 200 : 160}
         />
       )}
