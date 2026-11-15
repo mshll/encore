@@ -59,6 +59,8 @@
     ?playlists=saved  For you, From your recaps: three period playlists, one saved from a recap, one kept when a year ended, one with no cover
     ?week=quiet       Home, This week: nothing played yet this week (the usual stays)
     ?week=first       Home, This week: the history starts this week, so there is no usual to compare with
+    ?fail=stats/timeseries,living  every GET under each listed /api/ path answers 500, the rest stay real (one block's failed load;
+                      Home: stats/week, stats/overview, stats/timeseries, stats/on-this-day, stats/top, living, digests)
     ?recap=none       Recaps: every period has no recap yet (Write the recap)
     ?recap=facts      every recap has the numbers alone: no Claude lines
     ?recap=first      the history starts inside the period: nothing earlier to compare with
@@ -74,7 +76,7 @@
 type Json = Record<string, unknown>;
 
 const params = new URLSearchParams(location.search);
-for (const key of ["fixture", "player", "run", "dj", "settings", "history", "living", "library", "recap", "ask", "week", "picks", "playlists"]) {
+for (const key of ["fixture", "player", "run", "dj", "settings", "history", "living", "library", "recap", "ask", "week", "picks", "playlists", "fail"]) {
   const value = params.get(key);
   if (value === "off") sessionStorage.removeItem(`encore-${key}`);
   else if (value) sessionStorage.setItem(`encore-${key}`, value);
@@ -92,6 +94,7 @@ const askFixture = sessionStorage.getItem("encore-ask");
 const weekFixture = sessionStorage.getItem("encore-week");
 const picksFixture = sessionStorage.getItem("encore-picks");
 const playlistsFixture = sessionStorage.getItem("encore-playlists");
+const failing = (sessionStorage.getItem("encore-fail") ?? "").split(",").filter(Boolean);
 
 const SAVED_PLAYLISTS = [
   { kind: "monthly", key: "2026-10", label: "October 2026", url: "https://open.spotify.com/", source: "recap", savedAt: "2026-11-02T09:00:00.000Z", songs: 25, coverUrl: "/api/digests/periods/monthly/2026-10/cover" },
@@ -867,6 +870,7 @@ window.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
   const path = url.pathname;
   const method = (init?.method ?? (input instanceof Request ? input.method : "GET")).toUpperCase();
   if (!path.startsWith("/api/") || path.startsWith("/api/auth/")) return realFetch(input, init);
+  if (method === "GET" && failing.some((f) => path.startsWith(`/api/${f}`))) return json({ error: { code: "internal", message: "The database is locked by another process." } }, 500);
 
   if (player === "playing") {
     if (path === "/api/player/now") return json({ ...PLAYING_NOW, fetchedAt: new Date().toISOString() });

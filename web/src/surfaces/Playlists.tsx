@@ -8,7 +8,7 @@ import { fmtAgo, fmtDate, fmtDayShort, fmtInt } from "../lib/format";
 import { showToast } from "../lib/toast";
 import { AppLink } from "../ui/AppLink";
 import { Artwork } from "../ui/Artwork";
-import { Button, buttonClass, IconButton } from "../ui/Button";
+import { Button, buttonClass } from "../ui/Button";
 import { Dialog, DialogClose } from "../ui/Dialog";
 import { EntityHeader, EntityHeaderSkeleton } from "../ui/EntityHeader";
 import { Icon } from "../ui/Icon";
@@ -179,42 +179,40 @@ export function usePlayPlaylist() {
   };
 }
 
-function Cover({ playlist, news, compact }: { playlist: LivingPlaylist; news: string | null; compact: boolean }) {
-  const play = usePlayPlaylist();
+function PlaylistRow({ playlist, news }: { playlist: LivingPlaylist; news: string | null }) {
   const line = freshLine(playlist, news);
   return (
-    <li className={cx("group relative flex min-w-0 flex-col", compact && "phone:shrink-0 phone:basis-2/5 phone:snap-start")}>
-      <AppLink to={playlistPath(playlist.kind)} className="flex min-w-0 flex-col gap-3 rounded-md">
-        <Artwork src={playlist.coverUrl} kind="playlist" box="fill" />
-        <span className="flex min-w-0 flex-col gap-0.5">
-          <span className="truncate font-medium text-primary">{playlist.name}</span>
-          <span className={cx("text-caption text-pretty", line.problem ? "text-danger" : news ? "text-primary" : "text-secondary")}>{line.text}</span>
+    <li className="min-w-0 phone:snap-start">
+      <AppLink to={playlistPath(playlist.kind)} className="-mx-2 flex min-h-(--row-h) items-center gap-3 rounded-md px-2 py-1.5 transition-colors duration-150 hover:bg-fill">
+        <Artwork src={playlist.coverUrl} kind="playlist" box={40} />
+        <span className="flex min-w-0 flex-1 flex-col">
+          <span className="truncate text-primary">{playlist.name}</span>
+          <span className={cx("truncate text-caption", line.problem ? "text-danger" : news ? "text-primary" : "text-secondary")}>{line.text}</span>
         </span>
       </AppLink>
-      {playable(playlist) && (
-        <span className="absolute top-2 right-2 hidden translate-y-1 opacity-0 transition-[opacity,translate] duration-(--dur-hover) ease-out group-hover:translate-y-0 group-hover:opacity-100 focus-within:translate-y-0 focus-within:opacity-100 can-hover:block">
-          <IconButton icon={PlayIcon} fill label={`Play ${playlist.name}`} variant="accent" size="lg" onClick={() => void play(playlist)} className="rounded-full! shadow-overlay" />
-        </span>
-      )}
     </li>
   );
 }
 
-export function CoversSkeleton({ compact = false }: { compact?: boolean }) {
+/** Two columns of rows on a wider screen; on a phone, two rows a finger scrolls sideways. */
+const PLAYLIST_ROWS =
+  "grid gap-x-6 md:grid-cols-2 phone:-mx-(--gutter) phone:grid-flow-col phone:grid-rows-2 phone:auto-cols-[80%] phone:snap-x phone:snap-mandatory phone:scroll-px-(--gutter) phone:overflow-x-auto phone:overscroll-x-contain phone:px-(--gutter) phone:no-scrollbar";
+
+export function PlaylistRowsSkeleton() {
   return (
-    <div aria-hidden className={compact ? ROW : COVERS}>
+    <div aria-hidden className={PLAYLIST_ROWS}>
       {KINDS.map((k) => (
-        <div key={k} className={cx("flex flex-col gap-3", compact && "phone:shrink-0 phone:basis-2/5")}>
-          <Skeleton className="aspect-square w-full rounded-md" />
-          <Skeleton className="h-3.5 w-3/4" />
-          <Skeleton className="h-3 w-1/2" />
+        <div key={k} className="flex min-h-(--row-h) items-center gap-3">
+          <Skeleton className="size-10 shrink-0 rounded-xs" />
+          <div className="flex flex-1 flex-col gap-1.5">
+            <Skeleton className="h-3.5 w-3/4" />
+            <Skeleton className="h-3 w-1/2" />
+          </div>
         </div>
       ))}
     </div>
   );
 }
-
-const COVERS = "grid grid-cols-2 gap-x-4 gap-y-8 md:grid-cols-3 md:gap-x-6 xl:grid-cols-6";
 
 /** What is new in a playlist that has its own source of news: this week's unopened picks, unseen releases. */
 export function useNews(): Partial<Record<LivingKind, string>> {
@@ -228,17 +226,13 @@ export function useNews(): Partial<Record<LivingKind, string>> {
   };
 }
 
-/** One row of smaller covers (Home): six columns of at most 144 on a wider screen, a row a phone scrolls sideways. */
-const ROW =
-  "grid grid-cols-[repeat(6,minmax(0,9rem))] gap-x-4 phone:-mx-(--gutter) phone:flex phone:snap-x phone:snap-mandatory phone:scroll-px-(--gutter) phone:overflow-x-auto phone:px-(--gutter) phone:no-scrollbar";
-
-/** The playlists encore makes, by cover: what is in each and how fresh. `compact`: one row of smaller covers (Home). */
-export function PlaylistCovers({ list, compact = false }: { list: LivingList; compact?: boolean }) {
+/** The playlists encore makes, small (Home): cover, name and one line on what is new or how fresh each is. */
+export function PlaylistRows({ list }: { list: LivingList }) {
   const news = useNews();
   return (
-    <ul className={compact ? ROW : COVERS}>
+    <ul className={PLAYLIST_ROWS}>
       {list.items.map((p) => (
-        <Cover key={p.kind} playlist={p} news={news[p.kind] ?? null} compact={compact} />
+        <PlaylistRow key={p.kind} playlist={p} news={news[p.kind] ?? null} />
       ))}
     </ul>
   );
