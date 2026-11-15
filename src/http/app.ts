@@ -126,6 +126,19 @@ export function createApp(deps: Deps) {
   });
 
   if (existsSync(join(deps.config.webDist, "index.html"))) {
+    // Hashed build files never change, so they are cached for good. A missing one is a plain 404 nobody may keep:
+    // a cached 404 (from a request during a deploy) would break that page until the cache expired.
+    app.use("/assets/*", async (c, next) => {
+      await next();
+      c.header("Cache-Control", c.res.status === 200 ? "public, max-age=31536000, immutable" : "no-store");
+    });
+    app.use("/assets/*", serveStatic({ root: deps.config.webDist }));
+    app.get("/assets/*", (c) => c.text("Not found", 404));
+    // The page and other public files are revalidated on every load, so a deploy is picked up at once.
+    app.use("*", async (c, next) => {
+      await next();
+      if (!c.res.headers.has("Cache-Control")) c.header("Cache-Control", "no-cache");
+    });
     app.use("*", serveStatic({ root: deps.config.webDist }));
     // `path` is joined onto `root` (default "./"), so an absolute WEB_DIST must go in `root`.
     app.get("*", serveStatic({ root: deps.config.webDist, path: "index.html" }));

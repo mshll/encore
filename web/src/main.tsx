@@ -7,6 +7,9 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { ApiError, setUnauthenticatedHandler } from "./api/client";
 import { App } from "./app/App";
+import { recoverFromStaleChunks } from "./lib/chunkRecovery";
+
+recoverFromStaleChunks();
 
 const queryClient = new QueryClient({
   defaultOptions: {

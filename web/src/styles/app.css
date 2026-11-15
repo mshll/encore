@@ -124,6 +124,38 @@
   box-shadow: inset 0 var(--hairline) 0 var(--line);
 }
 
+/* Phone: the page blurs progressively under the floating dock, sharp at the top of the band and most blurred at the
+   screen edge (after Ghostwriter's top edge): eight stacked layers, each blurring one band of a mask a little more,
+   over a tint that fades the page into its own colour. Tint only where blur is missing or less transparency is asked. */
+@utility edge-blur {
+  &::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(to bottom, color-mix(in srgb, var(--surface-page) 0%, transparent), color-mix(in srgb, var(--surface-page) 70%, transparent));
+  }
+  & > i {
+    position: absolute;
+    inset: 0;
+    -webkit-backdrop-filter: blur(var(--b));
+    backdrop-filter: blur(var(--b));
+    --m: linear-gradient(to bottom, #0000 calc(var(--n) * 12.5%), #000 calc((var(--n) + 1) * 12.5%) calc((var(--n) + 2) * 12.5%), #0000 calc((var(--n) + 3) * 12.5%));
+    mask: var(--m);
+    -webkit-mask: var(--m);
+  }
+  & > i:nth-child(1) { --n: 0; --b: 0.4px; }
+  & > i:nth-child(2) { --n: 1; --b: 0.8px; }
+  & > i:nth-child(3) { --n: 2; --b: 1.5px; }
+  & > i:nth-child(4) { --n: 3; --b: 3px; }
+  & > i:nth-child(5) { --n: 4; --b: 6px; }
+  & > i:nth-child(6) { --n: 5; --b: 10px; }
+  & > i:nth-child(7) { --n: 6; --b: 14px; }
+  & > i:nth-child(8) { --n: 7; --b: 20px; }
+  @media (prefers-reduced-transparency: reduce) {
+    & > i { display: none; }
+  }
+}
+
 /* The one translucent surface (DESIGN.md, Phone dock). Solid where backdrop blur is missing or less transparency is asked for. */
 @utility glass {
   background-color: var(--surface-glass);

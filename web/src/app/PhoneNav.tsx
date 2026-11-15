@@ -4,14 +4,13 @@ import { useLocation } from "wouter";
 import { useChat } from "../chat/state";
 import { MiniPlayer } from "../player/PlayerBar";
 import { AppLink } from "../ui/AppLink";
-import { PRESSED } from "../ui/Button";
 import { cx } from "../ui/cx";
 import { Icon } from "../ui/Icon";
 import { ChatCircleTextIcon, DotsThreeIcon, MagnifyingGlassIcon } from "../ui/icons";
 import { BACKDROP, focusSheetOnTouch } from "../ui/surfaces";
 import { PHONE_MORE, PHONE_TABS } from "./nav";
 
-const TAB = "press relative flex h-full flex-1 flex-col items-center justify-center gap-0.5 rounded-full text-label font-medium text-primary";
+const TAB = "press relative flex h-full flex-1 items-center justify-center rounded-full text-primary";
 const MOVE = "duration-(--dur-move) ease-(--ease-move)";
 const MORE = { label: "More", icon: DotsThreeIcon };
 
@@ -50,6 +49,11 @@ export function PhoneNav({ onSearch, onOpenPlayer, collapsed, onExpand, inert }:
 
   return (
     <>
+      <div aria-hidden className="edge-blur pointer-events-none absolute inset-x-0 bottom-0 z-10 h-[calc(var(--bottom-chrome)+32px)] in-data-keyboard-open:hidden">
+        {Array.from({ length: 8 }, (_, i) => (
+          <i key={i} />
+        ))}
+      </div>
       <div
         data-dock
         data-collapsed={collapsed || undefined}
@@ -83,15 +87,13 @@ export function PhoneNav({ onSearch, onOpenPlayer, collapsed, onExpand, inert }:
             {PHONE_TABS.map((s, i) => {
               const active = i === current.index;
               return (
-                <AppLink key={s.id} to={s.path} onClick={chat.close} aria-current={active ? "page" : undefined} className={TAB}>
-                  <Icon icon={s.icon} size="md" fill={active} />
-                  <span>{s.label}</span>
+                <AppLink key={s.id} to={s.path} onClick={chat.close} aria-label={s.label} aria-current={active ? "page" : undefined} className={TAB}>
+                  <Icon icon={s.icon} size="lg" fill={active} />
                 </AppLink>
               );
             })}
-            <button type="button" aria-haspopup="dialog" aria-current={current.index === PHONE_TABS.length || undefined} onClick={() => setOpen(true)} className={TAB}>
-              <Icon icon={DotsThreeIcon} size="md" />
-              <span>More</span>
+            <button type="button" aria-label="More" aria-haspopup="dialog" aria-current={current.index === PHONE_TABS.length || undefined} onClick={() => setOpen(true)} className={TAB}>
+              <Icon icon={DotsThreeIcon} size="lg" />
             </button>
           </div>
           <button
@@ -101,7 +103,7 @@ export function PhoneNav({ onSearch, onOpenPlayer, collapsed, onExpand, inert }:
             onClick={onExpand}
             className={cx("press absolute inset-0 flex items-center justify-center rounded-full text-primary opacity-0 transition-opacity group-data-collapsed/dock:opacity-100", MOVE)}
           >
-            <Icon icon={current.surface.icon} size="md" fill={current.index >= 0 && current.index < PHONE_TABS.length} />
+            <Icon icon={current.surface.icon} size="lg" fill={current.index >= 0 && current.index < PHONE_TABS.length} />
           </button>
         </nav>
         <button
@@ -111,9 +113,8 @@ export function PhoneNav({ onSearch, onOpenPlayer, collapsed, onExpand, inert }:
           aria-pressed={chatOpen}
           onClick={chat.toggle}
           className={cx(
-            "press glass absolute right-0 bottom-0 flex size-(--tabbar-h) items-center justify-center rounded-full text-primary shadow-overlay transition-[width,height,color]",
+            "press absolute right-0 bottom-0 flex size-(--tabbar-h) items-center justify-center rounded-full bg-accent text-on-accent shadow-overlay transition-[width,height,background-color] hover:bg-accent-hover",
             "group-data-collapsed/dock:size-(--tabbar-h-collapsed)",
-            PRESSED,
             MOVE,
           )}
         >
