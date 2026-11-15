@@ -66,6 +66,7 @@ export type SimplifiedAlbum = {
   uri: string;
   name: string;
   album_type: string;
+  album_group?: string;
   release_date: string;
   release_date_precision: "year" | "month" | "day";
   total_tracks: number;

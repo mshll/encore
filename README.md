@@ -92,7 +92,7 @@ The app walks you through setup:
 
 ## Connect Claude (MCP)
 
-encore serves an MCP server at `/mcp` with tools over your listening (overview, top lists, history, lookup, on this day, forgotten favourites, now playing, releases) and two playback actions (play, add to queue).
+encore serves an MCP server at `/mcp` with tools over your listening (overview, top lists, history, lookup, on this day, forgotten favourites, now playing, releases, devices), playback actions (play, add to queue, pause, resume, skip next, skip previous), and three changes: create a playlist, add tracks to a playlist (including the songs `forgotten` returns), and mark releases as seen. The full list with inputs is in [docs/api.md](docs/api.md#mcp).
 
 **claude.ai, Claude Desktop and mobile** (one connector serves all three):
 

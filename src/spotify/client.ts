@@ -4,7 +4,7 @@ import type { SettingsSource } from "../settings/settings";
 import type { SpotifyAuth } from "./auth";
 import { SpotifyPacer } from "./pacer";
 import { SpotifyApiError, SpotifyBlockedError, type BlockReason } from "./errors";
-import type { Page, RecentlyPlayed, SimplifiedTrack, SpotifyArtist, SpotifyMe, SpotifyPlaylist, SpotifySearch, SpotifyTrack } from "./types";
+import type { Page, PlaylistEntry, RecentlyPlayed, SimplifiedTrack, SpotifyArtist, SpotifyMe, SpotifyPlaylist, SpotifySearch, SpotifyTrack } from "./types";
 
 const apiUrl = "https://api.spotify.com/v1";
 const oembedUrl = "https://open.spotify.com/oembed";
@@ -104,6 +104,15 @@ export class SpotifyClient {
 
   replacePlaylistItems(id: string, uris: string[]) {
     return this.request<{ snapshot_id: string }>("PUT", `/playlists/${encodeURIComponent(id)}/items`, { uris });
+  }
+
+  /** Appends up to 100 items. */
+  addPlaylistItems(id: string, uris: string[]) {
+    return this.request<{ snapshot_id: string }>("POST", `/playlists/${encodeURIComponent(id)}/items`, { uris });
+  }
+
+  playlistItems(id: string, offset: number, limit: number) {
+    return this.get<Page<PlaylistEntry>>(`/playlists/${encodeURIComponent(id)}/items?limit=${limit}&offset=${offset}`);
   }
 
   /** Spotify takes the JPEG as base64 text, at most 256 KB of it. */

@@ -90,4 +90,30 @@ describe("migrations", () => {
     ]);
     expect(db.$client.query("select playlist_id from living_playlists").all()).toEqual([{ playlist_id: "lp" }]);
   });
+  test("a database at 0013 drops releases stored under an artist who does not lead them, so the radar checks that artist again", () => {
+    const dir = mkdtempSync(join(tmpdir(), "encore-mig-"));
+    const partial = join(dir, "drizzle");
+    cpSync(folder, partial, { recursive: true });
+    const journal = JSON.parse(readFileSync(join(partial, "meta/_journal.json"), "utf8"));
+    journal.entries = journal.entries.slice(0, 14);
+    writeFileSync(join(partial, "meta/_journal.json"), JSON.stringify(journal));
+
+    const path = join(dir, "dev.db");
+    const old = new Database(path, { create: true });
+    migrate(drizzle(old), { migrationsFolder: partial });
+    old.run("insert into artists (id, name) values ('wayne', 'Lil Wayne'), ('passenger', 'Passenger')");
+    const release = (id: string, artistId: string, artistName: string) =>
+      old.run(`insert into releases (id, uri, artist_id, artist_name, name, album_type, release_date, first_seen_at, is_new) values ('${id}', 'spotify:album:${id}', '${artistId}', '${artistName}', '${id}', 'single', '2026-10-16', 0, 1)`);
+    release("holy", "wayne", "DJ CEO");
+    release("special", "wayne", "Lil Wayne");
+    release("wild", "passenger", "Passenger");
+    old.run("insert into release_tracks (release_id, position, uri, song_key, name, artist) values ('holy', 0, 'spotify:track:h', 'k', 'Holy Ghost', 'DJ CEO'), ('wild', 0, 'spotify:track:w', 'w', 'Wild Love', 'Passenger')");
+    old.run("insert into radar_artists (artist_id, last_checked_at) values ('wayne', 5), ('passenger', 5)");
+    old.close();
+
+    const db = openDb(path);
+    expect(db.$client.query("select id from releases order by id").all()).toEqual([{ id: "special" }, { id: "wild" }]);
+    expect(db.$client.query("select release_id from release_tracks").all()).toEqual([{ release_id: "wild" }]);
+    expect(db.$client.query("select artist_id from radar_artists").all()).toEqual([{ artist_id: "passenger" }]);
+  });
 });

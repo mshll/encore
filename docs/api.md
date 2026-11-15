@@ -763,11 +763,15 @@ Ends the session (playback continues). `404` when none is active.
 
 The `radar` job checks artists with at least `RADAR_MIN_LISTENS` (20) listens in the last 12 months, `RADAR_ARTISTS_PER_RUN` (2) Web API calls per run every `RADAR_INTERVAL_MINUTES` (60), each artist at most every `RADAR_RECHECK_DAYS` (7). Never-checked artists go first, then the longest unchecked, most listened first. An artist without a known Spotify id costs one `GET /tracks/{id}` on their most played track to learn it. A check is `GET /artists/{id}/albums?include_groups=album,single&limit=10`, plus one `include_groups=single` call when albums fill that page.
 
+A release counts only when the checked artist is credited on the album itself (`album_group` `album` or `single`); it is stored under the album's lead artist (`artist`, `artistId`), which can be someone else on a collaboration.
+
 A release is **new** when it was not stored before and its release date is on or after the day before the artist's previous check; on an artist's first check, within `RADAR_BASELINE_DAYS` (30). Year- and month-precision dates count as the first day of the period.
 
 ### `GET /api/radar`
 
-Params: `status` = `new` (default: new and not marked seen) | `recent` (released in the last `days`), `days` (1-365, default 30), `limit` (1-200, default 50). Sorted by release date, newest first.
+Params: `status` = `new` (default: flagged new) | `recent` (released in the last `days`), `days` (1-365, default 30), `limit` (1-200, default 50), `includeSeen` (`true` | `false`; default `false` for `new`, `true` for `recent`), `includeReissues` (`true` | `false`, default `false`). Sorted by release date, newest first.
+
+A **re-release** is a compilation, or a title whose version note (a bracketed part, or the part after the last ` - `) names a remaster, live recording, anniversary, deluxe edition, re-recording, reissue, expanded edition or box set, or a title that says "Remastered", "Re-recorded", "10th Anniversary" or starts with "Live at/from/in". Words in the name itself do not count, so "Live Forever" or "Anniversary" stay. Re-releases are left out of `items`, `unseenNew`, the weekly digest and the New from your artists playlist.
 
 ```json
 { "artists": 66, "withId": 47, "checkedRecently": 12, "unseenNew": 3, "lastRunAt": "...", "lastResult": { "due": 54, "checked": 2, "resolved": 0, "unresolved": 0, "found": 18, "newReleases": 1, "calls": 2 },
@@ -777,9 +781,9 @@ Params: `status` = `new` (default: new and not marked seen) | `recent` (released
 
 ### `POST /api/radar/seen`
 
-Body `{ "ids"?: [release id] }`; without `ids`, marks every unseen new release. `{ "marked": 3 }`.
+Body `{ "ids"?: [release id] }`; without `ids`, marks every unseen release flagged new. `{ "marked": 3 }`.
 
-For the weekly digest: `newReleasesSince(db, sinceMs)` in `src/radar/radar.ts` returns releases flagged new and first seen at or after `sinceMs`, seen or not.
+For the weekly digest: `newReleasesSince(db, sinceMs)` in `src/radar/radar.ts` returns releases flagged new and first seen at or after `sinceMs`, seen or not, without re-releases.
 
 ## Shares
 
@@ -820,7 +824,7 @@ Six private playlists in the owner's Spotify account that encore keeps refilling
 | `picks` | Weekly picks | The latest week of picks, without `never` picks | After a picks run, a pick state change, and every job tick | replace |
 | `forgotten` | Forgotten favourites | Songs with 10+ listens and none in 90 days (`stats/forgotten`), most listened first | Weekly (from Monday, local) | rolling, 10 per refresh |
 | `most-played` | Most played lately | Most listens in the last 28 local days, at least 2 | Daily (local) | replace |
-| `new-releases` | New from your artists | The first 3 tracks of each new release (radar) from the last 90 days, newest first | Every job tick | rolling |
+| `new-releases` | New from your artists | The first 3 tracks of each new release (radar) from the last 90 days, newest first, without re-releases | Every job tick | rolling |
 | `this-month` | This month in past years | Most listens in this calendar month of earlier years | Monthly (the 1st, local) | replace |
 | `this-year` | This year so far | The songs that defined the year so far, by the recap playlist rule (most listens, then most time, at least 2) | Weekly (from Monday, local), and on 1 January | replace |
 
@@ -1085,9 +1089,18 @@ Seams for other modules (`src/discord/`): `DiscordRegistry.addCommand({ definiti
 | `on_this_day` | `date?`, `limit?` |
 | `forgotten` | `days?`, `minListens?`, `limit?` |
 | `now_playing` | none |
-| `releases` | `status?` (`new`, `recent`), `days?` |
+| `releases` | `status?` (`new`, `recent`), `days?`, `includeSeen?` (default `false`), `includeReissues?` (default `false`) |
+| `mark_release_seen` | `ids` (release ids, album URIs or links) or `all: true` (every unseen release). `{ "marked": 2 }` |
+| `create_playlist` | `name`, `description?`, `public?` (default `false`), `tracks?`. `{ "id", "url", "added" }` |
+| `add_to_playlist` | `playlist` (id, URI or link), `tracks` (1-500). `{ "added", "alreadyInPlaylist" }` |
 | `play` | `uris` (1-50 track URIs) |
 | `add_to_queue` | `uri` |
+| `pause`, `resume`, `skip_next`, `skip_previous` | `device_id?` (default: the active device). `{ "ok": true }` |
+| `devices` | none. `{ "devices": [{ "id", "name", "type", "active", "restricted", "volume" }] }` |
+
+`tracks` takes track ids, `spotify:track` URIs, `open.spotify.com` track links, or song objects with a `uri`, so the `items` of `forgotten`, `top` or `history` can be passed as they are. Repeated tracks are sent once; `add_to_playlist` reads the playlist first and skips tracks it already holds. Tracks go to Spotify 100 per request.
+
+Spotify tools check the stored grant first: playlist tools need `playlist-modify-private` and `playlist-modify-public`, playback controls `user-modify-playback-state`, `devices` `user-read-playback-state`. A missing scope returns a tool error, `Re-authorize Encore to grant <scope>: connect Spotify again in encore Settings.`, without calling Spotify. No active device, Spotify Premium missing, and Spotify not connected or paused also return tool errors that say what to do. When a new playlist's tracks fail to add, the error names the playlist that was made.
 
 There are no library or playlist removal tools.
 
@@ -1108,7 +1121,7 @@ Codes and tokens are stored as SHA-256 hashes only. The redirect after consent c
 
 Session routes for the consent page and Settings (cookie, same-origin JSON writes like the rest of `/api`):
 
-- `GET /api/mcp/requests/:id`: `{ "clientName": "Claude", "redirectHost": "claude.ai", "loopback": false, "tools": { "read": ["overview", ...], "playback": ["play", "add_to_queue"] } }`. `clientName` is what the client registered, not verified. `loopback`: the redirect goes to this computer. `404 oauth_request_not_found` once expired or answered.
+- `GET /api/mcp/requests/:id`: `{ "clientName": "Claude", "redirectHost": "claude.ai", "loopback": false, "tools": { "read": ["overview", ...], "playback": ["play", ...], "write": ["create_playlist", "add_to_playlist", "mark_release_seen"] } }`. `clientName` is what the client registered, not verified. `loopback`: the redirect goes to this computer. `404 oauth_request_not_found` once expired or answered.
 - `POST /api/mcp/requests/:id` `{ "decision": "allow" | "deny" }`: `{ "redirectTo": "<redirect URI with code or error, state, iss>" }`. The page navigates there.
 - `GET /api/mcp/connections`: `{ "connections": [{ "id": 3, "clientName": "Claude", "redirectHost": "claude.ai", "connectedAt": "...", "lastUsedAt": "..." | null }] }`, newest first. One per allowed sign-in; `lastUsedAt` has one-minute resolution.
 - `DELETE /api/mcp/connections/:id`: `{ "disconnected": true }`. Deletes the connection and its tokens; the client must sign in again. `404` when unknown.
