@@ -6,13 +6,13 @@ A self-hosted dashboard for your own Spotify listening. It imports your full str
 
 One instance serves one person. Your data stays in a single SQLite file on your server.
 
-![Overview: time listened over all time, top artists and what is waiting](docs/screenshots/overview.png)
+![Home: this week against your usual, all-time listening and what happened on this day](docs/screenshots/home.png)
 
 ## What it does
 
 **Listening**
 
-- **Home**: what encore made for you (its playlists, this week's picks, new releases, your latest set) and one box to ask Claude or make a set; then time listened, plays and listens for any range, with top artists, songs and albums.
+- **Home**: this week against your usual, then time listened, plays and listens for any range, with top artists, songs and albums; below them, what encore made for you and your latest recap.
 - **Plays**: the full log, searchable and filterable by device and source.
 - **Music**: every artist, album and song you have played, each with its own page, plus favourites you stopped playing.
 - **Patterns**: when in the week you listen, which artists defined which months, genres and moods over time, how plays end and when you skip, and trips and devices.
@@ -21,7 +21,7 @@ One instance serves one person. Your data stays in a single SQLite file on your 
 
 - **Sets**: describe a playlist; Claude builds it from your history plus songs you have never played, with a reason for each. Refine it by chat, save it to Spotify, or play it as a session that adapts as you skip.
 - **For you**: the playlists encore makes, by cover. Weekly picks holds a few new songs picked each week with Claude's reason for each; New from your artists holds the new releases.
-- **Ask**: questions about your listening, answered from your history.
+- **Chat**: a side panel on every page that knows what you are looking at. Ask about your listening, make a set, or plan a library cleanup; answers come from your history, with charts where they help.
 
 **Playlists in Spotify** (in For you)
 
@@ -34,8 +34,9 @@ One instance serves one person. Your data stays in a single SQLite file on your 
 
 | | |
 | --- | --- |
-| ![A set built from a prompt, with a reason for each song and a conversation to refine it](docs/screenshots/set.png) | ![Patterns: which artists defined which months](docs/screenshots/eras.png) |
-| ![Patterns: listening by weekday and hour](docs/screenshots/when.png) | ![Plays: the full log, in the light theme](docs/screenshots/plays-light.png) |
+| ![The chat panel answering a question beside Home, with a chart](docs/screenshots/chat.png) | ![A set built from a prompt, with a reason for each song](docs/screenshots/set.png) |
+| ![Patterns: listening by weekday and hour](docs/screenshots/when.png) | ![Patterns: which artists defined which months](docs/screenshots/eras.png) |
+| ![A monthly recap with Claude's headline](docs/screenshots/recap.png) | ![Plays: the full log, in the light theme](docs/screenshots/plays-light.png) |
 
 Optional integrations: Discord commands and channel posts, and an MCP server over your analytics and playback.
 
