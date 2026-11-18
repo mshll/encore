@@ -1,7 +1,8 @@
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { useEffect, useLayoutEffect, useMemo, useState } from "react";
 import { useSearchParams } from "wouter";
-import { useHistory, useLifetime, useStatus, useTimezone, type HistoryFilters } from "../api/queries";
+import { useCorrections } from "../api/corrections";
+import { useHistory, useLifetime, useStatus, useTimezone, useTrashCount, type HistoryFilters } from "../api/queries";
 import type { Device, HistoryItem } from "../api/types";
 import { artistPath, songPath } from "../app/paths";
 import { useScrollElement } from "../app/Shell";
@@ -11,9 +12,11 @@ import { useRange } from "../lib/range";
 import { AppLink } from "../ui/AppLink";
 import { Artwork } from "../ui/Artwork";
 import { Button, IconButton } from "../ui/Button";
+import { Checkbox } from "../ui/Checkbox";
+import { Confirm } from "../ui/Dialog";
 import { cx } from "../ui/cx";
 import { Icon } from "../ui/Icon";
-import { ListBulletsIcon, PlayIcon, XIcon } from "../ui/icons";
+import { ArrowCounterClockwiseIcon, ListBulletsIcon, PlayIcon, TrashIcon, XIcon } from "../ui/icons";
 import { Page, PageHeader, dimWhile } from "../ui/Page";
 import { RangePicker } from "../ui/RangePicker";
 import { RowSkeleton } from "../ui/Rows";
@@ -31,6 +34,8 @@ const SOURCE_LABELS: Record<HistoryItem["source"], string> = { export: "From the
 const skipLabel = (item: HistoryItem) => (item.outcome === "early" || item.outcome === "midway" ? OUTCOME_LABELS[item.outcome] : null);
 
 const dayHeading = new Intl.DateTimeFormat("en-GB", { weekday: "long", day: "numeric", month: "long", year: "numeric", timeZone: "UTC" });
+
+const SELECT_COLUMN: Column = { id: "select", label: "Select", width: "24px", srLabel: true };
 
 const COLUMNS: Column[] = [
   { id: "time", label: "Time", width: "44px" },
@@ -53,6 +58,7 @@ function useFilters() {
     artist: params.get("artist") ?? undefined,
     songKey: params.get("songKey") ?? undefined,
     source: params.get("source") ?? undefined,
+    trash: params.get("trash") ?? undefined,
   };
   const set = (patch: Partial<HistoryFilters>) =>
     setParams(
@@ -93,10 +99,32 @@ function ArtistName({ item, className }: { item: HistoryItem; className?: string
   );
 }
 
-function DesktopRow({ item, timezone, columns, style, home }: { item: HistoryItem; timezone: string; columns: Column[]; style: React.CSSProperties; home: string | null | undefined }) {
+/** Ticking rows for a batch Delete, or Restore in the trash. */
+type Selection = { on: boolean; has: (id: number) => boolean; toggle: (id: number) => void };
+
+const playLabel = (item: HistoryItem) => [item.name ?? "Unknown", item.artist].filter(Boolean).join(", ");
+
+function DesktopRow({
+  item,
+  timezone,
+  columns,
+  style,
+  home,
+  selection,
+  onRestore,
+}: {
+  item: HistoryItem;
+  timezone: string;
+  columns: Column[];
+  style: React.CSSProperties;
+  home: string | null | undefined;
+  selection: Selection;
+  onRestore?: (item: HistoryItem) => void;
+}) {
   const playback = usePlayback();
   const song = item.kind === "track" && item.uri && item.name ? { uri: item.uri, name: item.name, songKey: item.songKey, artist: item.artist } : null;
   const cells: Record<string, React.ReactNode> = {
+    select: <Checkbox checked={selection.has(item.id)} onChange={() => selection.toggle(item.id)} label={`Select ${playLabel(item)}`} />,
     time: <span className="text-secondary tabular">{fmtTime(item.ts, timezone)}</span>,
     art: <Artwork src={item.albumArtUrl} kind="song" box={32} />,
     song: <SongTitle item={item} />,
@@ -105,7 +133,11 @@ function DesktopRow({ item, timezone, columns, style, home }: { item: HistoryIte
     played: <span className="tabular">{fmtDuration(item.msPlayed)}</span>,
     ending: skipLabel(item) && <span className="text-secondary">{skipLabel(item)}</span>,
     where: <span className="truncate text-secondary">{where(item, home)}</span>,
-    actions: song ? (
+    actions: onRestore ? (
+      <span className="flex justify-end can-hover:opacity-0 transition-opacity duration-150 group-hover:opacity-100 group-focus-within:opacity-100">
+        <IconButton icon={ArrowCounterClockwiseIcon} label={`Restore ${playLabel(item)}`} size="sm" onClick={() => onRestore(item)} />
+      </span>
+    ) : song ? (
       <span className="flex justify-end can-hover:opacity-0 transition-opacity duration-150 group-hover:opacity-100 group-focus-within:opacity-100 has-[[data-open]]:opacity-100">
         <IconButton icon={PlayIcon} label={`Play ${song.name}`} size="sm" onClick={() => playback.play([song.uri])} />
         <SongMenu song={song} />
@@ -121,7 +153,7 @@ function DesktopRow({ item, timezone, columns, style, home }: { item: HistoryIte
       ))}
     </div>
   );
-  return song ? (
+  return song && !onRestore ? (
     <SongContext song={song} className="h-full">
       {row}
     </SongContext>
@@ -130,11 +162,18 @@ function DesktopRow({ item, timezone, columns, style, home }: { item: HistoryIte
   );
 }
 
-function PhoneRow({ item, timezone }: { item: HistoryItem; timezone: string }) {
+function PhoneRow({ item, timezone, selection }: { item: HistoryItem; timezone: string; selection: Selection }) {
   const song = item.kind === "track" && item.uri && item.name ? { uri: item.uri, name: item.name, songKey: item.songKey, artist: item.artist } : null;
   const body = (
     <div className="relative flex h-full items-center gap-3">
-      {item.songKey && <AppLink to={songPath(item.songKey)} aria-label={`${item.name}, ${item.artist}`} className="absolute inset-0" />}
+      {selection.on ? (
+        <>
+          <button type="button" aria-hidden tabIndex={-1} className="absolute inset-0" onClick={() => selection.toggle(item.id)} />
+          <Checkbox checked={selection.has(item.id)} onChange={() => selection.toggle(item.id)} label={`Select ${playLabel(item)}`} className="relative" />
+        </>
+      ) : (
+        item.songKey && <AppLink to={songPath(item.songKey)} aria-label={`${item.name}, ${item.artist}`} className="absolute inset-0" />
+      )}
       <Artwork src={item.albumArtUrl} kind="song" box={40} className="pointer-events-none" />
       <span className="pointer-events-none flex min-w-0 flex-1 flex-col">
         <span className="truncate">{item.name ?? "Unknown"}</span>
@@ -146,7 +185,7 @@ function PhoneRow({ item, timezone }: { item: HistoryItem; timezone: string }) {
       </span>
     </div>
   );
-  return song ? (
+  return song && !selection.on && !item.trashedAt ? (
     <SongContext song={song} className="h-full">
       {body}
     </SongContext>
@@ -186,7 +225,36 @@ export function Plays() {
   const scroller = useScrollElement();
   const [listRef, width] = useWidth<HTMLDivElement>();
   const desktop = width >= 640;
-  const { visible, style } = useColumns(COLUMNS, width);
+  const inTrash = filters.trash === "true";
+  const corrections = useCorrections();
+  const trashCount = useTrashCount().data?.plays ?? 0;
+  const [selecting, setSelecting] = useState(false);
+  const [picked, setPicked] = useState<ReadonlySet<number>>(new Set());
+  const [confirmEmpty, setConfirmEmpty] = useState(false);
+  const selection: Selection = {
+    on: selecting,
+    has: (id) => picked.has(id),
+    toggle: (id) =>
+      setPicked((prev) => {
+        const next = new Set(prev);
+        if (!next.delete(id)) next.add(id);
+        return next;
+      }),
+  };
+  const stopSelecting = () => {
+    setSelecting(false);
+    setPicked(new Set());
+  };
+  useEffect(() => {
+    setSelecting(false);
+    setPicked(new Set());
+  }, [inTrash]);
+  const applySelection = async () => {
+    const ids = [...picked];
+    stopSelecting();
+    await (inTrash ? corrections.restore(ids) : corrections.trash(ids));
+  };
+  const { visible, style } = useColumns(selecting ? [SELECT_COLUMN, ...COLUMNS] : COLUMNS, width);
   const [margin, setMargin] = useState(0);
 
   const lines = useMemo<Line[]>(() => {
@@ -239,14 +307,66 @@ export function Plays() {
           <Toolbar filters={filters} setFilters={setFilters} />
           <div className="flex min-h-7 flex-wrap items-center gap-x-3 gap-y-1">
             <span className="text-secondary tabular" aria-live="polite">
-              {total === undefined ? " " : `${fmtInt(total)} ${total === 1 ? "play" : "plays"}`}
+              {selecting
+                ? `${fmtInt(picked.size)} selected`
+                : total === undefined
+                  ? " "
+                  : `${fmtInt(total)} ${inTrash ? "deleted " : ""}${total === 1 ? "play" : "plays"}`}
             </span>
-            {scoped && (
+            {inTrash && !selecting && (
+              <Button size="sm" variant="secondary" iconEnd={XIcon} onClick={() => setFilters({ trash: undefined })}>
+                Trash
+              </Button>
+            )}
+            {scoped && !selecting && (
               <Button size="sm" variant="secondary" iconEnd={XIcon} onClick={() => setFilters({ artist: undefined, songKey: undefined })}>
                 {filters.artist ? `Artist: ${filters.artist}` : "One song"}
               </Button>
             )}
+            <span className="ml-auto flex items-center gap-2">
+              {selecting ? (
+                <>
+                  <Button size="sm" variant="ghost" onClick={stopSelecting}>
+                    Cancel
+                  </Button>
+                  <Button size="sm" variant={inTrash ? "primary" : "danger"} icon={inTrash ? ArrowCounterClockwiseIcon : TrashIcon} disabled={picked.size === 0} onClick={() => void applySelection()}>
+                    {inTrash ? "Restore" : "Delete"}
+                  </Button>
+                </>
+              ) : (
+                <>
+                  {!inTrash && trashCount > 0 && (
+                    <Button size="sm" variant="ghost" onClick={() => setFilters({ trash: "true" })}>
+                      Trash <span className="text-secondary tabular">{fmtInt(trashCount)}</span>
+                    </Button>
+                  )}
+                  {inTrash && trashCount > 0 && (
+                    <Button size="sm" variant="ghost" onClick={() => setConfirmEmpty(true)}>
+                      Empty trash
+                    </Button>
+                  )}
+                  {lines.length > 0 && (
+                    <Button size="sm" variant="ghost" onClick={() => setSelecting(true)}>
+                      Select
+                    </Button>
+                  )}
+                </>
+              )}
+            </span>
           </div>
+          <Confirm
+            open={confirmEmpty}
+            onOpenChange={setConfirmEmpty}
+            title="Empty the trash?"
+            action="Delete for good"
+            danger
+            onConfirm={() => {
+              setConfirmEmpty(false);
+              void corrections.emptyTrash();
+            }}
+          >
+            {`${fmtInt(trashCount)} ${trashCount === 1 ? "play is" : "plays are"} deleted for good. They stay out of encore if they arrive again.`}
+          </Confirm>
           <div ref={listRef} role="table" aria-label="Plays" aria-rowcount={total} className={dimWhile(q.isPlaceholderData)}>
             {desktop && <TableHead columns={visible} style={style} className="mb-1" />}
             {q.isError ? (
@@ -255,8 +375,8 @@ export function Plays() {
               <RowSkeleton rows={12} />
             ) : lines.length === 0 ? (
               <EmptyState
-                title="No plays match"
-                description={filtered ? "Clear the search or filters, or pick a wider range." : "Pick a wider range to see plays."}
+                title={inTrash && !filtered ? "Nothing in the trash" : "No plays match"}
+                description={filtered ? "Clear the search or filters, or pick a wider range." : inTrash ? undefined : "Pick a wider range to see plays."}
                 action={
                   filtered && (
                     <Button size="sm" onClick={() => setFilters({ q: undefined, outcome: undefined, device: undefined, source: undefined, artist: undefined, songKey: undefined })}>
@@ -276,9 +396,17 @@ export function Plays() {
                           <span role="cell">{dayHeading.format(new Date(`${line.day}T00:00:00Z`))}</span>
                         </h2>
                       ) : desktop ? (
-                        <DesktopRow item={line.item} timezone={timezone} columns={visible} style={style} home={home} />
+                        <DesktopRow
+                          item={line.item}
+                          timezone={timezone}
+                          columns={visible}
+                          style={style}
+                          home={home}
+                          selection={selection}
+                          onRestore={inTrash ? (item) => void corrections.restore([item.id]) : undefined}
+                        />
                       ) : (
-                        <PhoneRow item={line.item} timezone={timezone} />
+                        <PhoneRow item={line.item} timezone={timezone} selection={selection} />
                       )}
                     </div>
                   );

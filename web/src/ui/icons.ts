@@ -53,3 +53,4 @@ export { ArrowsInSimpleIcon } from "@phosphor-icons/react/dist/csr/ArrowsInSimpl
 export { ArrowsOutSimpleIcon } from "@phosphor-icons/react/dist/csr/ArrowsOutSimple";
 export { ClockCounterClockwiseIcon } from "@phosphor-icons/react/dist/csr/ClockCounterClockwise";
 export { NotePencilIcon } from "@phosphor-icons/react/dist/csr/NotePencil";
+export { UsersThreeIcon } from "@phosphor-icons/react/dist/csr/UsersThree";

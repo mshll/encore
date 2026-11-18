@@ -1,8 +1,11 @@
-import { and, between, eq, inArray, max } from "drizzle-orm";
-import type { Db } from "../../db/client";
-import { plays } from "../../db/schema";
+import { and, between, eq, inArray, sql } from "drizzle-orm";
+import type { Db, DbOrTx } from "../../db/client";
+import { plays, playTombstones, playTrash } from "../../db/schema";
 import { setJobState } from "../../jobs/state";
+import { localTime } from "../../plays/localTime";
+import { MATCH_AFTER_MS, MATCH_BEFORE_MS } from "../../plays/match";
 import { beforeHistoryStart, insertPlays, upsertTracks, type HistoryWindow, type PlayInput, type TrackInput } from "../../plays/store";
+import { tombstonedKeys } from "../../plays/trash";
 import { exportFileKind, parseExportFile } from "./parse";
 
 export type ExportFile = { name: string; content: string };
@@ -14,6 +17,7 @@ export type ImportResult = {
   invalidRows: number;
   inserted: number;
   alreadyPresent: number;
+  deleted: number;
   beforeHistoryStart: number;
   apiPlaysRemoved: number;
   range: { from: string; to: string } | null;
@@ -23,8 +27,9 @@ export class EmptyImportError extends Error {}
 
 const EXPORT_TS_PRECISION_MS = 999;
 
-export function exportCoveredUntil(db: Db): number | null {
-  const latest = db.select({ ts: max(plays.ts) }).from(plays).where(eq(plays.source, "export")).get()?.ts;
+export function exportCoveredUntil(db: DbOrTx): number | null {
+  const latest = db.all<{ ts: number | null }>(sql`
+    select max(ts) as ts from (select max(ts) as ts from plays where source = 'export' union all select max(ts) from play_tombstones where source = 'export')`)[0]?.ts;
   return latest == null ? null : latest + EXPORT_TS_PRECISION_MS;
 }
 
@@ -33,6 +38,49 @@ function hash(value: string): string {
 }
 
 type Range = { from: number; to: number };
+
+const DAY_MS = 86_400_000;
+
+type Tombstone = { dedupe_key: string; track_uri: string; ts: number; ms_played: number | null; deleted_at: number };
+
+/**
+ * An export row is the same listen as a deleted api or live play of its track when it ends inside that play's
+ * match window. The export row takes the deleted play's place, in the trash too, so the deletion holds and
+ * Restore brings back the export row. Returns the rows still to insert and how many match a deleted play.
+ */
+function keepDeleted(tx: DbOrTx, rows: PlayInput[], timezone: string): { rows: PlayInput[]; deleted: number } {
+  const tombstoned = tombstonedKeys(
+    tx,
+    rows.map((r) => r.dedupeKey),
+  );
+  const candidates = rows.filter((r) => r.trackUri && !tombstoned.has(r.dedupeKey));
+  const span = rangeOf(candidates.map((r) => r.ts));
+  const unchanged = { rows, deleted: tombstoned.size };
+  if (!span) return unchanged;
+  const byTrack = new Map<string, Tombstone[]>();
+  for (const t of tx.all<Tombstone>(sql`
+    select dedupe_key, track_uri, ts, ms_played, deleted_at from play_tombstones
+    where source in ('api', 'live') and track_uri is not null and ts between ${span.from - MATCH_AFTER_MS} and ${span.to + DAY_MS}`))
+    byTrack.set(t.track_uri, [...(byTrack.get(t.track_uri) ?? []), t]);
+  if (byTrack.size === 0) return unchanged;
+  const replaced = new Set<string>();
+  for (const row of candidates) {
+    const options = byTrack.get(row.trackUri!) ?? [];
+    const i = options.findIndex((t) => row.ts >= t.ts - (t.ms_played ?? 0) - MATCH_BEFORE_MS && row.ts <= t.ts + MATCH_AFTER_MS);
+    if (i < 0) continue;
+    const [t] = options.splice(i, 1) as [Tombstone];
+    replaced.add(row.dedupeKey);
+    tx.delete(playTombstones).where(eq(playTombstones.dedupeKey, t.dedupe_key)).run();
+    tx.insert(playTombstones).values({ dedupeKey: row.dedupeKey, source: row.source, trackUri: row.trackUri, ts: row.ts, msPlayed: row.msPlayed, deletedAt: t.deleted_at }).run();
+    const trashed = tx.select({ id: playTrash.id, trashedAt: playTrash.trashedAt }).from(playTrash).where(eq(playTrash.dedupeKey, t.dedupe_key)).get();
+    if (!trashed) continue;
+    tx.delete(playTrash).where(eq(playTrash.id, trashed.id)).run();
+    tx.insert(playTrash)
+      .values({ ...row, ...localTime(row.ts, timezone), id: trashed.id, trashedAt: trashed.trashedAt })
+      .run();
+  }
+  return { rows: rows.filter((r) => !replaced.has(r.dedupeKey)), deleted: tombstoned.size + replaced.size };
+}
 
 function rangeOf(timestamps: number[]): Range | null {
   return timestamps.reduce<Range | null>((r, ts) => (r ? { from: Math.min(r.from, ts), to: Math.max(r.to, ts) } : { from: ts, to: ts }), null);
@@ -67,7 +115,7 @@ export function importExport(db: Db, input: ExportFile[], window: HistoryWindow,
   const kept = playRows.filter((p) => !beforeHistoryStart(p.ts, window));
   const range = rangeOf(kept.map((p) => p.ts));
 
-  const { inserted, apiPlaysRemoved } = db.transaction((tx) => {
+  const { inserted, apiPlaysRemoved, deleted } = db.transaction((tx) => {
     const removed = audioRanges.reduce(
       (n, r) =>
         n +
@@ -79,7 +127,8 @@ export function importExport(db: Db, input: ExportFile[], window: HistoryWindow,
       0,
     );
     upsertTracks(tx, trackRows, now);
-    return { inserted: insertPlays(tx, kept, window), apiPlaysRemoved: removed };
+    const fresh = keepDeleted(tx, kept, window.timezone);
+    return { inserted: insertPlays(tx, fresh.rows, window), apiPlaysRemoved: removed, deleted: fresh.deleted };
   });
 
   const result: ImportResult = {
@@ -88,7 +137,8 @@ export function importExport(db: Db, input: ExportFile[], window: HistoryWindow,
     rowsParsed: playRows.length,
     invalidRows: parsedFiles.reduce((sum, f) => sum + f.invalid, 0),
     inserted,
-    alreadyPresent: kept.length - inserted,
+    alreadyPresent: kept.length - inserted - deleted,
+    deleted,
     beforeHistoryStart: playRows.length - kept.length,
     apiPlaysRemoved,
     range: range && { from: new Date(range.from).toISOString(), to: new Date(range.to).toISOString() },

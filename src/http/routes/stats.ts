@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import { z } from "zod";
 import { PLAY_OUTCOMES } from "../../analytics/common";
 import { artistPage, albumPage, trackPage } from "../../analytics/entities";
+import { canonicalOf } from "../../artists/aliases";
 import { history } from "../../analytics/history";
 import { clock, devices, overview, timeSeries } from "../../analytics/overview";
 import { forgotten, onThisDay } from "../../analytics/recall";
@@ -109,6 +110,8 @@ export const statsRoutes = new Hono<Env>()
 export const entityRoutes = new Hono<Env>()
   .get("/artist", (c) => {
     const q = parse(ranged({ name: z.string().min(1), period }), c.req.query());
+    const canonical = canonicalOf(c.var.deps.db, q.name);
+    if (canonical !== null) throw new ApiError(404, "artist_alias", `${q.name} counts as ${canonical}`, { canonical });
     return c.json(found(artistPage(c.var.deps.db, { artist: q.name, range: range(q), period: q.period, weekendDays: c.var.deps.settings.get().weekendDays })));
   })
   .get("/album", (c) => {
@@ -136,6 +139,7 @@ const historyQuery = ranged({
   country: z.string().regex(/^[A-Z]{2}$/).optional(),
   source: z.enum(PLAY_SOURCES).optional(),
   q: z.string().trim().min(1).max(200).optional(),
+  trash: z.stringbool().optional(),
   limit: int(1, 500, 100),
   offset: int(0, 10_000_000, 0),
 });

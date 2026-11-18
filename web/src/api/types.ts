@@ -475,6 +475,8 @@ export type TagSeries = {
 export type ArtistPage = {
   artist: string;
   imageUrl: string | null;
+  /** Artist names that count as this artist. */
+  alsoCounts: string[];
   totals: Stats;
   timeline: TimePoint[];
   skipProfile: SkipProfile;
@@ -522,9 +524,13 @@ export type HistoryItem = {
   device: Device;
   country: string | null;
   source: "export" | "api" | "live";
+  /** When the play was deleted; null outside the trash. */
+  trashedAt: string | null;
 };
 
 export type History = { total: number; limit: number; offset: number; items: HistoryItem[] };
+
+export type ArtistAlias = { alias: string; canonical: string; createdAt: string };
 
 export type TrackRef = { uri: string; name: string; artist: string; albumArtUrl: string | null };
 export type TrackIdentity = TrackRef & { songKey: string; album: string | null };

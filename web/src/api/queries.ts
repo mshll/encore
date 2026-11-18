@@ -165,7 +165,9 @@ export const useSearch = (q: string, limit = 8) =>
     placeholderData: keepPreviousData,
   });
 
-export type HistoryFilters = { q?: string; outcome?: string; device?: string; artist?: string; songKey?: string; country?: string; source?: string };
+export type HistoryFilters = { q?: string; outcome?: string; device?: string; artist?: string; songKey?: string; country?: string; source?: string; trash?: string };
+
+export const useTrashCount = () => useQuery({ queryKey: ["plays", "trash"], queryFn: () => get<{ plays: number }>("/api/plays/trash") });
 
 export const HISTORY_PAGE = 200;
 

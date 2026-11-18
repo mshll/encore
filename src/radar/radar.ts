@@ -28,8 +28,8 @@ export function radarCandidates(db: Db, minListens: number, now: number): RadarC
       group by t.artist having listens >= ${minListens}
     ),
     ids as (
-      select t.artist, ta.artist_id, row_number() over (partition by t.artist order by count(*) desc, ta.artist_id) as rn
-      from tracks t join track_artists ta on ta.track_uri = t.uri and ta.position = 0
+      select t.artist, ta.artist_id, row_number() over (partition by t.artist order by max(a.name = t.artist) desc, count(*) desc, ta.artist_id) as rn
+      from tracks t join track_artists ta on ta.track_uri = t.uri and ta.position = 0 left join artists a on a.id = ta.artist_id
       where t.artist in (select artist from listened)
       group by t.artist, ta.artist_id
     )

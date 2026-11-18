@@ -73,7 +73,8 @@ Runs live in memory: a restart ends them.
 - **Played through share** (`finishedShare`): `through` outcomes / plays with a known outcome.
 - **Shuffle rate**: plays with `shuffle = true` / plays with a known shuffle flag.
 - **Song (merged track)**: plays are grouped by `songKey`, not URI. `songKey = normalizedTitle + "|" + normalizedArtist`, where normalization lowercases, strips accents, removes `(feat. ...)`, `(with ...)`, `[ft. ...]`, trailing `feat. ...`, and remaster markers (`- Remastered 2011`, `(Remastered)`), then collapses all punctuation to single spaces. Live versions and other edits stay separate. Artist is the export's `master_metadata_album_artist_name` (Spotify's primary artist for the track) or, for API-only tracks, the first listed artist. Song rows show the name, album, and URI of the song's most-played URI.
-- **Artist**: grouped by artist name string. **Album**: grouped by (artist, album name).
+- **Artist**: grouped by artist name string, after aliases: a track credited to an alias counts as its canonical artist everywhere an artist is grouped or filtered (stats, entities, history, recaps, radar, Claude and MCP), and its rows show the canonical name. The song key keeps the credited artist, so songs never merge across an alias. **Album**: grouped by (artist, album name).
+- **Deleted plays**: a deleted play moves to the trash and counts nowhere: no stat, entity, history, recap, taste profile, Claude tool or MCP tool reads it. It stays deleted when the same play arrives again: by its dedupe key from any source, by an api row inside a deleted live play's match window, and by an export row inside a deleted api or live play's match window (the export row takes its place in the trash). Emptying the trash deletes the rows for good but keeps that block.
 - **Context dimensions** (used by the skip split and skip profiles). Only plays with a known outcome:
   - `hourBucket`: `night` 00-05, `morning` 06-11, `afternoon` 12-17, `evening` 18-23 (local hour).
   - `dayType`: `weekend` on the `weekendDays` setting's ISO weekdays (default 5, 6: Friday and Saturday), else `weekday`. Decided at query time, so a change applies to all stored plays.
@@ -475,13 +476,14 @@ Session or `Authorization: Bearer <ADMIN_TOKEN>`.
   "invalidRows": 0,
   "inserted": 39811,
   "alreadyPresent": 0,
+  "deleted": 0,
   "beforeHistoryStart": 0,
   "apiPlaysRemoved": 0,
   "range": { "from": "2021-05-16T06:56:32.000Z", "to": "2026-11-12T21:31:26.000Z" }
 }
 ```
 
-`beforeHistoryStart` counts rows on a local day before the `historyStart` setting; they are not stored. `alreadyPresent` counts the other rows that were already stored. `range` spans the rows inside the history start.
+`beforeHistoryStart` counts rows on a local day before the `historyStart` setting; they are not stored. `deleted` counts rows of plays the owner deleted (see [Corrections](#corrections)); they stay deleted. `alreadyPresent` counts the other rows that were already stored. `range` spans the rows inside the history start.
 
 Rows that fail validation are counted in `invalid` and skipped. A file that is not a JSON array is a `400 invalid_export` and nothing is written. `415 multipart_required`, `400 no_files`, `400 too_many_files`, `413 file_too_large`.
 
@@ -660,14 +662,16 @@ All accept `from`/`to` and `period` (timeline bucket, default `month`). `404 not
 ### `GET /api/entities/artist?name=Mac%20Miller`
 
 ```json
-{ "artist": "Mac Miller", "imageUrl": "...", "totals": Stats,
+{ "artist": "Mac Miller", "imageUrl": "...", "alsoCounts": ["Larry Fisherman"], "totals": Stats,
   "timeline": [{ "period": "2025-01", "hours": 10.2, "plays": 300, "listens": 200 }],
   "skipProfile": SkipProfile,
   "tracks": [Song],
   "albums": [{ "album": "Circles", "albumArtUrl": "...", ...Stats }] }
 ```
 
-`tracks` is the top 50 songs by hours.
+`tracks` is the top 50 songs by hours. `alsoCounts` lists the artist names that count as this artist (see [Corrections](#corrections)).
+
+A name that counts as another artist is `404 artist_alias` with `details: { "canonical": "..." }`.
 
 ### `GET /api/entities/album?artist=Mac%20Miller&album=Circles`
 
@@ -701,17 +705,39 @@ Case-insensitive substring match over all music plays (no range). Params: `q` (1
 
 ### `GET /api/history`
 
-Newest first. Params (all optional): `from`, `to`, `kind` (default `track`), `artist` (exact), `songKey`, `uri` (exact track URI), `device`, `outcome` (one or more of `through`, `early`, `midway`, `interrupted`, comma-separated; only music plays match), `country` (2-letter), `source`, `q` (case-insensitive substring of track, artist, album, episode, or show name), `limit` (1-500, default 100), `offset`.
+Newest first. Params (all optional): `from`, `to`, `kind` (default `track`), `artist` (exact), `songKey`, `uri` (exact track URI), `device`, `outcome` (one or more of `through`, `early`, `midway`, `interrupted`, comma-separated; only music plays match), `country` (2-letter), `source`, `q` (case-insensitive substring of track, artist, album, episode, or show name), `trash` (`true` lists deleted plays instead, with the same filters), `limit` (1-500, default 100), `offset`.
 
 ```json
 { "total": 39338, "limit": 1, "offset": 0,
   "items": [{ "id": 79623, "ts": "2026-11-13T21:07:27.573Z", "day": "2026-11-14", "hour": 0, "kind": "track",
               "uri": "spotify:track:...", "songKey": "do i wanna know|arctic monkeys", "name": "Do I Wanna Know?", "artist": "Arctic Monkeys",
               "album": "AM", "albumArtUrl": "...", "msPlayed": null, "outcome": null, "shuffle": null,
-              "reasonStart": null, "reasonEnd": null, "device": "unknown", "country": null, "source": "api" }] }
+              "reasonStart": null, "reasonEnd": null, "device": "unknown", "country": null, "source": "api", "trashedAt": null }] }
 ```
 
 `outcome` is the play's outcome (see Metric definitions), `null` when unknown and for every non-music row. For episodes, `name` is the episode, `artist` the show, `uri` the episode URI, `songKey` `null`. `ts` is the end of the play (Spotify's export and recently-played both report end time).
+
+`trashedAt` is when the play was deleted, `null` outside the trash.
+
+## Corrections
+
+The owner's fixes to the history. Both are undoable.
+
+### Deleted plays
+
+- `POST /api/plays/trash` `{ "ids": [79623] }` (1-5000 history ids): moves the plays to the trash. `{ "trashed": 1 }`.
+- `POST /api/plays/trash/song` `{ "songKey": "...", "from"?: "YYYY-MM-DD", "to"?: "YYYY-MM-DD" }`: every play of the song in the range. `{ "trashed": 12, "ids": [...] }`; send `ids` to restore to undo.
+- `POST /api/plays/restore` `{ "ids": [79623] }`: moves trashed plays back with their ids. `{ "restored": 1 }`.
+- `GET /api/plays/trash`: `{ "plays": 3 }`, the number of plays in the trash. List them with `GET /api/history?trash=true`.
+- `DELETE /api/plays/trash`: deletes every trashed play for good. `{ "deleted": 3 }`. They still never come back from an import, poll or the watcher.
+
+### Artist aliases
+
+"Count X as Y": every track credited to the alias counts as the canonical artist (see Metric definitions, Artist).
+
+- `GET /api/artists/aliases`: `{ "items": [{ "alias": "Larry Fisherman", "canonical": "Mac Miller", "createdAt": "..." }] }`, sorted by alias.
+- `POST /api/artists/aliases` `{ "alias": "Larry Fisherman", "canonical": "Mac Miller" }`: `201` with the alias. Both must be artists with plays (`404 unknown_artist`). `400 same_artist`; `409 already_alias` when the alias already counts as someone; `409 alias_chain` when the canonical artist is itself an alias, or other artists count as the alias.
+- `DELETE /api/artists/aliases?alias=Larry%20Fisherman`: undoes it. `{ "removed": "Larry Fisherman" }`, or `404 not_alias`.
 
 ## Tracks
 

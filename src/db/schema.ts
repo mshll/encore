@@ -14,7 +14,10 @@ export const tracks = sqliteTable(
   {
     uri: text("uri").primaryKey(),
     name: text("name").notNull(),
+    /** The artist the track counts as: the credited artist, or its canonical artist when the credit is an alias. */
     artist: text("artist").notNull(),
+    /** Spotify's credited artist, kept only while an alias rewrites `artist`. */
+    artistCredit: text("artist_credit"),
     album: text("album"),
     songKey: text("song_key").notNull(),
     durationMs: integer("duration_ms"),
@@ -27,39 +30,72 @@ export const tracks = sqliteTable(
   (t) => [index("tracks_song_key").on(t.songKey), index("tracks_artist").on(t.artist), index("tracks_album").on(t.artist, t.album)],
 );
 
+const playColumns = () => ({
+  dedupeKey: text("dedupe_key").notNull().unique(),
+  ts: integer("ts").notNull(),
+  day: text("day").notNull(),
+  hour: integer("hour").notNull(),
+  weekday: integer("weekday").notNull(),
+  kind: text("kind", { enum: PLAY_KINDS }).notNull(),
+  trackUri: text("track_uri").references(() => tracks.uri),
+  episodeUri: text("episode_uri"),
+  episodeName: text("episode_name"),
+  showName: text("show_name"),
+  msPlayed: integer("ms_played"),
+  reasonStart: text("reason_start"),
+  reasonEnd: text("reason_end"),
+  skipped: integer("skipped", { mode: "boolean" }),
+  shuffle: integer("shuffle", { mode: "boolean" }),
+  offline: integer("offline", { mode: "boolean" }),
+  incognito: integer("incognito", { mode: "boolean" }),
+  device: text("device", { enum: DEVICES }).notNull(),
+  platformRaw: text("platform_raw"),
+  connCountry: text("conn_country"),
+  source: text("source", { enum: PLAY_SOURCES }).notNull(),
+  contextUri: text("context_uri"),
+});
+
 export const plays = sqliteTable(
   "plays",
-  {
-    id: integer("id").primaryKey({ autoIncrement: true }),
-    dedupeKey: text("dedupe_key").notNull().unique(),
-    ts: integer("ts").notNull(),
-    day: text("day").notNull(),
-    hour: integer("hour").notNull(),
-    weekday: integer("weekday").notNull(),
-    kind: text("kind", { enum: PLAY_KINDS }).notNull(),
-    trackUri: text("track_uri").references(() => tracks.uri),
-    episodeUri: text("episode_uri"),
-    episodeName: text("episode_name"),
-    showName: text("show_name"),
-    msPlayed: integer("ms_played"),
-    reasonStart: text("reason_start"),
-    reasonEnd: text("reason_end"),
-    skipped: integer("skipped", { mode: "boolean" }),
-    shuffle: integer("shuffle", { mode: "boolean" }),
-    offline: integer("offline", { mode: "boolean" }),
-    incognito: integer("incognito", { mode: "boolean" }),
-    device: text("device", { enum: DEVICES }).notNull(),
-    platformRaw: text("platform_raw"),
-    connCountry: text("conn_country"),
-    source: text("source", { enum: PLAY_SOURCES }).notNull(),
-    contextUri: text("context_uri"),
-  },
+  { id: integer("id").primaryKey({ autoIncrement: true }), ...playColumns() },
   (t) => [
     index("plays_kind_day").on(t.kind, t.day),
     index("plays_track_day").on(t.trackUri, t.day),
     index("plays_ts").on(t.ts),
     index("plays_source_ts").on(t.source, t.ts),
   ],
+);
+
+/** Plays the owner deleted, moved out of `plays` so no query counts them. Restore moves the row back with its id. */
+export const playTrash = sqliteTable(
+  "play_trash",
+  { id: integer("id").primaryKey(), ...playColumns(), trashedAt: integer("trashed_at").notNull() },
+  (t) => [index("play_trash_ts").on(t.ts)],
+);
+
+/** Every deleted play, kept after the trash is emptied, so no import, poll or watcher stores it again. */
+export const playTombstones = sqliteTable(
+  "play_tombstones",
+  {
+    dedupeKey: text("dedupe_key").primaryKey(),
+    source: text("source", { enum: PLAY_SOURCES }).notNull(),
+    trackUri: text("track_uri"),
+    ts: integer("ts").notNull(),
+    msPlayed: integer("ms_played"),
+    deletedAt: integer("deleted_at").notNull(),
+  },
+  (t) => [index("play_tombstones_track_ts").on(t.trackUri, t.ts)],
+);
+
+/** "Count `alias` as `canonical`": artist names as tracks credit them. A canonical artist is never itself an alias. */
+export const artistAliases = sqliteTable(
+  "artist_aliases",
+  {
+    alias: text("alias").primaryKey(),
+    canonical: text("canonical").notNull(),
+    createdAt: integer("created_at").notNull(),
+  },
+  (t) => [index("artist_aliases_canonical").on(t.canonical)],
 );
 
 export const artists = sqliteTable(

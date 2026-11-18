@@ -24,6 +24,7 @@ import { playerRoutes } from "./routes/player";
 import { radarRoutes } from "./routes/radar";
 import { runRoutes } from "./routes/runs";
 import { callbackRoute, spotifyRoutes } from "./routes/spotify";
+import { artistRoutes, playRoutes } from "./routes/corrections";
 import { entityRoutes, historyRoutes, searchRoutes, statsRoutes } from "./routes/stats";
 import { settingsRoutes } from "./routes/settings";
 import { PUBLIC_SHARE_HEADERS, publicShareRoutes, shareRoutes } from "./routes/share";
@@ -117,6 +118,8 @@ export function createApp(deps: Deps) {
   app.route("/api/stats", statsRoutes);
   app.route("/api/entities", entityRoutes);
   app.route("/api/history", historyRoutes);
+  app.route("/api/plays", playRoutes);
+  app.route("/api/artists", artistRoutes);
   app.route("/api/search", searchRoutes);
   app.route("/api/sets", setRoutes);
   app.route("/api/picks", pickRoutes);

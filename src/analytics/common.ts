@@ -193,7 +193,7 @@ export function withArtistImages<T extends { artist: string }>(db: Db, rows: T[]
   const names = [...new Set(rows.map((r) => r.artist))];
   if (names.length === 0) return [];
   const images = db.all<{ artist: string; image_url: string }>(sql`
-    select t.artist, max(a.image_url) as image_url from tracks t
+    select t.artist, coalesce(max(case when a.name = t.artist then a.image_url end), max(a.image_url)) as image_url from tracks t
     join track_artists ta on ta.track_uri = t.uri and ta.position = 0
     join artists a on a.id = ta.artist_id
     where a.image_url is not null and t.artist in (${sql.join(

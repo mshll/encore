@@ -1,8 +1,10 @@
 import { sql } from "drizzle-orm";
 import type { DbOrTx } from "../db/client";
 import { artists, plays, trackArtists, tracks } from "../db/schema";
+import { syncAliases } from "../artists/aliases";
 import { localTime } from "./localTime";
 import { songKey } from "./song";
+import { tombstonedKeys } from "./trash";
 
 export type TrackInput = {
   uri: string;
@@ -53,6 +55,7 @@ export function upsertTracks(db: DbOrTx, input: TrackInput[], now = Date.now()) 
       })
       .run();
   }
+  syncAliases(db);
 }
 
 export type ArtistInput = { id: string; name: string };
@@ -76,9 +79,16 @@ export function beforeHistoryStart(ts: number, window: HistoryWindow): boolean {
   return window.historyStart !== undefined && localTime(ts, window.timezone).day < window.historyStart;
 }
 
-/** Inserts the plays inside the window; returns how many rows were new. */
+/** Inserts the plays inside the window that were never deleted; returns how many rows were new. */
 export function insertPlays(db: DbOrTx, input: PlayInput[], window: HistoryWindow): number {
-  const inside = input.map((p) => ({ ...p, ...localTime(p.ts, window.timezone) })).filter((p) => window.historyStart === undefined || p.day >= window.historyStart);
+  const deleted = tombstonedKeys(
+    db,
+    input.map((p) => p.dedupeKey),
+  );
+  const inside = input
+    .filter((p) => !deleted.has(p.dedupeKey))
+    .map((p) => ({ ...p, ...localTime(p.ts, window.timezone) }))
+    .filter((p) => window.historyStart === undefined || p.day >= window.historyStart);
   let inserted = 0;
   for (const batch of chunks(inside)) {
     const rows = db

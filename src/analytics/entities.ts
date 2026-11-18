@@ -1,4 +1,5 @@
 import { eq, sql, type SQL } from "drizzle-orm";
+import { listAliases } from "../artists/aliases";
 import type { Db } from "../db/client";
 import { tracks } from "../db/schema";
 import { hours, LISTEN, MS, MUSIC, musicWhere, periodExpr, type Period, type Range, songStatsSql, songWithStats, STATS, stats, type SongRow, type StatsRow, withArtistImages } from "./common";
@@ -33,6 +34,7 @@ export function artistPage(db: Db, { artist, range, period, weekendDays }: Entit
   return {
     artist,
     imageUrl: withArtistImages(db, [{ artist }])[0]!.imageUrl,
+    alsoCounts: listAliases(db, artist).map((a) => a.alias),
     ...page,
     tracks: songs(db, where),
     albums: albums.map((a) => ({ album: a.album, albumArtUrl: a.album_art_url, ...stats(a) })),

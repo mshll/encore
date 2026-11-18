@@ -41,8 +41,8 @@ function Items({ song }: { song: SongRef }) {
   );
 }
 
-/** The row menu for a song. Every action in it is a user action; nothing plays on its own. */
-export function SongMenu({ song, className }: { song: SongRef; className?: string }) {
+/** The row menu for a song. Every action in it is a user action; nothing plays on its own. `children` adds items at its end. */
+export function SongMenu({ song, className, children }: { song: SongRef; className?: string; children?: ReactNode }) {
   return (
     <Menu>
       <MenuTrigger className={iconButtonClass({ size: "sm", className })} aria-label={`More for ${song.name}`}>
@@ -50,6 +50,12 @@ export function SongMenu({ song, className }: { song: SongRef; className?: strin
       </MenuTrigger>
       <MenuContent container={LAYER} side="bottom" align="end" sideOffset={4} collisionPadding={8} className={cx(POPUP, "min-w-52 p-1")}>
         <Items song={song} />
+        {children && (
+          <>
+            <MenuSeparator />
+            {children}
+          </>
+        )}
       </MenuContent>
     </Menu>
   );

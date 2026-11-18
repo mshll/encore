@@ -10,12 +10,15 @@ export function SearchField({
   onChange,
   label,
   placeholder,
+  fill = false,
   className,
 }: {
   value: string;
   onChange: (value: string) => void;
   label: string;
   placeholder?: string;
+  /** Takes its container's full width at every size (inside a dialog). */
+  fill?: boolean;
   className?: string;
 }) {
   const [text, setText] = useState(value);
@@ -36,7 +39,7 @@ export function SearchField({
       autoCapitalize="none"
       autoCorrect="off"
       spellCheck={false}
-      className={cx("w-full md:w-72", className)}
+      className={cx(fill ? "w-full" : "w-full md:w-72", className)}
       end={text ? <IconButton icon={XIcon} label="Clear search" size="sm" onClick={() => setText("")} /> : undefined}
     />
   );

@@ -1,7 +1,7 @@
 import { sql, type SQL } from "drizzle-orm";
 import type { Db } from "../db/client";
 import type { Device, PlayKind, PlaySource } from "../db/schema";
-import { containsPattern, OUTCOME, type PlayOutcome, type Range } from "./common";
+import { containsPattern, iso, OUTCOME, type PlayOutcome, type Range } from "./common";
 
 export type HistoryFilters = {
   range: Range;
@@ -14,6 +14,8 @@ export type HistoryFilters = {
   country?: string;
   source?: PlaySource;
   q?: string;
+  /** Lists trashed plays instead of stored ones. */
+  trash?: boolean;
   limit: number;
   offset: number;
 };
@@ -38,6 +40,7 @@ type Row = {
   device: Device;
   conn_country: string | null;
   source: PlaySource;
+  trashed_at: number | null;
 };
 
 const bool = (v: number | null) => (v == null ? null : v === 1);
@@ -62,11 +65,12 @@ export function history(db: Db, f: HistoryFilters) {
     parts.push(sql`(t.name like ${like} escape '\\' or t.artist like ${like} escape '\\' or t.album like ${like} escape '\\' or p.episode_name like ${like} escape '\\' or p.show_name like ${like} escape '\\')`);
   }
   const where = sql.join(parts, sql` and `);
-  const from = sql`plays p left join tracks t on t.uri = p.track_uri`;
+  const from = sql`${sql.raw(f.trash ? "play_trash" : "plays")} p left join tracks t on t.uri = p.track_uri`;
   const rows = db.all<Row>(sql`
     select p.id, p.ts, p.day, p.hour, p.kind, coalesce(p.track_uri, p.episode_uri) as uri, t.song_key,
       coalesce(t.name, p.episode_name) as name, coalesce(t.artist, p.show_name) as artist, t.album, t.album_art_url,
-      p.ms_played, case when p.kind = 'track' then ${OUTCOME} end as outcome, p.shuffle, p.reason_start, p.reason_end, p.device, p.conn_country, p.source
+      p.ms_played, case when p.kind = 'track' then ${OUTCOME} end as outcome, p.shuffle, p.reason_start, p.reason_end, p.device, p.conn_country, p.source,
+      ${sql.raw(f.trash ? "p.trashed_at" : "null")} as trashed_at
     from ${from} where ${where} order by p.ts desc, p.id desc limit ${f.limit} offset ${f.offset}`);
   const total = db.all<{ n: number }>(sql`select count(*) as n from ${from} where ${where}`)[0]!.n;
   return {
@@ -93,6 +97,7 @@ export function history(db: Db, f: HistoryFilters) {
       device: r.device,
       country: r.conn_country,
       source: r.source,
+      trashedAt: iso(r.trashed_at),
     })),
   };
 }

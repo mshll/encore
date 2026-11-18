@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { ApiError } from "../../api/client";
 import { useArtistPage, useRadar } from "../../api/queries";
 import type { ArtistPage as ArtistData } from "../../api/types";
 import { albumPath } from "../../app/paths";
@@ -10,10 +11,12 @@ import { Artwork } from "../../ui/Artwork";
 import { Button, buttonClass } from "../../ui/Button";
 import { EntityHeader } from "../../ui/EntityHeader";
 import { Icon } from "../../ui/Icon";
-import { ArrowUpRightIcon, PlayIcon } from "../../ui/icons";
+import { ArrowUpRightIcon, PlayIcon, UsersThreeIcon } from "../../ui/icons";
+import { MenuItem, MenuPopup, MenuRoot, MoreTrigger } from "../../ui/Menu";
 import { Page, SIDE_COLUMNS, Section, dimWhile, useDocumentTitle } from "../../ui/Page";
 import { RangePicker } from "../../ui/RangePicker";
 import { Row, RowList } from "../../ui/Rows";
+import { AlsoCounts, CountAsDialog, CountedAs } from "./ArtistAliases";
 import { EntityLoading, EntityMissing, FirstLast, Listening, SkipContext, SongList, usePeriod } from "./parts";
 
 const releaseDay = (date: string) => (date.length === 10 ? fmtDay(date) : date.length === 7 ? fmtMonth(date) : date);
@@ -87,7 +90,15 @@ export function ArtistPage({ name }: { name: string }) {
   const { period } = usePeriod(range);
   const q = useArtistPage(name, range, period);
   const playback = usePlayback();
+  const [countAs, setCountAs] = useState(false);
   useDocumentTitle(name);
+  const canonical = q.error instanceof ApiError && q.error.code === "artist_alias" ? q.error.details?.canonical : undefined;
+  if (typeof canonical === "string")
+    return (
+      <Page crumb={name}>
+        <CountedAs name={name} canonical={canonical} />
+      </Page>
+    );
   if (q.isError)
     return (
       <Page crumb={name}>
@@ -116,6 +127,15 @@ export function ArtistPage({ name }: { name: string }) {
             <AppLink to={`/plays?artist=${encodeURIComponent(d.artist)}`} className={buttonClass()}>
               Every play
             </AppLink>
+            <MenuRoot>
+              <MoreTrigger label={`More for ${d.artist}`} size="md" />
+              <MenuPopup align="start">
+                <MenuItem icon={UsersThreeIcon} onClick={() => setCountAs(true)}>
+                  Count as another artist…
+                </MenuItem>
+              </MenuPopup>
+            </MenuRoot>
+            <CountAsDialog artist={d.artist} open={countAs} onOpenChange={setCountAs} />
           </>
         }
         aside={<RangePicker />}
@@ -128,6 +148,7 @@ export function ArtistPage({ name }: { name: string }) {
         <div className="flex min-w-0 flex-col gap-10">
           <Albums artist={d.artist} albums={d.albums} />
           <Releases artist={d.artist} />
+          <AlsoCounts names={d.alsoCounts} />
         </div>
       </div>
       <SkipContext totals={d.totals} profile={d.skipProfile} />

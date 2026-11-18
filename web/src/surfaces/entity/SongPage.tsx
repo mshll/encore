@@ -1,3 +1,4 @@
+import { useCorrections } from "../../api/corrections";
 import { useTrackPage } from "../../api/queries";
 import type { MomentClass, TrackPage } from "../../api/types";
 import { albumPath, artistPath } from "../../app/paths";
@@ -8,7 +9,8 @@ import { AppLink } from "../../ui/AppLink";
 import { Button, buttonClass } from "../../ui/Button";
 import { cx } from "../../ui/cx";
 import { EntityHeader } from "../../ui/EntityHeader";
-import { PlayIcon } from "../../ui/icons";
+import { PlayIcon, TrashIcon } from "../../ui/icons";
+import { MenuItem } from "../../ui/Menu";
 import { Page, Section, dimWhile, useDocumentTitle } from "../../ui/Page";
 import { RangePicker } from "../../ui/RangePicker";
 import { SongMenu } from "../../ui/SongMenu";
@@ -46,6 +48,7 @@ export function SongPage({ songKey }: { songKey: string }) {
   const { period } = usePeriod(range);
   const q = useTrackPage(songKey, range, period);
   const playback = usePlayback();
+  const corrections = useCorrections();
   useDocumentTitle(q.data?.name ?? "Song");
   if (q.isError)
     return (
@@ -60,6 +63,7 @@ export function SongPage({ songKey }: { songKey: string }) {
       </Page>
     );
   const d = q.data;
+  const plays = `${fmtInt(d.totals.plays)} ${d.totals.plays === 1 ? "play" : "plays"}`;
   return (
     <Page crumb={d.name} className={dimWhile(q.isPlaceholderData)}>
       <EntityHeader
@@ -90,7 +94,11 @@ export function SongPage({ songKey }: { songKey: string }) {
             <AppLink to={`/plays?songKey=${encodeURIComponent(d.songKey)}`} className={buttonClass()}>
               Every play
             </AppLink>
-            <SongMenu song={{ uri: d.uri, name: d.name, artist: d.artist }} className="size-(--control-h)" />
+            <SongMenu song={{ uri: d.uri, name: d.name, artist: d.artist }} className="size-(--control-h)">
+              <MenuItem icon={TrashIcon} danger onClick={() => void corrections.trashSong(d.songKey, range)}>
+                {range.from || range.to ? `Delete ${plays} in this range` : `Delete all ${plays}`}
+              </MenuItem>
+            </SongMenu>
           </>
         }
         aside={<RangePicker />}
