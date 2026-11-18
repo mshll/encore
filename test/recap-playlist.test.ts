@@ -7,7 +7,8 @@ import { appOwnedPlaylistIds } from "../src/library/owned";
 import { RecapPeriodError, recapPeriod } from "../src/digest/service";
 import { definingSongs } from "../src/digest/songs";
 import { setJobState } from "../src/jobs/state";
-import { thisYearTracks } from "../src/living/build";
+import { buildRule } from "../src/living/engine";
+import { LIVING } from "../src/living/kinds";
 import { livingRow, MissingScopeError, refreshLiving, setLivingEnabled, type LivingDeps } from "../src/living/refresh";
 import { isDue, nextRefreshDay } from "../src/living/schedule";
 import { SpotifyNotConnectedError } from "../src/spotify/errors";
@@ -162,7 +163,7 @@ describe("This year so far", () => {
     const { db } = setup();
     seedYear(db);
 
-    expect(thisYearTracks(db, { now: DEC_20, timezone: TZ }, 50).map((t) => t.name)).toEqual(["A", "B"]);
+    expect(buildRule(db, LIVING["this-year"].rule, { now: DEC_20, timezone: TZ }).map((t) => t.name)).toEqual(["A", "B"]);
   });
 
   test("makes no playlist while the year has no song played twice", async () => {

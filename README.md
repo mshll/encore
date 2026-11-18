@@ -25,7 +25,7 @@ One instance serves one person. Your data stays in a single SQLite file on your 
 
 **Playlists in Spotify** (in For you)
 
-- Six private playlists encore keeps refilling: Weekly picks, Forgotten favourites, Most played lately, New from your artists, This month in past years, and This year so far (which becomes that year's playlist when the year ends). Each can be seen and played in encore; Keep in Spotify adds it to your account. Only Weekly picks needs the Anthropic key.
+- Private playlists encore keeps refilling: Weekly picks, Forgotten favourites, Most played lately, New from your artists, This month in past years, This year so far (which becomes that year's playlist when the year ends), and Right now (what you play at this hour on this weekday). Each can be seen and played in encore; Keep in Spotify adds it to your account. Only Weekly picks needs the Anthropic key.
 
 **Upkeep**
 
@@ -160,7 +160,7 @@ src/ingest/live/         recently-played poller, player watcher and its reconcil
 src/player/              typed Spotify playback API
 src/dj/                  DJ sessions on an app-owned playlist, deterministic and Claude re-planners
 src/radar/               release radar
-src/living/              living playlists: kinds, builders, schedule, refresh
+src/living/              living playlists: rules and their engine, built-in kinds, schedule, refresh
 src/library/             saved songs and own playlists sync, library analysis, plans and their rules; apply and undo (only reachable from the HTTP route);
                          song catalog, candidate verification, blocks, play outcomes, library tools
 src/discord/             interactions endpoint logic, REST client, command registry, built-in and assistant commands, channel posts

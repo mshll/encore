@@ -630,21 +630,56 @@ export type LibrarySongs = {
   items: (SongEvidence & { uri: string; where: LibraryPlace; positions: number[]; reason: string })[];
 };
 
-export type LivingKind = "picks" | "forgotten" | "most-played" | "new-releases" | "this-month" | "this-year";
+export type LivingKind = "picks" | "forgotten" | "most-played" | "new-releases" | "this-month" | "this-year" | "right-now";
 export type LivingStatus = "refreshed" | "unchanged" | "empty" | "deferred" | "failed" | "removed";
-export type LivingSchedule = "daily" | "weekly" | "monthly" | "yearly-weekly" | "picks" | "releases";
+export type LivingSchedule = "daily" | "weekly" | "monthly" | "yearly-weekly" | "picks" | "releases" | "window";
+
+/** A point a time filter compares with: days before the refresh, or a local day. */
+export type RuleWhen = { daysAgo: number } | { day: string };
+export type RuleWindow = { type: "all" } | { type: "days"; days: number } | { type: "range"; from: string; to?: string } | { type: "year-to-date" } | { type: "month-in-past-years" };
+export type RuleSource =
+  | { type: "history"; window: RuleWindow }
+  | { type: "moment"; weekdays: number[] | "today"; hours: { from: number; to: number } | "now" }
+  | { type: "releases"; days: number }
+  | { type: "picks" }
+  | { type: "liked" };
+export type RuleSort = "source" | "listens" | "recent" | "first-played" | "keepers" | "shuffle" | "listens-by-key";
+export type LivingRule = {
+  source: RuleSource;
+  filters: {
+    listens?: { min?: number; max?: number };
+    lastPlayed?: { before?: RuleWhen; after?: RuleWhen };
+    firstPlayed?: { before?: RuleWhen; after?: RuleWhen };
+    artists?: { include?: string[]; exclude?: string[] };
+    releaseYears?: { min?: number; max?: number };
+    keepers?: { minPlayedThrough: number };
+  };
+  sort: RuleSort;
+  limit: number;
+  perArtist?: number;
+  rolling?: { perRefresh: number };
+  schedule: LivingSchedule;
+};
+/** Body of `POST /api/living` and `PUT /api/living/:kind`. An owner's rule refreshes daily, weekly or monthly and cannot use `today`, `now` or `listens-by-key`. */
+export type RuleInput = { name: string; about?: string | null; rule: { source: RuleSource; schedule: "daily" | "weekly" | "monthly" } & Partial<Omit<LivingRule, "source" | "schedule">> };
+export type RulePreview = { count: number; songs: (LivingSong & { artistImageUrl: string | null })[] };
 export type LivingTrigger = "enable" | "schedule" | "manual" | "picks" | "year-end";
 
 export type LivingSong = { uri: string; songKey: string; name: string; artist: string; album: string | null; albumArtUrl: string | null };
 
 export type LivingPlaylist = {
   kind: LivingKind;
+  /** False for the owner's rules; `useLiving` lists the built-ins only until the Playlists page shows rules. */
+  builtin: boolean;
   name: string;
   about: string;
   mode: "replace" | "rolling";
   schedule: LivingSchedule;
   cap: number;
+  rule: LivingRule;
   enabled: boolean;
+  /** Scheduled refreshes skip it; Refresh now still fills it. */
+  frozen: boolean;
   playlist: { id: string; url: string } | null;
   removedAt: string | null;
   coverUrl: string;
@@ -677,6 +712,10 @@ export type LivingRefresh = { id: number; at: string; trigger: LivingTrigger; it
 export type LivingOutcome = { kind: LivingKind; status: LivingStatus | "off"; calls: number; cover?: "uploaded" | "unchanged" | "missing_scope" | "failed" };
 
 export type LivingUpdate = { outcome: LivingOutcome; playlist: LivingDetail };
+/** `PATCH` with `frozen` alone, or `PUT` when nothing was written to Spotify. */
+export type LivingQuietUpdate = { outcome: null; playlist: LivingDetail };
+/** `DELETE /api/living/:kind`: the Spotify playlist that stays in the owner's account, if any. */
+export type RuleDeleted = { deleted: true; spotifyPlaylist: { id: string; url: string } | null };
 
 export type PlanAction = "archive" | "remove" | "save" | "add" | "dedupe";
 export type PlanSource = "rule" | "analysis" | "claude" | "standing";

@@ -180,7 +180,7 @@ function ReleasesBand({ playlist, news }: { playlist: LivingListItem; news: stri
 }
 
 const LOOK_BACK: LivingKind[] = ["forgotten", "this-month", "this-year"];
-const ORDER: LivingKind[] = ["picks", "new-releases", "most-played", ...LOOK_BACK];
+const ORDER: LivingKind[] = ["picks", "new-releases", "most-played", "right-now", ...LOOK_BACK];
 
 function PlaylistBand({ playlist, news }: { playlist: LivingListItem; news: string | null }) {
   if (playlist.kind === "picks") return <PicksBand playlist={playlist} news={news} />;

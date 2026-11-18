@@ -1,9 +1,10 @@
 import { describe, expect, test } from "bun:test";
 import { createSession } from "../src/auth/sessions";
-import { livingPlaylists, livingRefreshes, picks, releases, spotifyAuth, type LivingTrack } from "../src/db/schema";
+import { livingPlaylists, livingRefreshes, picks, releases, spotifyAuth, type LivingKind, type LivingTrack } from "../src/db/schema";
 import { createJobs, enabledJobs } from "../src/jobs/definitions";
 import { setJobState } from "../src/jobs/state";
-import { forgottenTracks, mostPlayedTracks, newReleaseTracks, picksTracks, replaceMerge, rollingMerge, thisMonthTracks } from "../src/living/build";
+import { buildRule, type BuildContext } from "../src/living/engine";
+import { replaceMerge, rollingMerge } from "../src/living/merge";
 import { LIVING } from "../src/living/kinds";
 import { livingList } from "../src/living/view";
 import { fetchReleaseTracks, livingRow, markRemovedPlaylists, MissingScopeError, refreshLiving, refreshPicksPlaylist, runLiving, setLivingEnabled, type LivingDeps } from "../src/living/refresh";
@@ -23,6 +24,7 @@ const skips = (id: string, n: number, daysAgo: number) => Array.from({ length: n
 const t = (id: string): LivingTrack => ({ uri: uri(id), songKey: id, name: id, artist: "A", album: null, albumArtUrl: null });
 const keys = (items: { songKey: string }[]) => items.map((i) => i.songKey);
 const names = (items: { name: string }[]) => items.map((i) => i.name);
+const build = (kind: LivingKind, db: LivingDeps["db"], ctx: BuildContext = { now: NOW, timezone: TZ }) => buildRule(db, LIVING[kind].rule, ctx);
 
 type Route = (call: FetchCall) => Response | undefined;
 
@@ -65,7 +67,7 @@ describe("builders", () => {
     const { db } = setup();
     seed(db, [track("a", "A", "X", null), track("b", "B", "X", null), track("c", "C", "X", null), track("d", "D", "X", null)], [...listens("a", 3, 1), ...listens("b", 5, 2), ...listens("c", 1, 1), ...listens("d", 9, 40)]);
 
-    const built = mostPlayedTracks(db, { now: NOW, timezone: TZ });
+    const built = build("most-played", db);
 
     expect(names(built)).toEqual(["B", "A"]);
   });
@@ -73,18 +75,18 @@ describe("builders", () => {
   test("skips alone never move a song down Most played lately", () => {
     const { db } = setup();
     seed(db, [track("a", "A", "X", null), track("b", "B", "X", null)], [...listens("a", 4, 1), ...listens("b", 3, 1)]);
-    const before = names(mostPlayedTracks(db, { now: NOW, timezone: TZ }));
+    const before = names(build("most-played", db));
 
     seed(db, [], skips("a", 20, 0.5));
 
-    expect(names(mostPlayedTracks(db, { now: NOW, timezone: TZ }))).toEqual(before);
+    expect(names(build("most-played", db))).toEqual(before);
   });
 
   test("Forgotten favourites are songs with many listens and none in 90 days", () => {
     const { db } = setup();
     seed(db, [track("old", "Old", "X", null), track("kept", "Kept", "X", null), track("few", "Few", "X", null)], [...listens("old", 12, 200), ...listens("kept", 12, 200), ...listens("kept", 1, 5), ...listens("few", 3, 200)]);
 
-    expect(names(forgottenTracks(db, { now: NOW, timezone: TZ }))).toEqual(["Old"]);
+    expect(names(build("forgotten", db))).toEqual(["Old"]);
   });
 
   test("This month in past years takes this calendar month of earlier years only", () => {
@@ -95,14 +97,14 @@ describe("builders", () => {
       [play("2025-11-20T10:00:00Z", uri("y1"), 200_000), play("2026-11-02T10:00:00Z", uri("y0"), 200_000), play("2025-10-20T10:00:00Z", uri("oct"), 200_000)],
     );
 
-    expect(names(thisMonthTracks(db, { now: NOW, timezone: TZ }))).toEqual(["Last November"]);
+    expect(names(build("this-month", db))).toEqual(["Last November"]);
   });
 
   test("This month in past years is empty with no earlier year", () => {
     const { db } = setup();
     seed(db, [track("y0", "This November", "X", null)], [play("2026-11-02T10:00:00Z", uri("y0"), 200_000)]);
 
-    expect(thisMonthTracks(db, { now: NOW, timezone: TZ })).toEqual([]);
+    expect(build("this-month", db)).toEqual([]);
   });
 
   test("Weekly picks are the latest week in order, without never picks", () => {
@@ -110,7 +112,7 @@ describe("builders", () => {
     insertPicks(db, "2026-11-02", [{ id: "older" }]);
     insertPicks(db, "2026-11-09", [{ id: "one" }, { id: "no", state: "never" }, { id: "two" }]);
 
-    expect(names(picksTracks(db))).toEqual(["one", "two"]);
+    expect(names(build("picks", db))).toEqual(["one", "two"]);
   });
 
   test("New from your artists takes stored tracks of recent new releases, newest release first", async () => {
@@ -127,10 +129,10 @@ describe("builders", () => {
     release("ancient", "2025-01-01", true);
     release("known", "2026-11-11", false);
 
-    const fetched = await fetchReleaseTracks(deps);
+    const fetched = await fetchReleaseTracks(deps, 90);
 
     expect(fetched).toEqual({ releases: 2, calls: 2 });
-    expect(names(newReleaseTracks(db, { now: NOW, timezone: TZ }))).toEqual(["late 1", "late 2", "late 3", "early 1", "early 2", "early 3"]);
+    expect(names(build("new-releases", db))).toEqual(["late 1", "late 2", "late 3", "early 1", "early 2", "early 3"]);
   });
 });
 
@@ -326,6 +328,11 @@ describe("refresh", () => {
 describe("schedule", () => {
   const row = (patch: Partial<LivingRow>): LivingRow => ({
     kind: "most-played",
+    name: null,
+    about: null,
+    rule: null,
+    definedAt: null,
+    frozen: false,
     enabled: true,
     playlistId: "pl",
     playlistUrl: "u",
@@ -400,7 +407,7 @@ describe("list", () => {
   test("shows nothing for a playlist with nothing to put in it", () => {
     const { deps } = setup();
 
-    expect(livingList(deps).items.map((p) => p.songs.length)).toEqual([0, 0, 0, 0, 0, 0]);
+    expect(livingList(deps).items.map((p) => p.songs.length)).toEqual([0, 0, 0, 0, 0, 0, 0]);
   });
 });
 
@@ -433,11 +440,13 @@ describe("HTTP", () => {
     expect([res.status, res.headers.get("content-type"), res.headers.get("cache-control")]).toEqual([200, "image/jpeg", "private, max-age=31536000, immutable"]);
   });
 
-  test("an unknown kind is a 400", async () => {
+  test("a malformed id is a 400, an unknown one a 404", async () => {
     const app = testApp();
     const cookie = `encore_session=${createSession(app.db)}`;
 
-    expect((await app.request("/api/living/nope", { headers: { cookie } })).status).toBe(400);
+    const statuses = [(await app.request("/api/living/No_pe", { headers: { cookie } })).status, (await app.request("/api/living/nope", { headers: { cookie } })).status];
+
+    expect(statuses).toEqual([400, 404]);
   });
 });
 

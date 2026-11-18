@@ -1,10 +1,10 @@
 import { and, desc, eq } from "drizzle-orm";
 import type { Db } from "../db/client";
-import { livingRefreshes, type LivingKind } from "../db/schema";
+import { livingRefreshes } from "../db/schema";
 import { withArtwork } from "../library/artwork";
 import { livingCoverUrl } from "./cover";
-import { LIVING, LIVING_CAP } from "./kinds";
-import { currentItems, livingRow, livingRows, nextItems, WRITE_SCOPE, type LivingDeps } from "./refresh";
+import { specOf } from "./kinds";
+import { currentItems, livingRows, nextItems, requireLivingRow, WRITE_SCOPE, type LivingDeps } from "./refresh";
 import { nextRefreshDay, type LivingRow } from "./schedule";
 
 const HISTORY = 30;
@@ -31,7 +31,7 @@ function summary(deps: LivingDeps, row: LivingRow) {
 
 /** The playlist's summary and its first `songs` songs: what is in it now, else what a refresh would put in it. */
 function withSongs(deps: LivingDeps, row: LivingRow, songs: number) {
-  const spec = LIVING[row.kind];
+  const spec = specOf(row);
   const now = deps.now();
   const { timezone } = deps.settings.get();
   const live = row.removedAt === null ? row.playlistId : null;
@@ -39,21 +39,24 @@ function withSongs(deps: LivingDeps, row: LivingRow, songs: number) {
   const current = currentItems(deps.db, row.kind, live);
   const summary = {
     kind: row.kind,
+    builtin: spec.builtin,
     name: spec.name,
     about: spec.about({ now, timezone }),
-    mode: spec.mode,
-    schedule: spec.schedule,
-    cap: LIVING_CAP,
+    mode: spec.rule.rolling ? "rolling" : "replace",
+    schedule: spec.rule.schedule,
+    cap: spec.rule.limit,
+    rule: spec.rule,
     enabled: row.enabled,
+    frozen: row.frozen,
     playlist: live && row.playlistUrl ? { id: live, url: row.playlistUrl } : null,
     removedAt: iso(row.removedAt),
-    coverUrl: livingCoverUrl(row.kind),
+    coverUrl: livingCoverUrl(spec),
     status: row.status,
     error: row.error,
     attemptedAt: iso(row.attemptedAt),
     checkedAt: iso(row.checkedAt),
     changedAt: iso(live ? lastChange(deps.db, row) : null),
-    nextRefresh: row.enabled ? nextRefreshDay(spec.schedule, row.checkedAt, now, timezone) : null,
+    nextRefresh: row.enabled && !row.frozen ? nextRefreshDay(spec.rule.schedule, row.checkedAt, now, timezone) : null,
     count: current.length,
     available: next.length,
   };
@@ -72,8 +75,8 @@ export function livingList(deps: LivingDeps) {
 }
 
 /** One playlist with what is in it now, or what a refresh would put in it while it has nothing, and its refreshes. */
-export function livingDetail(deps: LivingDeps, kind: LivingKind) {
-  const row = livingRow(deps.db, kind, deps.now());
+export function livingDetail(deps: LivingDeps, kind: string) {
+  const row = requireLivingRow(deps.db, kind, deps.now());
   const live = row.removedAt === null ? row.playlistId : null;
   const items = currentItems(deps.db, kind, live);
   const history = deps.db
@@ -100,7 +103,7 @@ export function livingDetail(deps: LivingDeps, kind: LivingKind) {
 }
 
 /** The full contents a past refresh left in the playlist. */
-export function livingRefresh(db: Db, kind: LivingKind, id: number) {
+export function livingRefresh(db: Db, kind: string, id: number) {
   const row = db
     .select()
     .from(livingRefreshes)

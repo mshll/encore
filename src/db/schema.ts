@@ -1,4 +1,5 @@
 import { index, integer, primaryKey, sqliteTable, text } from "drizzle-orm/sqlite-core";
+import type { UserRule } from "../living/rules";
 
 export const PLAY_KINDS = ["track", "episode", "audiobook", "video"] as const;
 export const PLAY_SOURCES = ["export", "api", "live"] as const;
@@ -336,7 +337,7 @@ export const cleanupBatches = sqliteTable("cleanup_batches", {
   undoneAt: integer("undone_at"),
 });
 
-export const LIVING_KINDS = ["picks", "forgotten", "most-played", "new-releases", "this-month", "this-year"] as const;
+export const LIVING_KINDS = ["picks", "forgotten", "most-played", "new-releases", "this-month", "this-year", "right-now"] as const;
 export type LivingKind = (typeof LIVING_KINDS)[number];
 export const LIVING_STATUSES = ["refreshed", "unchanged", "empty", "deferred", "failed", "removed"] as const;
 export type LivingStatus = (typeof LIVING_STATUSES)[number];
@@ -344,9 +345,19 @@ export const LIVING_TRIGGERS = ["enable", "schedule", "manual", "picks", "year-e
 export type LivingTrigger = (typeof LIVING_TRIGGERS)[number];
 export type LivingTrack = { uri: string; songKey: string; name: string; artist: string; album: string | null; albumArtUrl: string | null };
 
-/** A playlist in the owner's account that encore keeps refilling: one row per kind, the same Spotify playlist for good. */
+/**
+ * A playlist in the owner's account that encore keeps refilling, the same Spotify playlist for good. `kind` is a built-in
+ * kind (`LIVING_KINDS`) or the id of one of the owner's rules, which also has `name` and `rule`.
+ */
 export const livingPlaylists = sqliteTable("living_playlists", {
-  kind: text("kind", { enum: LIVING_KINDS }).primaryKey(),
+  kind: text("kind").primaryKey(),
+  name: text("name"),
+  about: text("about"),
+  rule: text("rule", { mode: "json" }).$type<UserRule>(),
+  /** When the owner made the rule; null for built-ins. */
+  definedAt: integer("defined_at"),
+  /** Scheduled refreshes skip a frozen playlist; Refresh now still fills it. */
+  frozen: integer("frozen", { mode: "boolean" }).notNull().default(false),
   enabled: integer("enabled", { mode: "boolean" }).notNull(),
   playlistId: text("playlist_id"),
   playlistUrl: text("playlist_url"),
@@ -369,7 +380,7 @@ export const livingRefreshes = sqliteTable(
   "living_refreshes",
   {
     id: integer("id").primaryKey({ autoIncrement: true }),
-    kind: text("kind", { enum: LIVING_KINDS }).notNull(),
+    kind: text("kind").notNull(),
     playlistId: text("playlist_id").notNull(),
     trigger: text("trigger", { enum: LIVING_TRIGGERS }).notNull(),
     items: text("items", { mode: "json" }).$type<LivingTrack[]>().notNull(),

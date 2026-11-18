@@ -212,7 +212,8 @@ export const useTracks = (uris: string[]) =>
 export const useRadar = (status: "new" | "recent", days = 30) =>
   useQuery({ queryKey: ["radar", status, days], queryFn: () => get<Radar>("/api/radar", { status, days, limit: 200 }) });
 
-export const useLiving = () => useQuery({ queryKey: ["living"], queryFn: () => get<LivingList>("/api/living") });
+export const useLiving = () =>
+  useQuery({ queryKey: ["living"], queryFn: () => get<LivingList>("/api/living"), select: (list) => ({ ...list, items: list.items.filter((p) => p.builtin) }) });
 
 export const useLivingPlaylist = (kind: LivingKind) => useQuery({ queryKey: ["living", kind], queryFn: () => get<LivingDetail>(`/api/living/${kind}`) });
 

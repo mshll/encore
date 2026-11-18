@@ -6,7 +6,7 @@ import { rangeLabel } from "../lib/range";
 import { PATTERN_TABS } from "./nav";
 import { paramValue, RECAP_SLUGS } from "./paths";
 
-const LIVING: LivingKind[] = ["picks", "forgotten", "most-played", "new-releases", "this-month", "this-year"];
+const LIVING: LivingKind[] = ["picks", "forgotten", "most-played", "new-releases", "this-month", "this-year", "right-now"];
 const VIEWS: PatternView[] = ["when", "eras", "taste", "skips", "places"];
 const DAY = /^\d{4}-\d{2}-\d{2}$/;
 

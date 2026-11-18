@@ -116,4 +116,26 @@ describe("migrations", () => {
     expect(db.$client.query("select release_id from release_tracks").all()).toEqual([{ release_id: "wild" }]);
     expect(db.$client.query("select artist_id from radar_artists").all()).toEqual([{ artist_id: "passenger" }]);
   });
+
+  test("a database at 0014 keeps its living playlists and their refreshes, unfrozen and without a rule", () => {
+    const dir = mkdtempSync(join(tmpdir(), "encore-mig-"));
+    const partial = join(dir, "drizzle");
+    cpSync(folder, partial, { recursive: true });
+    const journal = JSON.parse(readFileSync(join(partial, "meta/_journal.json"), "utf8"));
+    journal.entries = journal.entries.slice(0, 15);
+    writeFileSync(join(partial, "meta/_journal.json"), JSON.stringify(journal));
+
+    const path = join(dir, "dev.db");
+    const old = new Database(path, { create: true });
+    migrate(drizzle(old), { migrationsFolder: partial });
+    old.run("insert into living_playlists (kind, enabled, playlist_id, playlist_url, created_at, cover_upload_key, updated_at) values ('most-played', 1, 'lp', 'u', 0, 'key', 0)");
+    old.run("insert into living_refreshes (kind, playlist_id, trigger, items, added, removed, calls, at) values ('most-played', 'lp', 'schedule', '[]', '[]', '[]', 2, 5)");
+    old.close();
+
+    const db = openDb(path);
+    expect(db.$client.query("select kind, playlist_id, cover_upload_key, frozen, rule, defined_at from living_playlists").all()).toEqual([
+      { kind: "most-played", playlist_id: "lp", cover_upload_key: "key", frozen: 0, rule: null, defined_at: null },
+    ]);
+    expect(db.$client.query("select kind, calls from living_refreshes").all()).toEqual([{ kind: "most-played", calls: 2 }]);
+  });
 });

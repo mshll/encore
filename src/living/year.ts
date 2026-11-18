@@ -4,11 +4,21 @@ import { livingPlaylists, livingRefreshes, recapPlaylists, type LivingTrack } fr
 import { localTime } from "../plays/localTime";
 import { playlistDescription } from "../sets/playlist";
 import { SpotifyApiError, SpotifyBlockedError } from "../spotify/errors";
-import { yearTracks } from "./build";
+import { buildRule } from "./engine";
 import { LIVING_CAP } from "./kinds";
 import { currentContext } from "./playing";
 import type { LivingRow } from "./schedule";
 import type { LivingDeps, RefreshOutcome } from "./refresh";
+import type { Rule } from "./rules";
+
+/** The songs that defined a whole year, by the recap playlist rule. */
+const wholeYear = (year: string): Rule => ({
+  source: { type: "history", window: { type: "range", from: `${year}-01-01`, to: `${year}-12-31` } },
+  filters: { listens: { min: 2 } },
+  sort: "listens",
+  limit: LIVING_CAP,
+  schedule: "yearly-weekly",
+});
 
 const sameUris = (a: LivingTrack[], b: LivingTrack[]) => a.length === b.length && a.every((t, i) => t.uri === b[i]!.uri);
 
@@ -49,7 +59,7 @@ export async function closeYear(deps: LivingDeps, row: LivingRow): Promise<"clos
     return { kind: "this-year", status: "deferred", calls: 0 };
   }
 
-  const whole = yearTracks(db, { from: `${year}-01-01`, to: `${year}-12-31` }, LIVING_CAP);
+  const whole = buildRule(db, wholeYear(year), { now, timezone });
   const items = whole.length ? whole : last.items;
   let calls = 0;
   try {

@@ -1,7 +1,8 @@
 import type { Context } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { z } from "zod";
-import { MissingScopeError } from "../living/refresh";
+import { BuiltinPlaylistError } from "../living/manage";
+import { LivingNotFoundError, MissingScopeError } from "../living/refresh";
 import { NoActiveDeviceError, PremiumRequiredError } from "../player/api";
 import { SettingsValidationError } from "../settings/store";
 import { SpotifyApiError, SpotifyBlockedError, SpotifyNotConfiguredError, SpotifyNotConnectedError } from "../spotify/errors";
@@ -45,8 +46,14 @@ function spotifyError(error: unknown): ApiError | null {
   return null;
 }
 
+function livingError(error: unknown): ApiError | null {
+  if (error instanceof LivingNotFoundError) return new ApiError(404, "not_found", "Not found");
+  if (error instanceof BuiltinPlaylistError) return new ApiError(409, "builtin_playlist", error.message);
+  return null;
+}
+
 export function errorResponse(c: Context, raw: unknown) {
-  const error = spotifyError(raw) ?? (raw instanceof SettingsValidationError ? new ApiError(400, "invalid_settings", "Settings validation failed", raw.issues) : raw);
+  const error = livingError(raw) ?? spotifyError(raw) ?? (raw instanceof SettingsValidationError ? new ApiError(400, "invalid_settings", "Settings validation failed", raw.issues) : raw);
   if (error instanceof ApiError) {
     return c.json({ error: { code: error.code, message: error.message, ...(error.details ? { details: error.details } : {}) } }, error.status);
   }

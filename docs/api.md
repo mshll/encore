@@ -47,7 +47,7 @@ Runs live in memory: a restart ends them.
 | `artist` | `artist` |
 | `album` | `artist`, `album` |
 | `song` | `songKey`, `name`, `artist` |
-| `playlist` | `playlist` (a living playlist kind: `picks`, `forgotten`, `most-played`, `new-releases`, `this-month`, `this-year`), `name` |
+| `playlist` | `playlist` (a living playlist kind: `picks`, `forgotten`, `most-played`, `new-releases`, `this-month`, `this-year`, `right-now`), `name` |
 | `recap` | `period` (`weekly`, `monthly`, `yearly`), `key`, `label` ("October 2026") |
 | `patterns` | `view` (`when`, `eras`, `taste`, `skips`, `places`), `from`?, `to`? (`YYYY-MM-DD`; none for all time) |
 | `library` | `planId`?, `title`? (a plan page; none for the other Library pages) |
@@ -892,7 +892,7 @@ The snapshot the page is drawn from (fields listed in [sharing.md](sharing.md#wh
 
 ## Living playlists
 
-Six private playlists in the owner's Spotify account that encore keeps refilling. Each kind has one Spotify playlist for good: made the first time it is switched on, then always updated in place. Off by default. Switching off stops refreshes and leaves the playlist in Spotify; encore never deletes or unfollows it.
+Private playlists in the owner's Spotify account that encore keeps refilling: seven built-in kinds, plus the owner's own rule playlists. Each has one Spotify playlist for good: made the first time it is switched on, then always updated in place. Off by default. Switching off stops refreshes and leaves the playlist in Spotify; encore never deletes or unfollows it. Every playlist's contents come from a rule (see [Rules](#rules)), read from the local database only; the built-ins are fixed rules, shown in their `rule`.
 
 | Kind | Name | Holds | Refresh | Mode |
 | --- | --- | --- | --- | --- |
@@ -902,22 +902,54 @@ Six private playlists in the owner's Spotify account that encore keeps refilling
 | `new-releases` | New from your artists | The first 3 tracks of each new release (radar) from the last 90 days, newest first, without re-releases | Every job tick | rolling |
 | `this-month` | This month in past years | Most listens in this calendar month of earlier years | Monthly (the 1st, local) | replace |
 | `this-year` | This year so far | The songs that defined the year so far, by the recap playlist rule (most listens, then most time, at least 2) | Weekly (from Monday, local), and on 1 January | replace |
+| `right-now` | Right now | Songs played at least twice on this local weekday within this three-hour local window (00:00, 03:00, ... 21:00), over all history; most plays played through first, then most listens; at most 3 per artist | When the window changes (every 3 hours, local) | replace |
 
-- At most 50 songs, distinct by song key. Replace rebuilds the list. Rolling puts new songs on top and drops the oldest past 50; it fills an empty playlist to 50, then adds at most its per-refresh count, and never adds a song that playlist already had.
+- Blocked songs and artists (`blocks`) never enter any of them.
+- At most 50 songs (a rule's `limit`), distinct by song key. Replace rebuilds the list. Rolling puts new songs on top and drops the oldest past 50; it fills an empty playlist to 50, then adds at most its per-refresh count, and never adds a song that playlist already had.
 - A refresh writes nothing when the list is unchanged, when the new list is empty (the playlist keeps its songs), or while the playlist is the playback context the player watcher last saw (`deferred`, retried on the next tick). A skip never removes a song or moves it down: rankings count listens, and rolling lists drop songs only at the cap.
 - Spotify calls: making the playlist is 3 (create, items, cover); a change is 2 (details, items); no change is 0. The cover is uploaded once, and again only when its drawing changes. New from your artists also costs one album tracks call (`GET /albums/{id}/tracks?limit=3`) per new release, once, at most 3 per tick. No single track or artist lookups.
 - The Spotify description says what the playlist holds and the local date it last changed: `Your most played songs of the last four weeks. Updated 14 Nov 2026 by encore.`
 - A playlist deleted in Spotify is found without a call of its own: a write that answers 404, or a library pass (`library` job) that lists the owner's playlists without it. It is switched off with `removedAt` set; switching on again makes a new playlist.
-- The `living` job ticks every 10 minutes (`JOBS_DISABLED=living` turns it off) and refreshes the kinds that are due. A failed refresh is retried after an hour.
+- Right now is written to Spotify only while it is on. A window with the same songs costs no call; a changed one costs 2 (details, items), so at most 16 calls a day. Like every playlist it waits while it is playing and makes no Spotify playlist while its window has no songs.
+- The `living` job ticks every 10 minutes (`JOBS_DISABLED=living` turns it off) and refreshes the playlists that are due. A failed refresh is retried after an hour. A frozen playlist (`frozen: true`) is never due and Weekly picks does not follow a picks change while frozen; Refresh now still fills it.
 - Writing needs the `playlist-modify-private` scope, the cover `ugc-image-upload`.
 - This year so far makes no playlist while the year has no song listened to twice. At its first refresh in a new year it closes the year it holds: the songs are set to that whole year, the playlist is renamed after the year ("2026") with the year's recap cover and description, recorded as that year's recap playlist (`source: "living"`, see Digests), and a change with trigger `year-end` is added to its history. The same refresh then starts a new This year so far for the new year once it has songs. Closing waits while the playlist is playing. When the year already has a recap playlist saved from its page, nothing is closed and the playlist carries on into the new year. Calls: 2 (details, items) plus the cover.
+
+### Rules
+
+A rule is JSON, validated on every write (`400 invalid_request` with the issues). An owner's rule:
+
+```json
+{
+  "source": { "type": "history", "window": { "type": "days", "days": 90 } },
+  "filters": {
+    "listens": { "min": 3, "max": 40 },
+    "lastPlayed": { "before": { "daysAgo": 14 }, "after": { "day": "2026-01-01" } },
+    "firstPlayed": { "before": { "daysAgo": 365 } },
+    "artists": { "include": ["Mac Miller"], "exclude": ["Drake"] },
+    "releaseYears": { "min": 2010, "max": 2019 },
+    "keepers": { "minPlayedThrough": 0.6 }
+  },
+  "sort": "listens", "limit": 50, "perArtist": 3, "rolling": { "perRefresh": 10 },
+  "schedule": "weekly"
+}
+```
+
+- `source`: `history` with a `window` (`all`; `days`: the last N local days, today included; `range`: `from` and optional `to` local days; `year-to-date`; `month-in-past-years`: this calendar month in every earlier year), `moment` (plays on ISO `weekdays`, 1 is Monday, within local `hours` `{ from, to }`, `to` up to 24, over all history), `releases` (`days`: stored tracks of new releases from the radar, without re-releases), `picks` (this week's, without `never`) or `liked` (saved songs, newest saved first).
+- `filters`, all optional, all must pass. Counts are listens (plays of 30 s or more) over the source's plays: the window or moment for `history` and `moment`, all history for the others. A time bound is `{ "daysAgo": n }` or `{ "day": "YYYY-MM-DD" }` (local). A song never played passes `lastPlayed.before` and fails the other time bounds. Artists match the primary artist, ignoring case. `releaseYears` drops songs without a known release date. `keepers` keeps songs whose share of plays with a known outcome that were played through (by the outcome rule in Metric definitions) is at least `minPlayedThrough`; a song with no known outcome passes, so a skip alone never removes a song nobody has data on.
+- `sort` (default `source`): `source` (the source's own order; most listens for `history` and `moment`), `listens` (most listens, then most time), `recent` (last played first), `first-played` (earliest first play first), `keepers` (most plays played through, then most listens), `shuffle` (seeded by the playlist and its schedule period, so it stays put until the next refresh). Ties end on the song key.
+- `limit` 1 to 100 (default 50), `perArtist` 1 to 100 (applied after sorting), `rolling` as above (without it the list is rebuilt each refresh).
+- `schedule`: `daily`, `weekly` (from Monday) or `monthly`, local.
+- The built-ins' rules may also use `schedule` `yearly-weekly`, `picks`, `releases` or `window`, a `moment` with `weekdays: "today"` and `hours: "now"` (the current three-hour window), and `sort: "listens-by-key"` (most listens, then the song key: the tie-break Forgotten favourites and Most played lately always had). An owner's rule cannot.
+
+An owner's rule playlist works like a built-in: one Spotify playlist for good, refresh history, deletion in Spotify detected the same way, a cover drawn for it (style and colour picked from its id), and a Spotify description of its `about` (else "Built from your rules") with the date. It makes no Spotify playlist while the rule matches nothing.
 
 Living playlist shape:
 
 ```json
 {
-  "kind": "most-played", "name": "Most played lately", "about": "Your most played songs of the last four weeks",
-  "mode": "replace", "schedule": "daily", "cap": 50, "enabled": true,
+  "kind": "most-played", "builtin": true, "name": "Most played lately", "about": "Your most played songs of the last four weeks",
+  "mode": "replace", "schedule": "daily", "cap": 50, "rule": Rule, "enabled": true, "frozen": false,
   "playlist": { "id": "...", "url": "https://open.spotify.com/playlist/..." } | null,
   "removedAt": null, "coverUrl": "/api/living/most-played/cover?v=...",
   "status": "refreshed" | "unchanged" | "empty" | "deferred" | "failed" | "removed" | null, "error": null,
@@ -926,11 +958,29 @@ Living playlist shape:
 }
 ```
 
-`schedule` is `daily`, `weekly`, `monthly`, `yearly-weekly` (weekly, and when the year turns), `picks` or `releases`. `checkedAt` is the last refresh that reached a result (refreshed, unchanged, empty); `changedAt` the last one that changed the playlist. `nextRefresh` is the local day of the next scheduled refresh, `null` while off and for `picks` and `releases`. `count` is the number of songs encore last put in the playlist; `available` what a refresh now would put in it.
+`kind` is the built-in kind or the rule's id (`rule-` and 10 hex characters). `mode`, `schedule` and `cap` repeat `rule.rolling`, `rule.schedule` and `rule.limit`. `schedule` is `daily`, `weekly`, `monthly`, `yearly-weekly` (weekly, and when the year turns), `window` (each three-hour local window), `picks` or `releases`. `checkedAt` is the last refresh that reached a result (refreshed, unchanged, empty); `changedAt` the last one that changed the playlist. `nextRefresh` is the local day of the next scheduled refresh, `null` while off or frozen and for `picks` and `releases`. `count` is the number of songs encore last put in the playlist; `available` what a refresh now would put in it.
 
 ### `GET /api/living`
 
-`{ "spotify": { "connected": true, "canWrite": true, "canUploadCovers": true }, "items": [LivingPlaylist & { "songs": [Song] }] }`, in the order of the table above. `songs` is the first five songs (`{ uri, songKey, name, artist, album, albumArtUrl, artistImageUrl }`): what is in the playlist now, else what a refresh would put in it; empty when there is nothing to put in it.
+`{ "spotify": { "connected": true, "canWrite": true, "canUploadCovers": true }, "items": [LivingPlaylist & { "songs": [Song] }] }`, the built-ins in the order of the table above, then the owner's rules in the order they were made. `songs` is the first five songs (`{ uri, songKey, name, artist, album, albumArtUrl, artistImageUrl }`): what is in the playlist now, else what a refresh would put in it; empty when there is nothing to put in it.
+
+An id that is not lowercase letters, digits and dashes (at most 40) is `400 invalid_request`; an unknown one is `404 not_found`.
+
+### `POST /api/living`
+
+Makes a rule playlist, off. Body `{ "name": "Old Mac Miller", "about"?: "..." | null, "rule": Rule }` (name 1 to 100 characters, about up to 300). `201 { "playlist": LivingPlaylist with items }`. Switching it on (`PATCH`) makes the Spotify playlist.
+
+### `POST /api/living/preview`
+
+Body `{ "rule": Rule }`. What a new playlist with that rule would hold now: `{ "count": 12, "songs": [Song] }`. Reads the database only: nothing is saved and Spotify is not called.
+
+### `PUT /api/living/:kind`
+
+Replaces a rule playlist's `name`, `about` and `rule` (same body as `POST`). When it is on, not frozen and in Spotify, it is refreshed at once (trigger `manual`; the name and description are written too when they changed, 1 call even when the songs did not); otherwise the next scheduled refresh uses the new rule. `{ "outcome": RefreshOutcome | null, "playlist" }`. A built-in is `409 builtin_playlist`.
+
+### `DELETE /api/living/:kind`
+
+Forgets a rule playlist and its refresh history. Its Spotify playlist stays in the owner's account untouched, and from then on counts as one of the owner's own playlists (Library). No Spotify call. `{ "deleted": true, "spotifyPlaylist": { "id", "url" } | null }`. A built-in is `409 builtin_playlist`.
 
 ### `GET /api/living/:kind`
 
@@ -946,11 +996,11 @@ The fixed cover JPEG, the same image the playlist has in Spotify. Cached for goo
 
 ### `PATCH /api/living/:kind`
 
-Body `{ "enabled": boolean }`. Switching on makes the playlist when there is none (or it was deleted) and fills it. `{ "outcome": { "kind", "status": LivingStatus | "off", "calls": 3, "cover"?: "uploaded" | "unchanged" | "missing_scope" | "failed" }, "playlist": LivingPlaylist with items }`. `409 spotify_not_connected`, `409 missing_scope` (`details.scope`). A Spotify failure is not an error response: `outcome.status` is `failed` and `playlist.error` says why.
+Body `{ "enabled"?: boolean, "frozen"?: boolean }`, at least one. `frozen` is saved first; it never calls Spotify, and alone it answers `outcome: null`. Switching on makes the playlist when there is none (or it was deleted) and fills it. `{ "outcome": { "kind", "status": LivingStatus | "off", "calls": 3, "cover"?: "uploaded" | "unchanged" | "missing_scope" | "failed" }, "playlist": LivingPlaylist with items }`. `409 spotify_not_connected`, `409 missing_scope` (`details.scope`). A Spotify failure is not an error response: `outcome.status` is `failed` and `playlist.error` says why.
 
 ### `POST /api/living/:kind/refresh`
 
-Refresh now, with the same rules and response as switching on. `outcome.status` is `off` when the kind is off.
+Refresh now, with the same rules and response as switching on, frozen or not. `outcome.status` is `off` when the playlist is off.
 
 ## Library
 
