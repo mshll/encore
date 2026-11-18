@@ -66,7 +66,7 @@ export function gateNotice(gate: Gate) {
   if (!gate.connected)
     return (
       <Notice tone="warning" action={spotifySettings}>
-        Connect Spotify to keep these playlists in your account.
+        Connect Spotify to keep playlists in your account.
       </Notice>
     );
   if (!gate.canWrite)

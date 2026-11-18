@@ -10,6 +10,7 @@ import { useAi } from "../lib/ai";
 import { addDays, daysBetween, todayIn } from "../lib/dates";
 import { fmtAgo, fmtCompact, fmtDayShort, fmtHours, fmtHoursValue, fmtInt, hoursParts, WEEKDAYS_SHORT } from "../lib/format";
 import { highlightText } from "../lib/insights";
+import { leadInEnd } from "../lib/leadIn";
 import { periodFor, useRange, type Range } from "../lib/range";
 import { fillPeriods } from "../lib/series";
 import { useDesktop } from "../lib/useMedia";
@@ -162,13 +163,15 @@ function RangeChart({ metric, range, firstDay }: { metric: Metric; range: Range;
   if (!q.data) return <ChartSkeleton className="h-[96px] md:h-[120px]" />;
   const period = q.data.period;
   const unit = period === "day" ? "per day" : period === "week" ? "per week" : "per month";
-  const rows = fillPeriods(q.data.points, period, range, today, (p) => ({ period: p, hours: 0, plays: 0, listens: 0 })).map((p) => ({
+  const points = fillPeriods(q.data.points, period, range, today, (p) => ({ period: p, hours: 0, plays: 0, listens: 0 }));
+  const start = period === "month" ? leadInEnd(points.map((p) => p.hours)) : 0;
+  const rows = points.slice(start).map((p) => ({
     period: p.period,
     title: periodTitle(p.period, period),
     value: p[metric],
   }));
   return (
-    <div className={dimWhile(q.isPlaceholderData)}>
+    <div className={`flex flex-col gap-2 ${dimWhile(q.isPlaceholderData)}`}>
       <DitherArea
         label={`${METRIC_LABEL[metric]} ${unit}`}
         rows={rows}
@@ -181,6 +184,7 @@ function RangeChart({ metric, range, firstDay }: { metric: Metric; range: Range;
         table={{ format: metric === "hours" ? fmtHoursValue : fmtInt }}
         height={desktop ? 120 : 96}
       />
+      {start > 0 && <p className="text-caption text-secondary">Starts {periodTitle(rows[0]!.period, period)}; the quiet months before it are left out.</p>}
     </div>
   );
 }

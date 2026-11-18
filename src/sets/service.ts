@@ -336,7 +336,7 @@ export async function createSet(ctx: FeatureContext, request: string, onEvent?: 
 
 export class SetNotBuiltError extends Error {
   constructor() {
-    super("Claude finished without submitting a set");
+    super("The AI finished without submitting a set");
   }
 }
 

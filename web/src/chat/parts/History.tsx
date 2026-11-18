@@ -15,7 +15,7 @@ export type HistoryItem = { thread: ChatThread; title: string; at: string };
 const EMPTY: Record<ChatMode, string> = {
   ask: "Questions you ask stay here.",
   set: "Sets you make stay here.",
-  tidy: "Plans you make with Claude stay here.",
+  tidy: "Plans you make stay here.",
 };
 
 /** Past conversations of one job, newest first. */

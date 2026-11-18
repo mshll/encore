@@ -51,7 +51,7 @@ function tagRows(db: Db, column: "genres" | "moods", a: number, b: number) {
 }
 
 /**
- * Two calendar years side by side. `artists` is the union of both years' top ten by hours, each with its rank in both
+ * Two calendar years side by side. `artists` is the union of both years' top ten by hours, in order of rank in `b`, each with its rank in both
  * years (among every artist played that year) and `change`: rank in `a` minus rank in `b`, so rising is positive.
  */
 export function yearCompare(db: Db, { a, b }: { a: number; b: number }) {
@@ -63,6 +63,7 @@ export function yearCompare(db: Db, { a, b }: { a: number; b: number }) {
     const inB = ranksB.get(artist) ?? null;
     return { artist, a: inA, b: inB, change: inA && inB ? inA.rank - inB.rank : null };
   });
+  artists.sort((x, y) => (x.b?.rank ?? Infinity) - (y.b?.rank ?? Infinity) || (x.a?.rank ?? Infinity) - (y.a?.rank ?? Infinity));
   return {
     years: listeningYears(db),
     a: side(db, a),

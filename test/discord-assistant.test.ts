@@ -124,7 +124,7 @@ describe("assistant on Discord", () => {
     const broke = setup(scripted().transport, { MONTHLY_BUDGET_USD: "1" });
     broke.db.insert(llmCalls).values({ ts: broke.time.now(), month: "2026-02", feature: "ask", requestedModel: "m", model: "m", inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0, webSearches: 0, usd: 1, stopReason: "end_turn", durationMs: 0 }).run();
     await broke.command("ask", { question: "q" });
-    expect(broke.edited()).toMatchObject({ content: "This month's Claude budget is used up ($1.00 of $1).", flags: 64 });
+    expect(broke.edited()).toMatchObject({ content: "This month's AI budget is used up ($1.00 of $1).", flags: 64 });
   });
 
   test("weekly posts: picks, then the digest with new releases, each once per period", async () => {

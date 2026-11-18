@@ -21,10 +21,10 @@ async function friendly<T>(work: () => Promise<T> | T): Promise<T> {
   try {
     return await work();
   } catch (error) {
-    if (error instanceof LlmNotConfiguredError) throw new UserFacingError("Claude is not configured.");
-    if (error instanceof LlmBudgetExceededError) throw new UserFacingError(`This month's Claude budget is used up ($${error.spentUsd.toFixed(2)} of $${error.capUsd}).`);
-    if (error instanceof LlmRefusalError) throw new UserFacingError("Claude declined that request.");
-    if (error instanceof LlmTruncatedError || error instanceof LlmIncompleteError || error instanceof SetNotBuiltError) throw new UserFacingError("Claude stopped before finishing. Try again.");
+    if (error instanceof LlmNotConfiguredError) throw new UserFacingError("AI is not set up.");
+    if (error instanceof LlmBudgetExceededError) throw new UserFacingError(`This month's AI budget is used up ($${error.spentUsd.toFixed(2)} of $${error.capUsd}).`);
+    if (error instanceof LlmRefusalError) throw new UserFacingError("The AI declined that request.");
+    if (error instanceof LlmTruncatedError || error instanceof LlmIncompleteError || error instanceof SetNotBuiltError) throw new UserFacingError("The AI stopped before finishing. Try again.");
     if (error instanceof SetNotFoundError || error instanceof PickNotFoundError) throw new UserFacingError("That no longer exists.");
     if (error instanceof EmptySetError) throw new UserFacingError("That set has no tracks.");
     throw error;

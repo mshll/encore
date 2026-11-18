@@ -1,8 +1,8 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { useLocation, useSearch } from "wouter";
-import { ApiError, request } from "../api/client";
-import { useOnboarding, useTimezone } from "../api/queries";
-import type { AiKeyCheck, Onboarding, OnboardingStepId } from "../api/types";
+import { ApiError } from "../api/client";
+import { useOnboarding, useSpend, useTimezone } from "../api/queries";
+import type { Onboarding, OnboardingStepId } from "../api/types";
 import { fmtInt } from "../lib/format";
 import { passkeyProblem, registerPasskey } from "../lib/passkey";
 import { connectSpotify } from "../lib/spotifyConnect";
@@ -18,6 +18,7 @@ import { Page, PageHeader } from "../ui/Page";
 import { SettingRows } from "../ui/SettingRow";
 import { Skeleton } from "../ui/Skeleton";
 import { describeError, ErrorState } from "../ui/States";
+import { draftAi, VerifyAi } from "./settings/AiProvider";
 import { SettingFieldRow, useSettingsForm, type SettingsForm } from "./settings/form";
 import { ImportStep } from "./setup/ImportStep";
 
@@ -27,7 +28,7 @@ const TITLES: Record<OnboardingStepId, string> = {
   spotifyConnect: "Connect Spotify",
   locale: "Time zone and weekend",
   import: "Import your history",
-  claude: "Claude",
+  claude: "AI",
   discord: "Discord",
   mcp: "MCP",
 };
@@ -35,7 +36,7 @@ const TITLES: Record<OnboardingStepId, string> = {
 const STEP_KEYS: Partial<Record<OnboardingStepId, string[]>> = {
   spotifyApp: ["spotifyClientId"],
   locale: ["timezone", "homeCountry", "weekendDays"],
-  claude: ["claudeApiKey"],
+  claude: ["aiProvider", "aiModel", "aiApiKey", "aiBaseUrl", "claudeModel"],
   discord: ["discordApplicationId", "discordPublicKey", "discordOwnerId"],
   mcp: ["mcpToken"],
 };
@@ -169,12 +170,12 @@ function FormActions({ form, done, optional, onNext }: { form: SettingsForm; don
   return null;
 }
 
-function FormFields({ form, keys, storage, hints }: { form: SettingsForm; keys: string[]; storage: boolean; hints?: Record<string, ReactNode> }) {
+function FormFields({ form, keys, storage, hints, placeholders }: { form: SettingsForm; keys: string[]; storage: boolean; hints?: Record<string, ReactNode>; placeholders?: Record<string, string> }) {
   return (
     <SettingRows>
       {keys.map((k) => {
         const f = form.fields.get(k);
-        return f ? <SettingFieldRow key={k} field={f} form={form} storage={storage} hint={hints?.[k]} /> : null;
+        return f ? <SettingFieldRow key={k} field={f} form={form} storage={storage} hint={hints?.[k]} placeholder={placeholders?.[k]} /> : null;
       })}
     </SettingRows>
   );
@@ -188,9 +189,25 @@ function External({ href, children }: { href: string; children: ReactNode }) {
   );
 }
 
-function SettingsStep({ o, id, frame, onNext, intro, hints, extra }: StepProps & { intro?: ReactNode; hints?: Record<string, ReactNode>; extra?: (form: SettingsForm) => ReactNode }) {
-  const keys = STEP_KEYS[id] ?? [];
-  const form = useSettingsForm(keys);
+function SettingsStep({
+  o,
+  id,
+  frame,
+  onNext,
+  intro,
+  hints,
+  placeholders,
+  shown,
+  extra,
+}: StepProps & {
+  intro?: ReactNode;
+  hints?: Record<string, ReactNode>;
+  placeholders?: (form: SettingsForm) => Record<string, string>;
+  shown?: (form: SettingsForm) => string[];
+  extra?: (form: SettingsForm) => ReactNode;
+}) {
+  const form = useSettingsForm(STEP_KEYS[id] ?? []);
+  const keys = shown?.(form) ?? STEP_KEYS[id] ?? [];
   const s = o.steps[id];
   return frame(
     <>
@@ -200,7 +217,7 @@ function SettingsStep({ o, id, frame, onNext, intro, hints, extra }: StepProps &
       ) : !form.settings.data ? (
         <Skeleton className="h-24 w-full" />
       ) : (
-        <FormFields form={form} keys={keys} storage={o.secretStorage.available} hints={hints} />
+        <FormFields form={form} keys={keys} storage={o.secretStorage.available} hints={hints} placeholders={placeholders?.(form)} />
       )}
       {extra?.(form)}
       {form.problem && <Notice tone="danger">{form.problem}</Notice>}
@@ -326,45 +343,20 @@ function DetectZone({ form, done }: { form: SettingsForm; done: boolean }) {
   return null;
 }
 
-function ClaudeStep(props: StepProps) {
+/** The same provider, model and key as Settings › AI, optional: Skip leaves encore without AI. */
+function AiStep(props: StepProps) {
+  const spend = useSpend().data;
   return (
     <SettingsStep
       {...props}
-      intro={
-        <p className="text-body text-pretty">
-          Sets, weekly picks, Ask, liner notes and recaps use Claude. Create a key in the <External href="https://console.anthropic.com/settings/keys">Anthropic console</External>.
-        </p>
-      }
-      extra={(form) => <VerifyKey form={form} />}
+      intro={<p className="text-body text-pretty">Sets, weekly picks, Ask, liner notes and written recaps need an AI provider.</p>}
+      shown={(form) => ["aiProvider", "aiModel", "aiApiKey", ...(draftAi(form).compatible ? ["aiBaseUrl"] : [])]}
+      placeholders={(form) => {
+        const ai = draftAi(form);
+        return { aiModel: ai.model ?? spend?.defaultModels[ai.provider] ?? "Model id", aiBaseUrl: "http://localhost:11434/v1" };
+      }}
+      extra={(form) => <VerifyAi form={form} configured={props.o.steps.claude.done} />}
     />
-  );
-}
-
-function VerifyKey({ form }: { form: SettingsForm }) {
-  const [busy, setBusy] = useState(false);
-  const [result, setResult] = useState<{ tone: "info" | "danger"; text: string } | null>(null);
-  const typed = form.draft.claudeApiKey;
-  const field = form.fields.get("claudeApiKey");
-  if (!field || (!field.set && typeof typed !== "string")) return null;
-  const verify = async () => {
-    setBusy(true);
-    setResult(null);
-    try {
-      const r = await request<AiKeyCheck>("/api/settings/ai/verify", { json: typeof typed === "string" && typed ? { provider: "anthropic", apiKey: typed } : {} });
-      setResult(r.valid ? { tone: "info", text: `The key works with ${r.model}.` } : { tone: "danger", text: r.message });
-    } catch (error) {
-      setResult({ tone: "danger", text: describeError(error) });
-    } finally {
-      setBusy(false);
-    }
-  };
-  return (
-    <div className="flex flex-col items-start gap-3">
-      <Button size="sm" busy={busy} busyLabel="Checking" disabled={typed === ""} onClick={() => void verify()}>
-        Check key
-      </Button>
-      {result && <Notice tone={result.tone}>{result.text}</Notice>}
-    </div>
   );
 }
 
@@ -461,7 +453,7 @@ const STEPS: Record<OnboardingStepId, (p: StepProps) => ReactNode> = {
   spotifyConnect: ConnectStep,
   locale: LocaleStep,
   import: ImportFrame,
-  claude: ClaudeStep,
+  claude: AiStep,
   discord: DiscordStep,
   mcp: McpStep,
 };

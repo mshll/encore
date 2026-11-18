@@ -104,7 +104,7 @@ export function SongPage({ songKey }: { songKey: string }) {
         aside={<RangePicker />}
       />
       <Listening totals={d.totals} timeline={d.timeline} />
-      <div className={cx("grid gap-10 lg:gap-12", d.uris.length > 1 && "lg:grid-cols-[minmax(0,1fr)_minmax(0,320px)]")}>
+      <div className={cx("grid gap-10 @min-[700px]/page:gap-12", d.uris.length > 1 && "@min-[700px]/page:grid-cols-[minmax(0,1fr)_minmax(0,320px)]")}>
         <LinerNotes songKey={d.songKey} />
         <Versions uris={d.uris} />
       </div>

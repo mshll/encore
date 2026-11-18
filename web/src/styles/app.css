@@ -56,6 +56,10 @@
   ::selection {
     background: var(--accent-subtle);
   }
+  input,
+  textarea {
+    caret-color: var(--accent-text);
+  }
   button,
   [role="button"],
   a {

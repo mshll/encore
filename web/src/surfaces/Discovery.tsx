@@ -88,7 +88,7 @@ function MonthFinds({ months }: { months: MonthDiscovery[] }) {
       ) : !q.data ? (
         <RowSkeleton rows={6} />
       ) : (
-        <div className={cx("grid gap-8 xl:grid-cols-2", dimWhile(q.isPlaceholderData))}>
+        <div className={cx("grid gap-8 @min-[960px]/page:grid-cols-2", dimWhile(q.isPlaceholderData))}>
           <div className="flex min-w-0 flex-col gap-2">
             <h3 className="font-medium text-secondary">Songs</h3>
             {q.data.songs.length === 0 ? (

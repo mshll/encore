@@ -253,6 +253,27 @@ describe("year against year", () => {
     ]);
     expect(r.genres).toEqual([{ value: "rock", a: 1, b: 1 }]);
   });
+
+  test("the year before's top artists that fell out follow in their rank this year", () => {
+    const d = testDb();
+    const ids = [...Array(10).keys()].map((i) => `n${i}`);
+    seed(
+      d,
+      [track("f1", "F1", "Faller 1", null), track("f2", "F2", "Faller 2", null), ...ids.map((id) => track(id, id, `New ${id}`, null))],
+      [
+        at("2025-03-01T10:00:00Z", uri("f1"), 3 * HOUR),
+        at("2025-03-02T10:00:00Z", uri("f2"), 2 * HOUR),
+        ...ids.map((id, i) => at(`2026-03-${String(i + 1).padStart(2, "0")}T10:00:00Z`, uri(id), (20 - i) * HOUR)),
+        at("2026-04-01T10:00:00Z", uri("f2"), 2 * HOUR),
+        at("2026-04-02T10:00:00Z", uri("f1"), HOUR),
+      ],
+    );
+    const r = yearCompare(d, { a: 2025, b: 2026 });
+    expect(r.artists.slice(10).map((x) => [x.artist, x.b?.rank])).toEqual([
+      ["Faller 2", 11],
+      ["Faller 1", 12],
+    ]);
+  });
 });
 
 describe("podcasts", () => {

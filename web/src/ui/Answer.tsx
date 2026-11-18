@@ -94,7 +94,7 @@ export function AnswerView({ answer, streaming = false, actions }: { answer: Ans
           </div>
         ),
       )}
-      {hasUnchecked(answer) && <p className="text-caption text-secondary">Numbers with a dotted line are not in the data Claude read.</p>}
+      {hasUnchecked(answer) && <p className="text-caption text-secondary">Numbers with a dotted line are not in the data this answer read.</p>}
       {(answer.basis || actions) && (
         <div className="flex items-start justify-between gap-3">
           {answer.basis ? <Basis basis={answer.basis} /> : <span />}

@@ -218,7 +218,7 @@ function FieldControl({ field, form, control, placeholder }: { field: SettingFie
         value={v === null ? "" : String(v)}
         placeholder={placeholder ?? (field.default === null ? undefined : String(field.default))}
         onChange={(e) => form.set(field.key, e.target.value)}
-        end={field.unit ? <span className="shrink-0 text-tertiary">{UNIT_LABELS[field.unit]}</span> : undefined}
+        end={field.unit ? <span className="shrink-0 text-secondary">{UNIT_LABELS[field.unit]}</span> : undefined}
       />
     );
   return (

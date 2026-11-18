@@ -21,11 +21,12 @@ function useCurrentTab(location: string) {
   const tab = PHONE_TABS[index];
   if (tab) return { index, surface: tab };
   const more = PHONE_MORE.find((s) => s.match(location));
-  return more ? { index: PHONE_TABS.length, surface: more } : { index: -1, surface: MORE };
+  if (more) return { index: PHONE_TABS.length, surface: more };
+  return location.startsWith("/ask") ? { index: PHONE_TABS.length, surface: MORE } : { index: -1, surface: MORE };
 }
 
 /**
- * Phone: a floating dock over the page. A glass pill holds Home, Plays, Music and More, with the current tab on a soft
+ * Phone: a floating dock over the page. A glass pill holds the phone tabs and More, with the current tab on a soft
  * capsule; the round Chat button sits beside it, the mini player above. Scrolling down collapses the pill to the
  * current tab's icon and moves the mini player between it and Chat. More opens a sheet with search and every other
  * surface. A tab shows its page, so it closes the chat.

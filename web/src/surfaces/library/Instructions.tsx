@@ -3,10 +3,11 @@ import { useState, type FormEvent } from "react";
 import { request } from "../../api/client";
 import { useStanding, useStatus, useTimezone } from "../../api/queries";
 import type { Standing } from "../../api/types";
+import { useAi } from "../../lib/ai";
 import { fmtDate } from "../../lib/format";
 import { showToast } from "../../lib/toast";
 import { AppLink } from "../../ui/AppLink";
-import { Button } from "../../ui/Button";
+import { Button, buttonClass } from "../../ui/Button";
 import { Confirm } from "../../ui/Dialog";
 import { Input } from "../../ui/Field";
 import { MenuItem, MenuPopup, MenuRoot, MoreTrigger } from "../../ui/Menu";
@@ -139,22 +140,34 @@ function AddForm() {
 /** Standing instructions (Claude plans on a schedule, off until switched on) and what is kept out of picks and sets. */
 export function LibraryInstructions() {
   const q = useStanding();
+  const ai = useAi();
   const scheduled = useStatus().data?.llm.schedule.enabled;
   return (
     <LibraryFrame width="read">
       <Section
         title="Standing instructions"
-        description="Claude makes a plan on this schedule for you to review. Nothing is applied on its own, and each run counts toward the monthly Claude budget."
+        description="Each makes a plan on its schedule for you to review. Nothing is applied on its own, and each run counts toward the monthly AI budget."
         labelledBy="standing"
       >
-        {scheduled === false && <Notice tone="warning">Scheduled jobs are off on this server, so these instructions do not run.</Notice>}
-        <AddForm />
+        {ai.configured && scheduled === false && <Notice tone="warning">Scheduled jobs are off on this server, so these instructions do not run.</Notice>}
+        {ai.configured && <AddForm />}
         {q.isError ? (
           <ErrorState error={q.error} onRetry={() => q.refetch()} />
         ) : !q.data ? (
           <RowSkeleton rows={2} />
         ) : q.data.items.length === 0 ? (
-          <EmptyState size="inline" title="No standing instructions" />
+          <EmptyState
+            size="inline"
+            title="No standing instructions"
+            description={ai.known && !ai.configured ? "They need AI." : undefined}
+            action={
+              ai.known && !ai.configured ? (
+                <AppLink to="/settings/ai" className={buttonClass({ size: "sm" })}>
+                  Set up AI
+                </AppLink>
+              ) : undefined
+            }
+          />
         ) : (
           <ul className="flex flex-col">
             {q.data.items.map((s) => (

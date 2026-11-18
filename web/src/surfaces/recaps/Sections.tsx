@@ -90,7 +90,7 @@ function Listening({ s, page }: { s: Of<"listening">; page: RecapPage }) {
         </Line>
       )}
       <p className="text-secondary">
-        {plural(s.listens, "play", "plays")}, {plural(s.artists, "artist", "artists")}, {plural(s.songs, "song", "songs")}
+        {plural(s.listens, "listen", "listens")}, {plural(s.artists, "artist", "artists")}, {plural(s.songs, "song", "songs")}
       </p>
       {s.daily && s.daily.length > 1 && busiest >= 0 && (
         <Line className="text-secondary">
@@ -527,7 +527,7 @@ export function RecapSections({ page, songsActions }: { page: RecapPage; songsAc
   const main = page.sections.filter((s) => MAIN.includes(s.id));
   const side = page.sections.filter((s) => !MAIN.includes(s.id));
   return (
-    <div className="grid gap-10 md:gap-12 lg:grid-cols-[minmax(0,1fr)_minmax(0,320px)] lg:gap-16">
+    <div className="grid gap-10 md:gap-12 @min-[700px]/page:grid-cols-[minmax(0,1fr)_minmax(0,320px)] @min-[700px]/page:gap-16">
       <div className="flex min-w-0 max-w-(--measure) flex-col gap-10 md:gap-12">
         {main.map((s) => (
           <SectionView key={s.id} s={s} page={page} songsActions={songsActions} />

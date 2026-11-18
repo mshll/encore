@@ -15,7 +15,7 @@ import { EmptyState, ErrorState } from "../../ui/States";
 import { cellClass, TableHead, useColumns, type Column } from "../../ui/Table";
 import { LibraryFrame } from "./LibraryFrame";
 import { FigureRow } from "./rows";
-import { classLabel, PLAY_CLASSES, songsPath } from "./words";
+import { classLabel, PLAY_CLASSES, songs, songsPath } from "./words";
 
 const GONE = ["dormant", "never"] as const;
 const gone = (c: { dormant: number; never: number }) => c.dormant + c.never;
@@ -138,7 +138,7 @@ function Playlists({ a }: { a: LibraryAnalysis }) {
               };
               return (
                 <div key={p.id} role="row" className="group relative -mx-2 rounded-md px-2 transition-colors duration-150 hover:bg-fill">
-                  <AppLink to={songsPath({ kind: "songs", where: p.id })} className="absolute inset-0 rounded-md" aria-label={`${p.name}: ${fmtInt(p.songs)} songs`} />
+                  <AppLink to={songsPath({ kind: "songs", where: p.id })} className="absolute inset-0 rounded-md" aria-label={`${p.name}: ${songs(p.songs)}`} />
                   {table ? (
                     <div className="pointer-events-none grid min-h-(--row-h) items-center gap-4 [&_a]:pointer-events-auto" style={style}>
                       {visible.map((c) => (
@@ -151,7 +151,7 @@ function Playlists({ a }: { a: LibraryAnalysis }) {
                     <div className="pointer-events-none flex min-h-(--row-h) flex-col justify-center py-2 [&_a]:pointer-events-auto">
                       <span className="truncate text-primary">{p.name}</span>
                       <span className="text-caption text-pretty text-secondary">
-                        {fmtInt(p.songs)} songs, {fmtPct(played)} played in the last {recent} months
+                        {songs(p.songs)}, {fmtPct(played)} played in the last {recent} months
                         {p.duplicates > 0 && (
                           <>
                             ,{" "}
@@ -273,7 +273,7 @@ export function LibraryOverview() {
       ) : a.liked.total === 0 && a.playlists.length === 0 ? (
         <EmptyState size="page" icon={BroomIcon} title="No liked songs or playlists" description="Like songs or make playlists in Spotify and they show here after the next sync." />
       ) : (
-        <div className={`${SIDE_COLUMNS} lg:[&>section]:col-span-2`}>
+        <div className={`${SIDE_COLUMNS} @min-[700px]/page:[&>section]:col-span-2`}>
           <div className="flex min-w-0 flex-col gap-10 md:gap-12">
             <Liked a={a} />
             <SavedMonths a={a} />

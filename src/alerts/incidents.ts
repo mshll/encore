@@ -55,9 +55,9 @@ export function currentIncidents(s: AlertSnapshot): Incident[] {
   if (s.claude.configured && s.claude.exhausted)
     incidents.push({
       key: "claude_cap",
-      title: "Claude monthly cap reached",
-      body: `$${s.claude.spentUsd.toFixed(2)} of $${s.claude.capUsd.toFixed(2)} spent in ${s.claude.month}. Claude features pause until next month or a higher cap.`,
-      recovery: "Claude features run again.",
+      title: "Monthly AI budget spent",
+      body: `$${s.claude.spentUsd.toFixed(2)} of $${s.claude.capUsd.toFixed(2)} spent in ${s.claude.month}. AI features pause until next month or a higher budget.`,
+      recovery: "AI features run again.",
     });
   return incidents;
 }

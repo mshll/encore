@@ -765,7 +765,7 @@ No range. Params: `a`, `b` (years, 1900-2999). Default `b` is the latest year wi
   "moods": [...] }
 ```
 
-`years` lists every year with music. `artists` is the union of both years' top 10 by hours, `b`'s first; ranks are among every artist that year, `null` when not played; `change` is rank in `a` minus rank in `b` (rising is positive), `null` unless played in both. `newArtists`/`newSongs` were first played that year, all time. Tag shares are of tagged hours (see Tag-based stats), the 8 largest in either year.
+`years` lists every year with music. `artists` is the union of both years' top 10 by hours, in order of rank in `b` (those not played in `b` last, by rank in `a`); ranks are among every artist that year, `null` when not played; `change` is rank in `a` minus rank in `b` (rising is positive), `null` unless played in both. `newArtists`/`newSongs` were first played that year, all time. Tag shares are of tagged hours (see Tag-based stats), the 8 largest in either year.
 
 ### `GET /api/stats/podcasts`
 
@@ -1311,7 +1311,7 @@ Tools Claude gets: `library_overview` (counts by when last played, playlists, ov
 
 ### Standing instructions
 
-A saved instruction with a schedule. The `library_plans` job (hourly, only with `JOBS_ENABLED`) starts a conversation for each switched-on instruction that is due (weekly: 7 days after the last run, monthly: 30), counted in the ledger and the monthly cap like any Claude call. The plan waits as an open plan with `source: "standing"`; the previous open plan from the same instruction is dismissed. It never applies anything. At the cap the run stops with `lastError` "The monthly Claude budget is spent".
+A saved instruction with a schedule. The `library_plans` job (hourly, only with `JOBS_ENABLED`) starts a conversation for each switched-on instruction that is due (weekly: 7 days after the last run, monthly: 30), counted in the ledger and the monthly cap like any Claude call. The plan waits as an open plan with `source: "standing"`; the previous open plan from the same instruction is dismissed. It never applies anything. At the cap the run stops with `lastError` "The monthly AI budget is spent".
 
 - `GET /api/library/standing`: `{ "items": [{ "id": 1, "instruction": "...", "cadence": "weekly" | "monthly", "enabled": false, "lastRunAt": null, "nextRunAt": null, "lastPlanId": null, "lastError": null }] }`. `nextRunAt` is `null` while switched off.
 - `POST /api/library/standing`: body `{ "instruction", "cadence", "enabled"?: false }`, `201` with the item. Off by default.

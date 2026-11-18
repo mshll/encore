@@ -3,6 +3,7 @@ import { Fragment, useState } from "react";
 import { ApiError, request } from "../../api/client";
 import { useBatches, usePlan, useStatus } from "../../api/queries";
 import type { Batch, ItemStatus, PlanAction, PlanDetail, PlanItem } from "../../api/types";
+import { useAi } from "../../lib/ai";
 import { fmtInt, fmtMonth } from "../../lib/format";
 import { showToast } from "../../lib/toast";
 import { AppLink } from "../../ui/AppLink";
@@ -245,6 +246,7 @@ export function PlanPage({ id }: { id: number }) {
   const { undo, pending } = useUndo();
   const edits = usePlanEdits(id);
   const chat = useChat();
+  const ai = useAi();
   useBatchEndings(batches.data?.items, (b) => void undo(b));
   const plan = q.data?.pages[0];
   useDocumentTitle(plan?.title ?? "Plan");
@@ -275,9 +277,9 @@ export function PlanPage({ id }: { id: number }) {
   const tabs = (["open", "applied", "skipped", "dismissed"] as const).filter((s) => s === "open" || plan.counts[s] > 0);
   const thread = plan.threadId;
   const secondary = [
-    thread
+    thread && ai.configured
       ? {
-          label: chat.runningFor({ kind: "plan", threadId: thread }) ? "Changing…" : "Change with Claude",
+          label: chat.runningFor({ kind: "plan", threadId: thread }) ? "Changing…" : "Change",
           icon: ChatCircleTextIcon,
           onClick: () => chat.show({ thread: { kind: "plan", threadId: thread } }),
         }

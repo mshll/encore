@@ -90,7 +90,7 @@ function SlotDetail({ slot, cell, range }: { slot: Slot; cell: Cell; range: Rang
       {cell.plays === 0 ? (
         <EmptyState size="inline" title="Nothing played in this hour" />
       ) : (
-        <div className="grid gap-8 xl:grid-cols-2">
+        <div className="grid gap-8 @min-[960px]/page:grid-cols-2">
           <div className="flex min-w-0 flex-col gap-2">
             <h3 className="font-medium text-secondary">Songs</h3>
             {songs.isError ? (

@@ -143,7 +143,7 @@ describe("alert monitor", () => {
 
     await alerts.check();
 
-    expect(ntfyCalls()[0]?.body).toBe("$0.00 of $0.00 spent in 2026-11. Claude features pause until next month or a higher cap.");
+    expect(ntfyCalls()[0]?.body).toBe("$0.00 of $0.00 spent in 2026-11. AI features pause until next month or a higher budget.");
   });
 
   test("a secret in an error never reaches the alert text", async () => {

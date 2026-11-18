@@ -2,6 +2,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { request } from "../../api/client";
 import { useNote } from "../../api/queries";
 import type { Note } from "../../api/types";
+import { useAi } from "../../lib/ai";
 import { assistantProblem } from "../../lib/assistant";
 import { Button } from "../../ui/Button";
 import { Icon } from "../../ui/Icon";
@@ -11,7 +12,7 @@ import { Skeleton } from "../../ui/Skeleton";
 import { Notice } from "../../ui/Notice";
 import { ErrorState } from "../../ui/States";
 
-/** The cached liner note for a song, or a button to write one. Writing is a paid Claude call, so only a click starts it. */
+/** The cached liner note for a song, or a button to write one with AI set up. Writing is a paid AI call, so only a click starts it. */
 export function LinerNotes({ songKey }: { songKey: string }) {
   const q = useNote(songKey);
   const queryClient = useQueryClient();
@@ -20,6 +21,8 @@ export function LinerNotes({ songKey }: { songKey: string }) {
     onSuccess: (note) => queryClient.setQueryData(["note", songKey], note),
   });
   const note = q.data;
+  const ai = useAi();
+  if (note === null && !ai.configured) return null;
   return (
     <Section
       title="Liner notes"

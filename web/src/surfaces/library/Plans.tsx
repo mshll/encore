@@ -4,6 +4,7 @@ import { request } from "../../api/client";
 import { useBatches, usePlans, useStatus } from "../../api/queries";
 import type { PlanSummary } from "../../api/types";
 import { useChat } from "../../chat/state";
+import { useAi } from "../../lib/ai";
 import { fmtAgo, fmtInt } from "../../lib/format";
 import { showToast } from "../../lib/toast";
 import { AppLink } from "../../ui/AppLink";
@@ -26,19 +27,22 @@ function planLine(p: PlanSummary): string {
 
 function OpenPlans({ plans }: { plans: PlanSummary[] }) {
   const chat = useChat();
+  const ai = useAi();
   const open = plans.filter((p) => p.status === "open" && (p.source !== "rule" || p.counts.open > 0));
   return (
     <Section
       title="To review"
       labelledBy="open-plans"
       actions={
-        <Button size="sm" icon={ChatCircleTextIcon} onClick={() => chat.show({ thread: null, mode: "tidy" })}>
-          Plan with Claude
-        </Button>
+        ai.configured && (
+          <Button size="sm" icon={ChatCircleTextIcon} onClick={() => chat.show({ thread: null, mode: "tidy" })}>
+            Describe a plan
+          </Button>
+        )
       }
     >
       {open.length === 0 ? (
-        <EmptyState size="inline" title="Nothing to review" description="Make a plan from a figure on the overview, or plan with Claude." />
+        <EmptyState size="inline" title="Nothing to review" description={ai.configured ? "Make a plan from a figure on the overview, or describe one." : "Make a plan from a figure on the overview."} />
       ) : (
         <RowList label="Plans to review">
           {open.map((p) => (

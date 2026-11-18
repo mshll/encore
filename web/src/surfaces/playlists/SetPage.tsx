@@ -2,7 +2,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { useLocation } from "wouter";
 import { ApiError, request } from "../../api/client";
-import { useDj, useSet, useTimezone } from "../../api/queries";
+import { useDj, useLiving, useSet, useTimezone } from "../../api/queries";
 import type { DjSession, SavedPlaylist, SetChange, SetConstraints, SetDetail, SetTrack } from "../../api/types";
 import { useOpenQueue } from "../../app/Shell";
 import { artistPath, songPath } from "../../app/paths";
@@ -37,7 +37,7 @@ import { RowSkeleton } from "../../ui/Rows";
 import { SettingRow, SettingRows } from "../../ui/SettingRow";
 import { EmptyState, ErrorState } from "../../ui/States";
 import { PlaylistMissing } from "./LivingPage";
-import { songs } from "./shared";
+import { gateNotice, songs } from "./shared";
 
 function TrackRow({ item, added, onPin, onRemove }: { item: SetTrack; added: boolean; onPin: () => void; onRemove: () => void }) {
   const playback = usePlayback();
@@ -144,7 +144,7 @@ function savedMessage(updated: boolean, cover: SavedPlaylist["cover"]["status"])
   return `${base}.`;
 }
 
-function SetActions({ set, playing }: { set: SetDetail; playing: boolean }) {
+function SetActions({ set, playing, canSave }: { set: SetDetail; playing: boolean; canSave: boolean }) {
   const queryClient = useQueryClient();
   const openQueue = useOpenQueue();
   const playback = usePlayback();
@@ -191,7 +191,7 @@ function SetActions({ set, playing }: { set: SetDetail; playing: boolean }) {
         Play
       </Button>
       {(!set.playlist || set.playlist.outdated) && (
-        <Button disabled={empty || busy !== null} busy={busy === "save"} busyLabel="Saving" onClick={save} className="phone:hidden">
+        <Button disabled={empty || !canSave || busy !== null} busy={busy === "save"} busyLabel="Saving" onClick={save} className="phone:hidden">
           {set.playlist ? "Update playlist" : "Save to Spotify"}
         </Button>
       )}
@@ -204,7 +204,7 @@ function SetActions({ set, playing }: { set: SetDetail; playing: boolean }) {
         <MoreTrigger label="More for this set" size="md" />
         <MenuPopup>
           {(!set.playlist || set.playlist.outdated) && (
-            <MenuItem icon={ArrowUpRightIcon} disabled={empty || busy !== null} onClick={save} className="md:hidden">
+            <MenuItem icon={ArrowUpRightIcon} disabled={empty || !canSave || busy !== null} onClick={save} className="md:hidden">
               {set.playlist ? "Update playlist" : "Save to Spotify"}
             </MenuItem>
           )}
@@ -421,6 +421,7 @@ function SetChanges({ set }: { set: SetDetail }) {
 export function SetPage({ id }: { id: number }) {
   const q = useSet(id);
   const dj = useDj();
+  const gate = useLiving().data?.spotify;
   const queryClient = useQueryClient();
   const [removing, setRemoving] = useState<SetTrack | null>(null);
   useDocumentTitle(q.data?.title ?? "Set");
@@ -467,8 +468,9 @@ export function SetPage({ id }: { id: number }) {
         kind="playlist"
         credits={set.description || undefined}
         detail={<span className={fresh.problem ? "text-danger" : undefined}>{fresh.text}</span>}
-        actions={<SetActions set={set} playing={Boolean(playing)} />}
+        actions={<SetActions set={set} playing={Boolean(playing)} canSave={!gate || (gate.connected && gate.canWrite)} />}
       />
+      {gate && gateNotice(gate)}
       {playing && <SessionLine session={playing} />}
       <div className={SIDE_COLUMNS}>
         <div className="flex min-w-0 flex-col gap-10 md:gap-12">

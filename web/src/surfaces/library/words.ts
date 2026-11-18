@@ -35,7 +35,7 @@ export function groupTitle(action: PlanAction, where: LibraryPlace): string {
 export const SOURCE_LABEL: Record<PlanSummary["source"], string> = {
   rule: "Ready-made",
   analysis: "From the library overview",
-  claude: "From Claude",
+  claude: "From the chat",
   standing: "From a standing instruction",
 };
 

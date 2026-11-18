@@ -4,7 +4,7 @@ import { useLocation } from "wouter";
 import { ApiError, request } from "../../api/client";
 import { useLivingPlaylist } from "../../api/queries";
 import type { LivingDetail, LivingId, LivingQuietUpdate, LivingUpdate, RuleInput, RulePreview } from "../../api/types";
-import { fmtHour } from "../../lib/format";
+import { fmtHour, fmtInt } from "../../lib/format";
 import { showToast } from "../../lib/toast";
 import { AppLink } from "../../ui/AppLink";
 import { Button, buttonClass } from "../../ui/Button";
@@ -287,11 +287,14 @@ function usePreview(input: RuleInput | null) {
   return { stale: state?.key !== key, data: state?.data, error: state?.error, retry: () => setState(null) };
 }
 
+const PREVIEW_FIRST = 20;
+
 function Preview({ input, id }: { input: RuleInput | null; id: LivingId | null }) {
   const preview = usePreview(input);
   const d = preview.data;
+  const [all, setAll] = useState(false);
   return (
-    <Section title="It would hold" description={d && !preview.stale ? songs(d.count) : undefined} className="lg:sticky lg:top-6 lg:self-start">
+    <Section title="It would hold" description={d && !preview.stale ? songs(d.count) : undefined} className="@min-[700px]/page:sticky lg:top-6 lg:self-start">
       {!input ? (
         <p className="text-secondary">Fix the fields marked above to see the songs.</p>
       ) : preview.error && !preview.stale ? (
@@ -301,11 +304,18 @@ function Preview({ input, id }: { input: RuleInput | null; id: LivingId | null }
       ) : d.count === 0 ? (
         <EmptyState size="inline" title="No song meets the rule" description="Widen the time, or loosen a filter." />
       ) : (
-        <RowList label="Preview" className={dimWhile(preview.stale)}>
-          {d.songs.slice(0, 20).map((s, i) => (
-            <SongRow key={s.uri} song={s} rank={i + 1} kind={id ?? "rule-preview"} />
-          ))}
-        </RowList>
+        <div className="flex flex-col gap-2">
+          <RowList label="Preview" className={dimWhile(preview.stale)}>
+            {(all ? d.songs : d.songs.slice(0, PREVIEW_FIRST)).map((s, i) => (
+              <SongRow key={s.uri} song={s} rank={i + 1} kind={id ?? "rule-preview"} />
+            ))}
+          </RowList>
+          {d.songs.length > PREVIEW_FIRST && (
+            <Button variant="ghost" size="sm" className="-ml-2.5 self-start" onClick={() => setAll((v) => !v)}>
+              {all ? "Show fewer" : `Show all ${fmtInt(d.songs.length)}`}
+            </Button>
+          )}
+        </div>
       )}
     </Section>
   );

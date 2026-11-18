@@ -19,7 +19,7 @@ One instance serves one person. Your data stays in a single SQLite file on your 
 
 **Play** (needs an AI provider)
 
-- **Sets**: describe a playlist; Claude builds it from your history plus songs you have never played, with a reason for each. Refine it by chat, save it to Spotify, or play it as a session that adapts as you skip.
+- **Sets**: describe a playlist and it is built from your history plus songs you have never played, with a reason for each. Refine it by chat, save it to Spotify, or play it as a session that adapts as you skip.
 - **Weekly picks**: a few new songs picked each week, each with its reason, at the head of Playlists.
 - **Chat**: a side panel on every page that knows what you are looking at. Ask about your listening, make a set, or plan a library cleanup; answers come from your history, with charts where they help.
 
@@ -31,14 +31,14 @@ One instance serves one person. Your data stays in a single SQLite file on your 
 
 **Upkeep**
 
-- **Recaps**: each week, month and year as a page of what changed: totals against the period before, artists up and down, genre and mood shifts, new songs that stuck, the busiest day and hour, with small inline charts. Claude adds a headline and one line per section; without Claude the page shows the numbers alone. Each recap has its playlist, the songs that defined the period, playable from the page and saved to Spotify with a cover titled with the period when you tap Save. A share card (wide or square) downloads from the page and goes with recaps posted to Discord, and a public link shows a frozen, read-only copy of one recap to anyone you give it to: made only when you ask, revocable, optionally expiring (see [docs/sharing.md](docs/sharing.md)).
-- **Library**: how much of your liked songs and playlists you still play, and where the dead weight sits. Plans to tidy them, ready-made, from a group of songs, or by telling Claude what you want ("clean up what I don't listen to anymore") and talking it through; a standing instruction can make one on a schedule: archive (the default) or remove, keep one copy of duplicates, like what you play a lot. Nothing changes in Spotify until you approve a plan, and every applied plan can be undone.
+- **Recaps**: each week, month and year as a page of what changed: totals against the period before, artists up and down, genre and mood shifts, new songs that stuck, the busiest day and hour, with small inline charts. With AI set up, each recap gets a headline and one line per section; without it the page shows the numbers alone. Each recap has its playlist, the songs that defined the period, playable from the page and saved to Spotify with a cover titled with the period when you tap Save. A share card (wide or square) downloads from the page and goes with recaps posted to Discord, and a public link shows a frozen, read-only copy of one recap to anyone you give it to: made only when you ask, revocable, optionally expiring (see [docs/sharing.md](docs/sharing.md)).
+- **Library**: how much of your liked songs and playlists you still play, and where the dead weight sits. Plans to tidy them, ready-made, from a group of songs, or by saying what you want ("clean up what I don't listen to anymore") and talking it through; a standing instruction can make one on a schedule: archive (the default) or remove, keep one copy of duplicates, like what you play a lot. Nothing changes in Spotify until you approve a plan, and every applied plan can be undone.
 
 | | |
 | --- | --- |
 | ![The chat panel answering a question beside Home, with a chart](docs/screenshots/chat.png) | ![A set built from a prompt, with a reason for each song](docs/screenshots/set.png) |
 | ![Patterns: listening by weekday and hour](docs/screenshots/when.png) | ![Patterns: which artists defined which months](docs/screenshots/eras.png) |
-| ![A monthly recap with Claude's headline](docs/screenshots/recap.png) | ![Plays: the full log, in the light theme](docs/screenshots/plays-light.png) |
+| ![A monthly recap with its written headline](docs/screenshots/recap.png) | ![Plays: the full log, in the light theme](docs/screenshots/plays-light.png) |
 
 Optional integrations: Discord commands and channel posts, and an MCP server over your analytics and playback.
 
@@ -160,7 +160,7 @@ src/plays/               shared play model: song key, device enum, local time, i
 src/ingest/export/       export parsing, import, CLI
 src/ingest/live/         recently-played poller, player watcher and its reconciliation, track and artist enrichment, album art
 src/player/              typed Spotify playback API
-src/dj/                  DJ sessions on an app-owned playlist, deterministic and Claude re-planners
+src/dj/                  DJ sessions on an app-owned playlist, deterministic and AI re-planners
 src/radar/               release radar
 src/living/              living playlists: rules and their engine, built-in kinds, schedule, refresh
 src/library/             saved songs and own playlists sync, library analysis, plans and their rules; apply and undo (only reachable from the HTTP route);
@@ -177,7 +177,7 @@ src/taste/               cached taste profile given to the model
 src/sets/ src/picks/     set building and weekly picks
 src/covers/              playlist cover and share card drawing (Skia via @napi-rs/canvas); its fonts and their licences are in assets/fonts
 src/ask/ src/notes/      questions over the history, liner notes
-src/digest/              recap periods, facts, pages, Claude lines, playlists and cards
+src/digest/              recap periods, facts, pages, written lines, playlists and cards
 src/share/               public share links: frozen snapshots, hashed tokens, the public page
 src/assistant/           plain entry points for chat integrations
 src/jobs/                scheduler and persisted job state

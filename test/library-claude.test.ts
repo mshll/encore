@@ -185,7 +185,7 @@ describe("standing instructions", () => {
 
     await runJob(db, job);
 
-    expect([fake.requests.length, db.select().from(libraryStanding).get()!.lastError]).toEqual([0, "The monthly Claude budget is spent"]);
+    expect([fake.requests.length, db.select().from(libraryStanding).get()!.lastError]).toEqual([0, "The monthly AI budget is spent"]);
   });
 });
 

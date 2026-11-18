@@ -75,7 +75,7 @@ export function AlertsTab() {
       <SendTest disabled={editing} />
       <SettingsBlock
         title="When to alert"
-        description="Also when Spotify sign-in fails, a Spotify quota runs out, a backup fails or the Claude cap is reached."
+        description="Also when Spotify sign-in fails, a Spotify quota runs out, a backup fails or the monthly AI budget is spent."
         keys={WHEN_KEYS}
         form={when}
       />

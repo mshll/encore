@@ -12,7 +12,7 @@ import { MenuItem, MenuPopup, MenuRoot, MoreTrigger } from "./Menu";
 export const SECTIONS = "flex flex-col gap-10 md:gap-12";
 
 /** The main answer left, small related lists right (DESIGN.md, Main plus side column). */
-export const SIDE_COLUMNS = "grid gap-10 lg:grid-cols-[minmax(0,1fr)_minmax(0,320px)] lg:gap-12";
+export const SIDE_COLUMNS = "grid gap-10 @min-[700px]/page:grid-cols-[minmax(0,1fr)_minmax(0,320px)] @min-[700px]/page:gap-12";
 
 /** Old data stays on screen, dimmed, while a new range or filter loads. */
 export const dimWhile = (refetching: boolean) => cx("transition-opacity duration-200", refetching && "opacity-60");
@@ -43,7 +43,7 @@ export function Page({
   return (
     <div className={cx("mx-auto flex w-full max-w-(--page-max) flex-col px-(--gutter)", fill ? "h-full" : "pb-16", className)}>
       <div className={cx("flex items-center md:h-12", trail ? "h-12" : "h-6")}>{trail && <Breadcrumbs trail={trail} current={crumb} />}</div>
-      <div className={cx(SECTIONS, "flex-1", fill && "min-h-0", width === "read" && "[&>:not(header)]:max-w-(--measure)")}>{children}</div>
+      <div className={cx(SECTIONS, "@container/page flex-1", fill && "min-h-0", width === "read" && "[&>:not(header)]:max-w-(--measure)")}>{children}</div>
     </div>
   );
 }
@@ -110,12 +110,9 @@ export function PageHeader({
   return (
     <header className="flex flex-col gap-4">
       <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-x-4 md:items-end md:gap-x-6">
-        <div className="flex min-w-0 flex-col gap-1">
-          <h1 title={title} className="line-clamp-2 font-display text-title text-balance break-words text-primary">
-            {title}
-          </h1>
-          {description && <p className="max-w-2xl text-secondary text-pretty">{description}</p>}
-        </div>
+        <h1 title={title} className="line-clamp-2 min-w-0 font-display text-title text-balance break-words text-primary">
+          {title}
+        </h1>
         {hasActions && (
           <div className="-mt-1.5 flex shrink-0 items-center gap-2 self-start md:mt-0 md:self-end">
             {secondary && secondary.length > 0 && <SecondaryButtons items={secondary} />}
@@ -123,6 +120,7 @@ export function PageHeader({
             {secondary && secondary.length > 0 && <SecondaryMenu items={secondary} />}
           </div>
         )}
+        {description && <p className="col-span-2 mt-1 max-w-2xl text-secondary text-pretty md:col-span-1 md:col-start-1">{description}</p>}
       </div>
       {children}
     </header>

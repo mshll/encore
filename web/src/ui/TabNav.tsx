@@ -19,7 +19,7 @@ export function TabNav({ items, label }: { items: TabNavItem[]; label: string })
   }, [location]);
   return (
     <nav ref={strip} aria-label={label} className="-mx-(--gutter) overflow-x-auto overscroll-x-contain px-(--gutter) no-scrollbar hairline-b">
-      <ul className="flex items-center gap-5">
+      <ul className="flex w-max items-center gap-5">
         {items.map((item) => {
           const active = location === item.path;
           return (

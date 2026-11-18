@@ -81,7 +81,7 @@ export async function runDueStanding(ctx: FeatureContext): Promise<Record<string
       if (turn.planId) made.push(turn.planId);
     } catch (error) {
       if (error instanceof LlmBudgetExceededError) {
-        db.update(libraryStanding).set({ lastError: "The monthly Claude budget is spent" }).where(eq(libraryStanding.id, row.id)).run();
+        db.update(libraryStanding).set({ lastError: "The monthly AI budget is spent" }).where(eq(libraryStanding.id, row.id)).run();
         return { skipped: "budget_exceeded", month: error.month, plans: made };
       }
       const message = error instanceof Error ? error.message : String(error);

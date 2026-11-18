@@ -2,7 +2,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState, type ReactNode } from "react";
 import { ApiError, request } from "../api/client";
 import { useOnboarding, useSettings, useSpend, useStatus } from "../api/queries";
-import type { AiKeyCheck, AiProvider, DiscordRegistration, JobStatus, LlmFeature, Session, SettingValue, Settings as SettingsData, SettingsAdoptResult, Status } from "../api/types";
+import type { AiProvider, DiscordRegistration, JobStatus, LlmFeature, Session, Settings as SettingsData, SettingsAdoptResult, Status } from "../api/types";
 import { SETTINGS_TABS } from "../app/nav";
 import { BudgetBar } from "../charts/BudgetBar";
 import { resetDay } from "../lib/assistant";
@@ -22,7 +22,8 @@ import { SettingRow, SettingRows } from "../ui/SettingRow";
 import { Skeleton } from "../ui/Skeleton";
 import { describeError, ErrorState } from "../ui/States";
 import { TabNav } from "../ui/TabNav";
-import { SettingsBlock, useSettingsForm, type SettingsForm } from "./settings/form";
+import { SettingsBlock, useSettingsForm } from "./settings/form";
+import { draftAi, PROVIDER_NAMES, VerifyAi } from "./settings/AiProvider";
 import { ALERT_SECRET_KEYS, AlertsTab } from "./settings/Alerts";
 import { DataTab } from "./settings/Data";
 import { HistoryStart } from "./settings/HistoryStart";
@@ -321,58 +322,6 @@ function Spend() {
 const PROVIDER_KEYS = ["aiProvider", "aiModel", "aiApiKey", "aiBaseUrl", "aiInputPrice", "aiOutputPrice"];
 const DEFAULT_KEYS = ["defaultMaxPerArtist", "defaultMaxPerAlbum", "defaultNewSongs"];
 
-const PROVIDER_NAMES: Record<AiProvider, string> = { anthropic: "Anthropic", openai: "OpenAI", google: "Google Gemini", "openai-compatible": "OpenAI-compatible" };
-
-const text = (v: SettingValue | null) => (typeof v === "string" && v.trim() ? v.trim() : null);
-const price = (v: SettingValue | null | undefined) => (typeof v === "number" ? v : typeof v === "string" && v.trim() && Number.isFinite(Number(v)) ? Number(v) : null);
-
-/** The provider, model, key and address as the form holds them now, saved or not, with the earlier Anthropic fields filling in. */
-function draftAi(form: SettingsForm) {
-  const provider = (text(form.value("aiProvider")) ?? "anthropic") as AiProvider;
-  const anthropic = provider === "anthropic";
-  return {
-    provider,
-    model: text(form.value("aiModel")) ?? (anthropic ? text(form.value("claudeModel")) : null),
-    legacyKey: anthropic && !form.fields.get("aiApiKey")?.set ? form.fields.get("claudeApiKey") : undefined,
-    compatible: provider === "openai-compatible",
-  };
-}
-
-function VerifyAi({ form, configured }: { form: SettingsForm; configured: boolean }) {
-  const [busy, setBusy] = useState(false);
-  const [result, setResult] = useState<{ ok: boolean; text: string } | null>(null);
-  const edited = ["aiProvider", "aiModel", "aiApiKey", "aiBaseUrl"].filter((k) => k in form.draft && text(form.draft[k]!) !== null);
-  const inputPrice = price(form.draft.aiInputPrice);
-  const outputPrice = price(form.draft.aiOutputPrice);
-  if (!configured && edited.length === 0) return null;
-  const verify = async () => {
-    setBusy(true);
-    setResult(null);
-    const body = {
-      ...Object.fromEntries(edited.map((k) => [{ aiProvider: "provider", aiModel: "model", aiApiKey: "apiKey", aiBaseUrl: "baseUrl" }[k]!, text(form.draft[k]!)])),
-      ...(inputPrice !== null && outputPrice !== null ? { inputPrice, outputPrice } : {}),
-    };
-    try {
-      const r = await request<AiKeyCheck>("/api/settings/ai/verify", { json: body });
-      setResult(r.valid ? { ok: true, text: `${r.model} answered.` } : { ok: false, text: r.message });
-    } catch (error) {
-      setResult({ ok: false, text: describeError(error) });
-    } finally {
-      setBusy(false);
-    }
-  };
-  return (
-    <SettingRow label="Check the connection" hint={result?.ok ? result.text : undefined} error={result && !result.ok ? result.text : null}>
-      {() => (
-        <div className="flex md:justify-end">
-          <Button size="sm" busy={busy} busyLabel="Checking" onClick={() => void verify()}>
-            {edited.length ? "Check before saving" : "Check"}
-          </Button>
-        </div>
-      )}
-    </SettingRow>
-  );
-}
 
 function ProviderBlock({ status, storage }: { status: Status; storage: boolean }) {
   const form = useSettingsForm([...PROVIDER_KEYS, "claudeModel"]);

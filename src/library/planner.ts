@@ -322,7 +322,7 @@ export function plannerTools(db: Db, snapshot: LibrarySnapshot, submit: (input: 
 
 export class PlanNotBuiltError extends Error {
   constructor() {
-    super("Claude finished without a plan");
+    super("The AI finished without a plan");
   }
 }
 

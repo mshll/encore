@@ -118,7 +118,7 @@ function PickDetail({ era, month, hours, led }: { era: Era; month: string; hours
       labelledBy="eras-pick"
       actions={page.data && hours > 0 && <StartSessionButton uris={page.data.tracks.map((s) => s.uri)} />}
     >
-      <div className="grid gap-8 xl:grid-cols-2">
+      <div className="grid gap-8 @min-[960px]/page:grid-cols-2">
         <Column title="Songs">
           {hours === 0 ? (
             <EmptyState size="inline" title={`No ${era.artist} this month`} />

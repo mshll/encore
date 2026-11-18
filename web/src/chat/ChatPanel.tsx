@@ -28,7 +28,7 @@ function useThreadTitle(thread: ChatThread | null): string {
   if (!thread) return "New chat";
   if (thread.kind === "ask") return ask.data?.title ?? "Question";
   if (thread.kind === "set") return set.data?.title ?? "Set";
-  return plans.data?.items.find((p) => p.threadId === thread.threadId)?.title ?? "Plan with Claude";
+  return plans.data?.items.find((p) => p.threadId === thread.threadId)?.title ?? "Plan";
 }
 
 function History({ onPicked }: { onPicked: () => void }) {

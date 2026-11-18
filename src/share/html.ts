@@ -97,7 +97,7 @@ function sectionHtml(s: SnapshotSection, r: RecapSnapshot["recap"]): string {
       const busiest = s.daily ? s.daily.indexOf(Math.max(...s.daily)) : -1;
       return `<section><h2>Listening</h2>${take(s.take)}<p class="figure">${esc(hours(s.hours))}</p>${
         compare && s.before !== null ? `<p class="line">${pair(s.hours, s.before, `${hours(s.hours)}, against ${hours(s.before)} in ${compare}`)}<span class="muted">${esc(change(s.hours, s.before))} against ${esc(hours(s.before))} in ${esc(compare)}</span></p>` : ""
-      }<p class="muted">${esc(plural(s.listens, "play", "plays"))}, ${esc(plural(s.artists, "artist", "artists"))}, ${esc(plural(s.songs, "song", "songs"))}</p>${
+      }<p class="muted">${esc(plural(s.listens, "listen", "listens"))}, ${esc(plural(s.artists, "artist", "artists"))}, ${esc(plural(s.songs, "song", "songs"))}</p>${
         s.daily && s.daily.length > 1 && busiest >= 0 ? `<p class="line">${columns(s.daily, busiest, `Listening each ${r.kind === "yearly" ? "week" : "day"}`, r.kind === "yearly" ? 53 : 31)}</p>` : ""
       }</section>`;
     }

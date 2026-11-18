@@ -31,7 +31,7 @@ export class PicksExistError extends Error {
 
 export class PicksNotSubmittedError extends Error {
   constructor() {
-    super("Claude finished without submitting picks");
+    super("The AI finished without submitting picks");
   }
 }
 

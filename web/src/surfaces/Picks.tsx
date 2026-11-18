@@ -226,7 +226,7 @@ function Generate() {
       <EmptyState
         icon={SparkleIcon}
         title="No picks this week yet"
-        description={gate.blocked ?? gate.warning ?? (stopped ? "Stopped." : schedule?.enabled ? `Claude picks them on ${nextRun(schedule.picks)}.` : undefined)}
+        description={gate.blocked ?? gate.warning ?? (stopped ? "Stopped." : schedule?.enabled ? `They are picked on ${nextRun(schedule.picks)}.` : undefined)}
         action={
           <Button variant="primary" disabled={Boolean(gate.blocked)} onClick={generate}>
             Pick this week’s songs

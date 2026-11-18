@@ -16,7 +16,7 @@ export const MODE_LABELS: Record<ChatMode, string> = { ask: "Ask", set: "Make a 
 const NEW_PROMPT: Record<ChatMode, { label: string; placeholder: string }> = {
   ask: { label: "Ask about your listening", placeholder: "Why did I stop playing…, what do I play when…" },
   set: { label: "Describe a set", placeholder: "A late drive home, songs I finished at night, a few I’ve never heard" },
-  tidy: { label: "Tell Claude what to tidy", placeholder: "Archive what I stopped playing, clear duplicates in…" },
+  tidy: { label: "Say what to tidy", placeholder: "Archive what I stopped playing, clear duplicates in…" },
 };
 
 /** The job of a new conversation, where Beautiful UI's Prompt Bar keeps its model picker. */
