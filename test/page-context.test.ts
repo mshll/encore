@@ -29,6 +29,7 @@ describe("page context validation", () => {
       { kind: "album", artist: "Mac Miller", album: "Circles" },
       { kind: "song", songKey: "woods|mac miller", name: "Woods", artist: "Mac Miller" },
       { kind: "playlist", playlist: "most-played", name: "Most played lately" },
+      { kind: "playlist", playlist: "rule-0a1b2c3d4e", name: "Old Mac Miller" },
       { kind: "recap", period: "monthly", key: "2026-10", label: "October 2026" },
       { kind: "patterns", view: "skips", from: "2026-01-01", to: "2026-03-31" },
       { kind: "library", planId: 4, title: "Archive old likes" },
@@ -47,6 +48,7 @@ describe("page context validation", () => {
       { kind: "artist", artist: "x".repeat(301) },
       { kind: "patterns", view: "when", from: "March" },
       { kind: "playlist", playlist: "liked", name: "Liked" },
+      { kind: "playlist", playlist: "rule-xyz", name: "Not a rule id" },
       { kind: "artist", artist: "   " },
     ];
 

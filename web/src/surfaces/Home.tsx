@@ -6,6 +6,7 @@ import { artistPath, recapPath, songPath } from "../app/paths";
 import { DitherArea, DitherBars } from "../charts/Dither";
 import { InlineChange, InlinePair } from "../charts/Inline";
 import { periodTick, periodTitle } from "../charts/ticks";
+import { useAi } from "../lib/ai";
 import { addDays, daysBetween, todayIn } from "../lib/dates";
 import { fmtAgo, fmtCompact, fmtDayShort, fmtHours, fmtHoursValue, fmtInt, hoursParts, WEEKDAYS_SHORT } from "../lib/format";
 import { highlightText } from "../lib/insights";
@@ -25,7 +26,7 @@ import { ChartSkeleton, Skeleton } from "../ui/Skeleton";
 import { StatStrip, type StatItem } from "../ui/Stat";
 import { EmptyState, ErrorState, FirstUseState } from "../ui/States";
 import { StartSessionButton } from "../ui/StartSessionButton";
-import { PlaylistRows, PlaylistRowsSkeleton } from "./Playlists";
+import { PlaylistRows, PlaylistRowsSkeleton } from "./playlists/shared";
 
 const weekdayShort = (day: string) => WEEKDAYS_SHORT[(new Date(`${day}T00:00:00Z`).getUTCDay() + 6) % 7]!;
 const shortHours = (h: number) => (h * 60 < 60 ? `${Math.round(h * 60)} min` : `${fmtHoursValue(h)} h`);
@@ -337,17 +338,18 @@ const plural = (n: number, one: string, many: string) => `${fmtInt(n)} ${n === 1
 /** The playlists encore keeps, small: what is new in each (picks, releases) is its line. */
 function MadeForYou() {
   const q = useLiving();
+  const ai = useAi();
   return (
     <section aria-labelledby="made-for-you" className="flex min-w-0 flex-col gap-2">
       <div className="flex items-center justify-between gap-4">
         <h2 id="made-for-you" className="font-medium text-secondary">
           Made for you
         </h2>
-        <AppLink to="/for-you" className={buttonClass({ variant: "ghost", size: "sm", className: "-mr-2.5" })}>
-          Open For you
+        <AppLink to="/playlists" className={buttonClass({ variant: "ghost", size: "sm", className: "-mr-2.5" })}>
+          Open Playlists
         </AppLink>
       </div>
-      {q.isError ? <ErrorState size="inline" error={q.error} onRetry={() => q.refetch()} /> : !q.data ? <PlaylistRowsSkeleton /> : <PlaylistRows list={q.data} />}
+      {q.isError ? <ErrorState size="inline" error={q.error} onRetry={() => q.refetch()} /> : !q.data ? <PlaylistRowsSkeleton /> : <PlaylistRows items={q.data.items.filter((p) => p.builtin && (ai.configured || p.kind !== "picks"))} />}
     </section>
   );
 }

@@ -16,7 +16,7 @@ import { useChat, type ChatMode, type ChatThread } from "./state";
 
 const ALL: Record<ChatMode, { label: string; path: string }> = {
   ask: { label: "All questions", path: "/ask" },
-  set: { label: "All sets", path: "/sets" },
+  set: { label: "All sets", path: "/playlists?show=sets" },
   tidy: { label: "All plans", path: "/library/plans" },
 };
 

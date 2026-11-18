@@ -15,10 +15,9 @@ const Music = lazy(() => import("../surfaces/Music").then((m) => ({ default: m.M
 const ArtistPage = lazy(() => import("../surfaces/entity/ArtistPage").then((m) => ({ default: m.ArtistPage })));
 const AlbumPage = lazy(() => import("../surfaces/entity/AlbumPage").then((m) => ({ default: m.AlbumPage })));
 const SongPage = lazy(() => import("../surfaces/entity/SongPage").then((m) => ({ default: m.SongPage })));
-const ForYou = lazy(() => import("../surfaces/ForYou").then((m) => ({ default: m.ForYou })));
-const PlaylistPage = lazy(() => import("../surfaces/Playlists").then((m) => ({ default: m.PlaylistPage })));
-const Sets = lazy(() => import("../surfaces/Sets").then((m) => ({ default: m.Sets })));
-const SetPage = lazy(() => import("../surfaces/SetPage").then((m) => ({ default: m.SetPage })));
+const Playlists = lazy(() => import("../surfaces/playlists/List").then((m) => ({ default: m.Playlists })));
+const PlaylistPage = lazy(() => import("../surfaces/playlists/PlaylistPage").then((m) => ({ default: m.PlaylistPage })));
+const RuleBuilder = lazy(() => import("../surfaces/playlists/RuleBuilder").then((m) => ({ default: m.RuleBuilder })));
 const Ask = lazy(() => import("../surfaces/Ask").then((m) => ({ default: m.Ask })));
 const Eras = lazy(() => import("../surfaces/Eras").then((m) => ({ default: m.Eras })));
 const Taste = lazy(() => import("../surfaces/Taste").then((m) => ({ default: m.Taste })));
@@ -94,11 +93,19 @@ export function App() {
           <Route path="/patterns/skips" component={Skips} />
           <Route path="/patterns/places" component={Places} />
 
-          <Route path="/for-you" component={ForYou} />
-          <Route path="/for-you/:kind">{(p) => <PlaylistPage key={p.kind} kind={p.kind} />}</Route>
+          <Route path="/playlists" component={Playlists} />
+          <Route path="/playlists/new">{() => <RuleBuilder />}</Route>
+          <Route path="/playlists/:id/edit">{(p) => <RuleBuilder key={p.id} id={p.id} />}</Route>
+          <Route path="/playlists/:id">{(p) => <PlaylistPage key={p.id} id={p.id} />}</Route>
 
-          <Route path="/sets/:id">{(p) => <SetPage key={p.id} id={Number(p.id)} />}</Route>
-          <Route path="/sets" component={Sets} />
+          <Route path="/for-you">
+            <Redirect to="/playlists" replace />
+          </Route>
+          <Route path="/for-you/:kind">{(p) => <Redirect to={`/playlists/${p.kind}`} replace />}</Route>
+          <Route path="/sets">
+            <Redirect to="/playlists?show=sets" replace />
+          </Route>
+          <Route path="/sets/:id">{(p) => <Redirect to={`/playlists/set-${p.id}`} replace />}</Route>
 
           <Route path="/ask/:id?">{(p) => <Ask id={p.id} />}</Route>
 

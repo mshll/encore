@@ -637,6 +637,8 @@ export type LibrarySongs = {
 };
 
 export type LivingKind = "picks" | "forgotten" | "most-played" | "new-releases" | "this-month" | "this-year" | "right-now";
+/** A living playlist's id: a built-in kind, or an owner's rule (`rule-` and 10 hex characters). */
+export type LivingId = LivingKind | `rule-${string}`;
 export type LivingStatus = "refreshed" | "unchanged" | "empty" | "deferred" | "failed" | "removed";
 export type LivingSchedule = "daily" | "weekly" | "monthly" | "yearly-weekly" | "picks" | "releases" | "window";
 
@@ -674,8 +676,8 @@ export type LivingTrigger = "enable" | "schedule" | "manual" | "picks" | "year-e
 export type LivingSong = { uri: string; songKey: string; name: string; artist: string; album: string | null; albumArtUrl: string | null };
 
 export type LivingPlaylist = {
-  kind: LivingKind;
-  /** False for the owner's rules; `useLiving` lists the built-ins only until the Playlists page shows rules. */
+  kind: LivingId;
+  /** False for the owner's rules. */
   builtin: boolean;
   name: string;
   about: string;
@@ -715,7 +717,7 @@ export type LivingDetail = LivingPlaylist & {
 
 export type LivingRefresh = { id: number; at: string; trigger: LivingTrigger; items: (LivingSong & { artistImageUrl: string | null })[]; added: LivingSong[]; removed: LivingSong[] };
 
-export type LivingOutcome = { kind: LivingKind; status: LivingStatus | "off"; calls: number; cover?: "uploaded" | "unchanged" | "missing_scope" | "failed" };
+export type LivingOutcome = { kind: LivingId; status: LivingStatus | "off"; calls: number; cover?: "uploaded" | "unchanged" | "missing_scope" | "failed" };
 
 export type LivingUpdate = { outcome: LivingOutcome; playlist: LivingDetail };
 /** `PATCH` with `frozen` alone, or `PUT` when nothing was written to Spotify. */
@@ -792,7 +794,7 @@ export type PageContext =
   | { kind: "artist"; artist: string }
   | { kind: "album"; artist: string; album: string }
   | { kind: "song"; songKey: string; name: string; artist: string }
-  | { kind: "playlist"; playlist: LivingKind; name: string }
+  | { kind: "playlist"; playlist: LivingId; name: string }
   | { kind: "recap"; period: RecapKind; key: string; label: string }
   | { kind: "patterns"; view: PatternView; from?: string; to?: string }
   | { kind: "library"; planId?: number; title?: string }

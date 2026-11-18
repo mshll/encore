@@ -2,6 +2,7 @@ import { Drawer, DrawerBackdrop, DrawerClose, DrawerContent, DrawerTitle } from 
 import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { useLocation } from "wouter";
 import { useChat } from "../chat/state";
+import { useAi } from "../lib/ai";
 import { MiniPlayer } from "../player/PlayerBar";
 import { AppLink } from "../ui/AppLink";
 import { cx } from "../ui/cx";
@@ -33,6 +34,7 @@ export function PhoneNav({ onSearch, onOpenPlayer, collapsed, onExpand, inert }:
   const [location] = useLocation();
   const [open, setOpen] = useState(false);
   const chat = useChat();
+  const ai = useAi();
   const chatOpen = chat.open && !location.startsWith("/ask");
   const current = useCurrentTab(location);
   const chatButton = useRef<HTMLButtonElement>(null);
@@ -57,13 +59,19 @@ export function PhoneNav({ onSearch, onOpenPlayer, collapsed, onExpand, inert }:
         data-dock
         data-collapsed={collapsed || undefined}
         inert={inert}
-        className="group/dock absolute right-[calc(var(--gutter)+env(safe-area-inset-right,0px))] bottom-(--dock-bottom) left-[calc(var(--gutter)+env(safe-area-inset-left,0px))] pointer-events-none z-20 h-(--tabbar-h) *:pointer-events-auto [--pill-w:calc(100vw-2*var(--gutter)-env(safe-area-inset-left,0px)-env(safe-area-inset-right,0px)-var(--tabbar-h)-var(--dock-gap))] in-data-keyboard-open:hidden"
+        className={cx(
+          "group/dock absolute right-[calc(var(--gutter)+env(safe-area-inset-right,0px))] bottom-(--dock-bottom) left-[calc(var(--gutter)+env(safe-area-inset-left,0px))] pointer-events-none z-20 h-(--tabbar-h) *:pointer-events-auto in-data-keyboard-open:hidden",
+          ai.configured
+            ? "[--pill-w:calc(100vw-2*var(--gutter)-env(safe-area-inset-left,0px)-env(safe-area-inset-right,0px)-var(--tabbar-h)-var(--dock-gap))]"
+            : "[--pill-w:calc(100vw-2*var(--gutter)-env(safe-area-inset-left,0px)-env(safe-area-inset-right,0px))]",
+        )}
       >
         <MiniPlayer
           onOpen={onOpenPlayer}
           className={cx(
             "absolute right-0 bottom-[calc(var(--tabbar-h)+var(--dock-gap))] left-0 h-(--mini-player-h) transition-[left,right,bottom,height]",
-            "group-data-collapsed/dock:right-[calc(var(--tabbar-h-collapsed)+var(--dock-gap))] group-data-collapsed/dock:bottom-0 group-data-collapsed/dock:left-[calc(var(--tabbar-h-collapsed)+var(--dock-gap))] group-data-collapsed/dock:h-(--tabbar-h-collapsed)",
+            ai.configured && "group-data-collapsed/dock:right-[calc(var(--tabbar-h-collapsed)+var(--dock-gap))]",
+            "group-data-collapsed/dock:bottom-0 group-data-collapsed/dock:left-[calc(var(--tabbar-h-collapsed)+var(--dock-gap))] group-data-collapsed/dock:h-(--tabbar-h-collapsed)",
             MOVE,
           )}
         />
@@ -105,6 +113,7 @@ export function PhoneNav({ onSearch, onOpenPlayer, collapsed, onExpand, inert }:
             <Icon icon={current.surface.icon} size="lg" fill={current.index >= 0 && current.index < PHONE_TABS.length} />
           </button>
         </nav>
+        {ai.configured && (
         <button
           ref={chatButton}
           type="button"
@@ -119,6 +128,7 @@ export function PhoneNav({ onSearch, onOpenPlayer, collapsed, onExpand, inert }:
         >
           <Icon icon={ChatCircleTextIcon} size="lg" fill={chatOpen} />
         </button>
+        )}
       </div>
       <Drawer open={open} onOpenChange={setOpen} container={LAYER}>
         <DrawerBackdrop className={SHEET_BACKDROP} />

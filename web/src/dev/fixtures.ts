@@ -43,6 +43,10 @@
     ?living=scope      Spotify connected without permission to change playlists
     ?living=refreshing switching on or off and Refresh now never answer
     ?living=kept       every playlist is on and kept in Spotify, updated two days ago
+    ?living=rules      two rule playlists after the built-ins (one on, frozen and in Spotify with a long name; one off), built from
+                       Most played lately's songs; their pages, edit form and preview read real data, nothing is saved
+    ?sets=constraints  the newest set has every limit set (2 per artist, 1 per album, 4 new songs, two artists and a song left out);
+                       saving limits answers here, nothing is written
     Living fixtures answer PATCH /api/living/:kind and POST /api/living/:kind/refresh themselves: nothing is written, no Spotify call.
     ?library=apply       Spotify reads as connected; Apply and Undo are answered here and the batch runs for about 6 s, then ends
     ?library=running     the newest open plan has an apply in progress (5 of its songs done)
@@ -79,7 +83,7 @@
 type Json = Record<string, unknown>;
 
 const params = new URLSearchParams(location.search);
-for (const key of ["fixture", "player", "run", "dj", "settings", "history", "living", "library", "recap", "ask", "week", "highlight", "picks", "playlists", "fail"]) {
+for (const key of ["fixture", "player", "run", "dj", "settings", "history", "living", "library", "recap", "ask", "week", "highlight", "picks", "playlists", "sets", "fail"]) {
   const value = params.get(key);
   if (value === "off") sessionStorage.removeItem(`encore-${key}`);
   else if (value) sessionStorage.setItem(`encore-${key}`, value);
@@ -98,6 +102,7 @@ const weekFixture = sessionStorage.getItem("encore-week");
 const highlightFixture = sessionStorage.getItem("encore-highlight");
 const picksFixture = sessionStorage.getItem("encore-picks");
 const playlistsFixture = sessionStorage.getItem("encore-playlists");
+const setsFixture = sessionStorage.getItem("encore-sets");
 const failing = (sessionStorage.getItem("encore-fail") ?? "").split(",").filter(Boolean);
 
 const SAVED_PLAYLISTS = [
@@ -765,9 +770,48 @@ function bendLiving(p: Json, state: string): Json {
 
 const LIVING_OUTCOME: Record<string, string> = { deferred: "deferred", failed: "failed", empty: "unchanged" };
 
+const FIXTURE_RULES: Json[] = [
+  {
+    kind: "rule-f1f1f1f1f1",
+    name: "Late night weekdays, the songs I always play through and never skip, from the last two years",
+    about: "Built for the drive home",
+    enabled: true,
+    frozen: true,
+    playlist: { id: "fixture", url: "https://open.spotify.com/" },
+    rule: { source: { type: "moment", weekdays: [1, 2, 3, 4], hours: { from: 22, to: 24 } }, filters: { keepers: { minPlayedThrough: 0.8 }, artists: { exclude: ["Drake"] } }, sort: "keepers", limit: 100, perArtist: 2, rolling: { perRefresh: 10 }, schedule: "daily" },
+  },
+  {
+    kind: "rule-f2f2f2f2f2",
+    name: "Old favourites",
+    about: null,
+    enabled: false,
+    frozen: false,
+    playlist: null,
+    rule: { source: { type: "history", window: { type: "all" } }, filters: { listens: { min: 10 }, lastPlayed: { before: { daysAgo: 60 } } }, sort: "listens", limit: 50, schedule: "weekly" },
+  },
+];
+
+/** A rule playlist made from a real built-in's data: Most played lately's songs and history under the rule's own fields. */
+function asRule(base: Json, rule: Json): Json {
+  return { ...base, ...rule, builtin: false, coverUrl: base.coverUrl, mode: (rule.rule as Json).rolling ? "rolling" : "replace", schedule: (rule.rule as Json).schedule, cap: (rule.rule as Json).limit, status: rule.enabled ? "refreshed" : null, count: rule.enabled ? base.available : 0, nextRefresh: null };
+}
+
 async function livingAnswer(path: string, method: string, init: RequestInit | undefined): Promise<Response | null> {
   if (!livingFixture || !path.startsWith("/api/living")) return null;
   const state = livingFixture;
+  if (state === "rules") {
+    const id = path.match(/^\/api\/living\/(rule-[0-9a-f]{10})$/)?.[1];
+    const rule = FIXTURE_RULES.find((r) => r.kind === id);
+    if (rule && method === "GET") return json(asRule((await (await realFetch("/api/living/most-played")).json()) as Json, rule));
+    if (rule) return json({ outcome: null, playlist: asRule((await (await realFetch("/api/living/most-played")).json()) as Json, rule) });
+    if (path === "/api/living" && method === "GET") {
+      const body = (await (await realFetch(path)).json()) as Json;
+      const items = body.items as Json[];
+      const base = items.find((p) => p.kind === "most-played")!;
+      return json({ ...body, items: [...items.filter((p) => p.builtin), ...FIXTURE_RULES.map((r) => asRule(base, r))] });
+    }
+    return null;
+  }
   const spotify = { connected: true, canWrite: state !== "scope", canUploadCovers: state !== "scope" };
   const write = path.match(/^\/api\/living\/([a-z-]+)(\/refresh)?$/);
   if (write && method !== "GET") {
@@ -990,6 +1034,13 @@ window.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
   if (livingFixture) {
     const answer = await livingAnswer(path, method, init);
     if (answer) return answer;
+  }
+  if (setsFixture === "constraints" && /^\/api\/sets\/\d+(\/constraints)?$/.test(path)) {
+    const set = (await (await realFetch(path.replace(/\/constraints$/, ""))).json()) as Json;
+    const constraints = { maxPerArtist: 2, maxPerAlbum: 1, newSongs: 4, exclude: { artists: ["Drake", LONG_ARTIST], songs: [{ songKey: "worst|worst", label: `${LONG_SONG} - ${LONG_ARTIST}` }] } };
+    if (method === "GET") return json({ ...set, constraints });
+    const patch = JSON.parse(String(init?.body ?? "{}")) as Json;
+    return json({ ...set, constraints: { ...constraints, ...patch } });
   }
   if ((picksFixture || playlistsFixture) && method === "GET") {
     const answer = await forYouAnswer(path);

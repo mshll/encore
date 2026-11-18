@@ -1,6 +1,7 @@
 import { createContext, lazy, Suspense, useCallback, useContext, useEffect, useRef, useState, type ReactNode, type RefObject } from "react";
 import { useLocation, useSearchParams } from "wouter";
 import { ChatProvider } from "../chat/ChatProvider";
+import { useAi } from "../lib/ai";
 import { useDesktop } from "../lib/useMedia";
 import { showToast } from "../lib/toast";
 import { PlayerBar } from "../player/PlayerBar";
@@ -97,7 +98,8 @@ export function Shell({ children }: { children: ReactNode }) {
   const [side, setSide] = useState<Side>(initialSide);
   const [location] = useLocation();
   const queueOpen = side === "queue";
-  const chatShown = side === "chat" && !location.startsWith("/ask");
+  const ai = useAi();
+  const chatShown = side === "chat" && ai.configured && !location.startsWith("/ask");
   const setQueueOpen = useCallback((open: boolean) => setSide((s) => (open ? "queue" : s === "queue" ? null : s)), []);
   const setChatOpen = useCallback((open: boolean) => setSide((s) => (open ? "chat" : s === "chat" ? null : s)), []);
   useEffect(() => {

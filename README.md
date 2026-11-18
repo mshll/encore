@@ -20,12 +20,14 @@ One instance serves one person. Your data stays in a single SQLite file on your 
 **Play** (needs an Anthropic API key)
 
 - **Sets**: describe a playlist; Claude builds it from your history plus songs you have never played, with a reason for each. Refine it by chat, save it to Spotify, or play it as a session that adapts as you skip.
-- **For you**: the playlists encore makes, by cover. Weekly picks holds a few new songs picked each week with Claude's reason for each; New from your artists holds the new releases.
+- **Weekly picks**: a few new songs picked each week, each with its reason, at the head of Playlists.
 - **Chat**: a side panel on every page that knows what you are looking at. Ask about your listening, make a set, or plan a library cleanup; answers come from your history, with charts where they help.
 
-**Playlists in Spotify** (in For you)
+**Playlists**
 
-- Private playlists encore keeps refilling: Weekly picks, Forgotten favourites, Most played lately, New from your artists, This month in past years, This year so far (which becomes that year's playlist when the year ends), and Right now (what you play at this hour on this weekday). Each can be seen and played in encore; Keep in Spotify adds it to your account. Only Weekly picks needs the Anthropic key.
+- One list of every playlist encore makes, each on the same page: how it fills, its songs, its changes, Play.
+- Private playlists encore keeps refilling: Weekly picks, Forgotten favourites, Most played lately, New from your artists, This month in past years, This year so far (which becomes that year's playlist when the year ends), and Right now (what you play at this hour on this weekday). Each can be seen and played in encore; Keep in Spotify adds it to your account; Freeze keeps its songs until you refresh it. Only Weekly picks needs the Anthropic key.
+- Build from rules: your own playlist from a rule (where the songs come from, filters on listens, dates, artists and release years, order, size, songs per artist, refresh), with a live preview. Sets and the playlists saved from recaps sit in the same list.
 
 **Upkeep**
 

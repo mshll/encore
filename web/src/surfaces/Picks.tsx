@@ -5,6 +5,7 @@ import { request } from "../api/client";
 import { useLifetime, usePickWeeks, usePicks, useStatus } from "../api/queries";
 import type { Pick, PicksWeek, PickState } from "../api/types";
 import { artistPath } from "../app/paths";
+import { useAi } from "../lib/ai";
 import { assistantProblem } from "../lib/assistant";
 import { fmtDayShort, fmtHour, fmtInt, fmtPct, WEEKDAYS } from "../lib/format";
 import { showToast } from "../lib/toast";
@@ -151,7 +152,7 @@ function PickRow({ pick }: { pick: Pick }) {
   );
 }
 
-/** Picks in short: art, name, artist and Claude's reason, with Play. Home and For you; the full rows live on Weekly picks. */
+/** Picks in short: art, name, artist and the reason, with Play. Under the Weekly picks row on Playlists; the full rows live on its page. */
 export function PickPreviews({ picks }: { picks: Pick[] }) {
   const playback = usePlayback();
   return (
@@ -199,6 +200,7 @@ function Generate() {
   const refresh = () => queryClient.invalidateQueries({ queryKey: ["picks"] });
   const run = useRun<PicksWeek>({ key: "/api/picks/generate", onDone: refresh });
   const [stopped, setStopped] = useState(false);
+  const ai = useAi();
   const generate = async () => {
     setStopped(false);
     if (await run.start("/api/picks/generate", {})) await refresh();
@@ -215,6 +217,7 @@ function Generate() {
       />
     );
   const schedule = status.data?.llm.schedule;
+  if (!ai.configured) return <EmptyState icon={SparkleIcon} title="No picks this week" />;
   return (
     <div className="flex flex-col gap-4">
       {run.problem && (

@@ -1,7 +1,7 @@
 import { useQueryClient, type Query } from "@tanstack/react-query";
 import { useCallback, useMemo, useSyncExternalStore } from "react";
 import { useLocation, useSearch } from "wouter";
-import type { LivingKind, PageContext, PatternView, RecapKind } from "../api/types";
+import type { LivingId, LivingKind, PageContext, PatternView, RecapKind } from "../api/types";
 import { rangeLabel } from "../lib/range";
 import { PATTERN_TABS } from "./nav";
 import { paramValue, RECAP_SLUGS } from "./paths";
@@ -9,12 +9,14 @@ import { paramValue, RECAP_SLUGS } from "./paths";
 const LIVING: LivingKind[] = ["picks", "forgotten", "most-played", "new-releases", "this-month", "this-year", "right-now"];
 const VIEWS: PatternView[] = ["when", "eras", "taste", "discovery", "records", "skips", "places"];
 const DAY = /^\d{4}-\d{2}-\d{2}$/;
+const RULE = /^rule-[0-9a-f]{10}$/;
+const isLivingId = (id: string): id is LivingId => (LIVING as string[]).includes(id) || RULE.test(id);
 
 /** What the address alone says about the page: the entity's ids. Names that the address does not hold are looked up after. */
 export type RouteContext =
   | Extract<PageContext, { kind: "artist" | "album" | "patterns" }>
   | { kind: "song"; songKey: string }
-  | { kind: "playlist"; playlist: LivingKind }
+  | { kind: "playlist"; playlist: LivingId }
   | { kind: "recap"; period: RecapKind; key: string }
   | { kind: "library"; planId?: number }
   | { kind: "set"; setId: number };
@@ -29,7 +31,11 @@ export function routeContext(location: string, search: string): RouteContext | n
   if (top === "music" && a === "artist" && b && parts.length === 3) return { kind: "artist", artist: b };
   if (top === "music" && a === "album" && b && c && parts.length === 4) return { kind: "album", artist: b, album: c };
   if (top === "music" && a === "song" && b && parts.length === 3) return { kind: "song", songKey: b };
-  if (top === "for-you" && a && parts.length === 2 && (LIVING as string[]).includes(a)) return { kind: "playlist", playlist: a as LivingKind };
+  if (top === "playlists" && a && parts.length === 2) {
+    const setId = positive(a.match(/^set-(\d+)$/)?.[1]);
+    if (setId) return { kind: "set", setId };
+    return isLivingId(a) ? { kind: "playlist", playlist: a } : null;
+  }
   if (top === "recaps" && a && b && parts.length === 3) {
     const period = recapKind(a);
     return period ? { kind: "recap", period, key: b } : null;
@@ -43,10 +49,6 @@ export function routeContext(location: string, search: string): RouteContext | n
   if (top === "library") {
     const planId = a === "plans" ? positive(b) : null;
     return planId ? { kind: "library", planId } : { kind: "library" };
-  }
-  if (top === "sets" && parts.length === 2) {
-    const setId = positive(a);
-    return setId ? { kind: "set", setId } : null;
   }
   return null;
 }

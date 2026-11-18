@@ -44,7 +44,7 @@ export function TabList<T extends string>({ options, label, className }: { optio
         <TabsTab
           key={o.value}
           value={o.value}
-          className="flex h-(--control-h) items-center gap-1.5 text-body-sm font-medium whitespace-nowrap text-secondary transition-colors duration-150 hover:text-primary data-[selected]:text-primary"
+          className="flex h-(--control-h) items-center justify-center gap-1.5 phone:min-w-11 text-body-sm font-medium whitespace-nowrap text-secondary transition-colors duration-150 hover:text-primary data-[selected]:text-primary"
         >
           {o.label}
         </TabsTab>

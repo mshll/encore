@@ -47,7 +47,7 @@ Runs live in memory: a restart ends them.
 | `artist` | `artist` |
 | `album` | `artist`, `album` |
 | `song` | `songKey`, `name`, `artist` |
-| `playlist` | `playlist` (a living playlist kind: `picks`, `forgotten`, `most-played`, `new-releases`, `this-month`, `this-year`, `right-now`), `name` |
+| `playlist` | `playlist` (a living playlist: a built-in kind, `picks`, `forgotten`, `most-played`, `new-releases`, `this-month`, `this-year`, `right-now`, or a rule playlist's id, `rule-` and 10 hex characters), `name` |
 | `recap` | `period` (`weekly`, `monthly`, `yearly`), `key`, `label` ("October 2026") |
 | `patterns` | `view` (`when`, `eras`, `taste`, `discovery`, `records`, `skips`, `places`), `from`?, `to`? (`YYYY-MM-DD`; none for all time) |
 | `library` | `planId`?, `title`? (a plan page; none for the other Library pages) |

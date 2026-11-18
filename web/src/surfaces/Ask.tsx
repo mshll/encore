@@ -1,12 +1,13 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
-import { useLocation } from "wouter";
+import { Redirect, useLocation } from "wouter";
 import { request } from "../api/client";
 import { useAskThread, useLifetime } from "../api/queries";
 import { Chat } from "../chat/Chat";
 import { ChatPanel } from "../chat/ChatPanel";
 import { HistoryList } from "../chat/parts/History";
 import { sameThread, useChat, type ChatThread } from "../chat/state";
+import { useAi } from "../lib/ai";
 import { assistantProblem } from "../lib/assistant";
 import { useMedia } from "../lib/useMedia";
 import { showToast } from "../lib/toast";
@@ -55,11 +56,14 @@ export function Ask({ id }: { id?: string }) {
   const thread = useAskThread(threadId);
   const [confirm, setConfirm] = useState(false);
   const del = useDeleteThread(threadId);
+  const ai = useAi();
 
   useEffect(() => {
     show({ thread: threadId ? { kind: "ask", id: threadId } : null, mode: "ask", open: false });
   }, [threadId, show]);
   const synced = sameThread(chat.thread, wanted) && chat.mode === "ask";
+
+  if (ai.known && !ai.configured) return <Redirect to="/" replace />;
 
   const firstUse = lifetime.data !== undefined && !lifetime.data.firstPlayed;
   if (firstUse)

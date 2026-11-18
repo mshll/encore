@@ -1,20 +1,18 @@
 import {
   BroomIcon,
   ChartBarIcon,
-  ChatCircleTextIcon,
   GearSixIcon,
   HouseIcon,
   ListBulletsIcon,
   NewspaperIcon,
   PlaylistIcon,
   RocketLaunchIcon,
-  SparkleIcon,
   VinylRecordIcon,
   type IconGlyph,
 } from "../ui/icons";
 
-/** Where a surface sits in the sidebar: a group, or its foot. */
-export type NavPlace = "listening" | "play" | "secondary" | "foot";
+/** Where a surface sits in the sidebar: a group, its foot, or nowhere (Setup once done is reached from Settings). */
+export type NavPlace = "listening" | "spotify" | "secondary" | "foot";
 
 export type Surface = {
   id: string;
@@ -36,20 +34,21 @@ export const SURFACES: Surface[] = [
   { id: "plays", path: "/plays", label: "Plays", icon: ListBulletsIcon, place: "listening", key: "p", match: under("/plays") },
   { id: "music", path: "/music", label: "Music", icon: VinylRecordIcon, place: "listening", key: "m", match: under("/music") },
   { id: "patterns", path: "/patterns", label: "Patterns", icon: ChartBarIcon, place: "listening", key: "t", match: under("/patterns") },
-  { id: "for-you", path: "/for-you", label: "For you", icon: SparkleIcon, place: "play", key: "f", match: under("/for-you") },
-  { id: "sets", path: "/sets", label: "Sets", icon: PlaylistIcon, place: "play", key: "s", match: under("/sets") },
-  { id: "ask", path: "/ask", label: "Ask", icon: ChatCircleTextIcon, place: "play", key: "a", match: under("/ask") },
-  { id: "recaps", path: "/recaps", label: "Recaps", icon: NewspaperIcon, place: "secondary", key: "r", match: under("/recaps") },
-  { id: "library", path: "/library", label: "Library", icon: BroomIcon, place: "secondary", key: "l", match: under("/library") },
+  { id: "recaps", path: "/recaps", label: "Recaps", icon: NewspaperIcon, place: "listening", key: "r", match: under("/recaps") },
+  { id: "playlists", path: "/playlists", label: "Playlists", icon: PlaylistIcon, place: "spotify", key: "y", match: under("/playlists") },
+  { id: "library", path: "/library", label: "Library", icon: BroomIcon, place: "spotify", key: "l", match: under("/library") },
   { id: "setup", path: "/setup", label: "Setup", icon: RocketLaunchIcon, place: "secondary", match: under("/setup") },
   { id: "settings", path: "/settings", label: "Settings", icon: GearSixIcon, place: "foot", key: ",", match: under("/settings") },
 ];
 
 export const byPlace = (place: NavPlace) => SURFACES.filter((s) => s.place === place);
 
-const PHONE_TAB_IDS = ["home", "plays", "music"];
+const PHONE_TAB_IDS = ["home", "playlists", "music"];
 
-/** Phone tab bar: Home, Plays and Music; everything else, Patterns first, sits in the More sheet. */
+/**
+ * Phone tab bar: Home, Music and Playlists, the three a phone is picked up for (glance at the week, play something, look
+ * up an artist); everything else, in sidebar order, sits in the More sheet. Plays is a log to search, more at home on a desk.
+ */
 export const PHONE_TABS = SURFACES.filter((s) => PHONE_TAB_IDS.includes(s.id));
 export const PHONE_MORE = SURFACES.filter((s) => !PHONE_TAB_IDS.includes(s.id));
 

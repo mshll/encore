@@ -171,7 +171,7 @@ function SetTurns({ id }: { id: number }) {
       {!replied && <FinishedSteps thread={{ kind: "set", id }} />}
       {set.version > 0 && (
         <ResultRow
-          to={`/sets/${set.id}`}
+          to={`/playlists/set-${set.id}`}
           art={<Artwork src={set.coverUrl} kind="playlist" box={40} />}
           title={set.title}
           detail={`${fmtInt(set.items.length)} songs · version ${fmtInt(set.version)}`}

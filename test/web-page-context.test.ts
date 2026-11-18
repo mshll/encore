@@ -34,8 +34,18 @@ describe("page context from the address", () => {
     expect(pages).toEqual([{ kind: "library" }, { kind: "library" }, { kind: "library", planId: 7 }]);
   });
 
+  test("a playlist page is a built-in or rule playlist, or a set", () => {
+    const pages = ["/playlists/right-now", "/playlists/rule-0a1b2c3d4e", "/playlists/set-12"].map((p) => routed(p));
+
+    expect(pages).toEqual([
+      { kind: "playlist", playlist: "right-now" },
+      { kind: "playlist", playlist: "rule-0a1b2c3d4e" },
+      { kind: "set", setId: 12 },
+    ]);
+  });
+
   test("pages without one subject have no context", () => {
-    const pages = ["/", "/plays", "/music/artists", "/for-you", "/for-you/unknown", "/sets", "/ask/3", "/settings/claude", "/recaps/day/1"].map((p) => routed(p));
+    const pages = ["/", "/plays", "/music/artists", "/playlists", "/playlists/unknown", "/playlists/new", "/playlists/rule-0a1b2c3d4e/edit", "/ask/3", "/settings/claude", "/recaps/day/1"].map((p) => routed(p));
 
     expect(pages.every((p) => p === null)).toBe(true);
   });

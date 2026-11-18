@@ -38,15 +38,18 @@ function SpotifyStatus() {
   );
 }
 
-function NavGroup({ items, location }: { items: Surface[]; location: string }) {
+function NavGroup({ label, items, location }: { label?: string; items: Surface[]; location: string }) {
   return (
-    <ul className="flex flex-col gap-px">
-      {items.map((s) => (
-        <li key={s.id}>
-          <NavRow item={s} location={location} />
-        </li>
-      ))}
-    </ul>
+    <div className="flex flex-col gap-1">
+      {label && <h2 className="px-2 text-caption text-secondary">{label}</h2>}
+      <ul className="flex flex-col gap-px">
+        {items.map((s) => (
+          <li key={s.id}>
+            <NavRow item={s} location={location} />
+          </li>
+        ))}
+      </ul>
+    </div>
   );
 }
 
@@ -56,7 +59,7 @@ function useSecondary(location: string) {
   return byPlace("secondary").filter((s) => s.id !== "setup" || complete === false || s.match(location));
 }
 
-/** Linear-style: every surface in three quiet groups, Settings at the foot. */
+/** Linear-style: Listening and Spotify, each under its name, then Setup until it is done; Settings at the foot. */
 export function Sidebar({ onSearch }: { onSearch: () => void }) {
   const [location] = useLocation();
   const secondary = useSecondary(location);
@@ -76,9 +79,9 @@ export function Sidebar({ onSearch }: { onSearch: () => void }) {
         </span>
       </button>
       <nav aria-label="Main" data-crop className="flex flex-1 flex-col gap-5 overflow-y-auto">
-        <NavGroup items={byPlace("listening")} location={location} />
-        <NavGroup items={byPlace("play")} location={location} />
-        <NavGroup items={secondary} location={location} />
+        <NavGroup label="Listening" items={byPlace("listening")} location={location} />
+        <NavGroup label="Spotify" items={byPlace("spotify")} location={location} />
+        {secondary.length > 0 && <NavGroup items={secondary} location={location} />}
       </nav>
       <div className="flex flex-col gap-px">
         <SpotifyStatus />

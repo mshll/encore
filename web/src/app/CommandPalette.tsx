@@ -3,13 +3,14 @@ import { useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { useSearch } from "../api/queries";
 import { useChat } from "../chat/state";
+import { useAi } from "../lib/ai";
 import { fmtHours } from "../lib/format";
 import { usePlayback } from "../player/playback";
 import { useRangeHref } from "../ui/AppLink";
 import { Artwork, type ArtKind } from "../ui/Artwork";
 import { cx } from "../ui/cx";
 import { Icon, type IconGlyph } from "../ui/Icon";
-import { ChatCircleTextIcon, MagnifyingGlassIcon } from "../ui/icons";
+import { ChatCircleTextIcon, MagnifyingGlassIcon, SparkleIcon } from "../ui/icons";
 import { Kbd, MOD_KEY } from "../ui/Kbd";
 import { BACKDROP, LAYER } from "../ui/surfaces";
 import { SURFACES } from "./nav";
@@ -29,7 +30,9 @@ type Entry = {
   ask?: string;
 };
 
-/** Search and go: surfaces, then artists, songs and albums from your history, then a question for Ask. */
+const SET_UP_AI: Entry = { id: "page:ai", group: "Go to", label: "Set up AI", path: "/settings/claude", icon: SparkleIcon };
+
+/** Search and go: surfaces, then artists, songs and albums from your history, then a question for the chat (with AI set up). */
 export function CommandPalette({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
   const [query, setQuery] = useState("");
   const [active, setActive] = useState(0);
@@ -40,9 +43,10 @@ export function CommandPalette({ open, onOpenChange }: { open: boolean; onOpenCh
   const href = useRangeHref();
   const playback = usePlayback();
   const listRef = useRef<HTMLDivElement>(null);
+  const ai = useAi();
   const entries = useMemo<Entry[]>(() => {
     const q = deferred.toLowerCase();
-    const pages: Entry[] = SURFACES.filter((s) => !q || s.label.toLowerCase().includes(q)).map((s) => ({
+    const surfaces: Entry[] = SURFACES.filter((s) => !q || s.label.toLowerCase().includes(q)).map((s) => ({
       id: `page:${s.path}`,
       group: "Go to",
       label: s.label,
@@ -50,10 +54,12 @@ export function CommandPalette({ open, onOpenChange }: { open: boolean; onOpenCh
       icon: s.icon,
       keys: s.key ? ["G", s.key.toUpperCase()] : undefined,
     }));
+    const setUp = ai.known && !ai.configured && (!q || SET_UP_AI.label.toLowerCase().includes(q));
+    const pages = setUp ? [...surfaces, SET_UP_AI] : surfaces;
     if (!q) return pages;
-    const ask: Entry = { id: "ask", group: "Ask", label: `Ask “${deferred}”`, path: "/ask", icon: ChatCircleTextIcon, ask: deferred };
+    const ask: Entry[] = ai.configured ? [{ id: "ask", group: "Ask", label: `Ask “${deferred}”`, path: "/ask", icon: ChatCircleTextIcon, ask: deferred }] : [];
     const found = search.data;
-    if (!found) return [...pages, ask];
+    if (!found) return [...pages, ...ask];
     return [
       ...found.artists.map((a) => ({ id: `artist:${a.artist}`, group: "Artists", label: a.artist, detail: fmtHours(a.hours), path: artistPath(a.artist), art: { src: a.imageUrl, kind: "artist" as const } })),
       ...found.songs.map((s) => ({
@@ -67,9 +73,9 @@ export function CommandPalette({ open, onOpenChange }: { open: boolean; onOpenCh
       })),
       ...found.albums.map((a) => ({ id: `album:${a.artist}|${a.album}`, group: "Albums", label: a.album, detail: a.artist, path: albumPath(a.artist, a.album), art: { src: a.albumArtUrl, kind: "album" as const } })),
       ...pages,
-      ask,
+      ...ask,
     ];
-  }, [deferred, search.data]);
+  }, [deferred, search.data, ai.known, ai.configured]);
 
   useEffect(() => setActive(0), [deferred]);
   useEffect(() => {

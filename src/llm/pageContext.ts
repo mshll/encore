@@ -8,13 +8,15 @@ export const PATTERN_VIEWS = ["when", "eras", "taste", "discovery", "records", "
 const name = z.string().trim().min(1).max(300);
 const day = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 const id = z.number().int().positive();
+/** A built-in living playlist kind, or an owner's rule playlist id. */
+const playlistId = z.union([z.enum(LIVING_KINDS), z.string().regex(/^rule-[0-9a-f]{10}$/)]);
 
 /** The page the owner sent a message from: ids and names only. The tools fetch the data behind them. */
 export const pageContextSchema = z.discriminatedUnion("kind", [
   z.strictObject({ kind: z.literal("artist"), artist: name }),
   z.strictObject({ kind: z.literal("album"), artist: name, album: name }),
   z.strictObject({ kind: z.literal("song"), songKey: z.string().min(1).max(600), name, artist: name }),
-  z.strictObject({ kind: z.literal("playlist"), playlist: z.enum(LIVING_KINDS), name }),
+  z.strictObject({ kind: z.literal("playlist"), playlist: playlistId, name }),
   z.strictObject({ kind: z.literal("recap"), period: z.enum(RECAP_KINDS), key: z.string().min(1).max(10), label: name }),
   z.strictObject({ kind: z.literal("patterns"), view: z.enum(PATTERN_VIEWS), from: day.optional(), to: day.optional() }),
   z.strictObject({ kind: z.literal("library"), planId: id.optional(), title: name.optional() }),
@@ -34,7 +36,7 @@ function where(c: PageContext): string {
     case "song":
       return `the song page for ${quoted(c.name)} by ${quoted(c.artist)} (songKey ${quoted(c.songKey)})`;
     case "playlist":
-      return `the page of encore's playlist ${quoted(c.name)} (kind ${c.playlist})`;
+      return `the page of encore's playlist ${quoted(c.name)} (id ${c.playlist})`;
     case "recap":
       return `the ${c.period} recap for ${quoted(c.label)} (key ${c.key})`;
     case "patterns": {

@@ -1,6 +1,7 @@
 import { useLocation } from "wouter";
 import { usePlayerNow } from "../api/queries";
 import { useChat } from "../chat/state";
+import { useAi } from "../lib/ai";
 import { fmtDuration } from "../lib/format";
 import { Artwork } from "../ui/Artwork";
 import { IconButton } from "../ui/Button";
@@ -119,6 +120,8 @@ export function PlayerBar({ queueOpen, onToggleQueue }: { queueOpen: boolean; on
 function ChatToggle() {
   const chat = useChat();
   const [location] = useLocation();
+  const ai = useAi();
+  if (!ai.configured) return null;
   const open = chat.open && !location.startsWith("/ask");
   return (
     <Tooltip

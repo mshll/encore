@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import { useLocation } from "wouter";
 import type { AskResult, PlanTurn, SetResult } from "../api/types";
 import { usePageContext } from "../app/pageContext";
+import { useAi } from "../lib/ai";
 import { useDesktop } from "../lib/useMedia";
 import { useRun } from "../lib/useRun";
 import { useClaudeGate } from "../ui/ClaudeNotice";
@@ -215,11 +216,12 @@ export function ChatProvider({ open, onOpenChange, children }: { open: boolean; 
     [open, mode, thread, context, pageKey, draft, pending, stopped, finished, run, gate, show, select, send, stop, onOpenChange, onAsk, collapse, desktop, expand],
   );
 
-  const toggle = useRef(value.toggle);
-  toggle.current = value.toggle;
+  const ai = useAi();
+  const toggle = useRef(ai.configured ? value.toggle : null);
+  toggle.current = ai.configured ? value.toggle : null;
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && !e.altKey && !e.shiftKey && e.key.toLowerCase() === "j") {
+      if (toggle.current && (e.metaKey || e.ctrlKey) && !e.altKey && !e.shiftKey && e.key.toLowerCase() === "j") {
         e.preventDefault();
         toggle.current();
       }
