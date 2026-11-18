@@ -68,7 +68,7 @@ export type AiProvider = "anthropic" | "openai" | "google" | "openai-compatible"
 
 export type AiStatus = { configured: boolean; provider: AiProvider; model: string | null; webSearch: boolean };
 
-export type LlmFeature = "sets" | "picks" | "ask" | "notes" | "digest" | "dj" | "library" | "verify";
+export type LlmFeature = "sets" | "picks" | "ask" | "notes" | "digest" | "dj" | "library" | "verify" | "chat" | "rules" | "play";
 
 export type Budget = { month: string; spentUsd: number; capUsd: number; remainingUsd: number; exhausted: boolean };
 
@@ -155,6 +155,8 @@ export type SetSummary = {
   request: string;
   version: number;
   constraints: SetConstraints;
+  /** The chat conversation that made or changes the set. */
+  conversationId: number | null;
   playlist: { id: string; url: string; savedVersion: number; outdated: boolean } | null;
   /** The generated cover; null while the set has no songs. */
   coverUrl: string | null;
@@ -176,7 +178,6 @@ export type SetDetail = SetSummary & {
   changes: SetChange[];
 };
 
-export type SetResult = { set: SetDetail; reply: string | null; changed?: boolean };
 
 export type PickState = "new" | "saved" | "not_now" | "never";
 
@@ -203,7 +204,6 @@ export type PicksWeek = { week: string; picks: Pick[]; stats: PickStats };
 
 export type Block = { id: number; kind: "song" | "artist"; key: string; label: string; reason: string; createdAt: string };
 
-export type AskThread = { id: number; title: string; createdAt: string; updatedAt: string };
 /** How a value in an answer is printed: hours, a share of 0 to 1, or a count of `noun` ("plays"). */
 export type AnswerUnit = { type: "hours" } | { type: "percent" } | { type: "count"; noun: string };
 
@@ -232,8 +232,6 @@ export type AnswerBlock = { type: "text"; spans: AnswerSpan[] } | { type: "visua
 export type Answer = { version: 1; blocks: AnswerBlock[]; visuals: Record<string, AnswerVisual>; basis: string | null };
 
 /** `content` is absent on answers written before answers were structured: `text` is all there is. */
-export type AskTurn = { role: "owner" | "assistant"; text: string; content?: Answer };
-export type AskResult = { threadId: number; answer: string; content: Answer };
 
 export type Note = Artwork & {
   songKey: string;
@@ -796,6 +794,7 @@ export type PlanSummary = {
   request: string | null;
   threadId: number | null;
   standingId: number | null;
+  conversationId: number | null;
   status: "open" | "applied" | "dismissed";
   counts: { open: number; selected: number; dismissed: number; applied: number; skipped: number };
   runningBatchId: number | null;
@@ -831,8 +830,6 @@ export type Batch = {
   finishedAt: string | null;
 };
 
-export type PlanTurn = { planId: number | null; threadId: number; reply: string | null; songs: number };
-export type PlanConversation = { threadId: number; planId: number | null; turns: { role: "owner" | "assistant"; text: string }[] };
 
 export type Standing = {
   id: number;
@@ -1038,3 +1035,31 @@ export type Obsessions = {
   rules: { windowDays: number; minListens: number; ratio: number; fadeDays: number; fadeShare: number };
   items: (MilestoneSong & { from: string; to: string; listens: number; usualPerWeek: number; after: number })[];
 };
+
+/** What the chat's router picked for a message. `refine` changes the attached set or plan. */
+export type ChatTask = "answer" | "set" | "rule" | "plan" | "play" | "refine";
+
+export type ChatSong = { songKey: string; uri: string; name: string; artist: string; album: string | null; albumArtUrl: string | null };
+
+export type RuleDraft = { id: number; name: string; about: string | null; rule: LivingRule; count: number; createdAt: string };
+
+export type ChatSetCard = { id: number; title: string; coverUrl: string | null; tracks: number; version: number; playlist: { url: string | null } | null };
+
+export type ChatOutcome =
+  | { kind: "answer"; threadId: number; turn: number; text: string | null; content: Answer | null }
+  | { kind: "set"; setId: number; changed: boolean; reply: string | null; set: ChatSetCard | null }
+  | { kind: "plan"; planId: number | null; threadId: number; reply: string | null; plan: { id: number; title: string; status: PlanSummary["status"]; open: number } | null }
+  | { kind: "rule"; draftId: number | null; reply: string | null; draft: RuleDraft | null }
+  | { kind: "play"; title: string | null; songs: ChatSong[]; reply: string | null };
+
+export type ChatOutcomeKind = ChatOutcome["kind"];
+
+export type ChatTurn = { id: number; position: number; message: string; task: ChatTask; at: string; outcome: ChatOutcome };
+
+export type ChatSubject = { kind: "set" | "plan"; id: number; title: string };
+
+export type ChatConversation = { id: number; title: string; subject: ChatSubject | null; createdAt: string; updatedAt: string; turns: ChatTurn[] };
+
+export type ChatListItem = { id: number; title: string; produced: ChatOutcomeKind | null; createdAt: string; updatedAt: string };
+
+export type ChatResult = { conversationId: number; turn: ChatTurn };

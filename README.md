@@ -21,7 +21,7 @@ One instance serves one person. Your data stays in a single SQLite file on your 
 
 - **Sets**: describe a playlist and it is built from your history plus songs you have never played, with a reason for each. Refine it by chat, save it to Spotify, or play it as a session that adapts as you skip.
 - **Weekly picks**: a few new songs picked each week, each with its reason, at the head of Playlists.
-- **Chat**: a side panel on every page that knows what you are looking at. Ask about your listening, make a set, or plan a library cleanup; answers come from your history, with charts where they help.
+- **Chat**: one assistant in a side panel on every page that knows what you are looking at, with every conversation in one searchable history and a full page at `/chat`. Write what you want and it picks the job: an answer about your listening, a set, a self-updating playlist rule to review and create, a library cleanup plan to review, or songs to play or queue (nothing plays until you tap). Each result is a card in the thread; answers come from your history, with charts where they help.
 
 **Playlists**
 

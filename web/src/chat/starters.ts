@@ -1,18 +1,12 @@
 import { useLibraryAnalysis } from "../api/queries";
-import type { PageContext } from "../api/types";
+import type { ChatOutcomeKind, PageContext } from "../api/types";
 import { contextLabel } from "../app/pageContext";
 import { useAskStarters, useSetStarters } from "../lib/prompts";
-import type { ChatMode } from "./state";
 
-function useTidyStarters(): string[] {
-  const a = useLibraryAnalysis().data;
-  const stale = a?.playlists.filter((p) => p.songs >= 20).sort((x, y) => x.classes.active / x.songs - y.classes.active / y.songs)[0];
-  return [
-    "Archive liked songs I haven’t played in a year",
-    stale && `Tidy ${stale.name}: keep what I still play`,
-    a && a.unsaved.total > 0 && "Like the songs I keep playing but never liked",
-  ].filter((s): s is string => Boolean(s));
-}
+/** A starting point and what sending it makes, so the owner knows before they tap. */
+export type Starter = { text: string; makes: ChatOutcomeKind };
+
+export const MAKES: Record<ChatOutcomeKind, string> = { answer: "An answer", set: "A set", plan: "A cleanup plan", rule: "A playlist rule", play: "Songs to play" };
 
 const PATTERN_ASKS: Record<string, string> = {
   when: "When in the week do I listen most here?",
@@ -24,57 +18,52 @@ const PATTERN_ASKS: Record<string, string> = {
   places: "What did I play on these trips?",
 };
 
-function askAbout(c: PageContext): string[] {
+const answer = (text: string): Starter => ({ text, makes: "answer" });
+const set = (text: string): Starter => ({ text, makes: "set" });
+
+/** About the page the chat is opened over: its own questions first, then one thing to make from it. */
+function about(c: PageContext): Starter[] {
   const name = contextLabel(c);
   switch (c.kind) {
     case "artist":
-      return [`How has my ${name} listening changed this year?`, `Which ${name} songs do I skip, and when?`, `When did I start playing ${name}?`];
+      return [
+        answer(`How has my ${name} listening changed this year?`),
+        set(`An hour of ${name}: the songs I play through most`),
+        { text: `A playlist of the ${name} songs I played most this year`, makes: "rule" },
+      ];
     case "album":
-      return [`Which songs on ${name} do I play through?`, `When did I play ${name} most?`];
+      return [answer(`Which songs on ${name} do I play through?`), set(`Built around ${name}, with a few songs I haven’t heard`)];
     case "song":
-      return [`When do I play ${name} most?`, `Do I skip ${name}, and where?`];
+      return [answer(`When do I play ${name} most?`), set(`Songs that sit next to ${name}, some known and some new`)];
     case "playlist":
-      return [`How often do I play the songs in ${name}?`];
+      return [answer(`How often do I play the songs in ${name}?`), set(`The best of ${name}, an hour of it`)];
     case "recap":
-      return [`What changed in ${name} against the period before?`, `Which artists led ${name}?`];
+      return [answer(`What changed in ${name} against the period before?`), set(`The best of ${name}, an hour of it`)];
     case "patterns":
-      return [PATTERN_ASKS[c.view]!];
+      return [answer(PATTERN_ASKS[c.view]!)];
     case "library":
-      return c.planId ? [`Have I played the songs in ${name} lately?`] : ["How many of my liked songs have I not played in a year?"];
+      return c.planId
+        ? [{ text: `Keep anything I played this year in ${name}`, makes: "plan" }, answer(`Have I played the songs in ${name} lately?`)]
+        : [{ text: "Archive liked songs I haven’t played in a year", makes: "plan" }, answer("How many of my liked songs have I not played in a year?")];
     case "set":
-      return [`Which songs in ${name} have I played since?`];
+      return [answer(`Which songs in ${name} have I played since?`)];
   }
 }
 
-function setAbout(c: PageContext): string[] {
-  const name = contextLabel(c);
-  switch (c.kind) {
-    case "artist":
-      return [`An hour of ${name}: the songs I play through most`, `${name} and the artists I play around them, a few I’ve never heard`];
-    case "album":
-      return [`Built around ${name}, with a few songs I haven’t heard`];
-    case "song":
-      return [`Songs that sit next to ${name}, some known and some new`];
-    case "playlist":
-    case "recap":
-      return [`The best of ${name}, an hour of it`];
-    default:
-      return [];
-  }
+function useTidyStarter(): Starter | null {
+  const a = useLibraryAnalysis().data;
+  const stale = a?.playlists.filter((p) => p.songs >= 20).sort((x, y) => x.classes.active / x.songs - y.classes.active / y.songs)[0];
+  return stale ? { text: `Tidy ${stale.name}: keep what I still play`, makes: "plan" } : null;
 }
 
-function tidyAbout(c: PageContext): string[] {
-  if (c.kind === "artist") return [`Archive the ${c.artist} songs I liked but no longer play`];
-  if (c.kind === "library" && c.planId) return [`Keep anything I played this year in ${contextLabel(c)}`];
-  return [];
-}
-
-/** Starting points for an empty conversation: about the page first, then from the owner's own listening. At most four. */
-export function useStarters(mode: ChatMode, context: PageContext | null): string[] {
-  const ask = useAskStarters();
-  const set = useSetStarters();
-  const tidy = useTidyStarters();
-  const about = context ? (mode === "ask" ? askAbout(context) : mode === "set" ? setAbout(context) : tidyAbout(context)) : [];
-  const general = mode === "ask" ? ask : mode === "set" ? set : tidy;
-  return [...about, ...general].slice(0, 4);
+/** Starting points for an empty conversation: about the page first, then one of each kind from the owner's own listening. At most four. */
+export function useStarters(context: PageContext | null): Starter[] {
+  const asks = useAskStarters();
+  const sets = useSetStarters();
+  const tidy = useTidyStarter();
+  const general = [asks[0] && answer(asks[0]), sets[0] && set(sets[0]), { text: "Play the songs I had on repeat last month", makes: "play" } as Starter, tidy, asks[1] && answer(asks[1])].filter(
+    (s): s is Starter => Boolean(s),
+  );
+  const seen = new Set<string>();
+  return [...(context ? about(context) : []), ...general].filter((s) => !seen.has(s.text) && Boolean(seen.add(s.text))).slice(0, 4);
 }

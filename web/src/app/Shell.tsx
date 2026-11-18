@@ -99,7 +99,7 @@ export function Shell({ children }: { children: ReactNode }) {
   const [location] = useLocation();
   const queueOpen = side === "queue";
   const ai = useAi();
-  const chatShown = side === "chat" && ai.configured && !location.startsWith("/ask");
+  const chatShown = side === "chat" && ai.configured && !location.startsWith("/chat");
   const setQueueOpen = useCallback((open: boolean) => setSide((s) => (open ? "queue" : s === "queue" ? null : s)), []);
   const setChatOpen = useCallback((open: boolean) => setSide((s) => (open ? "chat" : s === "chat" ? null : s)), []);
   useEffect(() => {

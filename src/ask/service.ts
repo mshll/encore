@@ -50,7 +50,7 @@ function knownNumbers(messages: ChatMessage[], question: string): number[] {
   return known;
 }
 
-export async function ask(ctx: FeatureContext, question: string, threadId: number | null, onEvent?: (e: AgentEvent) => void, context?: PageContext) {
+export async function ask(ctx: FeatureContext, question: string, threadId: number | null, onEvent?: (e: AgentEvent) => void, context?: PageContext, note = "") {
   const { db, llm } = ctx;
   const { timezone, homeCountry, weekendDays } = ctx.settings.get();
   const now = ctx.now();
@@ -61,7 +61,7 @@ export async function ask(ctx: FeatureContext, question: string, threadId: numbe
   const messages: ChatMessage[] = existing?.messages ?? [];
   const refs = new ResultRefs(maxId(messages, /"ref":"r(\d+)"/g) + 1);
   const visuals = new RunVisuals(maxId(messages, /"id":"v(\d+)"/g));
-  messages.push({ role: "user", content: `${ownerMessage(question)}\nOwner's local time: ${localNow({ timezone, weekendDays }, now)}.${pageContextNote(context)}` });
+  messages.push({ role: "user", content: `${ownerMessage(question)}\nOwner's local time: ${localNow({ timezone, weekendDays }, now)}.${pageContextNote(context)}${note}` });
   const turnStart = messages.length;
   const toolCalls: ToolCall[] = [];
   const result = await runAgent(llm, {
@@ -85,7 +85,7 @@ export async function ask(ctx: FeatureContext, question: string, threadId: numbe
     saveAnswer(tx, id, messages.length - 1, content, ctx.now());
     return id;
   });
-  return { threadId: id, answer: answerText(content), content, toolCalls };
+  return { threadId: id, turn: transcriptTurns(messages).length - 1, answer: answerText(content), content, toolCalls };
 }
 
 /** A thread is named by its first question. */

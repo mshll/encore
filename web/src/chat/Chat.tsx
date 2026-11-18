@@ -1,72 +1,57 @@
 import type { ReactNode } from "react";
-import { useSet, usePlanConversation } from "../api/queries";
+import { useConversation } from "../api/queries";
+import type { ChatSubject } from "../api/types";
 import { contextLabel } from "../app/pageContext";
+import { AppLink } from "../ui/AppLink";
 import { Composer, ComposerChip } from "../ui/Composer";
 import { Conversation } from "../ui/Conversation";
 import { Icon } from "../ui/Icon";
-import { CaretDownIcon, CheckIcon } from "../ui/icons";
-import { MenuItem, MenuPopup, MenuRoot, MenuTrigger } from "../ui/Menu";
+import { BroomIcon, PlaylistIcon } from "../ui/icons";
 import { Notice } from "../ui/Notice";
 import { useMessages } from "./Messages";
-import { useStarters } from "./starters";
-import { threadKey, useChat, type ChatMode } from "./state";
+import { MAKES, useStarters } from "./starters";
+import { threadKey, useChat } from "./state";
 
-export const MODE_LABELS: Record<ChatMode, string> = { ask: "Ask", set: "Make a set", tidy: "Clean up" };
+const subjectPath = (s: ChatSubject) => (s.kind === "set" ? `/playlists/set-${s.id}` : `/library/plans/${s.id}`);
 
-const NEW_PROMPT: Record<ChatMode, { label: string; placeholder: string }> = {
-  ask: { label: "Ask about your listening", placeholder: "Why did I stop playing…, what do I play when…" },
-  set: { label: "Describe a set", placeholder: "A late drive home, songs I finished at night, a few I’ve never heard" },
-  tidy: { label: "Say what to tidy", placeholder: "Archive what I stopped playing, clear duplicates in…" },
-};
-
-/** The job of a new conversation, where Beautiful UI's Prompt Bar keeps its model picker. */
-function ModePicker() {
-  const { mode, setMode } = useChat();
+/** The set or plan this conversation changes, pinned over the thread. A message that asks for a change goes to it. */
+export function SubjectChip({ subject }: { subject: ChatSubject }) {
+  const { leave } = useChat();
   return (
-    <MenuRoot>
-      <MenuTrigger className="press -ml-0.5 flex h-7 items-center gap-1 rounded-md px-1.5 text-caption font-medium text-secondary transition-colors duration-150 hover:bg-fill hover:text-primary data-[open]:bg-fill data-[open]:text-primary phone:-my-2 phone:h-11">
-        {MODE_LABELS[mode]}
-        <Icon icon={CaretDownIcon} className="text-tertiary" />
-      </MenuTrigger>
-      <MenuPopup side="top" align="start" className="min-w-44">
-        {(Object.keys(MODE_LABELS) as ChatMode[]).map((m) => (
-          <MenuItem key={m} onClick={() => setMode(m)} hint={m === mode ? <Icon icon={CheckIcon} className="text-primary" /> : undefined}>
-            {MODE_LABELS[m]}
-          </MenuItem>
-        ))}
-      </MenuPopup>
-    </MenuRoot>
+    <AppLink
+      to={subjectPath(subject)}
+      onClick={leave}
+      className="press flex min-h-8 min-w-0 items-center gap-2 rounded-md px-2 text-caption text-secondary transition-colors duration-150 hover:bg-fill hover:text-primary phone:min-h-11"
+    >
+      <Icon icon={subject.kind === "set" ? PlaylistIcon : BroomIcon} className="text-tertiary" />
+      <span className="min-w-0 truncate">
+        Changing <span className="font-medium text-primary">{subject.title}</span>
+      </span>
+    </AppLink>
   );
 }
 
-/** What the composer says inside a stored conversation: a set or plan still waiting on Claude's question is answered. */
-function useThreadPrompt(): { label: string; placeholder: string } {
-  const { thread } = useChat();
-  const set = useSet(thread?.kind === "set" ? thread.id : 0);
-  const plan = usePlanConversation(thread?.kind === "plan" ? thread.threadId : 0);
-  if (thread?.kind === "ask") return { label: "Ask a follow-up", placeholder: "Ask a follow-up" };
-  if (thread?.kind === "set")
-    return set.data?.version === 0 ? { label: "Answer", placeholder: "Your answer" } : { label: "Change the set", placeholder: "Less sad, more like track 3, a slower start" };
-  if (thread?.kind === "plan")
-    return plan.data && !plan.data.planId ? { label: "Answer", placeholder: "Your answer" } : { label: "Change the plan", placeholder: "Keep anything by…, only playlists, leave out…" };
-  return { label: "", placeholder: "" };
+export function useSubject(): ChatSubject | null {
+  const { conversation } = useChat();
+  return useConversation(conversation).data?.subject ?? null;
 }
 
-/** Starting points while the conversation is empty, about the page first. They send at once: picking one is the user's action. */
+/** Starting points while the conversation is empty, about the page first, each naming what it makes. A tap sends it: picking one is the owner's action. */
 function Starters() {
-  const { mode, context, gate, send } = useChat();
-  const starters = useStarters(mode, context);
+  const { context, gate, send } = useChat();
+  const starters = useStarters(context);
   if (gate.blocked || starters.length === 0) return null;
   return (
     <ul className="mt-3 flex flex-col">
       {starters.map((s, i) => (
-        <li key={s} className="animate-[fade-up_350ms_var(--ease-out)_both]" style={{ animationDelay: `${i * 90}ms` }}>
+        <li key={s.text} className="animate-[fade-up_350ms_var(--ease-out)_both]" style={{ animationDelay: `${i * 90}ms` }}>
           <button
             type="button"
-            onClick={() => send(s)}
-            className="press -mx-2 flex min-h-(--control-h) w-[calc(100%+16px)] items-center rounded-md px-2 py-1.5 text-left text-pretty transition-colors duration-150 hover:bg-fill"
+            onClick={() => send(s.text)}
+            className="press -mx-2 flex min-h-(--control-h) w-[calc(100%+16px)] flex-col items-start rounded-md px-2 py-1.5 text-left transition-colors duration-150 hover:bg-fill"
           >
-            {s}
+            <span className="text-pretty">{s.text}</span>
+            <span className="text-caption text-secondary">{MAKES[s.makes]}</span>
           </button>
         </li>
       ))}
@@ -74,16 +59,23 @@ function Starters() {
   );
 }
 
+function usePrompt(subject: ChatSubject | null): { label: string; placeholder: string } {
+  const { conversation } = useChat();
+  if (subject) return { label: `Change ${subject.title}`, placeholder: subject.kind === "set" ? "Less sad, more like track 3, a slower start" : "Keep anything by…, only playlists, leave out…" };
+  if (conversation !== null) return { label: "Message", placeholder: "Ask a follow-up, or ask for something new" };
+  return { label: "Message", placeholder: "Ask anything, or describe a set, a playlist or a cleanup" };
+}
+
 /**
- * The one conversation: Ask, Make a set and Clean up are modes of the same composer. It has its own scroll box with the
- * composer at the foot; in the panel it is inset off the panel's edges, on the Ask page the page gutter does that.
+ * The one conversation. It has its own scroll box with the composer at the foot; in the panel it is inset off the
+ * panel's edges, on the full page the page gutter does that.
  */
 export function Chat({ variant, empty }: { variant: "panel" | "page"; empty?: ReactNode }) {
   const chat = useChat();
-  const { thread, mode, draft, run, gate, pending, stopped, context } = chat;
+  const { conversation, draft, run, gate, pending, stopped, context } = chat;
   const messages = useMessages();
-  const threadPrompt = useThreadPrompt();
-  const prompt = thread ? threadPrompt : NEW_PROMPT[mode];
+  const subject = useSubject();
+  const prompt = usePrompt(subject);
   const running = Boolean(pending) || run.running;
   const composer = (
     <>
@@ -102,11 +94,11 @@ export function Chat({ variant, empty }: { variant: "panel" | "page"; empty?: Re
         onSubmit={() => chat.send(draft)}
         onStop={chat.stop}
         running={running}
-        maxLength={mode === "ask" ? 1000 : 2000}
+        maxLength={2000}
         disabled={Boolean(gate.blocked)}
-        notice={gate.blocked ?? (mode === "set" ? gate.warning : null)}
+        notice={gate.blocked}
         chips={context && <ComposerChip label="About:" value={contextLabel(context)} onRemove={chat.removeContext} />}
-        footer={thread ? gate.spend && <span className="truncate pl-1">{gate.spend}</span> : <ModePicker />}
+        footer={conversation !== null && gate.spend && <span className="truncate pl-1">{gate.spend}</span>}
       />
     </>
   );
@@ -120,9 +112,9 @@ export function Chat({ variant, empty }: { variant: "panel" | "page"; empty?: Re
           <Starters />
         </>
       }
-      follow={`${threadKey(thread)}|${pending ?? ""}|${chat.finished?.thread ?? ""}`}
+      follow={`${threadKey(conversation)}|${pending ?? ""}|${chat.finished?.conversation ?? ""}`}
       startAtEnd
-      thread={threadKey(thread)}
+      thread={threadKey(conversation)}
       contained
       inset={variant === "panel"}
     />

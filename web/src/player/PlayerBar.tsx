@@ -122,7 +122,7 @@ function ChatToggle() {
   const [location] = useLocation();
   const ai = useAi();
   if (!ai.configured) return null;
-  const open = chat.open && !location.startsWith("/ask");
+  const open = chat.open && !location.startsWith("/chat");
   return (
     <Tooltip
       label={

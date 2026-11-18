@@ -378,12 +378,13 @@ export async function startPlanConversation(
   onEvent?: (e: AgentEvent) => void,
   standing?: { id: number },
   context?: PageContext,
+  note = "",
 ): Promise<PlanTurn> {
   const { db, llm } = ctx;
   llm.assertAvailable();
   const now = ctx.now();
   const system = [LIBRARY_SYSTEM];
-  const messages: ChatMessage[] = [{ role: "user", content: `${ownerMessage(request)}\nOwner's local time: ${localNow(ctx.settings.get(), now)}.${pageContextNote(context)}` }];
+  const messages: ChatMessage[] = [{ role: "user", content: `${ownerMessage(request)}\nOwner's local time: ${localNow(ctx.settings.get(), now)}.${pageContextNote(context)}${note}` }];
   const threadId = createThread(db, "library", system, [], now);
   try {
     const turn = await converse(ctx, threadId, system, messages, { planId: null, source: standing ? "standing" : "claude", request, standingId: standing?.id }, onEvent);
@@ -397,13 +398,13 @@ export async function startPlanConversation(
 }
 
 /** The next owner message in a planning conversation, by thread: before the first plan exists the thread is all there is. */
-export async function continuePlanConversation(ctx: FeatureContext, threadId: number, message: string, onEvent?: (e: AgentEvent) => void, context?: PageContext): Promise<PlanTurn> {
+export async function continuePlanConversation(ctx: FeatureContext, threadId: number, message: string, onEvent?: (e: AgentEvent) => void, context?: PageContext, note = ""): Promise<PlanTurn> {
   const { db, llm } = ctx;
   const thread = getThread(db, threadId);
   if (!thread || thread.feature !== "library") throw new PlanNotFoundError();
   llm.assertAvailable();
   const plan = db.select().from(libraryPlans).where(eq(libraryPlans.threadId, threadId)).get();
-  thread.messages.push({ role: "user", content: `${ownerMessage(message)}\nOwner's local time: ${localNow(ctx.settings.get(), ctx.now())}.${pageContextNote(context)}` });
+  thread.messages.push({ role: "user", content: `${ownerMessage(message)}\nOwner's local time: ${localNow(ctx.settings.get(), ctx.now())}.${pageContextNote(context)}${note}` });
   const request = plan?.request ?? transcript(thread.messages).find((t) => t.role === "owner")?.text ?? message;
   const turn = await converse(ctx, threadId, thread.system, thread.messages, { planId: plan?.id ?? null, source: plan?.source ?? "claude", request, standingId: plan?.standingId ?? undefined }, onEvent);
   return { planId: turn.planId, threadId, reply: turn.reply, songs: turn.submitted };

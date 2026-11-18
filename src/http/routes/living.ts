@@ -1,5 +1,6 @@
 import { Hono } from "hono";
 import { z } from "zod";
+import { getRuleDraft } from "../../chat/rule";
 import { livingCover, livingCoverKey } from "../../living/cover";
 import { specOf } from "../../living/kinds";
 import { createRulePlaylist, deleteRulePlaylist, previewRule, ruleInputSchema, setLivingFrozen, updateRulePlaylist } from "../../living/manage";
@@ -26,6 +27,11 @@ export const livingRoutes = new Hono<Env>()
   .post("/preview", async (c) => {
     const { rule } = parse(z.strictObject({ rule: ruleSchema }), await jsonBody(c));
     return c.json(previewRule(deps(c), rule));
+  })
+  .get("/drafts/:id", (c) => {
+    const draft = getRuleDraft(c.var.deps.db, parse(z.object({ id: z.coerce.number().int().min(1) }), c.req.param()).id);
+    if (!draft) throw new ApiError(404, "not_found", "Not found");
+    return c.json(draft);
   })
   .get("/:kind", (c) => c.json(livingDetail(deps(c), parse(kindParam, c.req.param()).kind)))
   .get("/:kind/cover", async (c) => {

@@ -57,7 +57,7 @@ export function CommandPalette({ open, onOpenChange }: { open: boolean; onOpenCh
     const setUp = ai.known && !ai.configured && (!q || SET_UP_AI.label.toLowerCase().includes(q));
     const pages = setUp ? [...surfaces, SET_UP_AI] : surfaces;
     if (!q) return pages;
-    const ask: Entry[] = ai.configured ? [{ id: "ask", group: "Ask", label: `Ask “${deferred}”`, path: "/ask", icon: ChatCircleTextIcon, ask: deferred }] : [];
+    const ask: Entry[] = ai.configured ? [{ id: "ask", group: "Chat", label: `Ask “${deferred}”`, path: "/chat", icon: ChatCircleTextIcon, ask: deferred }] : [];
     const found = search.data;
     if (!found) return [...pages, ...ask];
     return [
@@ -88,7 +88,7 @@ export function CommandPalette({ open, onOpenChange }: { open: boolean; onOpenCh
   };
   const go = (entry: Entry | undefined) => {
     if (!entry) return;
-    if (entry.ask) chat.show({ thread: null, mode: "ask", send: entry.ask });
+    if (entry.ask) chat.show({ conversation: null, send: entry.ask });
     else navigate(href(entry.path));
     close();
   };

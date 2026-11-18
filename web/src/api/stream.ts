@@ -1,7 +1,11 @@
 import { parseError, toApiError } from "./client";
-import type { AnswerVisual } from "./types";
+import type { AnswerVisual, ChatTask } from "./types";
 
-export type StreamEvent = { type: "text"; delta: string } | { type: "tool"; name: string; input: Record<string, unknown> } | { type: "visual"; id: string; visual: AnswerVisual };
+export type StreamEvent =
+  | { type: "text"; delta: string }
+  | { type: "tool"; name: string; input: Record<string, unknown> }
+  | { type: "visual"; id: string; visual: AnswerVisual }
+  | { type: "task"; task: ChatTask };
 
 export type StreamHandlers = { onEvent: (event: StreamEvent) => void; onRun?: (run: { id: string; startedAt: string }) => void };
 
@@ -42,6 +46,7 @@ async function readStream<T>(res: Response, { onEvent, onRun }: StreamHandlers):
       if (event === "text") onEvent({ type: "text", delta: parsed.delta });
       if (event === "tool") onEvent({ type: "tool", name: parsed.name, input: parsed.input ?? {} });
       if (event === "visual") onEvent({ type: "visual", id: parsed.id, visual: parsed.visual });
+      if (event === "task") onEvent({ type: "task", task: parsed.task });
     }
   }
   throw toApiError(502, { error: { code: "llm_incomplete", message: "The stream ended early" } });

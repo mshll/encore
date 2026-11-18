@@ -174,7 +174,7 @@ function NewPlaylist() {
         <Icon icon={CaretDownIcon} size="sm" className="opacity-70" />
       </MenuTrigger>
       <MenuPopup>
-        <MenuItem icon={ChatCircleTextIcon} hint="Make a set" onClick={() => chat.show({ thread: null, mode: "set" })}>
+        <MenuItem icon={ChatCircleTextIcon} hint="Make a set" onClick={() => chat.show({ conversation: null })}>
           Describe it
         </MenuItem>
         <MenuItem icon={ListBulletsIcon} onClick={() => navigate("/playlists/new")}>
@@ -251,7 +251,7 @@ export function Playlists() {
         />
       );
     if (filter === "sets" && setItems.length === 0)
-      return <EmptyState icon={PlaylistIcon} title="No sets yet" description="Describe a playlist and get one built from your history and songs new to you." action={<NewSetButton onClick={() => chat.show({ thread: null, mode: "set" })} />} />;
+      return <EmptyState icon={PlaylistIcon} title="No sets yet" description="Describe a playlist and get one built from your history and songs new to you." action={<NewSetButton onClick={() => chat.show({ conversation: null })} />} />;
     if (filter === "recaps" && recapItems.length === 0)
       return (
         <EmptyState

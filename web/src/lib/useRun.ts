@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { get, request } from "../api/client";
-import type { AnswerVisual } from "../api/types";
+import type { AnswerVisual, ChatTask } from "../api/types";
 import { followRun, streamPost, type StreamEvent, type StreamHandlers } from "../api/stream";
 import { assistantProblem, progressLine } from "./assistant";
 
@@ -14,9 +14,11 @@ export type RunState = {
   checked: number;
   startedAt: number | null;
   problem: string | null;
+  /** The task the chat picked for the message, once the server says. */
+  task: ChatTask | null;
 };
 
-const IDLE: RunState = { running: false, steps: [], text: "", visuals: {}, searches: 0, checked: 0, startedAt: null, problem: null };
+const IDLE: RunState = { running: false, steps: [], text: "", visuals: {}, searches: 0, checked: 0, startedAt: null, problem: null, task: null };
 
 type ActiveRun = { run: { id: string; startedAt: string } | null };
 
@@ -41,6 +43,7 @@ export function useRun<T>(resume?: { key: string; onDone: (result: T) => void })
       setState((s) => {
         if (e.type === "text") return { ...s, text: s.text + e.delta };
         if (e.type === "visual") return { ...s, visuals: { ...s.visuals, [e.id]: e.visual } };
+        if (e.type === "task") return { ...s, task: e.task };
         const line = progressLine(e);
         return {
           ...s,

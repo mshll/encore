@@ -1,9 +1,9 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState, type ReactNode } from "react";
-import { useLocation } from "wouter";
+import { useLocation, useSearch } from "wouter";
 import { ApiError, request } from "../../api/client";
-import { useLivingPlaylist } from "../../api/queries";
-import type { LivingDetail, LivingId, LivingQuietUpdate, LivingUpdate, RuleInput, RulePreview } from "../../api/types";
+import { useLivingPlaylist, useRuleDraft } from "../../api/queries";
+import type { LivingDetail, LivingId, LivingQuietUpdate, LivingUpdate, RuleInput, RuleDraft, RulePreview } from "../../api/types";
 import { fmtHour, fmtInt } from "../../lib/format";
 import { showToast } from "../../lib/toast";
 import { AppLink } from "../../ui/AppLink";
@@ -333,10 +333,10 @@ function Preview({ input, id, preview }: { input: RuleInput | null; id: LivingId
   );
 }
 
-function Builder({ playlist }: { playlist: LivingDetail | null }) {
+function Builder({ playlist, draft }: { playlist: LivingDetail | null; draft?: RuleDraft }) {
   const queryClient = useQueryClient();
   const [, navigate] = useLocation();
-  const [form, setForm] = useState<RuleForm>(() => (playlist ? fromRule(playlist.name, playlist.about, playlist.rule) : NEW_RULE));
+  const [form, setForm] = useState<RuleForm>(() => (playlist ? fromRule(playlist.name, playlist.about, playlist.rule) : draft ? fromRule(draft.name, draft.about, draft.rule) : NEW_RULE));
   const [tried, setTried] = useState(false);
   const [busy, setBusy] = useState(false);
   const set: SetField = (key, value) => setForm((f) => ({ ...f, [key]: value }));
@@ -429,7 +429,20 @@ function EditBuilder({ id }: { id: LivingId }) {
 }
 
 /** Build from rules: the rule in plain fields with a live preview, then Create. The same form edits a rule playlist. */
+/** A rule the chat drafted, opened to review: nothing exists until Create. A draft that is gone opens an empty form. */
+function DraftBuilder({ id }: { id: number }) {
+  const q = useRuleDraft(id);
+  if (q.isPending)
+    return (
+      <Page crumb={undefined}>
+        <RowSkeleton rows={8} />
+      </Page>
+    );
+  return <Builder playlist={null} draft={q.data} />;
+}
+
 export function RuleBuilder({ id }: { id?: string }) {
-  if (id === undefined) return <Builder playlist={null} />;
+  const draft = Number(new URLSearchParams(useSearch()).get("draft"));
+  if (id === undefined) return Number.isInteger(draft) && draft > 0 ? <DraftBuilder id={draft} /> : <Builder playlist={null} />;
   return isLivingId(id) ? <EditBuilder id={id} /> : <PlaylistMissing />;
 }

@@ -1,52 +1,49 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useLocation } from "wouter";
-import type { AskResult, PlanTurn, SetResult } from "../api/types";
+import { request } from "../api/client";
+import type { ChatResult } from "../api/types";
 import { usePageContext } from "../app/pageContext";
 import { useAi } from "../lib/ai";
+import { assistantProblem } from "../lib/assistant";
+import { showToast } from "../lib/toast";
 import { useDesktop } from "../lib/useMedia";
 import { useRun } from "../lib/useRun";
 import { useClaudeGate } from "../ui/ClaudeNotice";
-import { ChatContext, modeOf, sameThread, threadKey, type Chat, type ChatMode, type ChatThread, type ShowOptions } from "./state";
-
-const CONVERSATIONS = "/api/library/conversations";
-
-type RunResult = AskResult | SetResult | PlanTurn;
+import { ChatContext, threadKey, type Chat, type ShowOptions } from "./state";
 
 const STORE = "encore-chat";
 
-function stored(): { mode: ChatMode; thread: ChatThread | null } {
+function stored(): number | null {
   try {
-    const value = JSON.parse(localStorage.getItem(STORE) ?? "null") as { mode?: ChatMode; thread?: ChatThread | null } | null;
-    return { mode: value?.mode ?? "ask", thread: value?.thread ?? null };
+    const value = JSON.parse(localStorage.getItem(STORE) ?? "null") as { conversation?: unknown } | null;
+    return typeof value?.conversation === "number" ? value.conversation : null;
   } catch {
-    return { mode: "ask", thread: null };
+    return null;
   }
 }
 
-/** The request path a message in this conversation goes to; also the key a working run is found by. */
-function runPath(mode: ChatMode, thread: ChatThread | null): string {
-  if (thread?.kind === "set") return `/api/sets/${thread.id}/messages`;
-  if (mode === "ask") return "/api/ask";
-  if (mode === "set") return "/api/sets";
-  return CONVERSATIONS;
-}
+/** The request path a message goes to; also the key a working run is found by. */
+const runPath = (conversation: number | null) => (conversation === null ? "/api/chat" : `/api/chat/${conversation}/messages`);
 
-function body(mode: ChatMode, thread: ChatThread | null, text: string) {
-  if (mode === "ask") return thread?.kind === "ask" ? { question: text, threadId: thread.id } : { question: text };
-  if (mode === "set") return thread ? { message: text } : { request: text };
-  return thread?.kind === "plan" ? { message: text, threadId: thread.threadId } : { message: text };
-}
+/** What a finished turn changed outside the chat, so those pages read it again. */
+const TOUCHED: Record<ChatResult["turn"]["outcome"]["kind"], string[][]> = {
+  answer: [["ask"]],
+  set: [["sets"], ["dj"]],
+  plan: [["library"]],
+  rule: [],
+  play: [],
+};
 
 /**
- * The one conversation with Claude, held by the shell so it survives navigation: which conversation is open, the
+ * The one conversation with the assistant, held by the shell so it survives navigation: which conversation is open, the
  * message on its way and the run that answers it. The run belongs to the server; this follows it.
  */
 export function ChatProvider({ open, onOpenChange, children }: { open: boolean; onOpenChange: (open: boolean) => void; children: ReactNode }) {
   const queryClient = useQueryClient();
   const [location, navigate] = useLocation();
   const desktop = useDesktop();
-  const [{ mode, thread }, setSelection] = useState(stored);
+  const [conversation, setConversation] = useState(stored);
   const [draft, setDraft] = useState("");
   const [pending, setPending] = useState<string | null>(null);
   const [stopped, setStopped] = useState(false);
@@ -59,55 +56,45 @@ export function ChatProvider({ open, onOpenChange, children }: { open: boolean; 
   const page = usePageContext();
   const pageKey = page ? JSON.stringify(page) : null;
   const context = page && pageKey !== removed ? page : null;
-  const gate = useClaudeGate({ needsSpotify: mode === "set" });
+  const gate = useClaudeGate({ needsSpotify: false });
 
   useEffect(() => {
     try {
-      localStorage.setItem(STORE, JSON.stringify({ mode, thread }));
+      localStorage.setItem(STORE, JSON.stringify({ conversation }));
     } catch {
       // Private mode or blocked storage: the chat still works, it only forgets the conversation on reload.
     }
-  }, [mode, thread]);
+  }, [conversation]);
 
-  const selection = useRef({ mode, thread });
-  selection.current = { mode, thread };
-  const select = useCallback((next: ChatThread | null, nextMode?: ChatMode) => {
-    const current = selection.current;
-    const m = next ? modeOf(next) : (nextMode ?? current.mode);
-    if (sameThread(current.thread, next) && m === current.mode) return;
+  const current = useRef(conversation);
+  current.current = conversation;
+  const select = useCallback((next: number | null) => {
+    if (current.current === next) return;
     sendSeq.current++;
     setPending(null);
     setStopped(false);
-    selection.current = { mode: m, thread: next };
-    setSelection({ mode: m, thread: next });
+    current.current = next;
+    setConversation(next);
   }, []);
 
   const runRef = useRef<{ steps: string[]; startedAt: number | null }>({ steps: [], startedAt: null });
-  const finish = async (result: RunResult) => {
+  const finish = async (result: ChatResult) => {
     const { steps, startedAt } = runRef.current;
     const seconds = startedAt ? Math.round((Date.now() - startedAt) / 1000) : null;
-    let next: ChatThread;
-    if ("set" in result) {
-      queryClient.setQueryData(["sets", result.set.id], result.set);
-      await queryClient.invalidateQueries({ queryKey: ["sets"], exact: true });
-      next = { kind: "set", id: result.set.id };
-    } else if ("content" in result) {
-      await queryClient.invalidateQueries({ queryKey: ["ask"] });
-      next = { kind: "ask", id: result.threadId };
-    } else {
-      await queryClient.invalidateQueries({ queryKey: ["library"], predicate: (q) => ["conversation", "plan", "plans"].includes(String(q.queryKey[1])) });
-      next = { kind: "plan", threadId: result.threadId };
-    }
-    setFinished({ thread: threadKey(next), steps, seconds });
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: ["chat"] }),
+      ...TOUCHED[result.turn.outcome.kind].map((queryKey) => queryClient.invalidateQueries({ queryKey })),
+    ]);
+    setFinished({ conversation: threadKey(result.conversationId), steps, seconds });
     setPending(null);
-    select(next);
-    if (next.kind === "ask" && location.startsWith("/ask") && location !== `/ask/${next.id}`) navigate(`/ask/${next.id}`);
+    select(result.conversationId);
+    if (location.startsWith("/chat") && location !== `/chat/${result.conversationId}`) navigate(`/chat/${result.conversationId}`);
   };
   const finishRef = useRef(finish);
   finishRef.current = finish;
 
-  const path = runPath(mode, thread);
-  const run = useRun<RunResult>({ key: path, onDone: (r) => void finishRef.current(r) });
+  const path = runPath(conversation);
+  const run = useRun<ChatResult>({ key: path, onDone: (r) => void finishRef.current(r) });
   runRef.current = { steps: run.steps, startedAt: run.startedAt };
 
   const send = useCallback(
@@ -123,7 +110,7 @@ export function ChatProvider({ open, onOpenChange, children }: { open: boolean; 
       setStopped(false);
       setFinished(null);
       setDraft("");
-      const result = await run.start(path, { ...body(mode, thread, text), ...(context ? { context } : {}) });
+      const result = await run.start(path, { message: text, ...(context ? { context } : {}) });
       if (seq !== sendSeq.current) return;
       if (result) await finishRef.current(result);
       else {
@@ -131,7 +118,7 @@ export function ChatProvider({ open, onOpenChange, children }: { open: boolean; 
         setDraft(text);
       }
     },
-    [gate.blocked, run, path, mode, thread, context],
+    [gate.blocked, run, path, context],
   );
 
   // Deferred a tick so a mount React StrictMode tears down at once never starts, and so never abandons, a paid run.
@@ -150,9 +137,8 @@ export function ChatProvider({ open, onOpenChange, children }: { open: boolean; 
   }, []);
 
   const show = useCallback(
-    ({ thread: next, mode: nextMode, send: text, open: opening = true }: ShowOptions = {}) => {
-      if (next !== undefined) select(next, nextMode);
-      else if (nextMode) select(null, nextMode);
+    ({ conversation: next, send: text, open: opening = true }: ShowOptions = {}) => {
+      if (next !== undefined) select(next);
       if (text) setQueued(text);
       if (opening) {
         onOpenChange(true);
@@ -160,6 +146,18 @@ export function ChatProvider({ open, onOpenChange, children }: { open: boolean; 
       }
     },
     [select, onOpenChange, focusComposer],
+  );
+
+  const attach = useCallback<Chat["attach"]>(
+    async (subject) => {
+      try {
+        const { conversationId } = await request<{ conversationId: number }>("/api/chat/attach", { json: subject });
+        show({ conversation: conversationId });
+      } catch (error) {
+        showToast(assistantProblem(error), "problem");
+      }
+    },
+    [show],
   );
 
   const stop = useCallback(() => {
@@ -170,11 +168,11 @@ export function ChatProvider({ open, onOpenChange, children }: { open: boolean; 
     setPending(null);
   }, [run, pending]);
 
-  const onAsk = location.startsWith("/ask");
+  const onPage = location.startsWith("/chat");
   const expand = useCallback(() => {
     returnTo.current = location;
-    navigate(thread?.kind === "ask" ? `/ask/${thread.id}` : "/ask");
-  }, [location, navigate, thread]);
+    navigate(conversation === null ? "/chat" : `/chat/${conversation}`);
+  }, [location, navigate, conversation]);
   const collapse = useCallback(() => {
     navigate(returnTo.current ?? "/");
     returnTo.current = null;
@@ -184,8 +182,7 @@ export function ChatProvider({ open, onOpenChange, children }: { open: boolean; 
   const value = useMemo<Chat>(
     () => ({
       open,
-      mode,
-      thread,
+      conversation,
       context,
       removeContext: () => setRemoved(pageKey),
       draft,
@@ -197,12 +194,12 @@ export function ChatProvider({ open, onOpenChange, children }: { open: boolean; 
       gate,
       composer,
       show,
-      setMode: (m) => select(null, m),
+      attach,
       send: (text) => void send(text),
       stop,
       close: () => onOpenChange(false),
       toggle: () => {
-        if (onAsk) collapse();
+        if (onPage) collapse();
         else if (open) onOpenChange(false);
         else show();
       },
@@ -211,9 +208,9 @@ export function ChatProvider({ open, onOpenChange, children }: { open: boolean; 
       },
       expand,
       collapse,
-      runningFor: (t) => run.running && sameThread(t, thread),
+      runningFor: (c) => run.running && c === conversation,
     }),
-    [open, mode, thread, context, pageKey, draft, pending, stopped, finished, run, gate, show, select, send, stop, onOpenChange, onAsk, collapse, desktop, expand],
+    [open, conversation, context, pageKey, draft, pending, stopped, finished, run, gate, show, attach, send, stop, onOpenChange, onPage, collapse, desktop, expand],
   );
 
   const ai = useAi();

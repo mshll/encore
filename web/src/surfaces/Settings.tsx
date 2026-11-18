@@ -271,7 +271,7 @@ function SpotifyTab({ status }: { status: Status }) {
   );
 }
 
-const FEATURE_LABELS: Record<LlmFeature, string> = { sets: "Sets", picks: "Picks", ask: "Ask", notes: "Liner notes", digest: "Recaps", dj: "Session re-plans", library: "Library plans", verify: "Connection checks" };
+const FEATURE_LABELS: Record<LlmFeature, string> = { sets: "Sets", picks: "Picks", ask: "Ask", notes: "Liner notes", digest: "Recaps", dj: "Session re-plans", library: "Library plans", verify: "Connection checks", chat: "Chat routing", rules: "Playlist rules", play: "Songs to play" };
 
 function Spend() {
   const q = useSpend();

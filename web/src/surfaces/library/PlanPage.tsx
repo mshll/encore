@@ -275,13 +275,12 @@ export function PlanPage({ id }: { id: number }) {
 
   const latest = batches.data?.items.find((b) => b.planId === id);
   const tabs = (["open", "applied", "skipped", "dismissed"] as const).filter((s) => s === "open" || plan.counts[s] > 0);
-  const thread = plan.threadId;
   const secondary = [
-    thread && ai.configured
+    plan.threadId && ai.configured
       ? {
-          label: chat.runningFor({ kind: "plan", threadId: thread }) ? "Changing…" : "Change",
+          label: plan.conversationId !== null && chat.runningFor(plan.conversationId) ? "Changing…" : "Change",
           icon: ChatCircleTextIcon,
-          onClick: () => chat.show({ thread: { kind: "plan", threadId: thread } }),
+          onClick: () => void chat.attach({ kind: "plan", id: plan.id }),
         }
       : null,
     dismissAction(plan, edits),

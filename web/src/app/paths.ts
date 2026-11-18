@@ -5,6 +5,8 @@ export const songPath = (songKey: string) => `/music/song/${encodeURIComponent(s
 export const albumPath = (artist: string, album: string) => `/music/album/${encodeURIComponent(artist)}/${encodeURIComponent(album)}`;
 export const RECAP_SLUGS = { weekly: "week", monthly: "month", yearly: "year" } as const satisfies Record<RecapKind, string>;
 export type RecapSlug = (typeof RECAP_SLUGS)[RecapKind];
+/** Where an old Ask link goes: its questions were discarded, so `/ask` and `/ask/:id` open the chat. */
+export const LEGACY_CHAT = "/chat";
 export const recapPath = (kind: RecapKind, key: string) => `/recaps/${RECAP_SLUGS[kind]}/${key}`;
 /** Wouter runs `decodeURI` on the path, which leaves reserved characters escaped; this decodes those for one param. */
 export const paramValue = (param: string) => param.replace(/%(2[346BCF]|3[ABDF]|40)/gi, (escape) => decodeURIComponent(escape));

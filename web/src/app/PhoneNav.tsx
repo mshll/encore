@@ -23,7 +23,7 @@ function useCurrentTab(location: string) {
   if (tab) return { index, surface: tab };
   const more = PHONE_MORE.find((s) => s.match(location));
   if (more) return { index: PHONE_TABS.length, surface: more };
-  return location.startsWith("/ask") ? { index: PHONE_TABS.length, surface: MORE } : { index: -1, surface: MORE };
+  return location.startsWith("/chat") ? { index: PHONE_TABS.length, surface: MORE } : { index: -1, surface: MORE };
 }
 
 /**
@@ -37,7 +37,7 @@ export function PhoneNav({ onSearch, onOpenPlayer, collapsed, onExpand, inert }:
   const [open, setOpen] = useState(false);
   const chat = useChat();
   const ai = useAi();
-  const chatOpen = chat.open && !location.startsWith("/ask");
+  const chatOpen = chat.open && !location.startsWith("/chat");
   const current = useCurrentTab(location);
   const chatButton = useRef<HTMLButtonElement>(null);
   const openedAt = useRef<string | null>(null);

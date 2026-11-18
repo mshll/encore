@@ -35,7 +35,7 @@ function OpenPlans({ plans }: { plans: PlanSummary[] }) {
       labelledBy="open-plans"
       actions={
         ai.configured && (
-          <Button size="sm" icon={ChatCircleTextIcon} onClick={() => chat.show({ thread: null, mode: "tidy" })}>
+          <Button size="sm" icon={ChatCircleTextIcon} onClick={() => chat.show({ conversation: null })}>
             Describe a plan
           </Button>
         )

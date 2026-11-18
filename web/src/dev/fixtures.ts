@@ -59,8 +59,7 @@
     ?library=disconnected Spotify reads as not connected (applying answers 409 spotify_not_connected)
     ?library=unsynced    the library has never synced
     Library fixtures answer the batch routes and Apply/Undo themselves: no Spotify call, nothing written.
-    ?ask=empty        Ask threads: every chart in a stored answer has nothing in it (series at zero, ranked and compare rows gone)
-    ?ask=visuals      Ask threads: the newest stored answer also holds the run fixtures' two visuals, an inline pair and a ranked block
+    ?ask=empty        the chat demo's answer (9001): every chart in it has nothing in it (series at zero, ranked and compare rows gone)
     ?picks=none       this week has no picks yet (Home, For you, Weekly picks)
     ?playlists=saved  For you, From your recaps: three period playlists, one saved from a recap, one kept when a year ended, one with no cover
     ?week=quiet       Home, This week: nothing played yet this week (the usual stays)
@@ -68,6 +67,11 @@
     ?moments=all|none Home, This week: a moment of every kind (record, milestone, new artists, streak, comeback; Home shows the
                       first three), or none
     ?ai=on|none       /api/status reads AI as set up, or not (what Home and the shell show; nothing calls a provider)
+    ?chat=demo        the chat: a history in every group (Today, Yesterday, This week, Older) and one conversation (9001) with
+                      every card (an answer with visuals, a set, a rule draft, a plan, songs to play), attached to the newest set;
+                      rename, delete and Change answer themselves (with ?fixture=worst, the longest names)
+    ?chat=empty       the chat's history holds nothing
+                      With a ?run= fixture, a chat message streams its task, steps and an answer, then lands on conversation 9001.
     ?fail=stats/timeseries,living  every GET under each listed /api/ path answers 500, the rest stay real (one block's failed load;
                       Home: stats/week, stats/moments, stats/on-repeat, history, stats/overview, stats/timeseries,
                       stats/on-this-day, stats/top, living)
@@ -86,7 +90,7 @@
 type Json = Record<string, unknown>;
 
 const params = new URLSearchParams(location.search);
-for (const key of ["fixture", "player", "run", "dj", "settings", "history", "living", "library", "recap", "ask", "week", "moments", "ai", "picks", "playlists", "sets", "fail"]) {
+for (const key of ["fixture", "player", "run", "dj", "settings", "history", "living", "library", "recap", "ask", "week", "moments", "ai", "picks", "playlists", "sets", "fail", "chat"]) {
   const value = params.get(key);
   if (value === "off") sessionStorage.removeItem(`encore-${key}`);
   else if (value) sessionStorage.setItem(`encore-${key}`, value);
@@ -107,6 +111,7 @@ const aiFixture = sessionStorage.getItem("encore-ai");
 const picksFixture = sessionStorage.getItem("encore-picks");
 const playlistsFixture = sessionStorage.getItem("encore-playlists");
 const setsFixture = sessionStorage.getItem("encore-sets");
+const chatFixture = sessionStorage.getItem("encore-chat");
 const failing = (sessionStorage.getItem("encore-fail") ?? "").split(",").filter(Boolean);
 
 const SAVED_PLAYLISTS = [
@@ -170,7 +175,6 @@ function emptyFor(path: string, isNew: boolean): unknown {
   if (path === "/api/picks/weeks") return { items: [] };
   if (path === "/api/blocks") return { items: [] };
   if (path === "/api/sets") return { items: [], total: 0, limit: 100, offset: 0 };
-  if (path === "/api/ask/threads") return { items: [] };
   if (path === "/api/stats/eras") return { months: [], series: [], artists: [] };
   if (path === "/api/stats/skips")
     return {
@@ -286,17 +290,6 @@ function worstAnswer(content: Json): Json {
     }),
   );
   return { ...content, visuals };
-}
-
-/** A stored answer with an inline pair after its first paragraph and a ranked block after that. */
-function withVisuals(turn: Json, visuals: Record<string, Visual>): Json {
-  const paragraphs = (turn.text as string).split(/\n\s*\n/).map((t) => t.trim()).filter(Boolean);
-  const basis = paragraphs.at(-1)?.startsWith("Based on:") ? paragraphs.pop()!.slice("Based on:".length).trim() : null;
-  const content = (turn.content as Json | undefined) ?? { version: 1, blocks: paragraphs.map((text) => ({ type: "text", spans: [{ text }] })), visuals: {}, basis };
-  const blocks = content.blocks as Json[];
-  const [first, ...rest] = blocks;
-  const lead = first?.type === "text" ? { ...first, spans: [...(first.spans as Json[]), { text: " " }, { visual: "v1" }] } : first;
-  return { ...content, blocks: [lead, { type: "visual", id: "v2" }, ...rest].filter(Boolean), visuals: { ...(content.visuals as Json), ...visuals } };
 }
 
 /** Every chart in an answer with nothing in it. */
@@ -499,7 +492,6 @@ function worsen(path: string, body: Json): unknown {
     const long = Array.from({ length: 6 }, (_, i) => [{ role: "owner", text: i % 2 ? `${LONG_SONG} by ${LONG_ARTIST}: when did I play it most?` : "And on weekdays?" }, ...turns.slice(1)]).flat();
     return { ...body, turns: [...turns, ...long] };
   }
-  if (path === "/api/ask/threads") return { items: (body.items as Json[]).slice(0, 1).map((t) => ({ ...t, title: `${LONG_SONG} ${LONG_ARTIST}?` })) };
   if (path === "/api/library/analysis") {
     const a = body as { playlists: Json[]; artists: Json[]; liked: Json; unsaved: { songs: Json[] } };
     return {
@@ -647,14 +639,8 @@ async function djSession() {
   };
 }
 
-const RUN_PATHS = [/^\/api\/digests\/generate$/, /^\/api\/picks\/generate$/, /^\/api\/sets$/, /^\/api\/sets\/\d+\/messages$/, /^\/api\/ask$/, /^\/api\/library\/conversations$/];
+const RUN_PATHS = [/^\/api\/chat$/, /^\/api\/chat\/\d+\/messages$/, /^\/api\/digests\/generate$/, /^\/api\/picks\/generate$/];
 
-const LIBRARY_STEPS: { name: string; input: Json }[] = [
-  { name: "library_overview", input: {} },
-  { name: "find_library_songs", input: { where: "liked", lastPlayed: ["over 6 months ago"] } },
-  { name: "find_library_songs", input: { where: "liked", artists: ["Kendrick Lamar"] } },
-  { name: "played_not_liked", input: {} },
-];
 const RUN_ID = "fixture-run";
 
 const STEPS: { name: string; input: Json }[] = [
@@ -685,10 +671,84 @@ async function askAnswer(): Promise<{ text: string; visuals: Record<string, Visu
       rows: top.items.map((t) => ({ item: { kind: "song", songKey: t.songKey, uri: t.uri, name: t.name, artist: t.artist, art: t.albumArtUrl }, value: t.plays })),
     },
   };
-  const text = `You listened ${now.hours} hours in October [[v1]] against ${before.hours} in September, led by ${top.items[0]?.name ?? "one song"}.\n[[v2]]\nBased on: your plays in September and October 2026.`;
+  const text = `You listened ${now.hours.toFixed(1)} hours in October [[v1]] against ${before.hours.toFixed(1)} in September, led by ${top.items[0]?.name ?? "one song"}.\n[[v2]]\nBased on: your plays in September and October 2026.`;
   return { text, visuals };
 }
 
+
+const CHAT_DEMO = 9001;
+const CHAT_DRAFT = 9101;
+const daysAgo = (days: number, hours = 0) => new Date(Date.now() - days * 86_400_000 - hours * 3_600_000).toISOString();
+
+const DRAFT_RULE = {
+  id: CHAT_DRAFT,
+  name: "Mac Miller lately",
+  about: "The Mac Miller songs I played most in the last 90 days.",
+  rule: { source: { type: "history", window: { type: "days", days: 90 } }, filters: { listens: { min: 3 }, artists: { include: ["Mac Miller"] } }, sort: "listens", limit: 30, perArtist: 30, schedule: "weekly" },
+  count: 24,
+  createdAt: daysAgo(0, 1),
+};
+
+/** Every outcome card in one conversation, built from real sets, plans and top songs; attached to the newest set. */
+async function chatDemo(): Promise<Json> {
+  const real = <T>(p: string) => realFetch(p).then((r) => r.json() as Promise<T>);
+  const [sets, plans, top, ask] = await Promise.all([
+    real<{ items: (Json & { id: number; title: string; coverUrl: string | null; tracks: number; version: number; playlist: { url: string } | null })[] }>("/api/sets?limit=1"),
+    real<{ items: (Json & { id: number; title: string; status: string; counts: { open: number }; source: string })[] }>("/api/library/plans"),
+    real<{ items: { songKey: string; uri: string; name: string; artist: string; album: string | null; albumArtUrl: string | null }[] }>("/api/stats/top/tracks?limit=9&sort=plays"),
+    askAnswer(),
+  ]);
+  const set = sets.items[0];
+  const plan = plans.items.find((p) => p.source === "claude") ?? plans.items.find((p) => p.counts.open > 0);
+  const answer = { version: 1, blocks: [{ type: "text", spans: [{ text: ask.text.split("[[v1]]")[0]! }, { visual: "v1" }, { text: "." }] }, { type: "visual", id: "v2" }], visuals: ask.visuals, basis: "your plays in September and October 2026." };
+  const content = askFixture === "empty" ? emptyAnswer(answer) : answer;
+  const worst = fixture === "worst";
+  const turns: Json[] = [
+    { message: worst ? `${LONG_SONG} by ${LONG_ARTIST}: how did October compare with September, and which songs led it?` : "How did October compare with September?", task: "answer", outcome: { kind: "answer", threadId: 1, turn: 1, text: null, content } },
+    { message: "A late drive set, like my Mac Miller era", task: "set", outcome: { kind: "set", setId: set?.id ?? 1, changed: true, reply: null, set: set ? { id: set.id, title: worst ? LONG_SONG : set.title, coverUrl: set.coverUrl, tracks: set.tracks, version: set.version, playlist: set.playlist ? { url: set.playlist.url } : null } : null } },
+    { message: "A playlist that keeps my most played Mac Miller of the last three months", task: "rule", outcome: { kind: "rule", draftId: CHAT_DRAFT, reply: null, draft: DRAFT_RULE } },
+    { message: "Archive liked songs I haven’t played in a year", task: "plan", outcome: { kind: "plan", planId: plan?.id ?? null, threadId: 1, reply: plan ? null : "Over a year, or never played too?", plan: plan ? { id: plan.id, title: plan.title, status: plan.status, open: plan.counts.open } : null } },
+    { message: "Play the songs I had on repeat last month", task: "play", outcome: { kind: "play", title: "On repeat last month", songs: top.items.map((s) => ({ songKey: s.songKey, uri: s.uri, name: s.name, artist: s.artist, album: s.album, albumArtUrl: s.albumArtUrl })), reply: null } },
+  ].map((t, i) => ({ id: CHAT_DEMO * 10 + i, position: i, at: daysAgo(0, 5 - i), ...t }));
+  return {
+    id: CHAT_DEMO,
+    title: worst ? `${LONG_SONG} ${LONG_ARTIST}` : "October, a late drive set and a tidy-up",
+    subject: set ? { kind: "set", id: set.id, title: worst ? LONG_SONG : set.title } : null,
+    createdAt: daysAgo(0, 6),
+    updatedAt: daysAgo(0, 1),
+    turns,
+  };
+}
+
+const CHAT_LIST = [
+  { id: CHAT_DEMO, title: "October, a late drive set and a tidy-up", produced: "play", at: daysAgo(0, 1) },
+  { id: 9002, title: "Why did I stop playing Joji?", produced: "answer", at: daysAgo(0, 3) },
+  { id: 9003, title: "Sunday morning, slow and warm", produced: "set", at: daysAgo(1) },
+  { id: 9004, title: "Weekly playlist of what I finish at night", produced: "rule", at: daysAgo(3) },
+  { id: 9005, title: "Clear duplicates in gym", produced: "plan", at: daysAgo(5) },
+  { id: 9006, title: "Which artists defined spring 2024?", produced: "answer", at: daysAgo(20) },
+  { id: 9007, title: "Queue some Frank Ocean", produced: "play", at: daysAgo(64) },
+];
+
+/** The chat's conversations, history and a rule draft, answered here: nothing reaches a model. */
+async function chatAnswer(path: string, query: string, method: string): Promise<Response | null> {
+  if (path === `/api/living/drafts/${CHAT_DRAFT}`) return json(DRAFT_RULE);
+  if (path === "/api/chat/conversations" && method === "GET") {
+    if (chatFixture === "empty") return json({ items: [] });
+    const q = (new URLSearchParams(query).get("q") ?? "").toLowerCase();
+    const items = CHAT_LIST.map(({ at, ...c }) => ({ ...c, title: fixture === "worst" && c.id === CHAT_DEMO ? `${LONG_SONG} ${LONG_ARTIST}` : c.title, createdAt: at, updatedAt: at }));
+    return json({ items: items.filter((c) => c.title.toLowerCase().includes(q)) });
+  }
+  if (path === `/api/chat/${CHAT_DEMO}` && method === "GET") return json(await chatDemo());
+  const other = CHAT_LIST.find((c) => path === `/api/chat/${c.id}`);
+  if (other && method === "GET") {
+    const demo = await chatDemo();
+    return json({ ...demo, id: other.id, title: other.title, subject: null, turns: [{ ...(demo.turns as Json[])[0], message: other.title }] });
+  }
+  if (/^\/api\/chat\/\d+$/.test(path) && method !== "GET") return json(method === "DELETE" ? { deleted: true } : await chatDemo());
+  if (path === "/api/chat/attach" && method === "POST") return json({ conversationId: CHAT_DEMO });
+  return null;
+}
 
 type Frame = [event: string, data: unknown, delayMs: number];
 
@@ -715,37 +775,16 @@ function sse(frames: Frame[], signal: AbortSignal | null | undefined, endless: b
 
 const stepFrames = (path: string, count: number): Frame[] => {
   if (path.startsWith("/api/digests")) return [];
-  const library = path.includes("library");
-  const last = path.includes("picks") ? "submit_picks" : path.includes("sets") ? "submit_set" : library ? "submit_plan" : null;
-  const steps = (library ? LIBRARY_STEPS : STEPS).slice(0, count).map((s): Frame => ["tool", s, 1200]);
-  return last && count >= (library ? LIBRARY_STEPS : STEPS).length ? [...steps, ["tool", { name: last, input: {} }, 1200]] : steps;
+  const steps = STEPS.slice(0, count).map((s): Frame => ["tool", s, 1200]);
+  return path.includes("picks") && count >= STEPS.length ? [...steps, ["tool", { name: "submit_picks", input: {} }, 1200]] : steps;
 };
 
 async function doneBody(path: string): Promise<unknown> {
   const real = <T>(p: string) => realFetch(p).then((r) => r.json() as Promise<T>);
   if (path === "/api/picks/generate") return real("/api/picks");
-  if (path === "/api/library/conversations") {
-    const plan = await fixturePlan();
-    return { planId: plan?.id ?? null, threadId: plan?.threadId ?? PLAN_THREAD, reply: plan ? null : "Over 6 months, or never played too?", songs: plan?.counts.open ?? 0 };
-  }
   if (path === "/api/digests/generate") return real<{ items: { id: number }[] }>("/api/digests").then((l) => (l.items[0] ? real(`/api/digests/${l.items[0].id}`) : {}));
-  if (path === "/api/ask") {
-    const threads = await real<{ items: { id: number }[] }>("/api/ask/threads");
-    const { text, visuals } = await askAnswer();
-    return { threadId: threads.items[0]?.id ?? 1, answer: text.replace(/\s*\[\[v\d+\]\]/g, ""), content: { version: 1, blocks: [], visuals, basis: null } };
-  }
-  const id = path.match(/^\/api\/sets\/(\d+)/)?.[1] ?? (await real<{ items: { id: number }[] }>("/api/sets")).items[0]?.id;
-  return { set: await real(`/api/sets/${id}`), reply: null, changed: true };
-}
-
-/** The conversation a finished plan run answers with when the database holds no Claude plan: answered here, never by the server. */
-const PLAN_THREAD = 900_001;
-let planMessages: string[] = [];
-
-/** The Claude plan a finished run made: a real one when there is one, else the first open plan. */
-async function fixturePlan() {
-  const plans = await realFetch("/api/library/plans").then((r) => r.json() as Promise<{ items: { id: number; source: string; threadId: number | null; counts: { open: number } }[] }>);
-  return plans.items.find((p) => p.source === "claude" && p.threadId) ?? plans.items.find((p) => p.counts.open > 0);
+  const demo = await chatDemo();
+  return { conversationId: CHAT_DEMO, turn: (demo.turns as Json[])[0] };
 }
 
 const PAUSED_UNTIL = new Date(Date.now() + 2 * 3600_000).toISOString();
@@ -756,7 +795,7 @@ let resumedKey: string | null = null;
 async function askRunning(): Promise<Frame[]> {
   const { text, visuals } = await askAnswer();
   const upToBlock = `${text.slice(0, text.indexOf("[[v2]]"))}[[v3]]\n`;
-  return [...stepFrames("/api/ask", 2), ["visual", { id: "v1", visual: visuals.v1 }, 600], ...upToBlock.match(/.{1,24}/gs)!.map((delta): Frame => ["text", { delta }, 80])];
+  return [...stepFrames("/api/chat", 2), ["visual", { id: "v1", visual: visuals.v1 }, 600], ...upToBlock.match(/.{1,24}/gs)!.map((delta): Frame => ["text", { delta }, 80])];
 }
 
 const RUN_ERRORS: Record<string, [number, Json]> = {
@@ -767,14 +806,6 @@ const RUN_ERRORS: Record<string, [number, Json]> = {
 
 async function runFixture(path: string, query: string, method: string, init: RequestInit | undefined): Promise<Response | null> {
   const signal = init?.signal;
-  if (path === `/api/library/conversations/${PLAN_THREAD}` && method === "GET") {
-    const plan = await fixturePlan();
-    return json({ threadId: PLAN_THREAD, planId: plan?.id ?? null, turns: planMessages.map((text) => ({ role: "owner", text })) });
-  }
-  if (path === "/api/library/conversations" && method === "POST" && typeof init?.body === "string") {
-    const body = JSON.parse(init.body) as { message: string; threadId?: number };
-    planMessages = body.threadId === PLAN_THREAD ? [...planMessages, body.message] : [body.message];
-  }
   if (path === "/api/status" && method === "GET") {
     const status = (await realFetch(path).then((r) => r.json())) as { llm: Json; ai: Json; spotify: Json };
     status.llm = { ...status.llm, configured: run !== "unconfigured" };
@@ -789,7 +820,8 @@ async function runFixture(path: string, query: string, method: string, init: Req
   }
   if (path === `/api/runs/${RUN_ID}/events`) {
     const opened: Frame = ["run", { id: RUN_ID, startedAt: new Date(Date.now() - 74_000).toISOString() }, 0];
-    return sse(resumedKey === "/api/ask" ? [opened, ...(await askRunning())] : [opened, ...stepFrames("", 4)], signal, true);
+    if (resumedKey?.startsWith("/api/chat")) return sse([opened, ["task", { task: "answer" }, 300], ...(await askRunning())], signal, true);
+    return sse([opened, ...stepFrames("", 4)], signal, true);
   }
   if (path === `/api/runs/${RUN_ID}` && method === "DELETE") return json({ cancelled: true });
   if (method !== "POST" || !RUN_PATHS.some((r) => r.test(path))) return null;
@@ -797,7 +829,8 @@ async function runFixture(path: string, query: string, method: string, init: Req
   if (error) return json({ error: error[1] }, error[0]);
   if (run === "starting") return new Promise<Response>(() => {});
   const opened: Frame = ["run", { id: RUN_ID, startedAt: new Date().toISOString() }, 0];
-  if (run === "running" && path === "/api/ask") return sse([opened, ...(await askRunning())], signal, true);
+  const chatting = path.startsWith("/api/chat");
+  if (run === "running" && chatting) return sse([opened, ["task", { task: "answer" }, 300], ...(await askRunning())], signal, true);
   if (run === "running") return sse([opened, ...stepFrames(path, STEPS.length)], signal, true);
   if (run === "failed")
     return sse(
@@ -805,10 +838,10 @@ async function runFixture(path: string, query: string, method: string, init: Req
       signal,
       false,
     );
-  if (path === "/api/ask") {
+  if (chatting) {
     const { text, visuals } = await askAnswer();
     const drawn = Object.entries(visuals).map(([id, visual]): Frame => ["visual", { id, visual }, 300]);
-    return sse([opened, ...stepFrames(path, 3), ["tool", { name: "show", input: {} }, 1200], ...drawn, ...text.match(/.{1,24}/gs)!.map((delta): Frame => ["text", { delta }, 80]), ["done", await doneBody(path), 600]], signal, false);
+    return sse([opened, ["task", { task: "answer" }, 300], ...stepFrames(path, 3), ["tool", { name: "show", input: {} }, 1200], ...drawn, ...text.match(/.{1,24}/gs)!.map((delta): Frame => ["text", { delta }, 80]), ["done", await doneBody(path), 600]], signal, false);
   }
   return sse([opened, ...stepFrames(path, STEPS.length), ["done", await doneBody(path), 600]], signal, false);
 }
@@ -1110,6 +1143,10 @@ window.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
     const answer = await runFixture(path, url.search.slice(1), method, init);
     if (answer) return answer;
   }
+  if (chatFixture || run || askFixture) {
+    const answer = await chatAnswer(path, url.search.slice(1), method);
+    if (answer) return answer;
+  }
   if (settingsFixture) {
     const answer = await settingsFixtureAnswer(path, method);
     if (answer) return answer;
@@ -1145,20 +1182,6 @@ window.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
   if (libraryFixture) {
     const answer = await libraryFixtureAnswer(path, method);
     if (answer) return answer;
-  }
-  if (askFixture === "visuals" && /^\/api\/ask\/threads\/\d+$/.test(path)) {
-    const res = await realFetch(input, init);
-    if (!res.ok) return res;
-    const body = (await res.json()) as { turns: Json[] };
-    const last = body.turns.findLastIndex((t) => t.role === "assistant");
-    const { visuals } = await askAnswer();
-    return json({ ...body, turns: body.turns.map((t, i) => (i === last ? { ...t, content: withVisuals(t, visuals) } : t)) });
-  }
-  if (askFixture === "empty" && /^\/api\/ask\/threads\/\d+$/.test(path)) {
-    const res = await realFetch(input, init);
-    if (!res.ok) return res;
-    const body = (await res.json()) as { turns: Json[] };
-    return json({ ...body, turns: body.turns.map((t) => (t.content ? { ...t, content: emptyAnswer(t.content as Json) } : t)) });
   }
   if (recapFixture || fixture === "worst") {
     const answer = await recapAnswer(path, method);

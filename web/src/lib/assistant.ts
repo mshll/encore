@@ -1,6 +1,6 @@
 import { ApiError } from "../api/client";
 import type { StreamEvent } from "../api/stream";
-import type { MomentClass } from "../api/types";
+import type { MomentClass, SavedPlaylist } from "../api/types";
 import { playbackProblem } from "../player/playback";
 import { CLASS_LABELS } from "./format";
 
@@ -80,6 +80,12 @@ export function progressLine(event: Extract<StreamEvent, { type: "tool" }>): str
       return "Finding songs you play but never liked";
     case "submit_plan":
       return "Writing the plan";
+    case "find_artists":
+      return `Looking for ${typeof i.q === "string" ? `“${i.q}”` : "an artist"} in your history`;
+    case "submit_rule":
+      return "Checking what the rule would hold";
+    case "suggest_songs":
+      return "Lining up the songs";
     case "show":
       return "Drawing the numbers";
     case "artist_history":
@@ -88,4 +94,12 @@ export function progressLine(event: Extract<StreamEvent, { type: "tool" }>): str
     default:
       return "Reading your listening";
   }
+}
+
+/** What saving a set to Spotify did, for its toast. */
+export function savedMessage(updated: boolean, cover: SavedPlaylist["cover"]["status"]): string {
+  const base = updated ? "Playlist updated in Spotify" : "Saved to Spotify as a private playlist";
+  if (cover === "failed") return `${base}, without its cover.`;
+  if (cover === "missing_scope") return `${base}. Connect Spotify again in Settings to add its cover.`;
+  return `${base}.`;
 }

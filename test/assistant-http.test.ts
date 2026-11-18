@@ -115,7 +115,7 @@ describe("streaming", () => {
     expect(events).toEqual([
       { event: "run", data: { id: expect.any(String), startedAt: expect.any(String) } },
       { event: "text", data: { delta: "You played Woods 20 times." } },
-      { event: "done", data: { threadId: 1, answer: "You played Woods 20 times.", content: expect.objectContaining({ version: 1 }), toolCalls: [] } },
+      { event: "done", data: { threadId: 1, turn: 1, answer: "You played Woods 20 times.", content: expect.objectContaining({ version: 1 }), toolCalls: [] } },
     ]);
   });
 

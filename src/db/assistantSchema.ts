@@ -4,7 +4,7 @@ import { RECAP_KINDS } from "../digest/periods";
 import type { RecapLines } from "../digest/page";
 import type { Constraints } from "../library/constraints";
 
-export const LLM_FEATURES = ["sets", "picks", "ask", "notes", "digest", "dj", "library", "verify"] as const;
+export const LLM_FEATURES = ["sets", "picks", "ask", "notes", "digest", "dj", "library", "verify", "chat", "rules", "play"] as const;
 export type LlmFeature = (typeof LLM_FEATURES)[number];
 
 export const PICK_STATES = ["new", "saved", "not_now", "never"] as const;
@@ -72,6 +72,8 @@ export const sets = sqliteTable("sets", {
   coverUploadKey: text("cover_upload_key"),
   /** Null on sets made before constraints existed: no constraints. */
   constraints: text("constraints", { mode: "json" }).$type<Constraints>(),
+  /** The chat conversation that made the set; null for sets made before conversations or through Discord. */
+  conversationId: integer("conversation_id"),
   createdAt: integer("created_at").notNull(),
   updatedAt: integer("updated_at").notNull(),
 });
@@ -260,6 +262,50 @@ export const shares = sqliteTable(
   },
   (t) => [uniqueIndex("shares_token").on(t.tokenHash), index("shares_ref").on(t.kind, t.refId)],
 );
+
+export const CHAT_TASKS = ["answer", "set", "rule", "plan", "play", "refine"] as const;
+export type ChatTask = (typeof CHAT_TASKS)[number];
+
+export const SUBJECT_KINDS = ["set", "plan"] as const;
+export type SubjectKind = (typeof SUBJECT_KINDS)[number];
+
+/** One conversation with the assistant. Each turn's outcome lives in its own task's tables; `subject` is the set or plan the conversation changes. */
+export const conversations = sqliteTable("conversations", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  title: text("title").notNull(),
+  subjectKind: text("subject_kind", { enum: SUBJECT_KINDS }),
+  subjectId: integer("subject_id"),
+  createdAt: integer("created_at").notNull(),
+  updatedAt: integer("updated_at").notNull(),
+});
+
+export const conversationTurns = sqliteTable(
+  "conversation_turns",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    conversationId: integer("conversation_id")
+      .notNull()
+      .references(() => conversations.id, { onDelete: "cascade" }),
+    position: integer("position").notNull(),
+    message: text("message").notNull(),
+    task: text("task", { enum: CHAT_TASKS }).notNull(),
+    outcome: text("outcome", { mode: "json" }).$type<unknown>().notNull(),
+    createdAt: integer("created_at").notNull(),
+  },
+  (t) => [uniqueIndex("conversation_turns_position").on(t.conversationId, t.position)],
+);
+
+/** A rule playlist the assistant drafted. Nothing is created until the owner presses Create on Build from rules. */
+export const ruleDrafts = sqliteTable("rule_drafts", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  conversationId: integer("conversation_id"),
+  name: text("name").notNull(),
+  about: text("about"),
+  rule: text("rule", { mode: "json" }).$type<unknown>().notNull(),
+  /** Songs the rule matched when drafted. */
+  count: integer("count").notNull(),
+  createdAt: integer("created_at").notNull(),
+});
 
 export const spotifyLookups = sqliteTable("spotify_lookups", {
   query: text("query").primaryKey(),

@@ -3,7 +3,7 @@ import { Redirect, Route, Switch, useRoute } from "wouter";
 import { useSession } from "../api/queries";
 import { ErrorState } from "../ui/States";
 import { NotFound } from "../surfaces/NotFound";
-import { paramValue } from "./paths";
+import { LEGACY_CHAT, paramValue } from "./paths";
 import { Shell } from "./Shell";
 
 const Home = lazy(() => import("../surfaces/Home").then((m) => ({ default: m.Home })));
@@ -18,7 +18,7 @@ const SongPage = lazy(() => import("../surfaces/entity/SongPage").then((m) => ({
 const Playlists = lazy(() => import("../surfaces/playlists/List").then((m) => ({ default: m.Playlists })));
 const PlaylistPage = lazy(() => import("../surfaces/playlists/PlaylistPage").then((m) => ({ default: m.PlaylistPage })));
 const RuleBuilder = lazy(() => import("../surfaces/playlists/RuleBuilder").then((m) => ({ default: m.RuleBuilder })));
-const Ask = lazy(() => import("../surfaces/Ask").then((m) => ({ default: m.Ask })));
+const ChatPage = lazy(() => import("../surfaces/ChatPage").then((m) => ({ default: m.ChatPage })));
 const Eras = lazy(() => import("../surfaces/Eras").then((m) => ({ default: m.Eras })));
 const Taste = lazy(() => import("../surfaces/Taste").then((m) => ({ default: m.Taste })));
 const Skips = lazy(() => import("../surfaces/Skips").then((m) => ({ default: m.Skips })));
@@ -107,7 +107,8 @@ export function App() {
           </Route>
           <Route path="/sets/:id">{(p) => <Redirect to={`/playlists/set-${p.id}`} replace />}</Route>
 
-          <Route path="/ask/:id?">{(p) => <Ask id={p.id} />}</Route>
+          <Route path="/chat/:id?">{(p) => <ChatPage id={p.id} />}</Route>
+          <Route path="/ask/:id?">{() => <Redirect to={LEGACY_CHAT} replace />}</Route>
 
           <Route path="/recaps/:slug/:key">{(p) => <RecapPeriodPage slug={p.slug} periodKey={p.key} />}</Route>
           <Route path="/recaps/:id">{(p) => (/^\d+$/.test(p.id) ? <RecapById key={p.id} id={Number(p.id)} /> : <RecapKindLatest key={p.id} slug={p.id} />)}</Route>

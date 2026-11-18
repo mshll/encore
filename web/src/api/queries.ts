@@ -9,6 +9,9 @@ const getOrNull = <T>(path: string, query: Record<string, string>) =>
     throw error;
   });
 import type {
+  ChatConversation,
+  ChatListItem,
+  RuleDraft,
   Alerts,
   Backups,
   LivingDetail,
@@ -18,9 +21,7 @@ import type {
   LivingList,
   SavedRecapPlaylist,
   LivingRefresh,
-  AskThread,
   Devices,
-  AskTurn,
   Block,
   Digest,
   DigestItem,
@@ -37,7 +38,6 @@ import type {
   ItemStatus,
   LibraryAnalysis,
   LibrarySongs,
-  PlanConversation,
   PlanDetail,
   PlanSummary,
   SongGroup,
@@ -315,10 +315,6 @@ export const useBatches = () =>
     refetchInterval: (q) => (q.state.data?.items.some(busy) ? 1000 : false),
   });
 
-/** `threadId` 0 reads nothing (a caller with no planning conversation open). */
-export const usePlanConversation = (threadId: number) =>
-  useQuery({ queryKey: ["library", "conversation", threadId], queryFn: () => get<PlanConversation>(`/api/library/conversations/${threadId}`), enabled: threadId > 0 });
-
 export const useStanding = () => useQuery({ queryKey: ["library", "standing"], queryFn: () => get<{ items: Standing[] }>("/api/library/standing") });
 
 export const useSets = () =>
@@ -340,10 +336,14 @@ export const usePickWeeks = () =>
 
 export const useBlocks = () => useQuery({ queryKey: ["blocks"], queryFn: () => get<{ items: Block[] }>("/api/blocks") });
 
-export const useAskThreads = () => useQuery({ queryKey: ["ask", "threads"], queryFn: () => get<{ items: AskThread[] }>("/api/ask/threads", { limit: 50 }) });
+export const useConversations = (q = "") =>
+  useQuery({ queryKey: ["chat", "list", q], queryFn: () => get<{ items: ChatListItem[] }>("/api/chat/conversations", { q: q || undefined, limit: 100 }), placeholderData: keepPreviousData });
 
-export const useAskThread = (id: number | null) =>
-  useQuery({ queryKey: ["ask", "threads", id], queryFn: () => get<AskThread & { turns: AskTurn[] }>(`/api/ask/threads/${id}`), enabled: id !== null });
+export const useConversation = (id: number | null) =>
+  useQuery({ queryKey: ["chat", "conversation", id], queryFn: () => get<ChatConversation>(`/api/chat/${id}`), enabled: id !== null, retry: false });
+
+export const useRuleDraft = (id: number | null) =>
+  useQuery({ queryKey: ["living", "draft", id], queryFn: () => get<RuleDraft>(`/api/living/drafts/${id}`), enabled: id !== null, retry: false, staleTime: Infinity });
 
 export const useNote = (songKey: string) =>
   useQuery({ queryKey: ["note", songKey], queryFn: () => getOrNull<Note>("/api/notes", { songKey }), staleTime: Infinity });

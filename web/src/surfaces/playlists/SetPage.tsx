@@ -8,7 +8,7 @@ import { useOpenQueue } from "../../app/Shell";
 import { artistPath, songPath } from "../../app/paths";
 import { useChat } from "../../chat/state";
 import { useAi } from "../../lib/ai";
-import { assistantProblem } from "../../lib/assistant";
+import { assistantProblem, savedMessage } from "../../lib/assistant";
 import { fmtAgo, fmtDate, fmtInt } from "../../lib/format";
 import { showToast } from "../../lib/toast";
 import { openInSpotify, usePlayback } from "../../player/playback";
@@ -143,13 +143,6 @@ function SessionLine({ session }: { session: DjSession }) {
   );
 }
 
-function savedMessage(updated: boolean, cover: SavedPlaylist["cover"]["status"]): string {
-  const base = updated ? "Playlist updated in Spotify" : "Saved to Spotify as a private playlist";
-  if (cover === "failed") return `${base}, without its cover.`;
-  if (cover === "missing_scope") return `${base}. Connect Spotify again in Settings to add its cover.`;
-  return `${base}.`;
-}
-
 function SetActions({ set, playing, canSave }: { set: SetDetail; playing: boolean; canSave: boolean }) {
   const queryClient = useQueryClient();
   const openQueue = useOpenQueue();
@@ -190,7 +183,6 @@ function SetActions({ set, playing, canSave }: { set: SetDetail; playing: boolea
     });
   const play = () => (set.playlist && !set.playlist.outdated ? playback.playContext(`spotify:playlist:${set.playlist.id}`) : playback.play(set.items.map((i) => i.uri)));
   const empty = set.items.length === 0;
-  const thread = { kind: "set", id: set.id } as const;
   return (
     <div className="flex flex-wrap items-center gap-2">
       <Button variant="accent" icon={PlayIcon} disabled={empty} onClick={() => void play()}>
@@ -202,8 +194,8 @@ function SetActions({ set, playing, canSave }: { set: SetDetail; playing: boolea
         </Button>
       )}
       {ai.configured && (
-        <Button icon={ChatCircleTextIcon} onClick={() => chat.show({ thread })}>
-          {chat.runningFor(thread) ? "Changing…" : set.version === 0 ? "Answer" : "Change"}
+        <Button icon={ChatCircleTextIcon} onClick={() => void chat.attach({ kind: "set", id: set.id })}>
+          {set.conversationId !== null && chat.runningFor(set.conversationId) ? "Changing…" : set.version === 0 ? "Answer" : "Change"}
         </Button>
       )}
       <MenuRoot>

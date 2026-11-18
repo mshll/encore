@@ -78,6 +78,7 @@ const RUN: RunState = {
   checked: 12,
   startedAt: Date.now() - 42_000,
   problem: null,
+  task: "set",
 };
 
 const SAMPLE_ANSWER: Answer = {

@@ -300,7 +300,7 @@ async function converse(ctx: FeatureContext, setId: number, threadId: number, sy
   return result;
 }
 
-export async function createSet(ctx: FeatureContext, request: string, onEvent?: (e: AgentEvent) => void, context?: PageContext, given?: ConstraintsPatch) {
+export async function createSet(ctx: FeatureContext, request: string, onEvent?: (e: AgentEvent) => void, context?: PageContext, given?: ConstraintsPatch, note = "") {
   const { db, llm } = ctx;
   llm.assertAvailable();
   const { timezone, weekendDays, llm: llmSettings } = ctx.settings.get();
@@ -308,7 +308,7 @@ export async function createSet(ctx: FeatureContext, request: string, onEvent?: 
   const now = ctx.now();
   const system = [SETS_SYSTEM, tagged("taste_profile", tasteProfile(db, { timezone, weekendDays }, now))];
   const messages: ChatMessage[] = [
-    { role: "user", content: `${ownerMessage(request)}\nOwner's local time: ${localNow({ timezone, weekendDays }, now)}.${constraintsNote(constraints)}${pageContextNote(context)}` },
+    { role: "user", content: `${ownerMessage(request)}\nOwner's local time: ${localNow({ timezone, weekendDays }, now)}.${constraintsNote(constraints)}${pageContextNote(context)}${note}` },
   ];
   const { setId, threadId } = db.transaction((tx) => {
     const threadId = createThread(tx, "sets", system, [], now);
@@ -340,7 +340,7 @@ export class SetNotBuiltError extends Error {
   }
 }
 
-export async function refineSet(ctx: FeatureContext, setId: number, message: string, onEvent?: (e: AgentEvent) => void, context?: PageContext) {
+export async function refineSet(ctx: FeatureContext, setId: number, message: string, onEvent?: (e: AgentEvent) => void, context?: PageContext, note = "") {
   const { db, llm } = ctx;
   const row = getSetRow(db, setId);
   if (!row) throw new SetNotFoundError();
@@ -349,7 +349,7 @@ export async function refineSet(ctx: FeatureContext, setId: number, message: str
   const messages = thread.messages;
   const pinned = pinnedItems(db, setId);
   const pins = pinned.length ? `\nPinned by the owner, keep in the set: ${pinned.map((i) => `${i.name} - ${i.artist} (songKey ${i.songKey})`).join("; ")}.` : "";
-  messages.push({ role: "user", content: `${ownerMessage(message)}\nOwner's local time: ${localNow(ctx.settings.get(), ctx.now())}.${pins}${constraintsNote(setConstraints(row))}${pageContextNote(context)}` });
+  messages.push({ role: "user", content: `${ownerMessage(message)}\nOwner's local time: ${localNow(ctx.settings.get(), ctx.now())}.${pins}${constraintsNote(setConstraints(row))}${pageContextNote(context)}${note}` });
   const before = row.version;
   const result = await converse(ctx, setId, row.threadId, thread.system, messages, { source: "claude", message }, onEvent);
   return { set: getSet(db, setId)!, changed: getSetRow(db, setId)!.version !== before, reply: result.terminal ? null : textReply(result.final.content) };
@@ -396,6 +396,7 @@ function summary(row: typeof sets.$inferSelect) {
     request: row.request,
     version: row.version,
     constraints: setConstraints(row),
+    conversationId: row.conversationId,
     playlist: row.playlistId ? { id: row.playlistId, url: row.playlistUrl, savedVersion: row.savedVersion, outdated: row.savedVersion !== row.version } : null,
     createdAt: new Date(row.createdAt).toISOString(),
     updatedAt: new Date(row.updatedAt).toISOString(),

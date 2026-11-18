@@ -30,7 +30,7 @@ Contract between the server and the web UI. All routes are JSON over HTTP on the
 
 ## Assistant runs
 
-A request sent with `Accept: text/event-stream` to `POST /api/sets`, `POST /api/sets/:id/messages`, `POST /api/picks/generate`, `POST /api/ask` or `POST /api/library/conversations` starts a run on the server. Closing the stream does not stop it. The stream starts with `event: run` (`{ "id", "startedAt" }`), then `text`, `tool` and (Ask) `visual` events, then one `done` or `error`.
+A request sent with `Accept: text/event-stream` to `POST /api/chat`, `POST /api/chat/:id/messages`, `POST /api/sets`, `POST /api/sets/:id/messages`, `POST /api/picks/generate`, `POST /api/ask` or `POST /api/library/conversations` starts a run on the server. Closing the stream does not stop it. The stream starts with `event: run` (`{ "id", "startedAt" }`), then (chat) one `task` event, `text`, `tool` and (answers) `visual` events, then one `done` or `error`.
 
 - `GET /api/runs?key=<request path>`: `{ "run": { "id", "startedAt" } | null }`, the run still working for that path.
 - `GET /api/runs/:id/events`: the same stream again from its first event. Finished runs stay readable for 10 minutes.
@@ -40,7 +40,7 @@ Runs live in memory: a restart ends them.
 
 ### Page context
 
-`POST /api/ask`, `POST /api/sets`, `POST /api/sets/:id/messages` and `POST /api/library/conversations` take an optional `context`: the page the owner sent the message from. It holds ids and names only; Claude reads it as what "this" or "them" refers to and fetches the data with its tools. It is added to that one message (stored with the thread, never shown in a transcript). Without it nothing is added. An unknown `kind`, an extra field, a name over 300 characters or a malformed day is `400 invalid_request`.
+`POST /api/chat`, `POST /api/chat/:id/messages`, `POST /api/ask`, `POST /api/sets`, `POST /api/sets/:id/messages` and `POST /api/library/conversations` take an optional `context`: the page the owner sent the message from. It holds ids and names only; Claude reads it as what "this" or "them" refers to and fetches the data with its tools. It is added to that one message (stored with the thread, never shown in a transcript). Without it nothing is added. An unknown `kind`, an extra field, a name over 300 characters or a malformed day is `400 invalid_request`.
 
 | `kind` | Fields |
 | --- | --- |
@@ -1265,6 +1265,10 @@ Makes a rule playlist, off. Body `{ "name": "Old Mac Miller", "about"?: "..." | 
 
 Body `{ "rule": Rule }`. What a new playlist with that rule would hold now: `{ "count": 12, "songs": [Song] }`. Reads the database only: nothing is saved and Spotify is not called.
 
+### `GET /api/living/drafts/:id`
+
+A rule playlist the chat drafted (see [Chat](#chat)): `{ "id": 3, "name": "...", "about": "..." | null, "rule": Rule, "count": 24, "createdAt": "..." }`. `count` is what the rule matched when drafted. Build from rules opens it prefilled (`/playlists/new?draft=3`); nothing exists until `POST /api/living`. `404` when unknown.
+
 ### `PUT /api/living/:kind`
 
 Replaces a rule playlist's `name`, `about` and `rule` (same body as `POST`). When it is on, not frozen and in Spotify, it is refreshed at once (trigger `manual`; the name and description are written too when they changed, 1 call even when the songs did not); otherwise the next scheduled refresh uses the new rule. `{ "outcome": RefreshOutcome | null, "playlist" }`. A built-in is `409 builtin_playlist`.
@@ -1359,12 +1363,12 @@ Rule plans stay `open`; their dismissed and applied items keep their status acro
 
 ```json
 { "items": [{ "id": 3, "source": "rule", "ruleKind": "saved_never_played", "title": "Liked songs never played",
-              "summary": "Liked more than 30 days ago and never played past 30 seconds.", "request": null, "threadId": null, "standingId": null, "status": "open",
+              "summary": "Liked more than 30 days ago and never played past 30 seconds.", "request": null, "threadId": null, "standingId": null, "conversationId": null, "status": "open",
               "counts": { "open": 135, "selected": 130, "dismissed": 2, "applied": 0, "skipped": 0 },
               "runningBatchId": null, "createdAt": "...", "updatedAt": "..." }] }
 ```
 
-`status`: `open`, `applied` (every ticked item applied; rule plans never), `dismissed`. `selected` counts open items that are ticked. Claude plans carry the owner's first message in `request` and their conversation in `threadId` (see `GET /api/library/conversations/:threadId`); standing plans also `standingId`.
+`status`: `open`, `applied` (every ticked item applied; rule plans never), `dismissed`. `selected` counts open items that are ticked. Claude plans carry the owner's first message in `request` and their conversation in `threadId` (see `GET /api/library/conversations/:threadId`); standing plans also `standingId`. `conversationId` is the chat conversation that made or changes the plan (see [Chat](#chat)).
 
 ### `POST /api/library/plans`
 
@@ -1575,6 +1579,7 @@ AI features, through the provider chosen in Settings (Anthropic, OpenAI, Google 
 | 404 | `not_found` | Unknown set, pick, thread, digest, block or note |
 | 409 | `period_unavailable` | A recap period that has not ended or that the history does not reach |
 | 409 | `playlist_empty` | A recap period with no song listened to twice, so no playlist to save |
+| 409 | `not_attachable` | Opening a chat on a plan that has no conversation of its own |
 
 ### Streaming
 
@@ -1583,6 +1588,7 @@ AI features, through the provider chosen in Settings (Anthropic, OpenAI, Google 
 | Event | `data` |
 | --- | --- |
 | `text` | `{ "delta": "..." }`: Claude's text as it is written |
+| `task` | `{ "task": "answer" | "set" | "rule" | "plan" | "play" | "refine" }`: chat only, the task the router picked, before any other work |
 | `tool` | `{ "name": "find_songs", "input": { ... } }`: a tool Claude called |
 | `visual` | `{ "id": "v1", "visual": Visual }`: Ask only. A visual Claude drew with `show`, sent before the text that places it as `[[v1]]` |
 | `done` | The same body the JSON response would have. Last event. |
@@ -1599,7 +1605,7 @@ Set shape (`GET /api/sets/:id`, and `set` in create/refine):
 ```json
 {
   "id": 1, "title": "Late drive", "description": "Night roads.", "request": "late drive, like my Mac Miller era",
-  "version": 2,
+  "version": 2, "conversationId": 4,
   "constraints": { "maxPerArtist": 2, "maxPerAlbum": null, "newSongs": 4, "exclude": { "artists": ["Drake"], "songs": [{ "songKey": "nights|frank ocean", "label": "Nights - Frank Ocean" }] } },
   "playlist": { "id": "3xYz...", "url": "https://open.spotify.com/playlist/3xYz...", "savedVersion": 1, "outdated": true },
   "coverUrl": "/api/sets/1/cover?v=e3b78ab8bd4c3322",
@@ -1621,6 +1627,7 @@ Set shape (`GET /api/sets/:id`, and `set` in create/refine):
 }
 ```
 
+- `conversationId`: the chat conversation that made or changes the set (see [Chat](#chat)), `null` for sets made through Discord or before the chat.
 - `kind`: `library` (in the history) or `new` (never played, verified on Spotify).
 - `albumArtUrl`, `artistImageUrl`: artwork for the row, or `null` when not known yet. Album art comes from any known version of the song (or the Spotify search result for new songs); the artist image is the primary artist's. Picks and notes carry the same two fields.
 - A refinement that changes mood or direction ("less sad") is applied to every track: familiar songs whose tags conflict with it are rejected unless the owner asked to keep them.
@@ -1763,7 +1770,7 @@ An answer is stored with its values when it is written, so it reads the same aft
 
 #### `POST /api/ask`
 
-`{ "question": "Why did I stop playing Joji?", "threadId": 3, "context": PageContext }` (`threadId` optional, continues a thread; `context` optional, see [Page context](#page-context)). `200 { "threadId": 3, "answer": "...", "content": Answer, "toolCalls": [{ "name": "artist_history", "input": { "artist": "Joji" } }] }`. `answer` is the answer as plain text for a chat message: prose, each block visual as lines ("1. Woods by Mac Miller: 20 plays"), then "Based on: ...".
+`{ "question": "Why did I stop playing Joji?", "threadId": 3, "context": PageContext }` (`threadId` optional, continues a thread; `context` optional, see [Page context](#page-context)). `200 { "threadId": 3, "turn": 1, "answer": "...", "content": Answer, "toolCalls": [{ "name": "artist_history", "input": { "artist": "Joji" } }] }`. `turn` is the answer's index in the thread's `turns`. `answer` is the answer as plain text for a chat message: prose, each block visual as lines ("1. Woods by Mac Miller: 20 plays"), then "Based on: ...".
 
 #### `GET /api/ask/threads`
 
@@ -1780,6 +1787,61 @@ An answer's share card as a PNG download (`Content-Disposition: attachment; file
 #### `DELETE /api/ask/threads/:id`
 
 `{ "deleted": true }`. Its answers are deleted with it.
+
+### Chat
+
+The one assistant the web app talks to. The owner writes; the server picks the task, then answers with that task's own prompt and tools, so a conversation can hold answers, sets, plans, rule drafts and songs to play. Discord and the MCP keep their own entry points (Chat integrations, MCP).
+
+**Routing.** Each message starts with one small structured call (feature `chat`, effort low, JSON output `{ "task" }`) that sees only the message, the page it was sent from, the attached set or plan, and one line for each of the last 3 turns. Tasks:
+
+| Task | Does | Feature | Produces |
+| --- | --- | --- | --- |
+| `answer` | Answers from the history, as [Ask](#ask); follows the conversation's last answer thread | `ask` | an Answer |
+| `set` | Builds a set, as `POST /api/sets` | `sets` | a set; it becomes the attached object |
+| `rule` | Drafts a rule playlist: `submit_rule` takes `{ name, about, rule }`, validated by the [Rules](#rules) schema and previewed against the database (as `POST /api/living/preview`); a rule that fails the schema or matches no songs is sent back to the model to fix. At most 8 model calls | `rules` | a rule draft, or the model's words when it could not make one |
+| `plan` | Plans a library cleanup, as `POST /api/library/conversations`; answers the plan's pending question when the last turn asked one | `library` | a plan; it becomes the attached object |
+| `play` | Picks songs from the history (`find_songs`, `artist_profile`, then `suggest_songs` with song keys in play order, 1 to 50, blocks respected). Starts nothing: the owner taps Play or Add to queue (`/api/player/play`, `/api/player/queue`) | `play` | songs to play |
+| `refine` | Only offered while a set or plan is attached: changes it, as `POST /api/sets/:id/messages` (the saved playlist is updated after a change) or the plan's conversation | `sets`, `library` | the same set or plan |
+
+An unreadable routing reply is treated as `answer`, which changes nothing. Each task's message carries the page context and up to 5 earlier turns as a note. Every call goes through the ledger and the monthly cap; `402` and `503` come before the stream opens.
+
+#### `POST /api/chat`
+
+Starts a conversation. Body `{ "message": "...", "context"?: PageContext }` (1 to 2000 characters). Stream or JSON; `201` (or the `done` event) `{ "conversationId": 4, "turn": Turn }`. A failed or cancelled first message leaves no conversation.
+
+#### `POST /api/chat/:id/messages`
+
+The same body, in conversation `:id`. `200 { "conversationId", "turn" }`. `404` for an unknown conversation.
+
+`Turn`: `{ "id", "position", "message", "task", "at", "outcome" }`, `outcome` by `kind`:
+
+| `kind` | Fields |
+| --- | --- |
+| `answer` | `threadId`, `turn` (the answer in that Ask thread, for its share card and public links), `text`, `content` (Answer) |
+| `set` | `setId`, `changed`, `reply` (the model's question or answer instead of a change), `set`: `{ id, title, coverUrl, tracks, version, playlist: { url } \| null }` or `null` once deleted |
+| `plan` | `planId` (`null` while the model's question waits), `threadId`, `reply`, `plan`: `{ id, title, status, open }` or `null` |
+| `rule` | `draftId`, `reply`, `draft` (as `GET /api/living/drafts/:id`) |
+| `play` | `title`, `songs: [{ songKey, uri, name, artist, album, albumArtUrl }]`, `reply` |
+
+#### `GET /api/chat/conversations`
+
+Params `q` (matches the title or any message, ignoring case), `limit` (1 to 200, default 50). `{ "items": [{ "id", "title", "produced": "answer" | "set" | "plan" | "rule" | "play" | null, "createdAt", "updatedAt" }] }`, last changed first. `produced` is what the newest turn made.
+
+#### `GET /api/chat/:id`
+
+`{ "id", "title", "subject": { "kind": "set" | "plan", "id", "title" } | null, "createdAt", "updatedAt", "turns": [Turn] }`. `subject` is the attached set or plan.
+
+#### `PATCH /api/chat/:id`
+
+Body `{ "title" }` (1 to 120 characters). The conversation as `GET`.
+
+#### `DELETE /api/chat/:id`
+
+`{ "deleted": true }`. Its answers go with it; sets, plans and rule drafts it made stay and lose the link.
+
+#### `POST /api/chat/attach`
+
+Body `{ "kind": "set" | "plan", "id" }`. `{ "conversationId" }`: the conversation that made the object, else a new one attached to it (titled with it), so the next message refines it. A plan with no conversation of its own (made by rule, from a group of songs) is `409 not_attachable`.
 
 ### Liner notes
 

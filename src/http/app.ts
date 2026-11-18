@@ -23,6 +23,7 @@ import { onboardingRoutes } from "./routes/onboarding";
 import { playerRoutes } from "./routes/player";
 import { radarRoutes } from "./routes/radar";
 import { runRoutes } from "./routes/runs";
+import { chatRoutes } from "./routes/chat";
 import { callbackRoute, spotifyRoutes } from "./routes/spotify";
 import { artistRoutes, playRoutes } from "./routes/corrections";
 import { entityRoutes, historyRoutes, searchRoutes, statsRoutes } from "./routes/stats";
@@ -125,6 +126,7 @@ export function createApp(deps: Deps) {
   app.route("/api/picks", pickRoutes);
   app.route("/api/blocks", blockRoutes);
   app.route("/api/ask", askRoutes);
+  app.route("/api/chat", chatRoutes);
   app.route("/api/notes", noteRoutes);
   app.route("/api/digests", digestRoutes);
   app.route("/api/llm", llmRoutes);

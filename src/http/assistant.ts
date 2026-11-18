@@ -6,6 +6,7 @@ import { PlanNotFoundError } from "../library/plans";
 import { PlanNotBuiltError } from "../library/planner";
 import { StandingNotFoundError } from "../library/standing";
 import { ThreadNotFoundError } from "../ask/service";
+import { ConversationNotFoundError, NotAttachableError } from "../chat/service";
 import type { AgentEvent } from "../llm/agent";
 import type { FeatureContext } from "../llm/context";
 import { LlmAbortedError, LlmBudgetExceededError, LlmIncompleteError, LlmNotConfiguredError, LlmPriceRequiredError, LlmProviderError, LlmRefusalError, LlmTruncatedError } from "../llm/errors";
@@ -34,7 +35,8 @@ export function toApiError(error: unknown): unknown {
   if (error instanceof SpotifyApiError) return new ApiError(502, "spotify_failed", error.message);
   if (error instanceof SetNotFoundError || error instanceof SetItemNotFoundError || error instanceof ThreadNotFoundError || error instanceof PickNotFoundError || error instanceof DigestNotFoundError)
     return new ApiError(404, "not_found", "Not found");
-  if (error instanceof PlanNotFoundError || error instanceof StandingNotFoundError) return new ApiError(404, "not_found", "Not found");
+  if (error instanceof PlanNotFoundError || error instanceof StandingNotFoundError || error instanceof ConversationNotFoundError) return new ApiError(404, "not_found", "Not found");
+  if (error instanceof NotAttachableError) return new ApiError(409, "not_attachable", error.message);
   if (error instanceof NoteSubjectNotFoundError) return new ApiError(404, "not_found", error.message);
   if (error instanceof PicksExistError) return new ApiError(409, "picks_exist", error.message, { week: error.week });
   if (error instanceof EmptySetError) return new ApiError(409, "set_empty", error.message);
@@ -94,6 +96,7 @@ export function followRun(c: Context<Env>, run: Run, keepAliveMs = 5_000) {
 function runEvent(e: AgentEvent): RunEvent {
   if (e.type === "text") return { event: "text", data: { delta: e.delta } };
   if (e.type === "visual") return { event: "visual", data: { id: e.id, visual: e.visual } };
+  if (e.type === "task") return { event: "task", data: { task: e.task } };
   return { event: "tool", data: { name: e.name, input: e.input } };
 }
 

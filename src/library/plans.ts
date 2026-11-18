@@ -155,12 +155,17 @@ function planSummary(db: Db, plan: Plan) {
     request: plan.request,
     threadId: plan.threadId,
     standingId: plan.standingId,
+    conversationId: plan.conversationId,
     status: plan.status,
     counts: { open: n("open"), selected: n("open", 1), dismissed: n("dismissed"), applied: n("applied"), skipped: n("skipped") },
     runningBatchId: running?.id ?? null,
     createdAt: iso(plan.createdAt),
     updatedAt: iso(plan.updatedAt),
   };
+}
+
+export function planById(db: Db, id: number) {
+  return planSummary(db, getPlanRow(db, id));
 }
 
 export function listPlans(db: Db) {

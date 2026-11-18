@@ -299,6 +299,8 @@ export const libraryPlans = sqliteTable("library_plans", {
   request: text("request"),
   threadId: integer("thread_id"),
   standingId: integer("standing_id"),
+  /** The chat conversation that made the plan, for plans made in the chat. */
+  conversationId: integer("conversation_id"),
   status: text("status", { enum: PLAN_STATUSES }).notNull(),
   createdAt: integer("created_at").notNull(),
   updatedAt: integer("updated_at").notNull(),
