@@ -11,7 +11,9 @@ import { forgotten, onThisDay } from "../../analytics/recall";
 import { MOMENT_CLASSES, momentSplit, skipContext, skips } from "../../analytics/skips";
 import { search } from "../../analytics/search";
 import { podcasts } from "../../analytics/podcasts";
-import { milestones, records, streaks, weekHighlight } from "../../analytics/records";
+import { weekMoments } from "../../analytics/moments";
+import { milestones, records, streaks } from "../../analytics/records";
+import { onRepeat } from "../../analytics/repeat";
 import { energyByHour, genreSeries, moodSeries } from "../../analytics/tags";
 import { eras, topAlbums, topArtists, topTracks } from "../../analytics/top";
 import { trips } from "../../analytics/trips";
@@ -49,12 +51,17 @@ export const statsRoutes = new Hono<Env>()
     const { timezone, llm } = settings.get();
     return c.json(weekSoFar(db, { now: localTime(now(), timezone), recapWeekday: llm.digestSlot.weekday }));
   })
-  .get("/highlight", (c) => {
+  .get("/moments", (c) => {
     const { db, settings, now } = c.var.deps;
     const { timezone, llm } = settings.get();
     const today = localTime(now(), timezone).day;
     const { from } = currentWeek(today, llm.digestSlot.weekday);
-    return c.json({ highlight: weekHighlight(db, { from, today }) });
+    return c.json({ items: weekMoments(db, { from, today }) });
+  })
+  .get("/on-repeat", (c) => {
+    const { db, settings, now } = c.var.deps;
+    const q = parse(z.object({ limit: int(1, 20, 5) }), c.req.query());
+    return c.json(onRepeat(db, { today: localTime(now(), settings.get().timezone).day, limit: q.limit }));
   })
   .get("/discovery", (c) => c.json(discovery(c.var.deps.db, { range: range(parse(ranged({}), c.req.query())) })))
   .get("/discovery/month", (c) => {

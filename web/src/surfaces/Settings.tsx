@@ -2,12 +2,13 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState, type ReactNode } from "react";
 import { ApiError, request } from "../api/client";
 import { useOnboarding, useSettings, useSpend, useStatus } from "../api/queries";
-import type { AiProvider, DiscordRegistration, JobStatus, LlmFeature, Session, Settings as SettingsData, SettingsAdoptResult, Status } from "../api/types";
+import type { AiProvider, DiscordRegistration, JobStatus, LlmFeature, Settings as SettingsData, SettingsAdoptResult, Status } from "../api/types";
 import { SETTINGS_TABS } from "../app/nav";
 import { BudgetBar } from "../charts/BudgetBar";
 import { resetDay } from "../lib/assistant";
 import { fmtAgo, fmtInt, fmtMonthLong } from "../lib/format";
 import { passkeyProblem, registerPasskey } from "../lib/passkey";
+import { useSignOut } from "../lib/signOut";
 import { connectSpotify } from "../lib/spotifyConnect";
 import { useTheme, type ThemePref } from "../lib/theme";
 import { showToast } from "../lib/toast";
@@ -533,14 +534,7 @@ function AccountTab() {
     },
     onError: (e) => setMessage({ ok: false, text: passkeyProblem(e) }),
   });
-  const signOut = useMutation({
-    mutationFn: () => request("/api/auth/logout", { method: "POST" }),
-    onSuccess: () => {
-      queryClient.setQueryData<Session>(["session"], (s) => ({ authenticated: false, setupRequired: false, setupTokenConfigured: s?.setupTokenConfigured ?? true }));
-      queryClient.removeQueries({ predicate: (q) => q.queryKey[0] !== "session" });
-    },
-    onError: (e) => setMessage({ ok: false, text: describeError(e) }),
-  });
+  const signOut = useSignOut();
   const n = onboarding.data?.steps.passkey.passkeys;
   return (
     <>

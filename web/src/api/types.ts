@@ -457,7 +457,9 @@ export type WeekSoFar = {
   usual: { hours: number; plays: number; listens: number; weeks: number } | null;
   topArtist: Overview["topArtist"];
   topTrack: Overview["topTrack"];
-  days: { day: string; hours: number }[];
+  /** The seven days of the week; `hours` is null for a day still to come. */
+  days: { day: string; hours: number | null; usual: number | null }[];
+  repeats: { listens: number; repeats: number; share: number | null };
 };
 
 export type Eras = {
@@ -934,7 +936,21 @@ export type RecordSet =
   | { record: "week"; week: string; hours: number }
   | { record: "month"; month: string; hours: number };
 
-export type Highlight = ({ kind: "record" } & RecordSet) | { kind: "milestone"; milestone: Milestone } | ({ kind: "streak" } & DayRun);
+export type MomentTarget = "records" | "discovery";
+
+export type Moment =
+  | ({ kind: "record"; target: MomentTarget } & RecordSet)
+  | { kind: "milestone"; target: MomentTarget; milestone: Milestone }
+  | { kind: "newArtists"; target: MomentTarget; count: number; artists: { artist: string; hours: number; imageUrl: string | null }[] }
+  | ({ kind: "streak"; target: MomentTarget } & DayRun)
+  | { kind: "comeback"; target: MomentTarget; comeback: Comeback };
+
+export type OnRepeat = {
+  rules: { recentDays: number; baselineDays: number; minListens: number; lift: number };
+  from: string;
+  to: string;
+  items: (Song & { usualListens: number })[];
+};
 
 export type Decades = {
   decades: { decade: number; hours: number; plays: number; share: number | null }[];

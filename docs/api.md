@@ -98,6 +98,11 @@ Runs live in memory: a restart ends them.
 - **Loyalty**: a loyal year is a calendar year with 2 h or more of the artist. Artists with 2 or more loyal years are listed, by loyal years, then the longest run of consecutive loyal years, then hours.
 - **Streak**: consecutive local days with at least one listen. The current streak is the run that reaches today or yesterday (today may not have a listen yet), over all time.
 - **Session**: music plays in time order; a play starts at `ts - ms_played` (`ts` is when it ended). A new session starts when a play starts more than 15 minutes after the previous one ended. A session's length is wall time from its first start to its last end.
+- **Week best** (`stats/week` `topArtist`, `topTrack`): the artist and the song with the most hours this week so far. Ties go to the artist name, then the song key, first in alphabetical order.
+- **Day usual** (`stats/week` `days[].usual`): the mean of the hours of the whole same weekday in each earlier week `usual` counts (the four weeks before the week, those the history covers whole). Today's bar is so far; its usual is the whole day.
+- **Repeats** (`stats/week` `repeats`): a listen this week is a repeat when the same song (`songKey`) had a listen earlier in the same week, by time of play. Listens before the week do not count. `share = repeats / listens`, `null` with no listens.
+- **Moments** (`stats/moments`): records and new artists count only once the history started at least 28 days before the week (with less, every week sets records and every artist is new). A new artist is one whose first music play of all time (any play, short ones included) is this week.
+- **On repeat** (`stats/on-repeat`): a song with 5 or more listens in the last 14 local days (today included) and at least twice its usual. Its usual is its listens in the 182 days before those 14, times 14, over the days of those 182 the history covers (0 when it covers none, so a song in a history younger than two weeks needs only the 5 listens). Ranked by listens minus usual, then listens, then song key.
 - **Records**: in the range, the local day, week (Monday start) and month with the most hours, the song with the most listens in one day, and the longest session. Ties go to the earliest.
 - **Milestones**: the play that took a song to its 10th, 25th, 50th, 100th, 250th, 500th or 1000th listen; an artist to 10, 50, 100, 250, 500 or 1000 hours; all music to 100, 500, 1000, 2500, 5000 or 10000 hours. Counted over all time; the range picks which crossings are listed (by local day).
 - **Release decade and listening age**: the release year is the first four digits of the track's `release_date` (Spotify gives a year, a month or a day). Listening age is the time-weighted median release year: sort the range's dated hours by release year; it is the first year at which the running total reaches half of them. Plays of songs with no release date are left out; `coverage.share` is the dated share of hours, `coverage.playsShare` of plays.
@@ -526,11 +531,12 @@ This week so far against the owner's usual. No params.
   "hours": 6.4, "plays": 141, "listens": 98,
   "usual": { "hours": 8.2, "plays": 180, "listens": 121, "weeks": 4 },
   "topArtist": <as in overview> | null, "topTrack": <as in overview> | null,
-  "days": [{ "day": "2026-10-17", "hours": 1.03 }]
+  "days": [{ "day": "2026-11-13", "hours": 1.14, "usual": 0.81 }, { "day": "2026-11-19", "hours": null, "usual": 2.17 }],
+  "repeats": { "listens": 98, "repeats": 41, "share": 0.418 }
 }
 ```
 
-The week is the recap week that holds today (`from` to `to`; weeks end the day before the recap weekday, as weekly recaps do); the figures cover `from` to now. `usual` is the mean of the same stretch, up to the same local hour, of the four weeks before, counting only weeks the history covers whole (`weeks` says how many); `null` when the history starts inside that span. `days` is the last 30 local days, today last, zeros included.
+The week is the recap week that holds today (`from` to `to`; weeks end the day before the recap weekday, as weekly recaps do); the figures cover `from` to now. `usual` is the mean of the same stretch, up to the same local hour, of the four weeks before, counting only weeks the history covers whole (`weeks` says how many); `null` when the history starts inside that span. `topArtist` and `topTrack` are the week's best artist and song (see Week best). `days` is the seven days of the week, `from` first: `hours` is `null` for a day still to come (today counts so far), `usual` is that day's usual (see Day usual), `null` when `usual` is. `repeats` is the week's repetition (see Repeats).
 
 ### `GET /api/stats/timeseries`
 
@@ -647,15 +653,28 @@ Params: `minPlays` (default 5), `topTracks` (0-50, default 5). Newest first.
 
 The range filters plays before trips are built, so a trip that crosses `from`/`to` is cut at the boundary.
 
-### `GET /api/stats/highlight`
+### `GET /api/stats/moments`
 
-One line for Home's This week. No params. `{ "highlight": Highlight | null }`, the first that applies:
+Up to three facts about this week for Home (see Moments). No params. `{ "items": Moment[] }`, in this order, at most one of each kind:
 
-1. An all-time record (see Records) set this week, once the history started at least 28 days before the week: `{ "kind": "record", "record": "day", "day", "hours" }`, `"session"` (`day`, `minutes`, `hours`), `"songDay"` (`day`, `listens`, `song`), `"week"` (`week`, `hours`) or `"month"` (`month`, `hours`), in that order.
-2. The biggest milestone crossed this week (total, then artist, then song; then the higher threshold): `{ "kind": "milestone", "milestone": Milestone }`.
-3. A current streak of 7 days or more: `{ "kind": "streak", "days", "from", "to" }`.
+1. `{ "kind": "record", "target": "records", "record": "day" | "session" | "songDay" | "week" | "month", ... }`: the first all-time record (see Records) set this week, its fields by kind: `day` (`day`, `hours`), `session` (`day`, `minutes`, `hours`), `songDay` (`day`, `listens`, `song`), `week` (`week`, `hours`), `month` (`month`, `hours`).
+2. `{ "kind": "milestone", "target": "records", "milestone": Milestone }`: the biggest milestone crossed this week (total, then artist, then song; then the higher threshold).
+3. `{ "kind": "newArtists", "target": "discovery", "count": 4, "artists": [{ "artist", "hours", "imageUrl" }] }`: artists first played this week, `artists` the first three by hours this week (ties by name).
+4. `{ "kind": "streak", "target": "records", "days", "from", "to" }`: the current streak, 7 days or more.
+5. `{ "kind": "comeback", "target": "discovery", "comeback": <a comeback item> }`: the newest comeback whose `returned` day is this week.
 
-The week is the one `stats/week` uses.
+`target` is the Patterns tab the fact links to. The week is the one `stats/week` uses. Empty history: `{ "items": [] }`.
+
+### `GET /api/stats/on-repeat`
+
+Songs played far more in the last 14 days than usual (see On repeat). Params: `limit` (1-20, default 5).
+
+```json
+{ "rules": { "recentDays": 14, "baselineDays": 182, "minListens": 5, "lift": 2 }, "from": "2026-11-05", "to": "2026-11-18",
+  "items": [{ ...Song, "usualListens": 0.3 }] }
+```
+
+Song `Stats` cover `from` to `to` (the last 14 local days, today included); `usualListens` is the song's usual for 14 days, to one decimal.
 
 ### `GET /api/stats/discovery`
 
@@ -1720,7 +1739,7 @@ The list item plus `text` (plain text for a chat message, dates written out), `f
 
 - Sections appear only when the numbers support them, in this order: `listening` always; `years` for a year whose year before has music (`stats/years` for the two years, kept with the recap when it is written, like every other figure, so reading the page does not compute it; `artists` are those played this year; a yearly recap stored without it has no `years` section); `months` for a year with two or more months of listening; `artists`, `songs` (the period's playlist: most listens, then most time, at least 2 listens, at most 15, 25 or 50 songs for a week, month or year; skips never lower a song), `finds` (songs and artists first played in the period and listened to again on another day of it, with `newShare`, the share of hours on songs first played in it, null on recaps stored before it was kept; needs earlier history), `comebacks` (artists back inside the period, at most 10, 50 for a year), `records` (all-time records set inside the period and milestones crossed in it), `taste` (only with a comparison and not in a year with `years`, tags whose share moved 5 points or more), `rhythm` (busiest day and hour, and `streak`, the longest run of days with a listen in the period). `quiet: true` (fewer than 5 listens or under half an hour) keeps only `listening`.
 - `before` values are the compared period's. `share` values are 0 to 1. `byHour` is hours per local hour 0-23; `daily` hours per day of the period.
-- `facts` from recaps written after insights landed also hold `discovery` (`newSongs`, `newArtists`, `newHours`, `newShare`; `null` when the history starts inside the period), `comebacks` (returning inside the period, as in `stats/comebacks`), `records` (all-time records set inside the period, as in `stats/highlight`'s record kinds; empty when the history starts inside it), `streak` (the longest run of days with a listen in the period) and `milestones` (crossed inside the period). The page draws them as `finds.newShare`, `comebacks`, `records` and `rhythm.streak`; older recaps lack these fields and their sections.
+- `facts` from recaps written after insights landed also hold `discovery` (`newSongs`, `newArtists`, `newHours`, `newShare`; `null` when the history starts inside the period), `comebacks` (returning inside the period, as in `stats/comebacks`), `records` (all-time records set inside the period, as in `stats/moments`' record kind; empty when the history starts inside it), `streak` (the longest run of days with a listen in the period) and `milestones` (crossed inside the period). The page draws them as `finds.newShare`, `comebacks`, `records` and `rhythm.streak`; older recaps lack these fields and their sections.
 - Recaps stored before recaps were pages (`facts` without `version: 2`) open with the same sections from their stored numbers: `headlineBy: "text"`, `compare.scaled: true` (their comparison was a typical period, scaled), `daily` and `byHour` null, and `legacyText` holds the text Claude wrote then, ISO dates written out.
 
 #### `GET /api/digests/playlists`

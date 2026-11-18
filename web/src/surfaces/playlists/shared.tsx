@@ -9,7 +9,8 @@ import { showToast } from "../../lib/toast";
 import { usePlayback } from "../../player/playback";
 import { AppLink } from "../../ui/AppLink";
 import { Artwork } from "../../ui/Artwork";
-import { buttonClass } from "../../ui/Button";
+import { buttonClass, IconButton } from "../../ui/Button";
+import { PlayIcon } from "../../ui/icons";
 import { cx } from "../../ui/cx";
 import { Notice } from "../../ui/Notice";
 import { Row } from "../../ui/Rows";
@@ -184,50 +185,51 @@ export function useNews(): Partial<Record<LivingKind, string>> {
 
 export const newsOf = (news: Partial<Record<LivingKind, string>>, kind: LivingId) => (kind in news ? (news[kind as LivingKind] ?? null) : null);
 
-function HomeRow({ playlist, news }: { playlist: LivingPlaylist; news: string | null }) {
+/**
+ * A cover on Home's shelf. The generated cover carries the name, so under it is only the fresh line and Play. The cover
+ * opens the playlist's page.
+ */
+function ShelfItem({ playlist, news }: { playlist: LivingPlaylist; news: string | null }) {
+  const play = usePlayPlaylist();
   const line = freshLine(playlist, news);
   return (
-    <li className="min-w-0 phone:snap-start">
-      <AppLink to={playlistPath(playlist.kind)} className="-mx-2 flex min-h-(--row-h) items-center gap-3 rounded-md px-2 py-1.5 transition-colors duration-150 hover:bg-fill">
-        <Artwork src={playlist.coverUrl} kind="playlist" box={40} />
-        <span className="flex min-w-0 flex-1 flex-col">
-          <span className="truncate text-primary">{playlist.name}</span>
-          <span className={cx("truncate text-caption", line.problem ? "text-danger" : line.news ? "text-primary" : "text-secondary")}>{line.text}</span>
-        </span>
+    <li className="flex w-32 shrink-0 snap-start flex-col gap-2 md:w-36">
+      <AppLink to={playlistPath(playlist.kind)} aria-label={`${playlist.name}, ${line.text}`} className="rounded-md">
+        <Artwork src={playlist.coverUrl} kind="playlist" box="fill" />
       </AppLink>
+      <div className="flex items-start gap-1">
+        <span className={cx("line-clamp-2 min-w-0 flex-1 text-caption", line.problem ? "text-danger" : line.news ? "text-primary" : "text-secondary")}>{line.text}</span>
+        {playable(playlist) && <IconButton icon={PlayIcon} label={`Play ${playlist.name}`} size="sm" variant="secondary" className="-mt-1 -mr-1 shrink-0 rounded-full" onClick={() => void play(playlist)} />}
+      </div>
     </li>
   );
 }
 
-/** Two columns of rows on a wider screen; on a phone, two rows a finger scrolls sideways. */
-const PLAYLIST_ROWS =
-  "grid gap-x-6 md:grid-cols-2 phone:-mx-(--gutter) phone:grid-flow-col phone:grid-rows-2 phone:auto-cols-[80%] phone:snap-x phone:snap-mandatory phone:scroll-px-(--gutter) phone:overflow-x-auto phone:overscroll-x-contain phone:px-(--gutter) phone:no-scrollbar";
+/** One row of covers that scrolls sideways when it does not fit, snapping to each cover. */
+const SHELF = "-mx-(--gutter) flex snap-x snap-mandatory scroll-px-(--gutter) gap-4 overflow-x-auto overscroll-x-contain px-(--gutter) pb-1 no-scrollbar";
 
-export function PlaylistRowsSkeleton() {
+export function PlaylistShelfSkeleton() {
   return (
-    <div aria-hidden className={PLAYLIST_ROWS}>
+    <div aria-hidden className={SHELF}>
       {KINDS.map((k) => (
-        <div key={k} className="flex min-h-(--row-h) items-center gap-3">
-          <Skeleton className="size-10 shrink-0 rounded-xs" />
-          <div className="flex flex-1 flex-col gap-1.5">
-            <Skeleton className="h-3.5 w-3/4" />
-            <Skeleton className="h-3 w-1/2" />
-          </div>
+        <div key={k} className="flex w-32 shrink-0 flex-col gap-2 md:w-36">
+          <Skeleton className="aspect-square w-full rounded-md" />
+          <Skeleton className="h-3.5 w-3/4" />
+          <Skeleton className="h-3 w-1/2" />
         </div>
       ))}
     </div>
   );
 }
 
-/** The built-ins, small (Home): cover, name and one line on what is new or how fresh each is. */
-export function PlaylistRows({ items }: { items: LivingPlaylist[] }) {
+/** The built-ins as covers (Home), in the order given: name, one line on what is new or how fresh, Play. */
+export function PlaylistShelf({ items }: { items: LivingPlaylist[] }) {
   const news = useNews();
   return (
-    <ul className={PLAYLIST_ROWS}>
+    <ul className={SHELF}>
       {items.map((p) => (
-        <HomeRow key={p.kind} playlist={p} news={newsOf(news, p.kind)} />
+        <ShelfItem key={p.kind} playlist={p} news={newsOf(news, p.kind)} />
       ))}
     </ul>
   );
 }
-

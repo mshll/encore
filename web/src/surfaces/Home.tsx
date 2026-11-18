@@ -1,99 +1,209 @@
 import type { UseQueryResult } from "@tanstack/react-query";
-import { useState } from "react";
-import { useDigests, useHighlight, useLifetime, useLiving, useOnThisDay, useOverview, useStatus, useTimeSeries, useTimezone, useTopAlbums, useTopArtists, useTopTracks, useWeek } from "../api/queries";
-import type { Overview as OverviewData, Status, WeekSoFar } from "../api/types";
+import { useState, type ReactNode } from "react";
+import {
+  useLifetime,
+  useLiving,
+  useMoments,
+  useOnRepeat,
+  useOnThisDay,
+  useOverview,
+  usePlayerNow,
+  useRecentPlays,
+  useStatus,
+  useTimeSeries,
+  useTimezone,
+  useTopArtists,
+  useTopTracks,
+  useWeek,
+} from "../api/queries";
+import type { LivingKind, Moment, Overview as OverviewData, Status, WeekSoFar } from "../api/types";
 import { artistPath, recapPath, songPath } from "../app/paths";
-import { DitherArea, DitherBars } from "../charts/Dither";
-import { InlineChange, InlinePair } from "../charts/Inline";
+import { DitherArea } from "../charts/Dither";
+import { InlineChange } from "../charts/Inline";
 import { periodTick, periodTitle } from "../charts/ticks";
+import { WeekBars } from "../charts/WeekBars";
 import { useAi } from "../lib/ai";
 import { addDays, daysBetween, todayIn } from "../lib/dates";
-import { fmtAgo, fmtCompact, fmtDayShort, fmtHours, fmtHoursValue, fmtInt, hoursParts, WEEKDAYS_SHORT } from "../lib/format";
-import { highlightText } from "../lib/insights";
+import { fmtAgo, fmtCompact, fmtDayShort, fmtHours, fmtHoursValue, fmtInt, fmtPct, fmtTime, hoursParts, WEEKDAYS_SHORT } from "../lib/format";
+import { momentText } from "../lib/insights";
 import { leadInEnd } from "../lib/leadIn";
 import { periodFor, useRange, type Range } from "../lib/range";
 import { fillPeriods } from "../lib/series";
 import { useDesktop } from "../lib/useMedia";
 import { AppLink } from "../ui/AppLink";
-import { Artwork } from "../ui/Artwork";
+import { Artwork, type ArtKind } from "../ui/Artwork";
 import { buttonClass } from "../ui/Button";
-import { WaveformIcon } from "../ui/icons";
+import { Icon } from "../ui/Icon";
+import { CaretRightIcon, WaveformIcon } from "../ui/icons";
 import { Notice } from "../ui/Notice";
 import { Page, PageHeader, SIDE_COLUMNS, Section, dimWhile } from "../ui/Page";
 import { RangePicker, useRangeLabel } from "../ui/RangePicker";
-import { AlbumRow, ArtistRow, Row, RowList, RowSkeleton, TrackRow } from "../ui/Rows";
-import { TabList, TabPanel, TabsRoot } from "../ui/Segmented";
+import { ArtistRow, Row, RowList, RowSkeleton, TrackRow } from "../ui/Rows";
 import { ChartSkeleton, Skeleton } from "../ui/Skeleton";
 import { StatStrip, type StatItem } from "../ui/Stat";
-import { EmptyState, ErrorState, FirstUseState } from "../ui/States";
 import { StartSessionButton } from "../ui/StartSessionButton";
-import { PlaylistRows, PlaylistRowsSkeleton } from "./playlists/shared";
+import { EmptyState, ErrorState, FirstUseState } from "../ui/States";
+import { KINDS, PlaylistShelf, PlaylistShelfSkeleton } from "./playlists/shared";
 
 const weekdayShort = (day: string) => WEEKDAYS_SHORT[(new Date(`${day}T00:00:00Z`).getUTCDay() + 6) % 7]!;
-const hoursText = (h: number) => {
-  const p = hoursParts(h);
-  return `${p.value} ${p.unit}`;
-};
+const plural = (n: number, one: string, many: string) => `${fmtInt(n)} ${n === 1 ? one : many}`;
 
-/** This week so far against the usual, then each of the last 30 days. */
-function WeekLine({ week }: { week: WeekSoFar }) {
-  const { usual } = week;
-  if (week.hours === 0)
-    return <p className="text-secondary text-pretty">{usual && usual.hours > 0 ? `Nothing played yet. By now you usually have ${fmtHours(usual.hours)}.` : "Nothing played yet."}</p>;
-  if (!usual) return <p className="text-secondary">{plural(week.listens, "play", "plays")}</p>;
+/** The week's best artist or song: art, what it is, the name, its hours. The lead of This week. */
+function BestTile({ to, label, name, detail, art }: { to: string; label: string; name: string; detail: string; art: { src: string | null; kind: ArtKind } }) {
   return (
-    <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-body text-primary">
-      <InlinePair now={week.hours} before={usual.hours} label={`${hoursText(week.hours)}, against a usual ${hoursText(usual.hours)} by now`} />
-      <InlineChange now={week.hours} before={usual.hours} />
-      <span className="min-w-0 text-secondary">against a usual {fmtHours(usual.hours)} by now</span>
-    </p>
+    <AppLink to={to} className="-m-2 flex min-w-0 items-center gap-3 rounded-lg p-2 transition-colors duration-150 hover:bg-fill">
+      <Artwork src={art.src} kind={art.kind} box={64} className="phone:size-14" />
+      <span className="flex min-w-0 flex-col">
+        <span className="text-caption text-secondary">{label}</span>
+        <span className="line-clamp-2 font-medium text-primary [overflow-wrap:anywhere]">{name}</span>
+        <span className="truncate text-caption text-secondary tabular">{detail}</span>
+      </span>
+    </AppLink>
   );
 }
 
-/** A record, milestone or streak of this week, when there is one. An extra line: it shows nothing while loading or after a failed load. */
-function WeekHighlight() {
-  const highlight = useHighlight().data?.highlight;
-  if (!highlight) return null;
-  return <p className="text-primary text-pretty">{highlightText(highlight)}</p>;
-}
-
-function WeekChart({ days }: { days: WeekSoFar["days"] }) {
-  const desktop = useDesktop();
-  return (
-    <DitherBars
-      label="Hours each day, the last 30 days"
-      rows={days.map((d) => ({ day: d.day, title: fmtDayShort(d.day), hours: d.hours }))}
-      xKey="day"
-      tipLabel="title"
-      valueKey="hours"
-      valueLabel="Hours"
-      xFormat={(d) => fmtDayShort(d)}
-      format={fmtHours}
-      table={{ format: fmtHoursValue }}
-      height={desktop ? 120 : 96}
-    />
-  );
-}
-
-function WeekTop({ week }: { week: WeekSoFar }) {
+function WeekBest({ week }: { week: WeekSoFar }) {
   const { topArtist: artist, topTrack: song } = week;
   if (!artist && !song) return null;
   return (
-    <div className="flex min-w-0 flex-col gap-2">
-      <h3 className="font-medium text-primary">Top this week</h3>
-      <RowList label="Top this week">
-        {artist && <Row to={artistPath(artist.artist)} title={artist.artist} subtitle={plural(artist.listens, "play", "plays")} art={{ src: artist.imageUrl, kind: "artist" }} value={fmtHours(artist.hours)} />}
-        {song && (
-          <Row
-            to={songPath(song.songKey)}
-            title={song.name}
-            subtitle={song.artist}
-            art={{ src: song.albumArtUrl, kind: "song" }}
-            value={fmtHours(song.hours)}
-            song={{ uri: song.uri, name: song.name, songKey: song.songKey, artist: song.artist }}
-          />
+    <div className="grid gap-4 @min-[520px]/page:grid-cols-2">
+      {artist && (
+        <BestTile
+          to={artistPath(artist.artist)}
+          label="Artist of the week"
+          name={artist.artist}
+          detail={`${fmtHours(artist.hours)} · ${plural(artist.listens, "listen", "listens")}`}
+          art={{ src: artist.imageUrl, kind: "artist" }}
+        />
+      )}
+      {song && (
+        <BestTile
+          to={songPath(song.songKey)}
+          label="Song of the week"
+          name={song.name}
+          detail={`${song.artist} · ${plural(song.listens, "listen", "listens")}`}
+          art={{ src: song.albumArtUrl, kind: "song" }}
+        />
+      )}
+    </div>
+  );
+}
+
+/** The hours so far, the change against the usual by now, and how much of the week was repeats. */
+function WeekFigure({ week }: { week: WeekSoFar }) {
+  const { usual, repeats } = week;
+  const parts = hoursParts(week.hours);
+  return (
+    <div className="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-1">
+      <p className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+        <span className="flex items-baseline gap-1.5">
+          <span className="font-display text-figure text-primary tabular">{parts.value}</span>
+          <span className="text-secondary">{parts.unit}</span>
+        </span>
+        {usual && usual.hours > 0 ? (
+          <span className="flex items-baseline gap-2 text-secondary">
+            {week.hours > 0 && <InlineChange now={week.hours} before={usual.hours} />}
+            <span>{week.hours > 0 ? `against a usual ${fmtHours(usual.hours)} by now` : `Nothing yet. By now you usually have ${fmtHours(usual.hours)}`}</span>
+          </span>
+        ) : (
+          <span className="text-secondary">{week.hours > 0 ? plural(week.plays, "play", "plays") : "Nothing played yet"}</span>
         )}
-      </RowList>
+      </p>
+      {repeats.share !== null && repeats.listens > 0 && <p className="text-secondary tabular">Repeats {fmtPct(repeats.share)} of listens</p>}
+    </div>
+  );
+}
+
+function Days({ week }: { week: WeekSoFar }) {
+  const desktop = useDesktop();
+  const days = week.days.map((d) => ({ ...d, label: weekdayShort(d.day), today: d.day === week.today }));
+  return (
+    <div className="flex flex-col gap-2">
+      <WeekBars days={days} format={fmtHours} height={desktop ? 112 : 88} />
+      {week.usual && (
+        <p className="flex items-center gap-2 text-caption text-secondary">
+          <span aria-hidden className="h-0.5 w-3 rounded-full bg-primary" />
+          Usual for the day
+        </p>
+      )}
+    </div>
+  );
+}
+
+const MOMENT_PATH: Record<Moment["target"], string> = { records: "/patterns/records", discovery: "/patterns/discovery" };
+
+/** Up to three facts of the week, each opening the Patterns tab that holds it. Nothing while loading or after a failed load. */
+function Moments() {
+  const items = useMoments().data?.items ?? [];
+  if (items.length === 0) return null;
+  return (
+    <ul aria-label="This week's moments" className="flex flex-col gap-1 md:flex-row md:flex-wrap md:gap-x-6">
+      {items.map((m) => (
+        <li key={m.kind} className="min-w-0">
+          <AppLink to={MOMENT_PATH[m.target]} className="-mx-1 flex min-h-11 items-center gap-1 rounded-sm px-1 text-primary text-pretty hover:underline md:min-h-0">
+            {momentText(m)}
+            <Icon icon={CaretRightIcon} size="sm" className="shrink-0 text-tertiary" />
+          </AppLink>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+/** When a play ended, short enough for a row's figure: the time today, the weekday this week, else the date. */
+function playedWhen(ts: string, day: string, today: string, timezone: string): string {
+  if (day === today) return fmtTime(ts, timezone);
+  return daysBetween(day, today) <= 7 ? weekdayShort(day) : fmtDayShort(day);
+}
+
+/** The newest plays, the song playing now first. */
+function RecentlyPlayed() {
+  const desktop = useDesktop();
+  const timezone = useTimezone();
+  const today = todayIn(timezone);
+  const limit = desktop ? 6 : 3;
+  const q = useRecentPlays(limit);
+  const now = usePlayerNow().data;
+  const playing = now?.playing && now.track ? now.track : null;
+  const items = (q.data?.items ?? []).filter((p) => p.uri && p.name).slice(0, playing ? limit - 1 : limit);
+  return (
+    <div className="flex min-w-0 flex-col gap-2">
+      <div className="flex min-h-(--control-h-sm) items-center justify-between gap-4">
+        <h3 className="font-medium text-primary">Recently played</h3>
+        <AppLink to="/plays" className={buttonClass({ variant: "ghost", size: "sm", className: "-mr-2.5" })}>
+          Show all
+        </AppLink>
+      </div>
+      {q.isError ? (
+        <ErrorState size="inline" error={q.error} onRetry={() => q.refetch()} />
+      ) : !q.data ? (
+        <RowSkeleton rows={limit} />
+      ) : items.length === 0 && !playing ? (
+        <p className="text-secondary">Nothing played yet.</p>
+      ) : (
+        <RowList label="Recently played">
+          {playing && (
+            <Row
+              title={playing.name}
+              subtitle={playing.artist}
+              art={{ src: playing.albumArtUrl, kind: "song" }}
+              value={<span className="text-accent-text">Now</span>}
+              song={{ uri: playing.uri, name: playing.name, artist: playing.artist }}
+            />
+          )}
+          {items.map((p) => (
+            <Row
+              key={p.id}
+              to={p.songKey ? songPath(p.songKey) : undefined}
+              title={p.name!}
+              subtitle={p.artist ?? undefined}
+              art={{ src: p.albumArtUrl, kind: "song" }}
+              value={playedWhen(p.ts, p.day, today, timezone)}
+              song={{ uri: p.uri!, name: p.name!, songKey: p.songKey, artist: p.artist }}
+            />
+          ))}
+        </RowList>
+      )}
     </div>
   );
 }
@@ -104,30 +214,59 @@ function ThisWeek() {
   const week = q.data;
   return (
     <Section title="This week" description={week ? `${weekdayShort(week.from)} ${fmtDayShort(week.from)} – ${weekdayShort(week.to)} ${fmtDayShort(week.to)}` : undefined}>
+      <div className={SIDE_COLUMNS}>
+        <div className="flex min-w-0 flex-col gap-6">
+          {q.isError ? (
+            <ErrorState size="inline" error={q.error} onRetry={() => q.refetch()} />
+          ) : !week ? (
+            <div aria-busy className="flex flex-col gap-6">
+              <div className="grid gap-4 @min-[520px]/page:grid-cols-2">
+                {[0, 1].map((i) => (
+                  <div key={i} className="flex items-center gap-3">
+                    <Skeleton className="size-16 rounded-md phone:size-14" />
+                    <div className="flex flex-1 flex-col gap-1.5">
+                      <Skeleton className="h-3 w-20" />
+                      <Skeleton className="h-4 w-32" />
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <Skeleton className="h-8 w-64" />
+              <ChartSkeleton className="h-[120px] md:h-[150px]" />
+            </div>
+          ) : (
+            <>
+              <WeekBest week={week} />
+              <WeekFigure week={week} />
+              <Days week={week} />
+            </>
+          )}
+          <Moments />
+        </div>
+        <RecentlyPlayed />
+      </div>
+    </Section>
+  );
+}
+
+/** Songs played far more in the last two weeks than usual. Absent when there are none. */
+function OnRepeat() {
+  const desktop = useDesktop();
+  const q = useOnRepeat(desktop ? 5 : 3);
+  if (q.data?.items.length === 0) return null;
+  const max = Math.max(...(q.data?.items.map((s) => s.listens) ?? [1]), 1);
+  return (
+    <Section title="On repeat" description="Listens in the last two weeks" actions={q.data && <StartSessionButton uris={q.data.items.map((s) => s.uri)} className="phone:hidden" />}>
       {q.isError ? (
         <ErrorState size="inline" error={q.error} onRetry={() => q.refetch()} />
-      ) : !week ? (
-        <div aria-busy className={SIDE_COLUMNS}>
-          <div className="flex flex-col gap-3">
-            <Skeleton className="h-8 w-32" />
-            <Skeleton className="h-4 w-64" />
-            <ChartSkeleton className="h-[96px] md:h-[120px]" />
-          </div>
-          <RowSkeleton rows={2} />
-        </div>
+      ) : !q.data ? (
+        <RowSkeleton rows={3} />
       ) : (
-        <div className={SIDE_COLUMNS}>
-          <div className="flex min-w-0 flex-col gap-3">
-            <p className="flex items-baseline gap-1.5">
-              <span className="font-display text-figure text-primary tabular">{hoursParts(week.hours).value}</span>
-              <span className="text-secondary">{hoursParts(week.hours).unit}</span>
-            </p>
-            <WeekLine week={week} />
-            <WeekHighlight />
-            <WeekChart days={week.days} />
-          </div>
-          <WeekTop week={week} />
-        </div>
+        <RowList label="On repeat">
+          {q.data.items.map((s) => (
+            <TrackRow key={s.songKey} song={s} value={fmtInt(s.listens)} share={s.listens / max} />
+          ))}
+        </RowList>
       )}
     </Section>
   );
@@ -170,7 +309,7 @@ function RangeChart({ metric, range, firstDay }: { metric: Metric; range: Range;
     value: p[metric],
   }));
   return (
-    <div className={`flex flex-col gap-2 ${dimWhile(q.isPlaceholderData)}`}>
+    <div className={`flex flex-col gap-1 ${dimWhile(q.isPlaceholderData)}`}>
       <DitherArea
         label={`${METRIC_LABEL[metric]} ${unit}`}
         rows={rows}
@@ -182,8 +321,9 @@ function RangeChart({ metric, range, firstDay }: { metric: Metric; range: Range;
         format={metric === "hours" ? fmtHours : fmtInt}
         table={{ format: metric === "hours" ? fmtHoursValue : fmtInt }}
         height={desktop ? 120 : 96}
+        dataButton={false}
       />
-      {start > 0 && <p className="text-caption text-secondary">Starts {periodTitle(rows[0]!.period, period)}; the quiet months before it are left out.</p>}
+      {start > 0 && <p className="text-caption text-secondary">From {periodTitle(rows[0]!.period, period)}</p>}
     </div>
   );
 }
@@ -218,19 +358,75 @@ function RangeFigures({ range, overview, firstDay }: { range: Range; overview: U
   );
 }
 
+function Column({ title, count, children }: { title: string; count?: number; children: ReactNode }) {
+  return (
+    <div className="flex min-w-0 flex-col gap-2">
+      <h3 className="flex items-baseline gap-2 font-medium text-primary">
+        {title}
+        {count ? <span className="font-normal text-tertiary tabular">{fmtCompact(count)}</span> : null}
+      </h3>
+      {children}
+    </div>
+  );
+}
+
+function TopArtists({ range, count }: { range: Range; count?: number }) {
+  const desktop = useDesktop();
+  const q = useTopArtists(range, 5);
+  const items = q.data?.items ?? [];
+  const max = items[0]?.hours || 1;
+  return (
+    <Column title="Artists" count={count}>
+      {q.isError ? (
+        <ErrorState size="inline" error={q.error} onRetry={() => q.refetch()} />
+      ) : !q.data ? (
+        <RowSkeleton rows={5} rank />
+      ) : (
+        <RowList label="Top artists" className={dimWhile(q.isPlaceholderData)}>
+          {items.map((a, i) => (
+            <ArtistRow key={a.artist} artist={a} rank={i + 1} value={fmtHours(a.hours)} share={desktop ? a.hours / max : undefined} narrowMeter />
+          ))}
+        </RowList>
+      )}
+    </Column>
+  );
+}
+
+function TopSongs({ range, count }: { range: Range; count?: number }) {
+  const desktop = useDesktop();
+  const q = useTopTracks(range, 5);
+  const items = q.data?.items ?? [];
+  const max = items[0]?.hours || 1;
+  return (
+    <Column title="Songs" count={count}>
+      {q.isError ? (
+        <ErrorState size="inline" error={q.error} onRetry={() => q.refetch()} />
+      ) : !q.data ? (
+        <RowSkeleton rows={5} rank />
+      ) : (
+        <RowList label="Top songs" className={dimWhile(q.isPlaceholderData)}>
+          {items.map((s, i) => (
+            <TrackRow key={s.songKey} song={s} rank={i + 1} value={fmtHours(s.hours)} share={desktop ? s.hours / max : undefined} narrowMeter />
+          ))}
+        </RowList>
+      )}
+    </Column>
+  );
+}
+
+/** The best song of this day in each earlier year, up to three. Absent when there is no earlier year. */
 function OnThisDay() {
   const q = useOnThisDay();
   if (q.data?.years.length === 0) return null;
   return (
-    <div className="flex min-w-0 flex-col gap-2">
-      <h3 className="font-medium text-primary">On this day</h3>
+    <Column title="On this day">
       {q.isError ? (
         <ErrorState size="inline" error={q.error} onRetry={() => q.refetch()} />
       ) : !q.data ? (
         <RowSkeleton rows={3} />
       ) : (
         <ol className="flex flex-col">
-          {q.data.years.map((y) => {
+          {q.data.years.slice(0, 3).map((y) => {
             const top = y.topTracks[0];
             return (
               <li key={y.year}>
@@ -239,7 +435,7 @@ function OnThisDay() {
                   className="-mx-2 flex min-h-(--row-h) items-center gap-3 rounded-md px-2 transition-colors duration-150 hover:bg-fill"
                 >
                   <span className="w-10 shrink-0 text-secondary tabular">{y.year}</span>
-                  {top && <Artwork src={top.albumArtUrl} kind="song" box={32} />}
+                  {top && <Artwork src={top.albumArtUrl} kind="song" box={32} className="phone:size-10" />}
                   <span className="flex min-w-0 flex-1 flex-col">
                     <span className="truncate">{top?.name ?? "Listening"}</span>
                     <span className="truncate text-caption text-secondary">{top?.artist}</span>
@@ -251,138 +447,73 @@ function OnThisDay() {
           })}
         </ol>
       )}
-    </div>
+    </Column>
   );
 }
 
 /**
- * The long view under This week, for any range (All time first): the totals drive the chart of the range, this day
- * in earlier years beside it, then the most played. One range picker scopes the whole group.
+ * The long view, for any range (All time first): the totals drive the chart of the range, then the top artists and
+ * songs beside this day in earlier years. One range picker scopes the whole group.
  */
 function Listening({ range, overview, firstDay }: { range: Range; overview: UseQueryResult<OverviewData>; firstDay: string | null }) {
   const title = useRangeLabel();
   const empty = overview.data?.plays === 0;
   return (
     <Section title={title} actions={<RangePicker />}>
-      <div className="flex flex-col gap-10">
-        <div className={SIDE_COLUMNS}>
-          <div className="min-w-0">
-            {empty ? (
-              <EmptyState size="section" title="No plays in this range" description="Choose a wider range to see your listening." />
-            ) : (
-              <RangeFigures range={range} overview={overview} firstDay={firstDay} />
-            )}
+      {empty ? (
+        <EmptyState size="section" title="No plays in this range" description="Choose a wider range to see your listening." />
+      ) : (
+        <div className="flex flex-col gap-10">
+          <RangeFigures range={range} overview={overview} firstDay={firstDay} />
+          <div className="flex flex-col gap-3">
+            <div className="grid gap-10 @min-[600px]/page:grid-cols-2 @min-[780px]/page:grid-cols-3 @min-[600px]/page:gap-8">
+              <TopArtists range={range} count={overview.data?.uniqueArtists} />
+              <TopSongs range={range} count={overview.data?.uniqueTracks} />
+              <OnThisDay />
+            </div>
+            <AppLink to="/music" className={buttonClass({ variant: "ghost", size: "sm", className: "-ml-2.5 self-start" })}>
+              Show all in Music
+            </AppLink>
           </div>
-          <OnThisDay />
         </div>
-        {!empty && (
-          <div className="flex min-w-0 flex-col gap-2">
-            <h3 className="font-medium text-primary">Most played</h3>
-            <Top range={range} overview={overview.data} />
-          </div>
-        )}
-      </div>
+      )}
     </Section>
   );
 }
 
-type TopTab = "artists" | "songs" | "albums";
+/** Right now first: it changes most often. Then the other built-ins in their usual order. */
+const SHELF_ORDER: LivingKind[] = ["right-now", ...KINDS.filter((k) => k !== "right-now")];
 
-function Top({ range, overview }: { range: Range; overview: OverviewData | undefined }) {
-  const [tab, setTab] = useState<TopTab>("artists");
-  const artists = useTopArtists(range, 5);
-  const songs = useTopTracks(range, 5, {}, tab === "songs");
-  const albums = useTopAlbums(range, 5);
-  const q = tab === "artists" ? artists : tab === "songs" ? songs : albums;
-  const items = q.data?.items ?? [];
-  const max = items[0]?.hours || 1;
-  const count = (n: number | undefined) => (n ? <span className="text-tertiary tabular max-md:hidden">{fmtCompact(n)}</span> : null);
-  const allPath = `/music/${tab}`;
-  return (
-    <TabsRoot value={tab} onValueChange={(v) => setTab(v as TopTab)} className="flex min-w-0 flex-col gap-3">
-      <div className="flex items-center justify-between gap-4 hairline-b">
-        <TabList
-          label="Top in this range"
-          options={[
-            { value: "artists", label: <>Artists {count(overview?.uniqueArtists)}</> },
-            { value: "songs", label: <>Songs {count(overview?.uniqueTracks)}</> },
-            { value: "albums", label: "Albums" },
-          ]}
-        />
-        <div className="flex shrink-0 items-center gap-2">
-          {tab === "songs" && songs.data && <StartSessionButton uris={songs.data.items.map((s) => s.uri)} className="phone:hidden" />}
-          <AppLink to={allPath} className={buttonClass({ variant: "ghost", size: "sm", className: "-mr-2.5" })}>
-            Show all
-          </AppLink>
-        </div>
-      </div>
-      <TabPanel value={tab}>
-        {q.isError ? (
-          <ErrorState error={q.error} onRetry={() => q.refetch()} />
-        ) : !q.data ? (
-          <RowSkeleton rows={5} rank />
-        ) : items.length === 0 ? (
-          <EmptyState title={`No ${tab} in this range`} />
-        ) : (
-          <RowList label={`Top ${tab}`} className={dimWhile(q.isPlaceholderData)}>
-            {tab === "artists" &&
-              artists.data?.items.map((a, i) => <ArtistRow key={a.artist} artist={a} rank={i + 1} value={fmtHours(a.hours)} share={a.hours / max} subtitle={`${fmtInt(a.listens)} listens`} />)}
-            {tab === "songs" && songs.data?.items.map((s, i) => <TrackRow key={s.songKey} song={s} rank={i + 1} value={fmtHours(s.hours)} share={s.hours / max} />)}
-            {tab === "albums" && albums.data?.items.map((a, i) => <AlbumRow key={`${a.artist}|${a.album}`} album={a} rank={i + 1} value={fmtHours(a.hours)} share={a.hours / max} />)}
-          </RowList>
-        )}
-      </TabPanel>
-    </TabsRoot>
-  );
-}
-
-const plural = (n: number, one: string, many: string) => `${fmtInt(n)} ${n === 1 ? one : many}`;
-
-/** The playlists encore keeps, small: what is new in each (picks, releases) is its line. */
 function MadeForYou() {
   const q = useLiving();
   const ai = useAi();
+  const items = (q.data?.items ?? [])
+    .filter((p) => p.builtin && (ai.configured || p.kind !== "picks"))
+    .sort((a, b) => SHELF_ORDER.indexOf(a.kind as LivingKind) - SHELF_ORDER.indexOf(b.kind as LivingKind));
   return (
-    <section aria-labelledby="made-for-you" className="flex min-w-0 flex-col gap-2">
-      <div className="flex items-center justify-between gap-4">
-        <h2 id="made-for-you" className="font-medium text-secondary">
-          Made for you
-        </h2>
+    <Section
+      title="Made for you"
+      actions={
         <AppLink to="/playlists" className={buttonClass({ variant: "ghost", size: "sm", className: "-mr-2.5" })}>
           Open Playlists
         </AppLink>
-      </div>
-      {q.isError ? <ErrorState size="inline" error={q.error} onRetry={() => q.refetch()} /> : !q.data ? <PlaylistRowsSkeleton /> : <PlaylistRows items={q.data.items.filter((p) => p.builtin && (ai.configured || p.kind !== "picks"))} />}
-    </section>
+      }
+    >
+      {q.isError ? <ErrorState size="inline" error={q.error} onRetry={() => q.refetch()} /> : !q.data ? <PlaylistShelfSkeleton /> : <PlaylistShelf items={items} />}
+    </Section>
   );
 }
 
-function LatestRecap() {
-  const q = useDigests();
-  const recap = q.data?.items[0];
-  if (!recap) return null;
+/** One line on the week so far that opens its recap period, read live from the week's figures. */
+function WeekRecapLink() {
+  const week = useWeek().data;
+  if (!week) return null;
+  const text = week.hours > 0 ? `This week so far: ${fmtHours(week.hours)}${week.topArtist ? `, mostly ${week.topArtist.artist}` : ""}` : "This week so far: nothing played yet";
   return (
-    <section aria-labelledby="latest-recap" className="flex min-w-0 flex-col gap-2">
-      <div className="flex min-h-(--control-h-sm) items-center">
-        <h2 id="latest-recap" className="font-medium text-secondary">
-          Latest recap
-        </h2>
-      </div>
-      <AppLink to={recapPath(recap.kind, recap.periodKey)} className="-mx-2 flex min-h-(--row-h) flex-col justify-center rounded-md px-2 py-1.5 transition-colors duration-150 hover:bg-fill">
-      <span className="truncate text-primary">{recap.headline}</span>
-      <span className="truncate text-caption text-secondary">{`${recap.title} · ${fmtAgo(recap.createdAt)}`}</span>
-      </AppLink>
-    </section>
-  );
-}
-
-/** What to play next, after the stats: the playlists and the latest recap. Questions go to the chat panel. */
-function PlayNext() {
-  return (
-    <div className={SIDE_COLUMNS}>
-      <MadeForYou />
-      <LatestRecap />
-    </div>
+    <AppLink to={recapPath("weekly", week.to)} className="-mx-2 flex min-h-11 items-center gap-2 self-start max-w-[calc(100%+1rem)] rounded-md px-2 text-secondary transition-colors duration-150 hover:bg-fill hover:text-primary">
+      <span className="min-w-0 truncate">{text}</span>
+      <Icon icon={CaretRightIcon} size="sm" className="shrink-0 text-tertiary" />
+    </AppLink>
   );
 }
 
@@ -412,15 +543,18 @@ function StatusNotice() {
 }
 
 /**
- * Home: the stats first. This week against the usual, then the long view for any range (All time by default) laid
- * out the same way, with the top lists of that range. What to play next follows, quieter: the playlists, the composer for
- * Ask or Sets, the latest recap. Music and Patterns hold the full answers.
+ * Home: stats first. This week leads (the week's best, the hours against the usual, a column per day with the usual
+ * tick, its moments, what played last), then what is on repeat, then the long view for any range, then the playlists.
+ * A phone puts the playlists before the long view: it is picked up to glance and play. Each block loads on its own.
  */
 export function Home() {
   const { range } = useRange();
   const lifetime = useLifetime();
   const overview = useOverview(range);
+  const desktop = useDesktop();
   const firstUse = lifetime.data?.plays === 0;
+  const listening = <Listening key="listening" range={range} overview={overview} firstDay={lifetime.data?.firstPlayed?.slice(0, 10) ?? null} />;
+  const playlists = <MadeForYou key="playlists" />;
   return (
     <Page>
       <PageHeader title="Home" />
@@ -433,8 +567,9 @@ export function Home() {
         <>
           <StatusNotice />
           <ThisWeek />
-          <Listening range={range} overview={overview} firstDay={lifetime.data?.firstPlayed?.slice(0, 10) ?? null} />
-          <PlayNext />
+          <OnRepeat />
+          {desktop ? [listening, playlists] : [playlists, listening]}
+          <WeekRecapLink />
         </>
       )}
     </Page>

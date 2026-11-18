@@ -30,6 +30,8 @@ type RowProps = {
   value?: ReactNode;
   /** Share of the top row, 0 to 1; draws the dither meter when the list is 512px or wider. */
   share?: number;
+  /** A shorter meter, shown from 240px: for lists in narrow columns (Home's three). */
+  narrowMeter?: boolean;
   song?: SongRef;
   /** Positions the row inside a virtualised list. */
   style?: CSSProperties;
@@ -43,7 +45,7 @@ type RowProps = {
 const HIDE_ON_ACTIONS =
   "md:transition-opacity md:duration-150 md:group-hover:opacity-0 md:can-hover:group-focus-within:opacity-0 md:can-hover:group-has-[[data-open]]:opacity-0";
 
-export function Row({ to, title, subtitle, art, rank, value, share, song, style }: RowProps) {
+export function Row({ to, title, subtitle, art, rank, value, share, narrowMeter, song, style }: RowProps) {
   const playback = usePlayback();
   const actionsOver = value !== undefined;
   const body = (
@@ -55,7 +57,7 @@ export function Row({ to, title, subtitle, art, rank, value, share, song, style 
         <span className="truncate text-primary">{title}</span>
         {subtitle && <span className="truncate text-caption text-secondary">{subtitle}</span>}
       </span>
-      {share !== undefined && <DitherMeter share={share} className="pointer-events-none hidden w-24 shrink-0 @lg:block" />}
+      {share !== undefined && <DitherMeter share={share} className={cx("pointer-events-none hidden shrink-0", narrowMeter ? "w-10 @[15rem]:block" : "w-24 @lg:block")} />}
       {value !== undefined && (
         <span className={cx("pointer-events-none w-16 shrink-0 text-right text-secondary tabular", song && actionsOver && HIDE_ON_ACTIONS)}>{value}</span>
       )}
@@ -86,7 +88,7 @@ export function Row({ to, title, subtitle, art, rank, value, share, song, style 
   );
 }
 
-export function TrackRow({ song, rank, value, share, style }: { song: Song; rank?: number; value?: ReactNode; share?: number; style?: CSSProperties }) {
+export function TrackRow({ song, rank, value, share, narrowMeter, style }: { song: Song; rank?: number; value?: ReactNode; share?: number; narrowMeter?: boolean; style?: CSSProperties }) {
   return (
     <Row
       to={songPath(song.songKey)}
@@ -96,6 +98,7 @@ export function TrackRow({ song, rank, value, share, style }: { song: Song; rank
       rank={rank}
       value={value}
       share={share}
+      narrowMeter={narrowMeter}
       style={style}
       song={{ uri: song.uri, name: song.name, songKey: song.songKey, artist: song.artist }}
     />
@@ -107,6 +110,7 @@ export function ArtistRow({
   rank,
   value,
   share,
+  narrowMeter,
   subtitle,
   style,
 }: {
@@ -114,10 +118,23 @@ export function ArtistRow({
   rank?: number;
   value?: ReactNode;
   share?: number;
+  narrowMeter?: boolean;
   subtitle?: ReactNode;
   style?: CSSProperties;
 }) {
-  return <Row to={artistPath(artist.artist)} title={artist.artist} subtitle={subtitle} art={{ src: artist.imageUrl, kind: "artist" }} rank={rank} value={value} share={share} style={style} />;
+  return (
+    <Row
+      to={artistPath(artist.artist)}
+      title={artist.artist}
+      subtitle={subtitle}
+      art={{ src: artist.imageUrl, kind: "artist" }}
+      rank={rank}
+      value={value}
+      share={share}
+      narrowMeter={narrowMeter}
+      style={style}
+    />
+  );
 }
 
 export function AlbumRow({ album, rank, value, share, style }: { album: AlbumStats; rank?: number; value?: ReactNode; share?: number; style?: CSSProperties }) {

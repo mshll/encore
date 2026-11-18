@@ -70,11 +70,12 @@ describe("http", () => {
   test("insight routes answer on an empty history and validate months and years", async () => {
     const { get } = signedIn();
 
-    const paths = ["discovery", "discovery/month?month=2026-01", "comebacks", "loyalty", "streaks", "records", "milestones", "decades", "years", "podcasts", "highlight"];
+    const paths = ["discovery", "discovery/month?month=2026-01", "comebacks", "loyalty", "streaks", "records", "milestones", "decades", "years", "podcasts", "moments", "on-repeat"];
     const statuses = await Promise.all(paths.map(async (path) => (await get(`/api/stats/${path}`)).status));
 
     expect(statuses).toEqual(paths.map(() => 200));
-    expect(await (await get("/api/stats/highlight")).json()).toEqual({ highlight: null });
+    expect(await (await get("/api/stats/moments")).json()).toEqual({ items: [] });
+    expect((await get("/api/stats/on-repeat?limit=0")).status).toBe(400);
     expect((await get("/api/stats/discovery/month?month=2026-13")).status).toBe(400);
     expect((await get("/api/stats/years?a=99")).status).toBe(400);
   });

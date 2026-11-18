@@ -56,7 +56,8 @@ import type {
   Comebacks,
   Decades,
   Discovery,
-  Highlight,
+  Moment,
+  OnRepeat,
   Loyalty,
   Milestones,
   MonthDiscoveries,
@@ -143,8 +144,13 @@ export const useOnThisDay = () => useQuery({ queryKey: ["on-this-day"], queryFn:
 
 export const useTrips = (range: Range) => useQuery(ranged<Trips>("/api/stats/trips", range, { topTracks: 5 }));
 
-export const useHighlight = () =>
-  useQuery({ queryKey: ["highlight"], queryFn: () => get<{ highlight: Highlight | null }>("/api/stats/highlight"), refetchInterval: 5 * 60_000 });
+export const useMoments = () => useQuery({ queryKey: ["moments"], queryFn: () => get<{ items: Moment[] }>("/api/stats/moments"), refetchInterval: 5 * 60_000 });
+
+export const useOnRepeat = (limit: number) => useQuery({ queryKey: ["on-repeat", limit], queryFn: () => get<OnRepeat>("/api/stats/on-repeat", { limit }), refetchInterval: 5 * 60_000 });
+
+/** The newest plays, for Home: refetched every 30 s so a play that just ended shows. */
+export const useRecentPlays = (limit: number) =>
+  useQuery({ queryKey: ["history", "recent", limit], queryFn: () => get<History>("/api/history", { limit }), refetchInterval: 30_000 });
 
 export const useDiscovery = (range: Range) => useQuery(ranged<Discovery>("/api/stats/discovery", range));
 

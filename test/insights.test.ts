@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { decades } from "../src/analytics/decades";
 import { comebacks, discovery, loyalty, monthDiscoveries, periodDiscovery } from "../src/analytics/discovery";
 import { podcasts } from "../src/analytics/podcasts";
-import { currentStreak, milestones, records, recordsSetIn, streaks, weekHighlight } from "../src/analytics/records";
+import { currentStreak, milestones, records, recordsSetIn, streaks } from "../src/analytics/records";
 import { yearCompare } from "../src/analytics/years";
 import { recapFacts } from "../src/digest/facts";
 import { songKey } from "../src/plays/song";
@@ -195,21 +195,6 @@ describe("milestones", () => {
   test("short plays are not listens", () => {
     const plays = Array.from({ length: 10 }, (_, i) => at(`2026-01-${String(i + 1).padStart(2, "0")}T10:00:00Z`, A, i === 0 ? 5_000 : 200_000));
     expect(milestones(db(...plays), { range: {}, limit: 10 }).items).toEqual([]);
-  });
-});
-
-describe("week highlight", () => {
-  test("a record set this week wins once the history is four weeks old", () => {
-    const d = db(at("2025-12-01T10:00:00Z", A), at("2026-01-05T10:00:00Z", B, 2 * HOUR));
-    expect(weekHighlight(d, { from: "2026-01-02", today: "2026-01-05" })).toMatchObject({ kind: "record", record: "day", day: "2026-01-05", hours: 2 });
-  });
-
-  test("a young history gives no record; a milestone or a week-long streak instead; else null", () => {
-    const young = db(at("2026-01-03T10:00:00Z", A), at("2026-01-05T10:00:00Z", B, 2 * HOUR));
-    expect(weekHighlight(young, { from: "2026-01-02", today: "2026-01-05" })).toBeNull();
-    const week = Array.from({ length: 7 }, (_, i) => at(`2026-01-0${i + 1}T10:00:00Z`, A));
-    expect(weekHighlight(db(...week), { from: "2026-01-05", today: "2026-01-07" })).toEqual({ kind: "streak", days: 7, from: "2026-01-01", to: "2026-01-07" });
-    expect(weekHighlight(testDb(), { from: "2026-01-05", today: "2026-01-07" })).toBeNull();
   });
 });
 

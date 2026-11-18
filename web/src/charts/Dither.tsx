@@ -32,6 +32,7 @@ function Frame({
   rows,
   format,
   table,
+  dataButton = true,
   children,
 }: {
   label: string;
@@ -40,6 +41,7 @@ function Frame({
   rows: Row[];
   format: (v: number) => string;
   table?: TableFormat;
+  dataButton?: boolean;
   children: ReactNode;
 }) {
   const [head, ...values] = columns;
@@ -49,8 +51,9 @@ function Frame({
       <div aria-hidden className="relative w-full [&_.font-mono]:font-sans [&_.font-mono]:text-label [&_.font-mono]:tabular-nums" style={{ height }}>
         {children}
       </div>
-      <div className="flex justify-end">
+      <div className={dataButton ? "flex justify-end" : undefined}>
         <DataTable
+          button={dataButton}
           label={label}
           head={[head!.label, ...values.map((c) => (table?.unit ? `${c.label} (${table.unit})` : c.label))]}
           rows={rows.map((r, i) => ({
@@ -127,6 +130,7 @@ export function DitherArea({
   format,
   table,
   height = 240,
+  dataButton,
 }: {
   label: string;
   rows: Row[];
@@ -138,6 +142,8 @@ export function DitherArea({
   format: (v: number) => string;
   table?: TableFormat;
   height?: number;
+  /** False leaves the data table to screen readers alone (Home). */
+  dataButton?: boolean;
 }) {
   const config: ChartConfig = { [valueKey]: { label: valueLabel, color: "green" } };
   const ticks = useDesktop() ? 7 : 4;
@@ -152,6 +158,7 @@ export function DitherArea({
       rows={rows}
       format={format}
       table={table}
+      dataButton={dataButton}
     >
       <AreaChart data={rows} config={config} margins={{ left: 44 }} className="size-full">
         <Grid />

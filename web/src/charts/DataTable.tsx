@@ -50,15 +50,20 @@ function Table({ label, head, rows, visible }: { label: string; head: string[]; 
 
 /**
  * The numbers behind a chart. Screen readers read the table in place; everyone else opens it from a quiet icon
- * button, in a dialog (a bottom sheet on a phone) that scrolls under a sticky header.
+ * button, in a dialog (a bottom sheet on a phone) that scrolls under a sticky header. Without `button`, only screen
+ * readers get it.
  */
-export function DataTable({ label, head, rows }: { label: string; head: string[]; rows: TableRow[] }) {
+export function DataTable({ label, head, rows, button = true }: { label: string; head: string[]; rows: TableRow[]; button?: boolean }) {
   const [open, setOpen] = useState(false);
+  const hidden = (
+    <div className="sr-only">
+      <Table label={label} head={head} rows={rows} visible={false} />
+    </div>
+  );
+  if (!button) return hidden;
   return (
     <>
-      <div className="sr-only">
-        <Table label={label} head={head} rows={rows} visible={false} />
-      </div>
+      {hidden}
       <Tooltip label="Show data">
         <IconButton icon={TableIcon} label={`Show data: ${label}`} size="sm" className="-mr-1.5" onClick={() => setOpen(true)} />
       </Tooltip>

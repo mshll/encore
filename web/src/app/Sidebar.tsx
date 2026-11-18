@@ -4,7 +4,8 @@ import { AppLink } from "../ui/AppLink";
 import { Lockup } from "../ui/Brand";
 import { cx } from "../ui/cx";
 import { Icon } from "../ui/Icon";
-import { MagnifyingGlassIcon } from "../ui/icons";
+import { MagnifyingGlassIcon, SignOutIcon } from "../ui/icons";
+import { useSignOut } from "../lib/signOut";
 import { Kbd, MOD_KEY } from "../ui/Kbd";
 import { byPlace, type Surface } from "./nav";
 
@@ -21,6 +22,16 @@ function NavRow({ item, location }: { item: Surface; location: string }) {
       <Icon icon={item.icon} fill={active} className={active ? "text-primary" : "text-tertiary"} />
       <span className="truncate">{item.label}</span>
     </AppLink>
+  );
+}
+
+function SignOutRow() {
+  const signOut = useSignOut();
+  return (
+    <button type="button" disabled={signOut.isPending} onClick={() => signOut.mutate()} className={cx(ROW, "text-secondary hover:bg-fill hover:text-primary disabled:opacity-60")}>
+      <Icon icon={SignOutIcon} className="text-tertiary" />
+      <span className="truncate">{signOut.isPending ? "Signing out…" : "Sign out"}</span>
+    </button>
   );
 }
 
@@ -88,6 +99,7 @@ export function Sidebar({ onSearch }: { onSearch: () => void }) {
         {byPlace("foot").map((s) => (
           <NavRow key={s.id} item={s} location={location} />
         ))}
+        <SignOutRow />
       </div>
     </aside>
   );

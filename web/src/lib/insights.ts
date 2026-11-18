@@ -1,4 +1,4 @@
-import type { Highlight, Milestone, RecordSet } from "../api/types";
+import type { Milestone, Moment, RecordSet } from "../api/types";
 import { fmtDay, fmtDayShort, fmtHours, fmtInt, fmtMonthLong } from "./format";
 
 export function ordinal(n: number): string {
@@ -38,12 +38,22 @@ function recordText(r: RecordSet): string {
   }
 }
 
-/** The sentence Home's This week shows for a highlight. */
-export function highlightText(h: Highlight): string {
-  if (h.kind === "streak") return `${fmtInt(h.days)} days in a row with music, since ${fmtDay(h.from)}`;
-  if (h.kind === "record") return recordText(h);
-  const m = h.milestone;
-  if (m.kind === "song") return `Your ${ordinal(m.threshold)} listen of ${m.song.name} by ${m.song.artist}`;
-  if (m.kind === "artist") return `${fmtInt(m.threshold)} hours of ${m.artist}`;
-  return `${fmtInt(m.threshold)} hours of music in all`;
+/** One of Home's moments this week, as a short phrase. */
+export function momentText(m: Moment): string {
+  switch (m.kind) {
+    case "record":
+      return recordText(m);
+    case "milestone": {
+      const x = m.milestone;
+      if (x.kind === "song") return `${ordinal(x.threshold)} listen of ${x.song.name} by ${x.song.artist}`;
+      if (x.kind === "artist") return `${fmtInt(x.threshold)} hours of ${x.artist}`;
+      return `${fmtInt(x.threshold)} hours of music in all`;
+    }
+    case "newArtists":
+      return m.count === 1 && m.artists[0] ? `${m.artists[0].artist}, new to you` : `${fmtInt(m.count)} new artists`;
+    case "streak":
+      return `${fmtInt(m.days)} days in a row with music`;
+    case "comeback":
+      return `${m.comeback.artist} back after ${fmtInt(m.comeback.gapMonths)} months`;
+  }
 }

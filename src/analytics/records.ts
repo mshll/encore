@@ -114,7 +114,7 @@ export const MILESTONES = {
   totalHours: [100, 500, 1000, 2500, 5000, 10000],
 } as const;
 
-const KIND_ORDER = { total: 3, artist: 2, song: 1 } as const;
+export const KIND_ORDER = { total: 3, artist: 2, song: 1 } as const;
 
 const values = (list: readonly number[]) => sql.raw(list.map((n) => `select ${n} as n`).join(" union all "));
 
@@ -175,24 +175,4 @@ export function recordsSetIn(db: Db, span: { from: string; to: string }) {
   if (all.week && all.week.week <= span.to && shiftDay(all.week.week, 6) >= span.from) set.push({ record: "week", ...all.week });
   if (all.month && all.month.month >= span.from.slice(0, 7) && all.month.month <= span.to.slice(0, 7)) set.push({ record: "month", ...all.month });
   return set;
-}
-
-/** Days of history a highlight needs before a record counts: with less, every week sets one. */
-export const HIGHLIGHT_HISTORY_DAYS = 28;
-/** A current streak worth a highlight. */
-export const HIGHLIGHT_STREAK_DAYS = 7;
-
-/** One line for Home's This week: a record set, else the biggest milestone crossed, else a current streak; null when none. */
-export function weekHighlight(db: Db, { from, today }: { from: string; today: string }) {
-  const start = db.all<{ day: string | null }>(sql`select min(p.day) as day from plays p where ${musicWhere({})}`)[0]?.day ?? null;
-  if (!start) return null;
-  if (start <= shiftDay(from, -HIGHLIGHT_HISTORY_DAYS)) {
-    const record = recordsSetIn(db, { from, to: today })[0];
-    if (record) return { kind: "record" as const, ...record };
-  }
-  const crossed = milestones(db, { range: { from, to: today }, limit: 100 }).items.sort((a, b) => KIND_ORDER[b.kind] - KIND_ORDER[a.kind] || b.threshold - a.threshold)[0];
-  if (crossed) return { kind: "milestone" as const, milestone: crossed };
-  const current = currentStreak(db, today);
-  if (current && current.days >= HIGHLIGHT_STREAK_DAYS) return { kind: "streak" as const, ...current };
-  return null;
 }

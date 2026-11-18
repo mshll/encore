@@ -65,9 +65,12 @@
     ?playlists=saved  For you, From your recaps: three period playlists, one saved from a recap, one kept when a year ended, one with no cover
     ?week=quiet       Home, This week: nothing played yet this week (the usual stays)
     ?week=first       Home, This week: the history starts this week, so there is no usual to compare with
-    ?highlight=record|session|song|milestone|streak|none  Home, This week: the highlight line in each form, or none
+    ?moments=all|none Home, This week: a moment of every kind (record, milestone, new artists, streak, comeback; Home shows the
+                      first three), or none
+    ?ai=on|none       /api/status reads AI as set up, or not (what Home and the shell show; nothing calls a provider)
     ?fail=stats/timeseries,living  every GET under each listed /api/ path answers 500, the rest stay real (one block's failed load;
-                      Home: stats/week, stats/overview, stats/timeseries, stats/on-this-day, stats/top, living, digests)
+                      Home: stats/week, stats/moments, stats/on-repeat, history, stats/overview, stats/timeseries,
+                      stats/on-this-day, stats/top, living)
     ?recap=none       Recaps: every period has no recap yet (Write the recap)
     ?recap=facts      every recap has the numbers alone: no Claude lines
     ?recap=first      the history starts inside the period: nothing earlier to compare with
@@ -83,7 +86,7 @@
 type Json = Record<string, unknown>;
 
 const params = new URLSearchParams(location.search);
-for (const key of ["fixture", "player", "run", "dj", "settings", "history", "living", "library", "recap", "ask", "week", "highlight", "picks", "playlists", "sets", "fail"]) {
+for (const key of ["fixture", "player", "run", "dj", "settings", "history", "living", "library", "recap", "ask", "week", "moments", "ai", "picks", "playlists", "sets", "fail"]) {
   const value = params.get(key);
   if (value === "off") sessionStorage.removeItem(`encore-${key}`);
   else if (value) sessionStorage.setItem(`encore-${key}`, value);
@@ -99,7 +102,8 @@ const libraryFixture = sessionStorage.getItem("encore-library");
 const recapFixture = sessionStorage.getItem("encore-recap");
 const askFixture = sessionStorage.getItem("encore-ask");
 const weekFixture = sessionStorage.getItem("encore-week");
-const highlightFixture = sessionStorage.getItem("encore-highlight");
+const momentsFixture = sessionStorage.getItem("encore-moments");
+const aiFixture = sessionStorage.getItem("encore-ai");
 const picksFixture = sessionStorage.getItem("encore-picks");
 const playlistsFixture = sessionStorage.getItem("encore-playlists");
 const setsFixture = sessionStorage.getItem("encore-sets");
@@ -134,16 +138,17 @@ const SPLIT_PARAMS = { params: { minPlays: 8, minContextPlays: 5, keeperBelow: 0
 const ZERO_STATS = { hours: 0, plays: 0, listens: 0, skips: 0, skipRate: null, earlySkips: 0, firstPlayed: null, lastPlayed: null };
 
 function quietWeek(usual: Json | null): Json {
-  const days = Array.from({ length: 30 }, (_, i) => ({ day: new Date(Date.UTC(2026, 9, 17 + i)).toISOString().slice(0, 10), hours: 0 }));
-  return { from: "2026-11-13", to: "2026-11-19", today: "2026-11-15", hours: 0, plays: 0, listens: 0, usual, topArtist: null, topTrack: null, days };
+  const days = Array.from({ length: 7 }, (_, i) => ({ day: `2026-11-${13 + i}`, hours: i <= 2 ? 0 : null, usual: usual ? 1.2 : null }));
+  return { from: "2026-11-13", to: "2026-11-19", today: "2026-11-15", hours: 0, plays: 0, listens: 0, usual, topArtist: null, topTrack: null, days, repeats: { listens: 0, repeats: 0, share: null } };
 }
 
 /** This week bent: nothing played yet (`quiet`), or no earlier weeks to compare with (`first`). */
 async function weekAnswer(path: string): Promise<Response | null> {
   if (path !== "/api/stats/week") return null;
   const body = (await (await realFetch(path)).json()) as Json;
-  if (weekFixture === "first") return json({ ...body, usual: null });
-  return json({ ...quietWeek(body.usual as Json | null), days: (body.days as Json[]).map((d, i, all) => (i >= all.length - 3 ? { ...d, hours: 0 } : d)) });
+  if (weekFixture === "first") return json({ ...body, usual: null, days: (body.days as Json[]).map((d) => ({ ...d, usual: null })) });
+  const quiet = quietWeek(body.usual as Json | null);
+  return json({ ...body, ...quiet, from: body.from, to: body.to, today: body.today, days: (body.days as Json[]).map((d) => ({ ...d, hours: d.hours === null ? null : 0 })) });
 }
 
 const COMEBACK_RULES = { gapMonths: 6, floorHours: 0.25, beforeHours: 3, sinceHours: 1, activeMonthHours: 1 };
@@ -180,7 +185,8 @@ function emptyFor(path: string, isNew: boolean): unknown {
   if (path === "/api/stats/skips/split") return { ...SPLIT_PARAMS, eligibleSongs: 0, counts: { keeper: 0, wrong_moment: 0, skipped_everywhere: 0, mixed: 0 }, songs: [] };
   if (path === "/api/stats/trips") return { homeCountry: "KW", trips: [] };
   if (path === "/api/stats/devices") return { period: "year", totals: [], series: [] };
-  if (path === "/api/stats/highlight") return { highlight: null };
+  if (path === "/api/stats/moments") return { items: [] };
+  if (path === "/api/stats/on-repeat") return { rules: { recentDays: 14, baselineDays: 182, minListens: 5, lift: 2 }, from: "2026-11-02", to: "2026-11-15", items: [] };
   if (path === "/api/stats/discovery") return { historyStart: isNew ? null : "2021-05-16", months: [], totals: { hours: 0, newHours: 0, newShare: null, newArtists: 0, newSongs: 0 } };
   if (path === "/api/stats/comebacks") return { rules: COMEBACK_RULES, items: [] };
   if (path === "/api/stats/loyalty") return { rules: { floorHours: 2, minYears: 2 }, years: [], items: [] };
@@ -197,14 +203,14 @@ function emptyFor(path: string, isNew: boolean): unknown {
   return null;
 }
 
-const HIGHLIGHT_SONG = { songKey: "loser|tame impala", uri: "spotify:track:7bxaFZ1O3cHkgLKMsdC3xR", name: "Loser", artist: "Tame Impala", albumArtUrl: null };
-const HIGHLIGHTS: Record<string, Json> = {
-  record: { kind: "record", record: "day", day: "2026-11-16", hours: 9.04 },
-  session: { kind: "record", record: "session", day: "2026-11-15", minutes: 295, hours: 4.86 },
-  song: { kind: "record", record: "songDay", day: "2026-11-15", listens: 25, song: { ...HIGHLIGHT_SONG, name: LONG_SONG } },
-  milestone: { kind: "milestone", milestone: { kind: "song", threshold: 25, day: "2026-11-13", song: HIGHLIGHT_SONG } },
-  streak: { kind: "streak", days: 17, from: "2026-10-29", to: "2026-11-14" },
-};
+const MOMENT_SONG = { songKey: "loser|tame impala", uri: "spotify:track:7bxaFZ1O3cHkgLKMsdC3xR", name: "Loser", artist: "Tame Impala", albumArtUrl: null };
+const MOMENTS: Json[] = [
+  { kind: "record", target: "records", record: "songDay", day: "2026-11-15", listens: 25, song: { ...MOMENT_SONG, name: LONG_SONG } },
+  { kind: "milestone", target: "records", milestone: { kind: "song", threshold: 25, day: "2026-11-13", song: MOMENT_SONG } },
+  { kind: "newArtists", target: "discovery", count: 3, artists: [{ artist: LONG_ARTIST, hours: 1.2, imageUrl: null }] },
+  { kind: "streak", target: "records", days: 12, from: "2026-11-04", to: "2026-11-15" },
+  { kind: "comeback", target: "discovery", comeback: { artist: "Tame Impala", imageUrl: null, lastBefore: "2025-10-26", returned: "2026-11-14", gapMonths: 9, gapDays: 384, hoursBefore: 5.46, hoursSince: 0.5 } },
+];
 
 /** Every name in an answer's visuals at its longest, every image broken. */
 function worstAnswer(content: Json): Json {
@@ -249,6 +255,8 @@ function worsen(path: string, body: Json): unknown {
       hours: 98765.4,
       listens: 1234567,
       usual: { hours: 0.01, plays: 1, listens: 1, weeks: 1 },
+      days: (body.days as Json[]).map((d, i) => (i === 0 ? { ...d, hours: 98765.4, usual: 0.01 } : { ...d, usual: 0.01 })),
+      repeats: { listens: 1234567, repeats: 1234566, share: 1 },
       topArtist: { artist: LONG_ARTIST, imageUrl: BROKEN_ART, hours: 98765.4, listens: 1234567 },
       topTrack: body.topTrack ? { ...(body.topTrack as Json), name: LONG_SONG, artist: LONG_ARTIST, albumArtUrl: BROKEN_ART, hours: 98765.4 } : null,
     };
@@ -351,6 +359,11 @@ function worsen(path: string, body: Json): unknown {
     const top = (body.totals as Json[])[0];
     if (!top) return body;
     return { ...body, coverage: { hoursTagged: 123456.7, hoursTotal: 123456.7, share: 1 }, totals: [{ ...top, value: "singer-songwriter", hours: 98765.4 }], series: (body.series as Json[]).filter((p) => p.value === top.value).map((p) => ({ ...p, value: "singer-songwriter" })) };
+  }
+  if (path === "/api/stats/moments") return { items: MOMENTS.slice(0, 3) };
+  if (path === "/api/stats/on-repeat") {
+    const items = (body.items as Json[]).map((it, i) => (i === 0 ? { ...it, name: LONG_SONG, artist: LONG_ARTIST, albumArtUrl: BROKEN_ART, listens: 12345, usualListens: 0 } : it));
+    return { ...body, items };
   }
   if (path === "/api/history") {
     const items = (body.items as Json[]).map((it, i) =>
@@ -1057,7 +1070,11 @@ window.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
     const answer = await forYouAnswer(path);
     if (answer) return answer;
   }
-  if (highlightFixture && path === "/api/stats/highlight") return json({ highlight: HIGHLIGHTS[highlightFixture] ?? null });
+  if (aiFixture && path === "/api/status") {
+    const body = (await (await realFetch(path)).json()) as Json;
+    return json({ ...body, ai: { ...(body.ai as Json), configured: aiFixture === "on" } });
+  }
+  if (momentsFixture && path === "/api/stats/moments") return json({ items: momentsFixture === "all" ? MOMENTS.slice(0, 3) : [] });
   if (weekFixture && method === "GET") {
     const answer = await weekAnswer(path);
     if (answer) return answer;

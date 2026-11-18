@@ -3,11 +3,12 @@ import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { useLocation } from "wouter";
 import { useChat } from "../chat/state";
 import { useAi } from "../lib/ai";
+import { useSignOut } from "../lib/signOut";
 import { MiniPlayer } from "../player/PlayerBar";
 import { AppLink } from "../ui/AppLink";
 import { cx } from "../ui/cx";
 import { Icon } from "../ui/Icon";
-import { ChatCircleTextIcon, DotsThreeIcon, MagnifyingGlassIcon } from "../ui/icons";
+import { ChatCircleTextIcon, DotsThreeIcon, MagnifyingGlassIcon, SignOutIcon } from "../ui/icons";
 import { LAYER, SHEET_BACKDROP, sheetFocus } from "../ui/surfaces";
 import { PHONE_MORE, PHONE_TABS } from "./nav";
 
@@ -170,10 +171,28 @@ export function PhoneNav({ onSearch, onOpenPlayer, collapsed, onExpand, inert }:
                   </li>
                 );
               })}
+              <li>
+                <SignOutItem onDone={() => setOpen(false)} />
+              </li>
             </ul>
           </div>
         </DrawerContent>
       </Drawer>
     </>
+  );
+}
+
+function SignOutItem({ onDone }: { onDone: () => void }) {
+  const signOut = useSignOut();
+  return (
+    <button
+      type="button"
+      disabled={signOut.isPending}
+      onClick={() => signOut.mutate(undefined, { onSuccess: onDone })}
+      className="flex h-12 w-full items-center gap-3 rounded-md px-3 text-primary disabled:opacity-60"
+    >
+      <Icon icon={SignOutIcon} size="md" className="text-secondary" />
+      {signOut.isPending ? "Signing out…" : "Sign out"}
+    </button>
   );
 }
