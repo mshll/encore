@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { MAX_SET_ITEMS } from "../library/constraints";
 import { localTime } from "../plays/localTime";
 
 export const SETTING_GROUPS = ["spotify", "locale", "claude", "picks", "digest", "dj", "discord", "mcp", "access", "jobs", "history"] as const;
@@ -68,6 +69,15 @@ const numeric = (
   return { ...base, type, secret: false, default: def, schema, ...bounds };
 };
 
+const optionalInteger = (base: Base, bounds: { min: number; max: number }): SettingField => ({
+  ...base,
+  type: "integer",
+  secret: false,
+  default: null,
+  schema: z.number().int().min(bounds.min).max(bounds.max),
+  ...bounds,
+});
+
 const choice = (base: Base, options: readonly [string, ...string[]], def: string): SettingField => ({
   ...base,
   type: "enum",
@@ -116,6 +126,9 @@ export function settingFields(models: readonly [string, ...string[]]): SettingFi
     text({ key: "claudeApiKey", group: "claude", env: "ANTHROPIC_API_KEY" }, z.string().min(1), { secret: true }),
     choice({ key: "claudeModel", group: "claude", env: "LLM_MODEL" }, models, models.includes("claude-opus-5-5") ? "claude-opus-5-5" : models[0]),
     numeric({ key: "monthlyBudgetUsd", group: "claude", env: "MONTHLY_BUDGET_USD" }, "number", 100, { min: 0, unit: "usd" }),
+    optionalInteger({ key: "defaultMaxPerArtist", group: "claude", env: "DEFAULT_MAX_PER_ARTIST" }, { min: 1, max: MAX_SET_ITEMS }),
+    optionalInteger({ key: "defaultMaxPerAlbum", group: "claude", env: "DEFAULT_MAX_PER_ALBUM" }, { min: 1, max: MAX_SET_ITEMS }),
+    optionalInteger({ key: "defaultNewSongs", group: "claude", env: "DEFAULT_NEW_SONGS" }, { min: 0, max: MAX_SET_ITEMS }),
 
     numeric({ key: "picksPerWeek", group: "picks", env: "PICKS_PER_WEEK" }, "integer", 5, { min: 1, max: 20 }),
     numeric({ key: "picksFarOut", group: "picks", env: "PICKS_FAR_OUT" }, "integer", 1, { min: 0, max: 20 }),

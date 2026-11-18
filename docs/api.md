@@ -266,7 +266,7 @@ Fields by group (env var in brackets; `*` = secret):
 | --- | --- |
 | `spotify` | `spotifyClientId` [SPOTIFY_CLIENT_ID] |
 | `locale` | `timezone` [TIMEZONE], `homeCountry` [HOME_COUNTRY], `weekendDays` [WEEKEND_DAYS, e.g. `5,6`] |
-| `claude` | `claudeApiKey`* [ANTHROPIC_API_KEY], `claudeModel` [LLM_MODEL], `monthlyBudgetUsd` [MONTHLY_BUDGET_USD] |
+| `claude` | `claudeApiKey`* [ANTHROPIC_API_KEY], `claudeModel` [LLM_MODEL], `monthlyBudgetUsd` [MONTHLY_BUDGET_USD], `defaultMaxPerArtist`, `defaultMaxPerAlbum`, `defaultNewSongs` [DEFAULT_*] |
 | `picks` | `picksPerWeek`, `picksFarOut`, `picksWeekday`, `picksHour` [PICKS_*] |
 | `digest` | `digestWeekday`, `digestHour` [DIGEST_*] |
 | `dj` | `djReplanner`, `djReplanTimeoutSeconds`, `djSkipTrigger` [DJ_*] |
@@ -735,9 +735,11 @@ Default re-planner (deterministic): keeps the remaining tail minus songs already
 
 Claude re-planner: with `DJ_REPLANNER=llm` (default `deterministic`), the deterministic re-planner runs first, then Claude orders the remaining planned songs plus the deterministic list, given what was played through and skipped this session, the song playing now and the taste profile (feature `dj` in the ledger, effort low). Any failure falls back to the deterministic list: no API key, budget spent, refusal, no answer, or no answer within `DJ_REPLAN_TIMEOUT_SECONDS` (default 20).
 
+Constraints: a session started from a set uses the set's constraints; any other session uses the defaults from settings. After the re-planner returns, each song it added (one not already planned) is dropped when it is blocked, excluded, or would take its artist or album past the cap. Played, current and planned songs count towards the caps and are never dropped for them. Songs not in `tracks` cannot be checked and stay. The AI re-planner is told the constraints. `newSongs` does not apply: a re-plan only uses songs from the history.
+
 A re-plan reads the session again after the re-planner returns and cuts the tail at the position it finds then, so a song that became current while the re-plan ran is never removed.
 
-Seam: `DjService.setReplanner(fn)` with `fn(input: { finished, skipped, current, upcoming, exclude, now }) => Promise<string[]>` (track URIs). Returned URIs that are played, current or invalid are dropped.
+Seam: `DjService.setReplanner(fn)` with `fn(input: { finished, skipped, current, upcoming, exclude, now, constraints }) => Promise<string[]>` (track URIs). The constraints apply to the result, then returned URIs that are played, current or invalid are dropped.
 
 ### `POST /api/dj/start`
 
@@ -1172,6 +1174,7 @@ Set shape (`GET /api/sets/:id`, and `set` in create/refine):
 {
   "id": 1, "title": "Late drive", "description": "Night roads.", "request": "late drive, like my Mac Miller era",
   "version": 2,
+  "constraints": { "maxPerArtist": 2, "maxPerAlbum": null, "newSongs": 4, "exclude": { "artists": ["Drake"], "songs": [{ "songKey": "nights|frank ocean", "label": "Nights - Frank Ocean" }] } },
   "playlist": { "id": "3xYz...", "url": "https://open.spotify.com/playlist/3xYz...", "savedVersion": 1, "outdated": true },
   "coverUrl": "/api/sets/1/cover?v=e3b78ab8bd4c3322",
   "createdAt": "...", "updatedAt": "...",
@@ -1201,15 +1204,22 @@ Set shape (`GET /api/sets/:id`, and `set` in create/refine):
 - `history`: for `library` tracks, the owner's all-time listens and last play of the song; `null` for `new` tracks.
 - `pinned`: the owner pinned the track. A refinement that leaves out a pinned track is rejected and Claude must keep it; Claude is told which tracks are pinned with every refinement.
 - `changes`: one entry per version after the first, oldest first. `source` is `claude` (a refinement; `message` is the owner's message) or `owner` (a track removed by hand; `message` is `null`). `moved` lists kept songs whose order relative to the other kept songs changed (songs only shifted by an insert or removal are not listed); `from` and `to` are 1-based positions.
+- `constraints`: hard rules the set's songs must meet; `null` means no limit. `maxPerArtist` (1-80) counts songs by primary artist. `maxPerAlbum` (1-80) counts by album name, case-insensitive; songs without an album are not counted. `newSongs` (0-80) is the exact number of `new` songs; every other song comes from the history. `exclude.artists` (names, case-insensitive, at most 100; matched against every credited artist of a new song and the primary artist of a library song) and `exclude.songs` (`songKey` plus a display `label`, at most 200) apply to this set only; blocks (see Blocks) are the permanent exclusions and apply everywhere. The model is told the constraints with every message, and `submit_set` rejects a set that breaks one with an error that names the tracks, so the model must change the songs. Sets made before constraints existed have none (all `null`, empty lists).
 - `dj`: `{ finished, skipped }` for this track across the DJ sessions started from the set (`POST /api/sets/:id/play` or the Discord Play now button), from the watcher's live plays. `djSessions` on the set counts those sessions.
 
 #### `POST /api/sets`
 
-`{ "request": "late drive, like my Mac Miller era, half songs I've never heard", "context"?: PageContext }` (1-2000 chars; [Page context](#page-context)). `201 { "set": Set, "reply": null }`. `reply` is text when Claude asks a question instead of building; the set then has `version: 0` and no items, and the owner answers via `POST /api/sets/:id/messages`.
+`{ "request": "late drive, like my Mac Miller era, half songs I've never heard", "context"?: PageContext, "constraints"?: Partial<Constraints> }` (1-2000 chars; [Page context](#page-context)). A constraint field left out takes its default from settings (`defaultMaxPerArtist`, `defaultMaxPerAlbum`, `defaultNewSongs`; exclusions default to none); `null` turns a limit off for this set. The set keeps its values when the defaults change later. `201 { "set": Set, "reply": null }`. `reply` is text when Claude asks a question instead of building; the set then has `version: 0` and no items, and the owner answers via `POST /api/sets/:id/messages`.
 
 #### `POST /api/sets/:id/messages`
 
 `{ "message": "less sad, and swap track 3 for something more upbeat", "context"?: PageContext }`. `200 { "set": Set, "changed": true, "reply": null }`. `changed: false` with a `reply` when Claude answered without changing the set. When the set changed and was saved to Spotify before, its playlist is updated as by `POST /api/sets/:id/playlist` before the response; if that fails, the change stands and `playlist.outdated` stays `true`.
+
+A refinement keeps the set's constraints. When the owner's message asks for a change ("max 2 per artist", "no Drake"), the model changes them with its `set_constraints` tool before it resubmits; the change is stored on the set even if the model then answers without resubmitting.
+
+#### `PATCH /api/sets/:id/constraints`
+
+Body: any of the `constraints` fields. Fields left out keep their value; `exclude` replaces both lists. `200 Set`. Works without an AI provider; does not start a run and does not change the songs or `version`: the next refinement must meet the new constraints. `400 invalid_request` for out-of-range values, `404 not_found` for an unknown set.
 
 #### `GET /api/sets`
 
@@ -1261,6 +1271,7 @@ Pick shape:
 
 - `distance`: `near` or `far`.
 - `source`: the web search result from the run that supports the reason. A pick is stored only when its source was returned by that run's search and names the song or its artist. `null` only on picks made before this field existed.
+- Constraints: one pick per artist. The `defaultMaxPerAlbum` setting caps picks per album (by album name) and is checked like a set's constraints; `defaultMaxPerArtist` and `defaultNewSongs` do not apply (every pick is new).
 - `state`: `new`, `saved`, `not_now`, `never`. `never` blocks the song from all future suggestions (sets and picks); a second `never` for the same artist blocks the artist. Moving a pick out of `never` lifts those blocks. `not_now` songs may be picked again after 28 days.
 - `outcome.hit`: played through at least once and (played on 2+ days, or in the Spotify library, or state `saved`). Plays are refreshed hourly, library state daily.
 

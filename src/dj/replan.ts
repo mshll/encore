@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import { HOUR_BUCKET, dayTypeSql, LISTEN, MUSIC, SKIP_KNOWN, SKIPPED } from "../analytics/common";
 import type { Db } from "../db/client";
+import type { Constraints } from "../library/constraints";
 import { dayTypeOf } from "../library/catalog";
 import { localTime, type Locale } from "../plays/localTime";
 
@@ -11,6 +12,8 @@ export type ReplanInput = {
   upcoming: string[];
   exclude: string[];
   now: number;
+  /** Enforced on the result by the session; given so a re-planner can choose within them. */
+  constraints?: Constraints;
 };
 
 export type Replanner = (input: ReplanInput) => Promise<string[]>;

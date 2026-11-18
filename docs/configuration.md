@@ -48,6 +48,7 @@ All env values are validated at boot (the process exits on invalid values). See 
 | `LLM_MODEL` | `claude-opus-5-5` | |
 | `LLM_PRICES` | built in | JSON overrides, USD per million tokens, keyed by model |
 | `MONTHLY_BUDGET_USD` | `100` | Claude spend cap per local month. At the cap, LLM endpoints return `402` and LLM jobs skip |
+| `DEFAULT_MAX_PER_ARTIST`, `DEFAULT_MAX_PER_ALBUM`, `DEFAULT_NEW_SONGS` | unset | Default constraints (unset: no limit). A new set copies them, field by field, unless its request gives a value. Caps are 1-80; `DEFAULT_NEW_SONGS` is 0-80, the exact number of songs the owner has never played. DJ sessions not started from a set use the artist and album caps; weekly picks use the album cap |
 | `PICKS_PER_WEEK`, `PICKS_FAR_OUT` | `5`, `1` | Weekly picks, and how many of them are far from the owner's taste |
 | `PICKS_WEEKDAY`, `PICKS_HOUR` | `5`, `10` | When weekly picks run (ISO weekday, local hour) |
 | `DIGEST_WEEKDAY`, `DIGEST_HOUR` | `5`, `9` | Weekly digest slot; the monthly recap runs on the 1st at `DIGEST_HOUR` |

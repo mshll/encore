@@ -1,4 +1,5 @@
 import type { ModelPrice } from "../config";
+import type { ConstraintDefaults } from "../library/constraints";
 
 export type DiscordConfig = {
   botToken?: string;
@@ -19,6 +20,8 @@ export type LlmConfig = {
   picksFarOut: number;
   picksSlot: { weekday: number; hour: number };
   digestSlot: { weekday: number; hour: number };
+  /** Applied to new sets, weekly picks and DJ sessions not started from a set. */
+  constraints: ConstraintDefaults;
 };
 
 /** Settings resolved from env, the settings table and defaults, in the units services use. */
@@ -71,6 +74,9 @@ export type RawSettings = {
   claudeApiKey?: string;
   claudeModel: string;
   monthlyBudgetUsd: number;
+  defaultMaxPerArtist?: number;
+  defaultMaxPerAlbum?: number;
+  defaultNewSongs?: number;
   picksPerWeek: number;
   picksFarOut: number;
   picksWeekday: number;
@@ -148,6 +154,7 @@ export function resolveSettings(v: RawSettings, prices: Record<string, ModelPric
       picksFarOut: Math.min(v.picksFarOut, v.picksPerWeek),
       picksSlot: { weekday: v.picksWeekday, hour: v.picksHour },
       digestSlot: { weekday: v.digestWeekday, hour: v.digestHour },
+      constraints: { maxPerArtist: v.defaultMaxPerArtist ?? null, maxPerAlbum: v.defaultMaxPerAlbum ?? null, newSongs: v.defaultNewSongs ?? null },
     },
     discord:
       v.discordApplicationId && v.discordPublicKey && v.discordOwnerId

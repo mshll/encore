@@ -4,6 +4,7 @@ import type { Db } from "../src/db/client";
 import { picks } from "../src/db/schema";
 import { blockedSets, listBlocks } from "../src/library/blocks";
 import { CandidateVerifier } from "../src/library/candidates";
+import { NO_CONSTRAINTS } from "../src/library/constraints";
 import { isHit, pickStats, refreshPickLibraryState, refreshPickOutcomes } from "../src/picks/outcomes";
 import { generatePicks, PicksExistError, validatePicks, weekOf } from "../src/picks/service";
 import { setPickState } from "../src/picks/state";
@@ -142,7 +143,7 @@ describe("validatePicks", () => {
       { name: "Later", artist: "Y", id: "l" },
       { name: "Recent", artist: "Z", id: "r" },
     ]);
-    const check = (id: string) => validatePicks(db, blockedSets(db), v, one(id), expected, "2026-02-23", now, sources).errors;
+    const check = (id: string) => validatePicks(db, blockedSets(db), v, one(id), expected, "2026-02-23", now, sources, NO_CONSTRAINTS).errors;
     expect(check("o")[0]).toContain("already picked");
     expect(check("l")).toEqual([]);
     expect(check("r")[0]).toContain("already picked");
@@ -153,10 +154,10 @@ describe("validatePicks", () => {
     const never = insertPick(db, { name: "Bad", artist: "Q" });
     setPickState(db, never.id, "never", now);
     const v = verifier(db, [{ name: "Other", artist: "Q", id: "q2" }]);
-    expect(validatePicks(db, blockedSets(db), v, one("q2"), expected, "w", now, sources).errors).toEqual([]);
+    expect(validatePicks(db, blockedSets(db), v, one("q2"), expected, "w", now, sources, NO_CONSTRAINTS).errors).toEqual([]);
     const second = insertPick(db, { name: "Worse", artist: "Q" });
     setPickState(db, second.id, "never", now);
-    expect(validatePicks(db, blockedSets(db), v, one("q2"), expected, "w", now, sources).errors).toEqual(["Pick 1: Other is blocked."]);
+    expect(validatePicks(db, blockedSets(db), v, one("q2"), expected, "w", now, sources, NO_CONSTRAINTS).errors).toEqual(["Pick 1: Other is blocked."]);
   });
 });
 

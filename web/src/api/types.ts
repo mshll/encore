@@ -123,12 +123,22 @@ export type SetChange = {
   at: string;
 };
 
+/** Hard rules a set's songs must meet. `null` means no limit. */
+export type SetConstraints = {
+  maxPerArtist: number | null;
+  maxPerAlbum: number | null;
+  /** Exactly this many songs the owner has never played. */
+  newSongs: number | null;
+  exclude: { artists: string[]; songs: { songKey: string; label: string }[] };
+};
+
 export type SetSummary = {
   id: number;
   title: string;
   description: string;
   request: string;
   version: number;
+  constraints: SetConstraints;
   playlist: { id: string; url: string; savedVersion: number; outdated: boolean } | null;
   /** The generated cover; null while the set has no songs. */
   coverUrl: string | null;

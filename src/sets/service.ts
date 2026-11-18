@@ -9,8 +9,9 @@ import { localNow, tagged, type FeatureContext } from "../llm/context";
 import { pageContextNote, type PageContext } from "../llm/pageContext";
 import { leaksInternals } from "../llm/plainText";
 import { createThread, deleteThread, getThread, ownerMessage, saveThreadMessages, transcript } from "../llm/threads";
-import { blockedSets, isBlocked, type Blocked } from "../library/blocks";
+import { artistKey, blockedSets, isBlocked, type Blocked } from "../library/blocks";
 import { CandidateVerifier } from "../library/candidates";
+import { constraintErrors, constraintsPatch, constraintsSchema, describeConstraints, MAX_SET_ITEMS, NO_CONSTRAINTS, withDefaults, type ConstrainedSong, type Constraints, type ConstraintsPatch } from "../library/constraints";
 import { withArtwork } from "../library/artwork";
 import { loadCatalog, type CatalogSong } from "../library/catalog";
 import { MOODS } from "../tags/vocabulary";
@@ -21,7 +22,6 @@ import { setDjOutcomes } from "./play";
 import { SETS_SYSTEM } from "./prompt";
 
 const MAX_SEARCHES_PER_RUN = 30;
-export const MAX_SET_ITEMS = 80;
 
 const submitInput = z.strictObject({
   title: z.string().min(1).max(80),
@@ -78,10 +78,12 @@ export function validateSubmission(
   verifier: CandidateVerifier,
   input: SubmitInput,
   weekendDays: readonly number[],
+  constraints: Constraints,
 ): { errors: string[]; rows: ItemRow[] } {
   const catalog = loadCatalog(db, weekendDays);
   const errors: string[] = [];
   const rows: ItemRow[] = [];
+  const counted: ConstrainedSong[] = [];
   const seen = new Set<string>();
   input.items.forEach((item, i) => {
     const n = i + 1;
@@ -95,6 +97,7 @@ export function validateSubmission(
       if (conflict) return errors.push(`Track ${n}: ${song.name} conflicts with the direction (${conflict}). Replace it, or list its songKey in keep if the owner asked to keep it.`);
       seen.add(song.songKey);
       rows.push({ position: n, kind: "library", songKey: song.songKey, uri: song.uri, name: song.name, artist: song.artist, album: song.album, reason: item.reason });
+      counted.push({ position: n, songKey: song.songKey, name: song.name, artists: [song.artist], album: song.album, isNew: false });
       return;
     }
     const song = item.uri ? verifier.verified.get(item.uri) : undefined;
@@ -103,7 +106,9 @@ export function validateSubmission(
     if (seen.has(song.songKey)) return errors.push(`Track ${n}: ${song.name} appears twice.`);
     seen.add(song.songKey);
     rows.push({ position: n, kind: "new", songKey: song.songKey, uri: song.uri, name: song.name, artist: song.artists[0]!, album: song.album, albumArtUrl: song.albumArtUrl, reason: item.reason });
+    counted.push({ position: n, songKey: song.songKey, name: song.name, artists: song.artists, album: song.album || null, isNew: true });
   });
+  errors.push(...constraintErrors(counted, constraints));
   return { errors, rows };
 }
 
@@ -240,11 +245,34 @@ function seedVerifier(db: Db, verifier: CandidateVerifier, setId: number) {
   }
 }
 
+/** Blocks plus the set's exclusions, so find_songs leaves out what the set cannot use. Refilled in place when the exclusions change. */
+function fillHidden(hidden: Blocked, blocked: Blocked, c: Constraints) {
+  hidden.songs.clear();
+  hidden.artists.clear();
+  for (const k of [...blocked.songs, ...c.exclude.songs.map((s) => s.songKey)]) hidden.songs.add(k);
+  for (const k of [...blocked.artists, ...c.exclude.artists.map(artistKey)]) hidden.artists.add(k);
+}
+
 async function converse(ctx: FeatureContext, setId: number, threadId: number, system: string[], messages: MessageParam[], change: Change, onEvent?: (e: AgentEvent) => void) {
   const { db, spotify, llm } = ctx;
   const blocked = blockedSets(db);
   const verifier = new CandidateVerifier(db, spotify, blocked, MAX_SEARCHES_PER_RUN, ctx.now);
   seedVerifier(db, verifier, setId);
+  let constraints = setConstraints(getSetRow(db, setId)!);
+  const hidden: Blocked = { songs: new Set(), artists: new Set() };
+  fillHidden(hidden, blocked, constraints);
+  const updateConstraints = tool({
+    name: "set_constraints",
+    description:
+      "Change this set's constraints, only when the owner's latest message asks for it (for example 'max 2 per artist' or 'no Drake'). Never use it to make a submission pass. Fields you leave out keep their value; exclude replaces both lists. Returns the constraints now in force.",
+    schema: constraintsPatch,
+    run: (patch) => {
+      constraints = { ...constraints, ...patch };
+      db.update(sets).set({ constraints }).where(eq(sets.id, setId)).run();
+      fillHidden(hidden, blocked, constraints);
+      return { constraints };
+    },
+  });
   const submit = tool({
     name: "submit_set",
     strict: true,
@@ -252,7 +280,7 @@ async function converse(ctx: FeatureContext, setId: number, threadId: number, sy
     schema: submitInput,
     terminal: true,
     run: (input) => {
-      const { errors, rows } = validateSubmission(db, blocked, verifier, input, ctx.settings.get().weekendDays);
+      const { errors, rows } = validateSubmission(db, blocked, verifier, input, ctx.settings.get().weekendDays, constraints);
       errors.push(...missingPinned(db, setId, rows));
       if (errors.length) return { accepted: false, errors };
       persistSet(db, setId, input, rows, ctx.now(), change);
@@ -263,7 +291,7 @@ async function converse(ctx: FeatureContext, setId: number, threadId: number, sy
     feature: "sets",
     ref: `set:${setId}`,
     system,
-    tools: [...libraryTools(db, blocked, ctx.now(), ctx.settings.get().weekendDays), verifyTool(verifier), submit],
+    tools: [...libraryTools(db, hidden, ctx.now(), ctx.settings.get().weekendDays), verifyTool(verifier), updateConstraints, submit],
     messages,
     effort: "medium",
     onEvent,
@@ -272,18 +300,21 @@ async function converse(ctx: FeatureContext, setId: number, threadId: number, sy
   return result;
 }
 
-export async function createSet(ctx: FeatureContext, request: string, onEvent?: (e: AgentEvent) => void, context?: PageContext) {
+export async function createSet(ctx: FeatureContext, request: string, onEvent?: (e: AgentEvent) => void, context?: PageContext, given?: ConstraintsPatch) {
   const { db, llm } = ctx;
   llm.assertAvailable();
-  const { timezone, weekendDays } = ctx.settings.get();
+  const { timezone, weekendDays, llm: llmSettings } = ctx.settings.get();
+  const constraints = withDefaults(llmSettings.constraints, given);
   const now = ctx.now();
   const system = [SETS_SYSTEM, tagged("taste_profile", tasteProfile(db, { timezone, weekendDays }, now))];
-  const messages: MessageParam[] = [{ role: "user", content: `${ownerMessage(request)}\nOwner's local time: ${localNow({ timezone, weekendDays }, now)}.${pageContextNote(context)}` }];
+  const messages: MessageParam[] = [
+    { role: "user", content: `${ownerMessage(request)}\nOwner's local time: ${localNow({ timezone, weekendDays }, now)}.${constraintsNote(constraints)}${pageContextNote(context)}` },
+  ];
   const { setId, threadId } = db.transaction((tx) => {
     const threadId = createThread(tx, "sets", system, [], now);
     const setId = tx
       .insert(sets)
-      .values({ threadId, request, title: "Untitled set", description: "", version: 0, createdAt: now, updatedAt: now })
+      .values({ threadId, request, title: "Untitled set", description: "", version: 0, constraints, createdAt: now, updatedAt: now })
       .returning({ id: sets.id })
       .get().id;
     return { setId, threadId };
@@ -318,7 +349,7 @@ export async function refineSet(ctx: FeatureContext, setId: number, message: str
   const messages = thread.messages;
   const pinned = pinnedItems(db, setId);
   const pins = pinned.length ? `\nPinned by the owner, keep in the set: ${pinned.map((i) => `${i.name} - ${i.artist} (songKey ${i.songKey})`).join("; ")}.` : "";
-  messages.push({ role: "user", content: `${ownerMessage(message)}\nOwner's local time: ${localNow(ctx.settings.get(), ctx.now())}.${pins}${pageContextNote(context)}` });
+  messages.push({ role: "user", content: `${ownerMessage(message)}\nOwner's local time: ${localNow(ctx.settings.get(), ctx.now())}.${pins}${constraintsNote(setConstraints(row))}${pageContextNote(context)}` });
   const before = row.version;
   const result = await converse(ctx, setId, row.threadId, thread.system, messages, { source: "claude", message }, onEvent);
   return { set: getSet(db, setId)!, changed: getSetRow(db, setId)!.version !== before, reply: result.terminal ? null : textReply(result.final.content) };
@@ -334,6 +365,19 @@ function textReply(content: { type: string }[]): string | null {
 }
 
 const getSetRow = (db: Db, id: number) => db.select().from(sets).where(eq(sets.id, id)).get();
+
+export const setConstraints = (row: Pick<typeof sets.$inferSelect, "constraints">): Constraints => row.constraints ?? NO_CONSTRAINTS;
+
+const constraintsNote = (c: Constraints) => `\n${tagged("set_constraints", describeConstraints(c))}`;
+
+/** Changes the constraints the next refinement must meet. The songs and the version stay as they are. */
+export function updateSetConstraints(db: Db, setId: number, patch: ConstraintsPatch) {
+  const row = getSetRow(db, setId);
+  if (!row) throw new SetNotFoundError();
+  const constraints = constraintsSchema.parse({ ...setConstraints(row), ...patch });
+  db.update(sets).set({ constraints }).where(eq(sets.id, setId)).run();
+  return getSet(db, setId)!;
+}
 
 function deleteSetRows(db: Db, setId: number) {
   const row = getSetRow(db, setId);
@@ -358,6 +402,7 @@ function summary(row: typeof sets.$inferSelect) {
     description: row.description,
     request: row.request,
     version: row.version,
+    constraints: setConstraints(row),
     playlist: row.playlistId ? { id: row.playlistId, url: row.playlistUrl, savedVersion: row.savedVersion, outdated: row.savedVersion !== row.version } : null,
     createdAt: new Date(row.createdAt).toISOString(),
     updatedAt: new Date(row.updatedAt).toISOString(),

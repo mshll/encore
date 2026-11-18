@@ -9,6 +9,7 @@ import { artistKey, blockedSets, type Blocked } from "../library/blocks";
 import { withArtwork } from "../library/artwork";
 import { refreshPicksPlaylist } from "../living/refresh";
 import { CandidateVerifier } from "../library/candidates";
+import { constraintErrors, describeConstraints, withDefaults, type ConstrainedSong, type ConstraintDefaults, type Constraints } from "../library/constraints";
 import { libraryTools, verifyTool } from "../library/tools";
 import { localTime } from "../plays/localTime";
 import { tasteProfile } from "../taste/profile";
@@ -86,9 +87,11 @@ export function validatePicks(
   week: string,
   now: number,
   sources: SearchSources,
+  constraints: Constraints,
 ): { errors: string[]; rows: PickRow[] } {
   const errors: string[] = [];
   const rows: PickRow[] = [];
+  const counted: ConstrainedSong[] = [];
   if (input.picks.length !== expected.count) errors.push(`Submit exactly ${expected.count} picks; got ${input.picks.length}.`);
   const far = input.picks.filter((p) => p.distance === "far").length;
   if (far !== expected.far) errors.push(`Exactly ${expected.far} picks must be far; got ${far}.`);
@@ -109,6 +112,7 @@ export function validatePicks(
     const artist = artistKey(song.artists[0]!);
     if (artists.has(artist)) return errors.push(`Pick ${n}: only one pick per artist (${song.artists[0]}).`);
     artists.add(artist);
+    counted.push({ position: n, songKey: song.songKey, name: song.name, artists: song.artists, album: song.album || null, isNew: true });
     rows.push({
       week,
       position: n,
@@ -128,6 +132,7 @@ export function validatePicks(
       createdAt: now,
     });
   });
+  errors.push(...constraintErrors(counted, constraints, "pick"));
   return { errors, rows };
 }
 
@@ -142,6 +147,9 @@ function historyText(db: Db, now: number): string {
     })
     .join("\n");
 }
+
+/** The default constraints as picks use them: every pick is new, and one pick per artist is already the rule. */
+export const picksConstraints = (defaults: ConstraintDefaults): Constraints => withDefaults({ ...defaults, maxPerArtist: null, newSongs: null });
 
 const generating = new Set<string>();
 
@@ -164,6 +172,7 @@ async function generateWeek(ctx: FeatureContext, week: string, onEvent?: (e: Age
   const now = ctx.now();
   llm.assertAvailable();
   const { picksPerWeek: count, picksFarOut: far } = llmSettings;
+  const constraints = picksConstraints(llmSettings.constraints);
   const blocked = blockedSets(db);
   const verifier = new CandidateVerifier(db, spotify, blocked, MAX_SEARCHES_PER_RUN, ctx.now);
   const system = [PICKS_SYSTEM, tagged("taste_profile", tasteProfile(db, { timezone, weekendDays }, now))];
@@ -173,6 +182,7 @@ async function generateWeek(ctx: FeatureContext, week: string, onEvent?: (e: Age
       content: [
         `Choose this week's picks (week of ${week}). Owner's local time: ${localNow({ timezone, weekendDays }, now)}.`,
         `Pick exactly ${count} songs: ${count - far} near the owner's taste and ${far} further out.`,
+        tagged("constraints", describeConstraints(constraints)),
         tagged("past_picks", historyText(db, now)),
       ].join("\n\n"),
     },
@@ -190,7 +200,7 @@ async function generateWeek(ctx: FeatureContext, week: string, onEvent?: (e: Age
     }),
     terminal: true,
     run: (input) => {
-      const { errors, rows } = validatePicks(db, blocked, verifier, input, { count, far }, week, ctx.now(), searchSources(messages));
+      const { errors, rows } = validatePicks(db, blocked, verifier, input, { count, far }, week, ctx.now(), searchSources(messages), constraints);
       if (errors.length) return { accepted: false, errors };
       db.transaction((tx) => {
         if (weekHasPicks(tx, week)) throw new PicksExistError(week);

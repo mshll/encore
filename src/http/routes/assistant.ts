@@ -19,7 +19,8 @@ import { savePick, updatePickState } from "../../assistant/api";
 import { ensureSetCover, setCoverSource } from "../../sets/cover";
 import { saveSetPlaylist, syncSetPlaylist } from "../../sets/playlist";
 import { djSessionView } from "./dj";
-import { createSet, deleteSet, getSet, listSets, pinSetItem, refineSet, removeSetItem } from "../../sets/service";
+import { createSet, deleteSet, getSet, listSets, pinSetItem, refineSet, removeSetItem, updateSetConstraints } from "../../sets/service";
+import { constraintsPatch } from "../../library/constraints";
 import { pageContextSchema } from "../../llm/pageContext";
 import { featureContext, mapped, respond } from "../assistant";
 import type { Env } from "../context";
@@ -32,8 +33,8 @@ const text = (max: number) => z.string().trim().min(1).max(max);
 
 export const setRoutes = new Hono<Env>()
   .post("/", async (c) => {
-    const body = parse(z.object({ request: text(2000), context: pageContextSchema.optional() }), await jsonBody(c));
-    return respond(c, (ctx, onEvent) => createSet(ctx, body.request, onEvent, body.context), 201);
+    const body = parse(z.object({ request: text(2000), context: pageContextSchema.optional(), constraints: constraintsPatch.optional() }), await jsonBody(c));
+    return respond(c, (ctx, onEvent) => createSet(ctx, body.request, onEvent, body.context, body.constraints), 201);
   })
   .get("/", (c) => {
     const q = parse(paging(100, 20), c.req.query());
@@ -76,6 +77,11 @@ export const setRoutes = new Hono<Env>()
     const setId = parse(id, c.req.param()).id;
     const body = parse(z.object({ deviceId: z.string().min(1).max(100).optional() }).strict(), await jsonBody(c).catch(() => ({})));
     return c.json({ session: djSessionView(db, await mapped(() => playSet(db, services.dj, setId, body.deviceId))) });
+  })
+  .patch("/:id/constraints", async (c) => {
+    const setId = parse(id, c.req.param()).id;
+    const body = parse(constraintsPatch, await jsonBody(c));
+    return c.json(await mapped(() => updateSetConstraints(c.var.deps.db, setId, body)));
   })
   .patch("/:id/items/:position", async (c) => {
     const p = parse(item, c.req.param());

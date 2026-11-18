@@ -2,6 +2,7 @@ import { blob, index, integer, primaryKey, real, sqliteTable, text, uniqueIndex 
 import { COVER_STYLES } from "../covers/style";
 import { RECAP_KINDS } from "../digest/periods";
 import type { RecapLines } from "../digest/page";
+import type { Constraints } from "../library/constraints";
 
 export const LLM_FEATURES = ["sets", "picks", "ask", "notes", "digest", "dj", "library"] as const;
 export type LlmFeature = (typeof LLM_FEATURES)[number];
@@ -69,6 +70,8 @@ export const sets = sqliteTable("sets", {
   savedAt: integer("saved_at"),
   /** Cover key of the image last uploaded to the playlist. */
   coverUploadKey: text("cover_upload_key"),
+  /** Null on sets made before constraints existed: no constraints. */
+  constraints: text("constraints", { mode: "json" }).$type<Constraints>(),
   createdAt: integer("created_at").notNull(),
   updatedAt: integer("updated_at").notNull(),
 });

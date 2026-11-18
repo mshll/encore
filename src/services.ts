@@ -1,5 +1,6 @@
 import type { Config } from "./config";
 import type { Db } from "./db/client";
+import { sessionConstraints } from "./dj/constraints";
 import { AppPlaylists } from "./dj/playlists";
 import { createLlmReplanner } from "./dj/llmReplan";
 import { createDefaultReplanner, type Replanner } from "./dj/replan";
@@ -29,7 +30,7 @@ export function createServices(db: Db, config: Config, settings: SettingsSource,
   const deterministic = createDefaultReplanner(db, () => settings.get());
   const llmReplanner = createLlmReplanner(assistant, deterministic);
   const replanner: Replanner = (input) => (settings.get().djReplanner === "llm" ? llmReplanner : deterministic)(input);
-  const dj = new DjService(db, player, playlists, replanner, () => settings.get().djSkipTrigger, now);
+  const dj = new DjService(db, player, playlists, replanner, () => settings.get().djSkipTrigger, now, (id) => sessionConstraints(db, id, settings.get().llm.constraints));
   watcher.subscribe((event) => dj.onWatchEvent(event));
   return { player, watcher, playlists, dj, llm, assistant, llmKeyCheck: options.llmKeyCheck ?? sdkKeyCheck };
 }

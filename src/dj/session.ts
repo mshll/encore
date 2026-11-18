@@ -4,6 +4,8 @@ import type { Db } from "../db/client";
 import { djSessions } from "../db/schema";
 import type { WatchEvent } from "../ingest/live/watcher";
 import type { PlayerApi } from "../player/api";
+import { NO_CONSTRAINTS, type Constraints } from "../library/constraints";
+import { constrainTail } from "./constraints";
 import type { AppPlaylists } from "./playlists";
 import type { Replanner } from "./replan";
 
@@ -26,6 +28,7 @@ export class DjService {
     private replanner: Replanner,
     private readonly skipTrigger: () => number,
     private readonly now: () => number = Date.now,
+    private readonly constraintsFor: (sessionId: number) => Constraints = () => NO_CONSTRAINTS,
   ) {}
 
   setReplanner(replanner: Replanner) {
@@ -103,14 +106,16 @@ export class DjService {
     const session = this.db.select().from(djSessions).where(eq(djSessions.id, id)).get();
     if (!session || session.status !== "active") return;
     try {
-      const proposed = await this.replanner({
+      const input = {
         finished: session.outcomes.filter((o) => o.outcome === "finished").map((o) => o.uri),
         skipped: session.outcomes.filter((o) => o.outcome === "skipped").map((o) => o.uri),
         current: session.uris[session.position] ?? null,
         upcoming: session.uris.slice(session.position + 1),
         exclude: session.uris.slice(0, session.position + 1),
         now: this.now(),
-      });
+        constraints: this.constraintsFor(id),
+      };
+      const proposed = constrainTail(this.db, input, await this.replanner(input), input.constraints);
       // Playback may have moved on while the re-planner ran (an LLM call takes seconds): the track that is
       // current now must stay, so the tail is cut at the position read after the re-plan, not before it.
       const fresh = this.db.select().from(djSessions).where(eq(djSessions.id, id)).get();
