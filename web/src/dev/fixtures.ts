@@ -61,6 +61,7 @@
     ?playlists=saved  For you, From your recaps: three period playlists, one saved from a recap, one kept when a year ended, one with no cover
     ?week=quiet       Home, This week: nothing played yet this week (the usual stays)
     ?week=first       Home, This week: the history starts this week, so there is no usual to compare with
+    ?highlight=record|session|song|milestone|streak|none  Home, This week: the highlight line in each form, or none
     ?fail=stats/timeseries,living  every GET under each listed /api/ path answers 500, the rest stay real (one block's failed load;
                       Home: stats/week, stats/overview, stats/timeseries, stats/on-this-day, stats/top, living, digests)
     ?recap=none       Recaps: every period has no recap yet (Write the recap)
@@ -78,7 +79,7 @@
 type Json = Record<string, unknown>;
 
 const params = new URLSearchParams(location.search);
-for (const key of ["fixture", "player", "run", "dj", "settings", "history", "living", "library", "recap", "ask", "week", "picks", "playlists", "fail"]) {
+for (const key of ["fixture", "player", "run", "dj", "settings", "history", "living", "library", "recap", "ask", "week", "highlight", "picks", "playlists", "fail"]) {
   const value = params.get(key);
   if (value === "off") sessionStorage.removeItem(`encore-${key}`);
   else if (value) sessionStorage.setItem(`encore-${key}`, value);
@@ -94,6 +95,7 @@ const libraryFixture = sessionStorage.getItem("encore-library");
 const recapFixture = sessionStorage.getItem("encore-recap");
 const askFixture = sessionStorage.getItem("encore-ask");
 const weekFixture = sessionStorage.getItem("encore-week");
+const highlightFixture = sessionStorage.getItem("encore-highlight");
 const picksFixture = sessionStorage.getItem("encore-picks");
 const playlistsFixture = sessionStorage.getItem("encore-playlists");
 const failing = (sessionStorage.getItem("encore-fail") ?? "").split(",").filter(Boolean);
@@ -139,6 +141,8 @@ async function weekAnswer(path: string): Promise<Response | null> {
   return json({ ...quietWeek(body.usual as Json | null), days: (body.days as Json[]).map((d, i, all) => (i >= all.length - 3 ? { ...d, hours: 0 } : d)) });
 }
 
+const COMEBACK_RULES = { gapMonths: 6, floorHours: 0.25, beforeHours: 3, sinceHours: 1, activeMonthHours: 1 };
+
 function emptyFor(path: string, isNew: boolean): unknown {
   if (path === "/api/stats/overview")
     return { ...ZERO_STATS, uniqueTracks: 0, uniqueArtists: 0, shuffleRate: null, topArtist: null, topTrack: null, firstPlayed: isNew ? null : "2021-05-16T06:56:32.000Z" };
@@ -171,6 +175,15 @@ function emptyFor(path: string, isNew: boolean): unknown {
   if (path === "/api/stats/skips/split") return { ...SPLIT_PARAMS, eligibleSongs: 0, counts: { keeper: 0, wrong_moment: 0, skipped_everywhere: 0, mixed: 0 }, songs: [] };
   if (path === "/api/stats/trips") return { homeCountry: "KW", trips: [] };
   if (path === "/api/stats/devices") return { period: "year", totals: [], series: [] };
+  if (path === "/api/stats/highlight") return { highlight: null };
+  if (path === "/api/stats/discovery") return { historyStart: isNew ? null : "2021-05-16", months: [], totals: { hours: 0, newHours: 0, newShare: null, newArtists: 0, newSongs: 0 } };
+  if (path === "/api/stats/comebacks") return { rules: COMEBACK_RULES, items: [] };
+  if (path === "/api/stats/loyalty") return { rules: { floorHours: 2, minYears: 2 }, years: [], items: [] };
+  if (path === "/api/stats/streaks") return { today: "2026-11-14", current: null, longest: null, artists: [] };
+  if (path === "/api/stats/records") return { sessionGapMinutes: 15, day: null, week: null, month: null, songDay: null, session: null };
+  if (path === "/api/stats/milestones") return { thresholds: { songListens: [10], artistHours: [10], totalHours: [100] }, items: [] };
+  if (path === "/api/stats/decades") return { decades: [], listeningAge: null, coverage: { hoursDated: 0, hoursTotal: 0, share: null, playsShare: null } };
+  if (path === "/api/stats/podcasts") return { hours: 0, plays: 0, shows: [], recent: [] };
   if (path === "/api/stats/tags/genres" || path === "/api/stats/tags/moods") return { period: "month", coverage: { hoursTagged: 0, hoursTotal: 0, share: null }, totals: [], series: [] };
   if (path === "/api/stats/tags/energy") return { coverage: { hoursTagged: 0, hoursTotal: 0, share: null }, hours: Array.from({ length: 24 }, (_, hour) => ({ hour, energy: null, valence: null, listens: 0 })) };
   if (path === "/api/tags/pending") return { items: [], total: 0, limit: 1, offset: 0 };
@@ -178,6 +191,15 @@ function emptyFor(path: string, isNew: boolean): unknown {
   if (path === "/api/library/analysis") return unsyncedLibrary(isNew);
   return null;
 }
+
+const HIGHLIGHT_SONG = { songKey: "loser|tame impala", uri: "spotify:track:7bxaFZ1O3cHkgLKMsdC3xR", name: "Loser", artist: "Tame Impala", albumArtUrl: null };
+const HIGHLIGHTS: Record<string, Json> = {
+  record: { kind: "record", record: "day", day: "2026-11-16", hours: 9.04 },
+  session: { kind: "record", record: "session", day: "2026-11-15", minutes: 295, hours: 4.86 },
+  song: { kind: "record", record: "songDay", day: "2026-11-15", listens: 25, song: { ...HIGHLIGHT_SONG, name: LONG_SONG } },
+  milestone: { kind: "milestone", milestone: { kind: "song", threshold: 25, day: "2026-11-13", song: HIGHLIGHT_SONG } },
+  streak: { kind: "streak", days: 17, from: "2026-10-29", to: "2026-11-14" },
+};
 
 /** Every name in an answer's visuals at its longest, every image broken. */
 function worstAnswer(content: Json): Json {
@@ -243,6 +265,40 @@ function worsen(path: string, body: Json): unknown {
     return { items: items.slice(0, path.includes("albums") ? 1 : 2) };
   }
   if (path === "/api/stats/timeseries") return { ...body, points: (body.points as Json[]).slice(-1) };
+  if (path === "/api/stats/discovery") return { ...body, months: (body.months as Json[]).slice(-1).map((m) => ({ ...m, newArtists: 123456, newSongs: 1234567, newShare: 1 })) };
+  if (path === "/api/stats/discovery/month")
+    return {
+      ...body,
+      artists: (body.artists as Json[]).slice(0, 1).map((a) => ({ ...a, artist: LONG_ARTIST, imageUrl: BROKEN_ART, hours: 98765.4, songs: 1234567 })),
+      songs: (body.songs as Json[]).slice(0, 1).map((s) => ({ ...s, name: LONG_SONG, artist: LONG_ARTIST, albumArtUrl: BROKEN_ART, hours: 98765.4 })),
+    };
+  if (path === "/api/stats/comebacks" || path === "/api/stats/loyalty")
+    return { ...body, items: (body.items as Json[]).slice(0, 1).map((a) => ({ ...a, artist: LONG_ARTIST, imageUrl: BROKEN_ART, hoursSince: 98765.4, gapMonths: 123 })) };
+  if (path === "/api/stats/streaks")
+    return { ...body, current: { days: 12345, from: "1992-08-01", to: "2026-11-14" }, artists: (body.artists as Json[]).slice(0, 1).map((a) => ({ ...a, artist: LONG_ARTIST, imageUrl: BROKEN_ART, days: 12345 })) };
+  if (path === "/api/stats/records") {
+    const songDay = body.songDay as Json | null;
+    return { ...body, day: { day: "2026-01-01", hours: 23.99 }, songDay: songDay && { ...songDay, listens: 1234, song: { ...(songDay.song as Json), name: LONG_SONG } } };
+  }
+  if (path === "/api/stats/milestones")
+    return {
+      ...body,
+      items: [
+        { kind: "song", threshold: 1000, day: "2026-11-13", song: { songKey: "worst|worst", uri: "spotify:track:0000000000000000000000", name: LONG_SONG, artist: LONG_ARTIST, albumArtUrl: BROKEN_ART } },
+        { kind: "artist", threshold: 1000, day: "2026-11-12", artist: LONG_ARTIST, imageUrl: BROKEN_ART },
+        { kind: "total", threshold: 10000, day: "2026-11-11" },
+      ],
+    };
+  if (path === "/api/stats/podcasts")
+    return {
+      hours: 98765.4,
+      plays: 1234567,
+      shows: [
+        { show: LONG_ALBUM, hours: 98765.4, plays: 1234567, episodes: 123456, firstPlayed: "2021-01-01T00:00:00.000Z", lastPlayed: "2026-11-13T00:00:00.000Z" },
+        { show: null, hours: 0.01, plays: 1, episodes: 1, firstPlayed: null, lastPlayed: null },
+      ],
+      recent: [{ ts: "2026-11-13T10:00:00.000Z", day: "2026-11-13", show: LONG_ARTIST, episode: LONG_SONG, uri: null, minutes: 1234 }],
+    };
   if (path === "/api/stats/clock") {
     const cells = (body.cells as Json[]).map((c, i) => ({ ...c, hours: i === 100 ? 4321.5 : i % 37 === 0 ? 0.01 : 0, plays: i === 100 ? 98765 : i % 37 === 0 ? 1 : 0 }));
     return { cells };
@@ -939,6 +995,7 @@ window.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
     const answer = await forYouAnswer(path);
     if (answer) return answer;
   }
+  if (highlightFixture && path === "/api/stats/highlight") return json({ highlight: HIGHLIGHTS[highlightFixture] ?? null });
   if (weekFixture && method === "GET") {
     const answer = await weekAnswer(path);
     if (answer) return answer;

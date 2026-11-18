@@ -49,7 +49,7 @@ Runs live in memory: a restart ends them.
 | `song` | `songKey`, `name`, `artist` |
 | `playlist` | `playlist` (a living playlist kind: `picks`, `forgotten`, `most-played`, `new-releases`, `this-month`, `this-year`, `right-now`), `name` |
 | `recap` | `period` (`weekly`, `monthly`, `yearly`), `key`, `label` ("October 2026") |
-| `patterns` | `view` (`when`, `eras`, `taste`, `skips`, `places`), `from`?, `to`? (`YYYY-MM-DD`; none for all time) |
+| `patterns` | `view` (`when`, `eras`, `taste`, `discovery`, `records`, `skips`, `places`), `from`?, `to`? (`YYYY-MM-DD`; none for all time) |
 | `library` | `planId`?, `title`? (a plan page; none for the other Library pages) |
 | `set` | `setId`, `title` |
 
@@ -59,7 +59,7 @@ Runs live in memory: a restart ends them.
 
 ## Metric definitions
 
-- **Music play**: a row with `kind = "track"` from the audio export or the API. Podcast episodes, audiobooks, and every row from `Streaming_History_Video_*.json` (music videos included) are stored but excluded from all `/api/stats/*` and `/api/entities/*` numbers. `/api/history` can show them with `kind`.
+- **Music play**: a row with `kind = "track"` from the audio export or the API. Podcast episodes, audiobooks, and every row from `Streaming_History_Video_*.json` (music videos included) are stored but excluded from all `/api/stats/*` and `/api/entities/*` numbers except `/api/stats/podcasts` (episodes only). `/api/history` can show them with `kind`.
 - **Play**: one row. Includes very short plays.
 - **Listen**: a music play with `ms_played >= 30000` (export and live rows) or any API row. The Spotify recently-played API only reports plays it counted, and it does not give `ms_played`.
 - **Hours**: sum of `ms_played`. API rows have no `ms_played`, so they count the track's full `duration_ms` once known (from the poll itself or enrichment), else 0.
@@ -93,6 +93,15 @@ Runs live in memory: a restart ends them.
 - **Era** (`/api/stats/eras`): top N artists by hours in the range; for each, hours per local month across a continuous month axis, the month with the most hours (`peakMonth`), and first/last play of all time (not limited to the range).
 - **Trip**: plays ordered by time, ignoring rows without `conn_country` (all API rows). A trip is a maximal run of consecutive plays whose country is not `HOME_COUNTRY` (unset: the country with the most plays; `homeCountry` is `null` when no play has a country); a single home-country play ends it. A trip can span several countries. Trips with fewer than `minPlays` plays (default 5) are dropped. `days` counts local days from first to last play inclusive. Trip plays count all kinds (country is about location); `hours` and `topTracks` count music only.
 - **Forgotten**: songs with at least `minListens` listens (all time) and no play of any kind in the last `days` days.
+- **Discovery**: a song (by `songKey`) or artist is new in the month of its first music play, all time (any play, short ones included; local days). `newShare` is the month's hours on songs first played that month over the month's hours. The month the history starts in is left out, since everything in it is new.
+- **Comeback**: an artist with 3 h or more, then 6 or more *active* months (months with 1 h or more of any music) each under 15 minutes of that artist, then a month at 15 minutes or more, with 1 h or more from that month on. Months with no listening at all are skipped, so a break from all music is not a comeback. `lastBefore` is the last play day of the last month at the floor before the gap, `returned` the first play day of the month back; `hoursBefore` counts up to the gap, `hoursSince` from the return on. An artist can come back more than once. Forgotten lists songs; comebacks list artists who returned.
+- **Loyalty**: a loyal year is a calendar year with 2 h or more of the artist. Artists with 2 or more loyal years are listed, by loyal years, then the longest run of consecutive loyal years, then hours.
+- **Streak**: consecutive local days with at least one listen. The current streak is the run that reaches today or yesterday (today may not have a listen yet), over all time.
+- **Session**: music plays in time order; a play starts at `ts - ms_played` (`ts` is when it ended). A new session starts when a play starts more than 15 minutes after the previous one ended. A session's length is wall time from its first start to its last end.
+- **Records**: in the range, the local day, week (Monday start) and month with the most hours, the song with the most listens in one day, and the longest session. Ties go to the earliest.
+- **Milestones**: the play that took a song to its 10th, 25th, 50th, 100th, 250th, 500th or 1000th listen; an artist to 10, 50, 100, 250, 500 or 1000 hours; all music to 100, 500, 1000, 2500, 5000 or 10000 hours. Counted over all time; the range picks which crossings are listed (by local day).
+- **Release decade and listening age**: the release year is the first four digits of the track's `release_date` (Spotify gives a year, a month or a day). Listening age is the time-weighted median release year: sort the range's dated hours by release year; it is the first year at which the running total reaches half of them. Plays of songs with no release date are left out; `coverage.share` is the dated share of hours, `coverage.playsShare` of plays.
+- **Podcasts**: plays with `kind = "episode"`, grouped by show name; hours are `ms_played` only.
 - **Export vs API and live**: export rows are the source of truth. Importing an export deletes API and live rows from the export's first to last timestamp (plus 999 ms, since export timestamps have second precision), and the poller and the watcher ignore plays at or before the newest export row (+999 ms). `apiPlaysRemoved` counts both.
 - **Live plays** (`source: "live"`): the `watch` job polls `GET /me/player` and turns state changes into plays. `ms_played` is the progress it observed (pauses excluded, forward seeks capped at wall time). `skipped` is true when the track changed before its last 5 s, like Spotify's flag on `fwdbtn`; the outcome comes from `reason_end` and the time played, as for export rows. `reason_end` is `trackdone` (reached the last 5 s), `fwdbtn` (changed earlier) or `endplay` (playback stopped); `reason_start` is the previous play's `trackdone`/`fwdbtn`, else `null`. All three are inferred, not Spotify's values. A gap between polls over `2 x WATCHER_IDLE_SECONDS + 30 s` leaves the end unknown (`skipped`, `reason_end` null). `device` comes from the Spotify device name and type; `contextUri` is the playlist or album played from. A watcher that starts mid-track counts the part before its first poll as played.
 - **History start** (`historyStart` setting): plays on a local day before it are never stored, whichever path brings them (export import, recently-played poll, watcher). Saving the setting only filters what arrives from then on; plays already stored are removed only by `POST /api/settings/history-start`. Clearing it removes nothing and restores nothing: removed plays return only by importing the export again.
@@ -635,6 +644,136 @@ Params: `minPlays` (default 5), `topTracks` (0-50, default 5). Newest first.
 ```
 
 The range filters plays before trips are built, so a trip that crosses `from`/`to` is cut at the boundary.
+
+### `GET /api/stats/highlight`
+
+One line for Home's This week. No params. `{ "highlight": Highlight | null }`, the first that applies:
+
+1. An all-time record (see Records) set this week, once the history started at least 28 days before the week: `{ "kind": "record", "record": "day", "day", "hours" }`, `"session"` (`day`, `minutes`, `hours`), `"songDay"` (`day`, `listens`, `song`), `"week"` (`week`, `hours`) or `"month"` (`month`, `hours`), in that order.
+2. The biggest milestone crossed this week (total, then artist, then song; then the higher threshold): `{ "kind": "milestone", "milestone": Milestone }`.
+3. A current streak of 7 days or more: `{ "kind": "streak", "days", "from", "to" }`.
+
+The week is the one `stats/week` uses.
+
+### `GET /api/stats/discovery`
+
+New artists and songs per month (see Discovery). Months with plays in the range, oldest first.
+
+```json
+{ "historyStart": "2021-05-16",
+  "months": [{ "month": "2026-10", "hours": 36.4, "newHours": 8.1, "newShare": 0.223, "newArtists": 41, "newSongs": 120 }],
+  "totals": { "hours": 1444.47, "newHours": 416.17, "newShare": 0.288, "newArtists": 1577, "newSongs": 5043 } }
+```
+
+Empty history: `historyStart: null`, no months, zero totals with `newShare: null`.
+
+### `GET /api/stats/discovery/month`
+
+No range. Params: `month` (`YYYY-MM`, required), `limit` (1-100, default 20). The artists and songs first played in that month, by their hours that month.
+
+```json
+{ "month": "2026-10",
+  "artists": [{ "artist": "Graveyard Club", "imageUrl": null, "firstDay": "2026-10-22", "hours": 0.19, "listens": 4, "songs": 3, "hoursSince": 0.19 }],
+  "songs": [{ ...Song, "firstDay": "2026-10-22", "hoursSince": 0.4, "listensSince": 6 }] }
+```
+
+Song `Stats` cover the month; `hoursSince` and `listensSince` run from the month's first day to now.
+
+### `GET /api/stats/comebacks`
+
+Params: `limit` (1-100, default 20). Comebacks whose `returned` day is in the range, newest first.
+
+```json
+{ "rules": { "gapMonths": 6, "floorHours": 0.25, "beforeHours": 3, "sinceHours": 1, "activeMonthHours": 1 },
+  "items": [{ "artist": "Tame Impala", "imageUrl": "...", "lastBefore": "2025-10-26", "returned": "2026-08-02", "gapMonths": 9, "gapDays": 280, "hoursBefore": 5.46, "hoursSince": 2.54 }] }
+```
+
+`gapMonths` counts active months only; `gapDays` is calendar days from `lastBefore` to `returned`.
+
+### `GET /api/stats/loyalty`
+
+Params: `limit` (1-100, default 20). The range limits which plays count.
+
+```json
+{ "rules": { "floorHours": 2, "minYears": 2 }, "years": [2021, 2024, 2025, 2026],
+  "items": [{ "artist": "Kendrick Lamar", "imageUrl": "...", "years": [2024, 2025, 2026], "hours": 58.28, "run": { "from": 2024, "to": 2026, "years": 3 } }] }
+```
+
+`years` at the top lists every year with music in the range; an item's `years` are its loyal years.
+
+### `GET /api/stats/streaks`
+
+Params: `limit` (1-50, default 5) artists.
+
+```json
+{ "today": "2026-11-14",
+  "current": { "days": 17, "from": "2026-10-29", "to": "2026-11-14" } | null,
+  "longest": { "days": 257, "from": "2024-12-06", "to": "2025-08-19" } | null,
+  "artists": [{ "artist": "Kendrick Lamar", "imageUrl": "...", "days": 39, "from": "2025-02-08", "to": "2025-03-18" }] }
+```
+
+`current` ignores the range; `longest` and `artists` (each artist's longest run of days with a listen of them, 2 days or more) are within it.
+
+### `GET /api/stats/records`
+
+```json
+{ "sessionGapMinutes": 15,
+  "day": { "day": "2024-12-29", "hours": 9.04 } | null,
+  "week": { "week": "2025-04-21", "hours": 38.38 } | null,
+  "month": { "month": "2025-04", "hours": 126.18 } | null,
+  "songDay": { "day": "2021-07-12", "listens": 25, "song": { "songKey", "uri", "name", "artist", "albumArtUrl" } } | null,
+  "session": { "start": "2025-02-21T07:33:31.620Z", "end": "2025-02-21T12:28:08.000Z", "day": "2025-02-21", "minutes": 295, "hours": 4.86, "plays": 71 } | null }
+```
+
+`week` is the Monday. `session.day` is the local day of its first play; `hours` is time played, `minutes` wall time.
+
+### `GET /api/stats/milestones`
+
+Params: `limit` (1-200, default 20). Crossings on a day in the range, newest first.
+
+```json
+{ "thresholds": { "songListens": [10, 25, 50, 100, 250, 500, 1000], "artistHours": [10, 50, 100, 250, 500, 1000], "totalHours": [100, 500, 1000, 2500, 5000, 10000] },
+  "items": [
+    { "kind": "song", "threshold": 25, "day": "2026-11-13", "song": { "songKey", "uri", "name", "artist", "albumArtUrl" } },
+    { "kind": "artist", "threshold": 50, "day": "2026-10-02", "artist": "Mac Miller", "imageUrl": "..." },
+    { "kind": "total", "threshold": 1000, "day": "2025-09-14" }
+  ] }
+```
+
+### `GET /api/stats/decades`
+
+```json
+{ "decades": [{ "decade": 2010, "hours": 449.43, "plays": 11920, "share": 0.363 }],
+  "listeningAge": 2019,
+  "coverage": { "hoursDated": 1239.25, "hoursTotal": 1444.83, "share": 0.858, "playsShare": 0.817 } }
+```
+
+`share` is the decade's share of dated hours. `listeningAge` is a release year (see the definition), `null` with no dated plays.
+
+### `GET /api/stats/years`
+
+No range. Params: `a`, `b` (years, 1900-2999). Default `b` is the latest year with music, `a` the year before `b`.
+
+```json
+{ "years": [2021, 2024, 2025, 2026],
+  "a": { "year": 2025, "hours": 998.53, "plays": 24978, "listens": 17481, "artists": 1299, "songs": 3974, "newArtists": 1057, "newSongs": 3487 },
+  "b": { "year": 2026, ... },
+  "artists": [{ "artist": "Kanye West", "imageUrl": "...", "a": { "rank": 9, "hours": 20 }, "b": { "rank": 2, "hours": 20.07 }, "change": 7 }],
+  "genres": [{ "value": "hip-hop", "a": 0.41, "b": 0.38 }],
+  "moods": [...] }
+```
+
+`years` lists every year with music. `artists` is the union of both years' top 10 by hours, `b`'s first; ranks are among every artist that year, `null` when not played; `change` is rank in `a` minus rank in `b` (rising is positive), `null` unless played in both. `newArtists`/`newSongs` were first played that year, all time. Tag shares are of tagged hours (see Tag-based stats), the 8 largest in either year.
+
+### `GET /api/stats/podcasts`
+
+Params: `limit` (1-100, default 20) shows and episodes.
+
+```json
+{ "hours": 0.17, "plays": 34,
+  "shows": [{ "show": "Show", "hours": 0.07, "plays": 1, "episodes": 1, "firstPlayed": "...", "lastPlayed": "..." }],
+  "recent": [{ "ts": "...", "day": "2025-07-25", "show": "Show", "episode": "Episode", "uri": "spotify:episode:...", "minutes": 4 }] }
+```
 
 ### Tag-based stats
 
@@ -1239,6 +1378,11 @@ Seams for other modules (`src/discord/`): `DiscordRegistry.addCommand({ definiti
 | `lookup` | `query?` (name search) or `artist` (+ `album`) or `songKey`/`uri` (entity page) |
 | `on_this_day` | `date?`, `limit?` |
 | `forgotten` | `days?`, `minListens?`, `limit?` |
+| `discovery` | `from?`, `to?`, or `month` (`YYYY-MM`, that month's new artists and songs), `limit?` |
+| `comebacks`, `loyalty`, `podcasts` | `from?`, `to?`, `limit?` |
+| `records` | `from?`, `to?`. Records, `streaks` and `milestones` in one result |
+| `decades` | `from?`, `to?` |
+| `year_compare` | `a?`, `b?` |
 | `now_playing` | none |
 | `releases` | `status?` (`new`, `recent`), `days?`, `includeSeen?` (default `false`), `includeReissues?` (default `false`) |
 | `mark_release_seen` | `ids` (release ids, album URIs or links) or `all: true` (every unseen release). `{ "marked": 2 }` |
@@ -1558,6 +1702,7 @@ The list item plus `text` (plain text for a chat message, dates written out), `f
 
 - Sections appear only when the numbers support them, in the order above: `listening` always; `months` for a year with two or more months of listening; `artists`, `songs` (the period's playlist: most listens, then most time, at least 2 listens, at most 15, 25 or 50 songs for a week, month or year; skips never lower a song), `taste` (only with a comparison, tags whose share moved 5 points or more), `finds` (songs and artists first played in the period and listened to again on another day of it; needs earlier history), `rhythm` (busiest day and hour). `quiet: true` (fewer than 5 listens or under half an hour) keeps only `listening`.
 - `before` values are the compared period's. `share` values are 0 to 1. `byHour` is hours per local hour 0-23; `daily` hours per day of the period.
+- `facts` from recaps written after insights landed also hold `discovery` (`newSongs`, `newArtists`, `newHours`, `newShare`; `null` when the history starts inside the period), `comebacks` (returning inside the period, as in `stats/comebacks`), `records` (all-time records set inside the period, as in `stats/highlight`'s record kinds; empty when the history starts inside it), `streak` (the longest run of days with a listen in the period) and `milestones` (crossed inside the period). Older recaps lack these fields; the page does not draw them yet.
 - Recaps stored before recaps were pages (`facts` without `version: 2`) open with the same sections from their stored numbers: `headlineBy: "text"`, `compare.scaled: true` (their comparison was a typical period, scaled), `daily` and `byHour` null, and `legacyText` holds the text Claude wrote then, ISO dates written out.
 
 #### `GET /api/digests/playlists`

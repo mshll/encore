@@ -1,14 +1,20 @@
 import { z } from "zod";
+import { decades } from "../analytics/decades";
+import { comebacks, discovery, loyalty, monthDiscoveries } from "../analytics/discovery";
 import { artistPage, trackPage } from "../analytics/entities";
 import { overview } from "../analytics/overview";
+import { podcasts } from "../analytics/podcasts";
+import { milestones, records, streaks } from "../analytics/records";
 import { forgotten, onThisDay } from "../analytics/recall";
 import { search } from "../analytics/search";
 import { MOMENT_CLASSES, momentSplit } from "../analytics/skips";
 import { energyByHour, genreSeries, moodSeries } from "../analytics/tags";
 import { eras, topAlbums, topArtists, topTracks } from "../analytics/top";
 import { trips } from "../analytics/trips";
+import { listeningYears, yearCompare } from "../analytics/years";
 import type { Db } from "../db/client";
 import { tool, ToolError, type AgentTool } from "../llm/agent";
+import { localTime } from "../plays/localTime";
 import { queryPlays, queryPlaysInput } from "./query";
 
 const day = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
@@ -34,7 +40,9 @@ const songBrief = (s: { songKey: string; name: string; artist: string; album: st
 });
 
 /** Read-only tools over the play history. None of them reaches auth, session, passkey, token or ledger tables. */
-export function askTools(db: Db, { homeCountry, weekendDays }: { homeCountry?: string; weekendDays: readonly number[] }, now: number): AgentTool[] {
+export function askTools(db: Db, { homeCountry, weekendDays, timezone }: { homeCountry?: string; weekendDays: readonly number[]; timezone: string }, now: number): AgentTool[] {
+  const today = localTime(now, timezone).day;
+  const noImage = <T extends { imageUrl: string | null }>({ imageUrl: _image, ...rest }: T) => rest;
   return [
     tool({
       name: "query_plays",
@@ -147,6 +155,69 @@ export function askTools(db: Db, { homeCountry, weekendDays }: { homeCountry?: s
       description: "Average tagged energy and valence (1-5) of listens per local hour.",
       schema: z.strictObject(range),
       run: (input) => energyByHour(db, { range: checkRange(input) }),
+    }),
+    tool({
+      name: "discovery",
+      description:
+        "New artists and songs per month (first played that month, all time) and the share of each month's hours on songs first heard that month; the month the history starts in is left out. With month (YYYY-MM): that month's new artists and songs, with hours that month and since.",
+      schema: z.strictObject({ ...range, month: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/).optional() }),
+      run: ({ month, ...r }) => {
+        if (!month) return discovery(db, { range: checkRange(r) });
+        const found = monthDiscoveries(db, { month, limit: 15 });
+        return { ...found, artists: found.artists.map(noImage), songs: found.songs.map((s) => ({ ...songBrief(s), firstDay: s.firstDay, hoursSince: s.hoursSince })) };
+      },
+    }),
+    tool({
+      name: "comebacks",
+      description:
+        "Artists the owner played a lot (3+ hours), then barely (under 15 minutes a month) for 6+ months of other listening, then came back to (1+ hour since). The range filters by the day they came back. Distinct from forgotten, which lists songs not played lately.",
+      schema: z.strictObject(range),
+      run: (r) => {
+        const found = comebacks(db, { range: checkRange(r), limit: 20 });
+        return { ...found, items: found.items.map(noImage) };
+      },
+    }),
+    tool({
+      name: "loyalty",
+      description: "Artists played 2+ hours in each of many calendar years, with the longest run of consecutive such years.",
+      schema: z.strictObject(range),
+      run: (r) => {
+        const found = loyalty(db, { range: checkRange(r), limit: 20 });
+        return { ...found, items: found.items.map(noImage) };
+      },
+    }),
+    tool({
+      name: "records",
+      description:
+        "Personal records in a period: most hours in a day, week and month, most listens of one song in a day, the longest session (plays less than 15 minutes apart), days in a row with a listen (current and longest), artists' longest daily runs, and milestones crossed (a song's 10th, 25th, 50th... listen; an artist's 10th, 50th, 100th... hour; total hours).",
+      schema: z.strictObject(range),
+      run: (r) => {
+        const rg = checkRange(r);
+        const s = streaks(db, { range: rg, today });
+        return { ...records(db, { range: rg }), streaks: { ...s, artists: s.artists.map(noImage) }, milestones: milestones(db, { range: rg, limit: 20 }).items };
+      },
+    }),
+    tool({
+      name: "decades",
+      description: "Hours by release decade of the songs played, and the listening age: the median release year weighted by hours. Songs without a release date are left out; check coverage.",
+      schema: z.strictObject(range),
+      run: (r) => decades(db, { range: checkRange(r) }),
+    }),
+    tool({
+      name: "year_compare",
+      description: "Two calendar years side by side: hours, plays, new artists and songs, the top artists with their rank in each year (change: positive rose), genre and mood shares. Default: the latest year against the one before.",
+      schema: z.strictObject({ a: z.number().int().min(1900).max(2999).optional(), b: z.number().int().min(1900).max(2999).optional() }),
+      run: ({ a, b }) => {
+        const later = b ?? listeningYears(db).at(-1) ?? Number(today.slice(0, 4));
+        const found = yearCompare(db, { a: a ?? later - 1, b: later });
+        return { ...found, artists: found.artists.map(noImage) };
+      },
+    }),
+    tool({
+      name: "podcasts",
+      description: "Podcast listening (episodes, not music): hours by show and the latest episodes.",
+      schema: z.strictObject(range),
+      run: (r) => podcasts(db, { range: checkRange(r), limit: 15 }),
     }),
     tool({
       name: "trips",

@@ -52,6 +52,16 @@ import type {
   AlbumStats,
   ArtistStats,
   Clock,
+  Comebacks,
+  Decades,
+  Discovery,
+  Highlight,
+  Loyalty,
+  Milestones,
+  MonthDiscoveries,
+  Podcasts,
+  Records,
+  Streaks,
   Eras,
   Forgotten,
   History,
@@ -131,6 +141,33 @@ export const useForgotten = (days: number) =>
 export const useOnThisDay = () => useQuery({ queryKey: ["on-this-day"], queryFn: () => get<OnThisDay>("/api/stats/on-this-day", { limit: 3 }) });
 
 export const useTrips = (range: Range) => useQuery(ranged<Trips>("/api/stats/trips", range, { topTracks: 5 }));
+
+export const useHighlight = () =>
+  useQuery({ queryKey: ["highlight"], queryFn: () => get<{ highlight: Highlight | null }>("/api/stats/highlight"), refetchInterval: 5 * 60_000 });
+
+export const useDiscovery = (range: Range) => useQuery(ranged<Discovery>("/api/stats/discovery", range));
+
+export const useMonthDiscoveries = (month: string | null) =>
+  useQuery({
+    queryKey: ["discovery", "month", month],
+    queryFn: () => get<MonthDiscoveries>("/api/stats/discovery/month", { month: month!, limit: 10 }),
+    enabled: month !== null,
+    placeholderData: keepPreviousData,
+  });
+
+export const useComebacks = (range: Range) => useQuery(ranged<Comebacks>("/api/stats/comebacks", range, { limit: 10 }));
+
+export const useLoyalty = (range: Range) => useQuery(ranged<Loyalty>("/api/stats/loyalty", range, { limit: 10 }));
+
+export const useStreaks = (range: Range) => useQuery(ranged<Streaks>("/api/stats/streaks", range, { limit: 5 }));
+
+export const useRecords = (range: Range) => useQuery(ranged<Records>("/api/stats/records", range));
+
+export const useMilestones = (range: Range) => useQuery(ranged<Milestones>("/api/stats/milestones", range, { limit: 12 }));
+
+export const useDecades = (range: Range) => useQuery(ranged<Decades>("/api/stats/decades", range));
+
+export const usePodcasts = (range: Range) => useQuery(ranged<Podcasts>("/api/stats/podcasts", range, { limit: 20 }));
 
 export const useDevices = (range: Range) => useQuery(ranged<Devices>("/api/stats/devices", range, { period: "year" }));
 

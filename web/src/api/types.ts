@@ -785,7 +785,7 @@ export type Standing = {
   lastError: string | null;
 };
 
-export type PatternView = "when" | "eras" | "taste" | "skips" | "places";
+export type PatternView = "when" | "eras" | "taste" | "discovery" | "records" | "skips" | "places";
 
 /** The page a message to Claude was sent from (`context` on the run start routes): ids and names only. */
 export type PageContext =
@@ -811,3 +811,93 @@ export type McpConsentDecision = { redirectTo: string };
 
 /** `GET /api/mcp/connections`: one per OAuth sign-in the owner allowed. */
 export type McpConnection = { id: number; clientName: string; redirectHost: string; connectedAt: string; lastUsedAt: string | null };
+
+export type MonthDiscovery = { month: string; hours: number; newHours: number; newShare: number | null; newArtists: number; newSongs: number };
+
+export type Discovery = {
+  historyStart: string | null;
+  months: MonthDiscovery[];
+  totals: { hours: number; newHours: number; newShare: number | null; newArtists: number; newSongs: number };
+};
+
+export type MonthDiscoveries = {
+  month: string;
+  artists: { artist: string; imageUrl: string | null; firstDay: string; hours: number; listens: number; songs: number; hoursSince: number }[];
+  songs: (Song & { firstDay: string; hoursSince: number; listensSince: number })[];
+};
+
+export type Comeback = { artist: string; imageUrl: string | null; lastBefore: string; returned: string; gapMonths: number; gapDays: number; hoursBefore: number; hoursSince: number };
+
+export type Comebacks = {
+  rules: { gapMonths: number; floorHours: number; beforeHours: number; sinceHours: number; activeMonthHours: number };
+  items: Comeback[];
+};
+
+export type Loyalty = {
+  rules: { floorHours: number; minYears: number };
+  years: number[];
+  items: { artist: string; imageUrl: string | null; years: number[]; hours: number; run: { from: number; to: number; years: number } }[];
+};
+
+export type DayRun = { days: number; from: string; to: string };
+
+export type Streaks = {
+  today: string;
+  current: DayRun | null;
+  longest: DayRun | null;
+  artists: ({ artist: string; imageUrl: string | null } & DayRun)[];
+};
+
+export type MilestoneSong = { songKey: string; uri: string; name: string; artist: string; albumArtUrl: string | null };
+
+export type Records = {
+  sessionGapMinutes: number;
+  day: { day: string; hours: number } | null;
+  week: { week: string; hours: number } | null;
+  month: { month: string; hours: number } | null;
+  songDay: { day: string; listens: number; song: MilestoneSong } | null;
+  session: { start: string; end: string; day: string; minutes: number; hours: number; plays: number } | null;
+};
+
+export type Milestone =
+  | { kind: "song"; threshold: number; day: string; song: MilestoneSong }
+  | { kind: "artist"; threshold: number; day: string; artist: string; imageUrl: string | null }
+  | { kind: "total"; threshold: number; day: string };
+
+export type Milestones = {
+  thresholds: { songListens: number[]; artistHours: number[]; totalHours: number[] };
+  items: Milestone[];
+};
+
+export type RecordSet =
+  | { record: "day"; day: string; hours: number }
+  | { record: "session"; day: string; minutes: number; hours: number }
+  | { record: "songDay"; day: string; listens: number; song: MilestoneSong }
+  | { record: "week"; week: string; hours: number }
+  | { record: "month"; month: string; hours: number };
+
+export type Highlight = ({ kind: "record" } & RecordSet) | { kind: "milestone"; milestone: Milestone } | ({ kind: "streak" } & DayRun);
+
+export type Decades = {
+  decades: { decade: number; hours: number; plays: number; share: number | null }[];
+  listeningAge: number | null;
+  coverage: { hoursDated: number; hoursTotal: number; share: number | null; playsShare: number | null };
+};
+
+export type YearSide = { year: number; hours: number; plays: number; listens: number; artists: number; songs: number; newArtists: number; newSongs: number };
+
+export type YearCompare = {
+  years: number[];
+  a: YearSide;
+  b: YearSide;
+  artists: { artist: string; imageUrl: string | null; a: { rank: number; hours: number } | null; b: { rank: number; hours: number } | null; change: number | null }[];
+  genres: { value: string; a: number; b: number }[];
+  moods: { value: string; a: number; b: number }[];
+};
+
+export type Podcasts = {
+  hours: number;
+  plays: number;
+  shows: { show: string | null; hours: number; plays: number; episodes: number; firstPlayed: string | null; lastPlayed: string | null }[];
+  recent: { ts: string; day: string; show: string | null; episode: string | null; uri: string | null; minutes: number }[];
+};

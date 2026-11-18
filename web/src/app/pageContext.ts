@@ -7,7 +7,7 @@ import { PATTERN_TABS } from "./nav";
 import { paramValue, RECAP_SLUGS } from "./paths";
 
 const LIVING: LivingKind[] = ["picks", "forgotten", "most-played", "new-releases", "this-month", "this-year", "right-now"];
-const VIEWS: PatternView[] = ["when", "eras", "taste", "skips", "places"];
+const VIEWS: PatternView[] = ["when", "eras", "taste", "discovery", "records", "skips", "places"];
 const DAY = /^\d{4}-\d{2}-\d{2}$/;
 
 /** What the address alone says about the page: the entity's ids. Names that the address does not hold are looked up after. */

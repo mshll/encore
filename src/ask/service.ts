@@ -69,7 +69,7 @@ export async function ask(ctx: FeatureContext, question: string, threadId: numbe
     feature: "ask",
     ref: existing ? `thread:${existing.id}` : undefined,
     system,
-    tools: [...withRefs(askTools(db, { homeCountry, weekendDays }, now), refs), showTool(db, refs, visuals, (id, visual) => onEvent?.({ type: "visual", id, visual }))],
+    tools: [...withRefs(askTools(db, { homeCountry, weekendDays, timezone }, now), refs), showTool(db, refs, visuals, (id, visual) => onEvent?.({ type: "visual", id, visual }))],
     messages,
     effort: "medium",
     maxCalls: 15,

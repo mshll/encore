@@ -71,6 +71,13 @@ const VALID_INPUTS: Record<string, unknown> = {
   tag_trends: { tag: "moods" },
   energy_by_hour: {},
   trips: {},
+  discovery: { month: "2026-01" },
+  comebacks: {},
+  loyalty: {},
+  records: { from: "2026-01-01" },
+  decades: {},
+  year_compare: { a: 2025, b: 2026 },
+  podcasts: {},
 };
 
 describe("ask tools are read-only and scoped to listening data", () => {
@@ -78,7 +85,7 @@ describe("ask tools are read-only and scoped to listening data", () => {
     const { db } = featureCtx(null);
     seedLibrary(db);
     seedSecrets(db);
-    const tools = askTools(db, { homeCountry: "KW", weekendDays: WEEKEND }, Date.parse("2026-02-01T00:00:00Z"));
+    const tools = askTools(db, { homeCountry: "KW", weekendDays: WEEKEND, timezone: "Asia/Kuwait" }, Date.parse("2026-02-01T00:00:00Z"));
     const runTool = (name: string, input: unknown) => {
       const t = tools.find((x) => x.name === name)!;
       return (t.run as (i: unknown) => unknown)(t.schema.parse(input));

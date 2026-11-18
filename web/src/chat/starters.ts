@@ -18,6 +18,8 @@ const PATTERN_ASKS: Record<string, string> = {
   when: "When in the week do I listen most here?",
   eras: "Which artists defined these months?",
   taste: "How did my genres and moods shift here?",
+  discovery: "Which new artists stuck with me here?",
+  records: "What were my biggest listening days here?",
   skips: "Which songs do I skip most here, and in what context?",
   places: "What did I play on these trips?",
 };

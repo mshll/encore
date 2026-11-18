@@ -1,6 +1,8 @@
 import { Hono } from "hono";
 import { z } from "zod";
 import { PLAY_OUTCOMES } from "../../analytics/common";
+import { decades } from "../../analytics/decades";
+import { comebacks, discovery, loyalty, monthDiscoveries } from "../../analytics/discovery";
 import { artistPage, albumPage, trackPage } from "../../analytics/entities";
 import { canonicalOf } from "../../artists/aliases";
 import { history } from "../../analytics/history";
@@ -8,10 +10,13 @@ import { clock, devices, overview, timeSeries } from "../../analytics/overview";
 import { forgotten, onThisDay } from "../../analytics/recall";
 import { MOMENT_CLASSES, momentSplit, skipContext, skips } from "../../analytics/skips";
 import { search } from "../../analytics/search";
+import { podcasts } from "../../analytics/podcasts";
+import { milestones, records, streaks, weekHighlight } from "../../analytics/records";
 import { energyByHour, genreSeries, moodSeries } from "../../analytics/tags";
 import { eras, topAlbums, topArtists, topTracks } from "../../analytics/top";
 import { trips } from "../../analytics/trips";
-import { weekSoFar } from "../../analytics/week";
+import { currentWeek, weekSoFar } from "../../analytics/week";
+import { listeningYears, yearCompare } from "../../analytics/years";
 import { DEVICES, PLAY_KINDS, PLAY_SOURCES } from "../../db/schema";
 import { localTime } from "../../plays/localTime";
 import type { Env } from "../context";
@@ -26,6 +31,8 @@ function range(q: { from?: string; to?: string }) {
   if (q.from && q.to && q.from > q.to) throw new ApiError(400, "invalid_request", "from must be on or before to");
   return { from: q.from, to: q.to };
 }
+const month = z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/, "expected YYYY-MM");
+const year = z.coerce.number().int().min(1900).max(2999);
 const period = z.enum(["day", "week", "month", "year"]).default("month");
 const top = ranged({ limit: int(1, 200, 50), offset: int(0, 1_000_000, 0), sort: z.enum(["hours", "listens", "plays"]).default("hours"), q: z.string().trim().min(1).max(200).optional() });
 const topAt = top.extend({ weekday: z.coerce.number().int().min(1).max(7).optional(), hour: z.coerce.number().int().min(0).max(23).optional() });
@@ -41,6 +48,48 @@ export const statsRoutes = new Hono<Env>()
     const { db, settings, now } = c.var.deps;
     const { timezone, llm } = settings.get();
     return c.json(weekSoFar(db, { now: localTime(now(), timezone), recapWeekday: llm.digestSlot.weekday }));
+  })
+  .get("/highlight", (c) => {
+    const { db, settings, now } = c.var.deps;
+    const { timezone, llm } = settings.get();
+    const today = localTime(now(), timezone).day;
+    const { from } = currentWeek(today, llm.digestSlot.weekday);
+    return c.json({ highlight: weekHighlight(db, { from, today }) });
+  })
+  .get("/discovery", (c) => c.json(discovery(c.var.deps.db, { range: range(parse(ranged({}), c.req.query())) })))
+  .get("/discovery/month", (c) => {
+    const q = parse(z.object({ month, limit: int(1, 100, 20) }), c.req.query());
+    return c.json(monthDiscoveries(c.var.deps.db, q));
+  })
+  .get("/comebacks", (c) => {
+    const q = parse(ranged({ limit: int(1, 100, 20) }), c.req.query());
+    return c.json(comebacks(c.var.deps.db, { range: range(q), limit: q.limit }));
+  })
+  .get("/loyalty", (c) => {
+    const q = parse(ranged({ limit: int(1, 100, 20) }), c.req.query());
+    return c.json(loyalty(c.var.deps.db, { range: range(q), limit: q.limit }));
+  })
+  .get("/streaks", (c) => {
+    const { db, settings, now } = c.var.deps;
+    const q = parse(ranged({ limit: int(1, 50, 5) }), c.req.query());
+    return c.json(streaks(db, { range: range(q), today: localTime(now(), settings.get().timezone).day, limit: q.limit }));
+  })
+  .get("/records", (c) => c.json(records(c.var.deps.db, { range: range(parse(ranged({}), c.req.query())) })))
+  .get("/milestones", (c) => {
+    const q = parse(ranged({ limit: int(1, 200, 20) }), c.req.query());
+    return c.json(milestones(c.var.deps.db, { range: range(q), limit: q.limit }));
+  })
+  .get("/decades", (c) => c.json(decades(c.var.deps.db, { range: range(parse(ranged({}), c.req.query())) })))
+  .get("/years", (c) => {
+    const { db, settings, now } = c.var.deps;
+    const thisYear = Number(localTime(now(), settings.get().timezone).day.slice(0, 4));
+    const q = parse(z.object({ a: year.optional(), b: year.optional() }), c.req.query());
+    const b = q.b ?? listeningYears(db).at(-1) ?? thisYear;
+    return c.json(yearCompare(db, { a: q.a ?? b - 1, b }));
+  })
+  .get("/podcasts", (c) => {
+    const q = parse(ranged({ limit: int(1, 100, 20) }), c.req.query());
+    return c.json(podcasts(c.var.deps.db, { range: range(q), limit: q.limit }));
   })
   .get("/timeseries", (c) => {
     const q = parse(ranged({ period }), c.req.query());

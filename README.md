@@ -14,8 +14,8 @@ One instance serves one person. Your data stays in a single SQLite file on your 
 
 - **Home**: this week against your usual, then time listened, plays and listens for any range, with top artists, songs and albums; below them, what encore made for you and your latest recap.
 - **Plays**: the full log, searchable and filterable by device and source.
-- **Music**: every artist, album and song you have played, each with its own page, plus favourites you stopped playing.
-- **Patterns**: when in the week you listen, which artists defined which months, genres and moods over time, how plays end and when you skip, and trips and devices.
+- **Music**: every artist, album and song you have played, each with its own page, plus favourites you stopped playing and the podcasts you listen to.
+- **Patterns**: when in the week you listen, which artists defined which months, genres, moods and release decades over time, the music you find each month and the artists you come back to, your records and milestones, how plays end and when you skip, and trips and devices.
 
 **Play** (needs an Anthropic API key)
 
@@ -92,7 +92,7 @@ The app walks you through setup:
 
 ## Connect Claude (MCP)
 
-encore serves an MCP server at `/mcp` with tools over your listening (overview, top lists, history, lookup, on this day, forgotten favourites, now playing, releases, devices), playback actions (play, add to queue, pause, resume, skip next, skip previous), and three changes: create a playlist, add tracks to a playlist (including the songs `forgotten` returns), and mark releases as seen. The full list with inputs is in [docs/api.md](docs/api.md#mcp).
+encore serves an MCP server at `/mcp` with tools over your listening (overview, top lists, history, lookup, on this day, forgotten favourites, discovery, comebacks, loyalty, records, decades, year against year, podcasts, now playing, releases, devices), playback actions (play, add to queue, pause, resume, skip next, skip previous), and three changes: create a playlist, add tracks to a playlist (including the songs `forgotten` returns), and mark releases as seen. The full list with inputs is in [docs/api.md](docs/api.md#mcp).
 
 **claude.ai, Claude Desktop and mobile** (one connector serves all three):
 

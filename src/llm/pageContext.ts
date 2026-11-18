@@ -3,7 +3,7 @@ import { LIVING_KINDS } from "../db/schema";
 import { RECAP_KINDS } from "../digest/periods";
 import { tagged } from "./context";
 
-export const PATTERN_VIEWS = ["when", "eras", "taste", "skips", "places"] as const;
+export const PATTERN_VIEWS = ["when", "eras", "taste", "discovery", "records", "skips", "places"] as const;
 
 const name = z.string().trim().min(1).max(300);
 const day = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);

@@ -31,7 +31,16 @@ function tagCoverage(db: Db, range: Range) {
   return { hoursTagged: hours(row.tagged_ms ?? 0), hoursTotal: hours(row.ms ?? 0), share: rate(row.tagged_ms ?? 0, row.ms ?? 0) };
 }
 
-export const genreSeries = (db: Db, { range, period }: { range: Range; period: Period }) => bySeries(db, "genres", range, period);
+/** Each genre's or mood's share (0 to 1) of the range's tagged hours. A song with two tags counts toward both. */
+export function tagShares(db: Db, column: "genres" | "moods", range: Range): Map<string, number> {
+  const rows = db.all<{ value: string; ms: number }>(sql`
+    select j.value as value, sum(${MS}) as ms from ${TAGGED}, json_each(tg.${sql.raw(column)}) j
+    where ${musicWhere(range)} group by j.value`);
+  const total = db.all<{ ms: number | null }>(sql`select sum(${MS}) as ms from ${TAGGED} where ${musicWhere(range)}`)[0]?.ms ?? 0;
+  return new Map(rows.map((r) => [r.value, total ? r.ms / total : 0]));
+}
+
+export const genreSeries =(db: Db, { range, period }: { range: Range; period: Period }) => bySeries(db, "genres", range, period);
 export const moodSeries = (db: Db, { range, period }: { range: Range; period: Period }) => bySeries(db, "moods", range, period);
 
 export function energyByHour(db: Db, { range }: { range: Range }) {

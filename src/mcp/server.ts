@@ -1,12 +1,17 @@
 import { createMcpHandler, McpServer } from "@modelcontextprotocol/server";
 import { z } from "zod";
 import { PLAY_OUTCOMES } from "../analytics/common";
+import { decades } from "../analytics/decades";
+import { comebacks, discovery, loyalty, monthDiscoveries } from "../analytics/discovery";
 import { artistPage, albumPage, trackPage } from "../analytics/entities";
 import { history } from "../analytics/history";
 import { overview } from "../analytics/overview";
+import { podcasts } from "../analytics/podcasts";
+import { milestones, records, streaks } from "../analytics/records";
 import { forgotten, onThisDay } from "../analytics/recall";
 import { search } from "../analytics/search";
 import { topAlbums, topArtists, topTracks } from "../analytics/top";
+import { listeningYears, yearCompare } from "../analytics/years";
 import type { Db } from "../db/client";
 import { MissingScopeError } from "../living/refresh";
 import { NoActiveDeviceError, PremiumRequiredError } from "../player/api";
@@ -20,7 +25,24 @@ import { addToPlaylist, createPlaylist, PlaylistTracksError, playlistIdOf, track
 
 /** What each tool can do, for the OAuth consent page. A test keeps it in step with the registered tools. */
 export const MCP_TOOLS = {
-  read: ["overview", "top", "history", "lookup", "on_this_day", "forgotten", "now_playing", "releases", "devices"],
+  read: [
+    "overview",
+    "top",
+    "history",
+    "lookup",
+    "on_this_day",
+    "forgotten",
+    "discovery",
+    "comebacks",
+    "loyalty",
+    "records",
+    "decades",
+    "year_compare",
+    "podcasts",
+    "now_playing",
+    "releases",
+    "devices",
+  ],
   playback: ["play", "add_to_queue", "pause", "resume", "skip_next", "skip_previous"],
   write: ["create_playlist", "add_to_playlist", "mark_release_seen"],
 } as const;
@@ -146,6 +168,75 @@ export function createEncoreMcpServer({ db, settings, services, spotify, now }: 
       inputSchema: z.object({ days: z.number().int().min(1).max(3650).default(90), minListens: z.number().int().min(1).default(10), limit: z.number().int().min(1).max(100).default(20) }),
     },
     async (args) => json(forgotten(db, { ...args, asOf: now() })),
+  );
+
+  server.registerTool(
+    "discovery",
+    {
+      description:
+        "New artists and songs per month (first played that month, all time) and the share of each month's hours on songs first heard that month. With month (YYYY-MM): that month's new artists and songs instead.",
+      inputSchema: z.object({ ...range, month: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/).optional(), limit: z.number().int().min(1).max(50).default(20) }),
+    },
+    async ({ from, to, month, limit }) => json(month ? monthDiscoveries(db, { month, limit }) : discovery(db, { range: { from, to } })),
+  );
+
+  server.registerTool(
+    "comebacks",
+    {
+      description:
+        "Artists played a lot (3+ hours), then barely (under 15 minutes a month) for 6+ months in which other music was played, then back (1+ hour since). Listed by the day they came back, which the date range filters.",
+      inputSchema: z.object({ ...range, limit: z.number().int().min(1).max(50).default(20) }),
+    },
+    async ({ from, to, limit }) => json(comebacks(db, { range: { from, to }, limit })),
+  );
+
+  server.registerTool(
+    "loyalty",
+    {
+      description: "Artists played 2+ hours in each of many calendar years, with their longest run of consecutive such years.",
+      inputSchema: z.object({ ...range, limit: z.number().int().min(1).max(50).default(20) }),
+    },
+    async ({ from, to, limit }) => json(loyalty(db, { range: { from, to }, limit })),
+  );
+
+  server.registerTool(
+    "records",
+    {
+      description:
+        "Personal records in a date range: most hours in a day, a week and a month, most listens of one song in a day, the longest session (plays less than 15 minutes apart), days in a row with listening (current and longest) and artists' longest daily runs, and milestones crossed (a song's 10th, 25th... listen, an artist's 10th, 50th... hour, total hours).",
+      inputSchema: z.object({ ...range }),
+    },
+    async ({ from, to }) => {
+      const today = localTime(now(), settings.get().timezone).day;
+      return json({ ...records(db, { range: { from, to } }), streaks: streaks(db, { range: { from, to }, today }), milestones: milestones(db, { range: { from, to }, limit: 20 }).items });
+    },
+  );
+
+  server.registerTool(
+    "decades",
+    {
+      description: "Hours by the release decade of the songs played, and the listening age: the median release year weighted by hours. Songs without a release date are left out; coverage says how much.",
+      inputSchema: z.object(range),
+    },
+    async ({ from, to }) => json(decades(db, { range: { from, to } })),
+  );
+
+  server.registerTool(
+    "year_compare",
+    {
+      description: "Two calendar years side by side: hours, plays, new artists and songs, top artists with their rank in each year, genre and mood shares. Default: the latest year with plays against the one before.",
+      inputSchema: z.object({ a: z.number().int().min(1900).max(2999).optional(), b: z.number().int().min(1900).max(2999).optional() }),
+    },
+    async ({ a, b }) => {
+      const later = b ?? listeningYears(db).at(-1) ?? Number(localTime(now(), settings.get().timezone).day.slice(0, 4));
+      return json(yearCompare(db, { a: a ?? later - 1, b: later }));
+    },
+  );
+
+  server.registerTool(
+    "podcasts",
+    { description: "Podcast listening: hours by show and the latest episodes.", inputSchema: z.object({ ...range, limit: z.number().int().min(1).max(50).default(20) }) },
+    async ({ from, to, limit }) => json(podcasts(db, { range: { from, to }, limit })),
   );
 
   server.registerTool("now_playing", { description: "What is playing on Spotify right now." }, async () => json(await services.watcher.nowPlaying(settings.get().watcherIdleMs + 5000)));

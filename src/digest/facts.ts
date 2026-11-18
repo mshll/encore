@@ -1,6 +1,9 @@
 import { sql } from "drizzle-orm";
 import { LISTEN, MS, MUSIC, musicWhere } from "../analytics/common";
+import { comebacks, periodDiscovery } from "../analytics/discovery";
 import { overview } from "../analytics/overview";
+import { longestStreak, milestones, recordsSetIn } from "../analytics/records";
+import { tagShares } from "../analytics/tags";
 import { topArtists, topTracks } from "../analytics/top";
 import type { Db } from "../db/client";
 import { daysIn, shiftDay, type RecapKind, type Span } from "./periods";
@@ -35,6 +38,16 @@ export type RecapFacts = {
   busiest: { day: { day: string; hours: number } | null; hour: { hour: number; hours: number } | null; byHour: number[] };
   /** Yearly only: each month with listening. */
   months: { month: string; hours: number; artist: string | null; song: { name: string; artist: string } | null }[];
+  /** The fields below came after version 2: recaps stored before have none of them. */
+  /** New artists and songs of the period and the share of hours on songs first heard in it. Null without earlier history. */
+  discovery?: ReturnType<typeof periodDiscovery>;
+  /** Artists back after a long gap, returning inside the period. */
+  comebacks?: ReturnType<typeof comebacks>["items"];
+  /** All-time records set inside the period, and the longest run of days with listening in it. */
+  records?: ReturnType<typeof recordsSetIn>;
+  streak?: ReturnType<typeof longestStreak>;
+  /** Thresholds crossed inside the period, newest first. */
+  milestones?: ReturnType<typeof milestones>["items"];
 };
 
 /** The first day with a song play, or null before any import. */
@@ -52,18 +65,10 @@ function daily(db: Db, period: Span): number[] {
   return Array.from({ length: daysIn(period) }, (_, i) => hoursOf(rows.get(shiftDay(period.from, i)) ?? 0));
 }
 
-function shares(db: Db, column: "genres" | "moods", range: Span): Map<string, number> {
-  const rows = db.all<{ value: string; ms: number }>(sql`
-    select j.value as value, sum(${MS}) as ms from ${MUSIC} join track_tags tg on tg.song_key = t.song_key, json_each(tg.${sql.raw(column)}) j
-    where ${musicWhere(range)} group by j.value`);
-  const total = db.all<{ ms: number | null }>(sql`select sum(${MS}) as ms from ${MUSIC} join track_tags tg on tg.song_key = t.song_key where ${musicWhere(range)}`)[0]?.ms ?? 0;
-  return new Map(rows.map((r) => [r.value, total ? r.ms / total : 0]));
-}
-
 /** With a baseline, the tags whose share moved most; without one, the largest. */
 function shareChanges(db: Db, column: "genres" | "moods", period: Span, baseline: Span | null): Share[] {
-  const now = shares(db, column, period);
-  const before = baseline ? shares(db, column, baseline) : null;
+  const now = tagShares(db, column, period);
+  const before = baseline ? tagShares(db, column, baseline) : null;
   const rows = [...new Set([...now.keys(), ...(before?.keys() ?? [])])].map((value) => ({
     value,
     share: r3(now.get(value) ?? 0),
@@ -150,6 +155,11 @@ export function recapFacts(db: Db, kind: RecapKind, period: Span & { inProgress:
       byHour: Array.from({ length: 24 }, (_, h) => hoursOf(byHour.get(h) ?? 0)),
     },
     months: kind === "yearly" ? months(db, period) : [],
+    discovery: periodDiscovery(db, period),
+    comebacks: comebacks(db, { range: period, limit: 5 }).items,
+    records: start !== null && start < period.from ? recordsSetIn(db, period) : [],
+    streak: longestStreak(db, period),
+    milestones: milestones(db, { range: period, limit: 10 }).items,
   };
 }
 

@@ -18,12 +18,14 @@ import { Select } from "../ui/Select";
 import { EmptyState, ErrorState, FirstUseState } from "../ui/States";
 import { TabNav } from "../ui/TabNav";
 import { Forgotten } from "./Forgotten";
+import { Podcasts } from "./Podcasts";
 
-export type MusicTab = "artists" | "albums" | "songs" | "forgotten";
+export type MusicTab = "artists" | "albums" | "songs" | "forgotten" | "podcasts";
+type RankedTab = Exclude<MusicTab, "forgotten" | "podcasts">;
 
-const KIND: Record<Exclude<MusicTab, "forgotten">, TopKind> = { artists: "artists", albums: "albums", songs: "tracks" };
-const NOUN: Record<Exclude<MusicTab, "forgotten">, [string, string]> = { artists: ["artist", "artists"], albums: ["album", "albums"], songs: ["song", "songs"] };
-const COLUMN: Record<Exclude<MusicTab, "forgotten">, string> = { artists: "Artist", albums: "Album", songs: "Song" };
+const KIND: Record<RankedTab, TopKind> = { artists: "artists", albums: "albums", songs: "tracks" };
+const NOUN: Record<RankedTab, [string, string]> = { artists: ["artist", "artists"], albums: ["album", "albums"], songs: ["song", "songs"] };
+const COLUMN: Record<RankedTab, string> = { artists: "Artist", albums: "Album", songs: "Song" };
 
 const SORTS: { value: TopSort; label: string }[] = [
   { value: "hours", label: "Hours" },
@@ -58,7 +60,7 @@ type Stats = { hours: number; listens: number; plays: number };
 
 const figure = (item: Stats, sort: TopSort) => (sort === "hours" ? fmtHours(item.hours) : fmtInt(item[sort]));
 
-function subtitle(tab: Exclude<MusicTab, "forgotten">, item: TopItem[TopKind]) {
+function subtitle(tab: RankedTab, item: TopItem[TopKind]) {
   if (tab === "artists") {
     const a = item as ArtistStats;
     return a.songs === undefined ? undefined : `${fmtInt(a.songs)} ${a.songs === 1 ? "song" : "songs"}`;
@@ -66,17 +68,17 @@ function subtitle(tab: Exclude<MusicTab, "forgotten">, item: TopItem[TopKind]) {
   return undefined;
 }
 
-function ListRow({ tab, item, rank, sort, share, style }: { tab: Exclude<MusicTab, "forgotten">; item: TopItem[TopKind]; rank?: number; sort: TopSort; share: number; style: React.CSSProperties }) {
+function ListRow({ tab, item, rank, sort, share, style }: { tab: RankedTab; item: TopItem[TopKind]; rank?: number; sort: TopSort; share: number; style: React.CSSProperties }) {
   const value = figure(item, sort);
   if (tab === "artists") return <ArtistRow artist={item as ArtistStats} rank={rank} value={value} share={share} subtitle={subtitle(tab, item)} style={style} />;
   if (tab === "albums") return <AlbumRow album={item as AlbumStats} rank={rank} value={value} share={share} style={style} />;
   return <TrackRow song={item as Song} rank={rank} value={value} share={share} style={style} />;
 }
 
-const keyOf = (tab: Exclude<MusicTab, "forgotten">, item: TopItem[TopKind]) =>
+const keyOf = (tab: RankedTab, item: TopItem[TopKind]) =>
   tab === "artists" ? (item as ArtistStats).artist : tab === "albums" ? `${(item as AlbumStats).artist}|${(item as AlbumStats).album}` : (item as Song).songKey;
 
-function RankedList({ tab }: { tab: Exclude<MusicTab, "forgotten"> }) {
+function RankedList({ tab }: { tab: RankedTab }) {
   const { range } = useRange();
   const { sort, q, set } = useListParams();
   const overview = useOverview(range);
@@ -186,6 +188,8 @@ export function Music({ tab }: { tab: MusicTab }) {
         <FirstUseState icon={VinylRecordIcon} description="Import your Spotify history or connect Spotify, and the artists, albums and songs you play rank here." />
       ) : tab === "forgotten" ? (
         <Forgotten />
+      ) : tab === "podcasts" ? (
+        <Podcasts />
       ) : (
         <RankedList key={tab} tab={tab} />
       )}

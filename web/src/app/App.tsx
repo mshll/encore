@@ -9,6 +9,8 @@ import { Shell } from "./Shell";
 const Home = lazy(() => import("../surfaces/Home").then((m) => ({ default: m.Home })));
 const Plays = lazy(() => import("../surfaces/Plays").then((m) => ({ default: m.Plays })));
 const When = lazy(() => import("../surfaces/When").then((m) => ({ default: m.When })));
+const Discovery = lazy(() => import("../surfaces/Discovery").then((m) => ({ default: m.Discovery })));
+const Records = lazy(() => import("../surfaces/Records").then((m) => ({ default: m.Records })));
 const Music = lazy(() => import("../surfaces/Music").then((m) => ({ default: m.Music })));
 const ArtistPage = lazy(() => import("../surfaces/entity/ArtistPage").then((m) => ({ default: m.ArtistPage })));
 const AlbumPage = lazy(() => import("../surfaces/entity/AlbumPage").then((m) => ({ default: m.AlbumPage })));
@@ -79,6 +81,7 @@ export function App() {
           <Route path="/music/albums">{() => <Music tab="albums" />}</Route>
           <Route path="/music/songs">{() => <Music tab="songs" />}</Route>
           <Route path="/music/forgotten">{() => <Music tab="forgotten" />}</Route>
+          <Route path="/music/podcasts">{() => <Music tab="podcasts" />}</Route>
 
           <Route path="/patterns">
             <Redirect to="/patterns/when" replace />
@@ -86,6 +89,8 @@ export function App() {
           <Route path="/patterns/when" component={When} />
           <Route path="/patterns/eras" component={Eras} />
           <Route path="/patterns/taste" component={Taste} />
+          <Route path="/patterns/discovery" component={Discovery} />
+          <Route path="/patterns/records" component={Records} />
           <Route path="/patterns/skips" component={Skips} />
           <Route path="/patterns/places" component={Places} />
 

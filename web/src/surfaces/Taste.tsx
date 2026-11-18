@@ -1,7 +1,7 @@
 import { useMemo, useState, type ReactNode } from "react";
-import { useEnergy, usePendingTags, useTagSeries, useTimeSeries } from "../api/queries";
+import { useDecades, useEnergy, usePendingTags, useTagSeries, useTimeSeries } from "../api/queries";
 import type { Energy, TagSeries } from "../api/types";
-import { DitherArea, DitherLine } from "../charts/Dither";
+import { DitherArea, DitherBars, DitherLine } from "../charts/Dither";
 import { DitherMeter } from "../charts/DitherMeter";
 import { InlineFact, InlineShare } from "../charts/Inline";
 import { periodTick } from "../charts/ticks";
@@ -9,6 +9,7 @@ import { monthSequence } from "../lib/dates";
 import { fmtHour, fmtHours, fmtInt, fmtMonth, fmtMonthLong, fmtPct } from "../lib/format";
 import { leadInEnd } from "../lib/leadIn";
 import { useRange, type Range } from "../lib/range";
+import { useDesktop } from "../lib/useMedia";
 import { cx } from "../ui/cx";
 import { WaveformIcon } from "../ui/icons";
 import { SECTIONS, SIDE_COLUMNS, Section, dimWhile } from "../ui/Page";
@@ -126,6 +127,37 @@ function EnergyByHour({ range }: { range: Range }) {
   );
 }
 
+function Decades({ range }: { range: Range }) {
+  const q = useDecades(range);
+  const desktop = useDesktop();
+  if (q.isError) return <ErrorState size="inline" error={q.error} onRetry={() => q.refetch()} />;
+  if (!q.data) return <ChartSkeleton className="h-52" />;
+  const { decades, listeningAge, coverage } = q.data;
+  if (listeningAge === null || coverage.share === null) return null;
+  const peak = decades.reduce((a, b) => ((b.share ?? 0) > (a.share ?? 0) ? b : a));
+  return (
+    <Section title="Release decades" description={`The ${peak.decade}s hold ${fmtPct(peak.share)} of your listening to dated songs.`} labelledBy="taste-decades">
+      <InlineFact label="Listening age" figure={String(listeningAge)}>
+        <span className="text-secondary">the median release year of what you played, weighted by time listened</span>
+      </InlineFact>
+      <DitherBars
+        label="Share of listening by release decade"
+        rows={decades.map((d) => ({ decade: `${d.decade}s`, title: `${d.decade}s`, share: Math.round((d.share ?? 0) * 1000) / 10 }))}
+        xKey="decade"
+        tipLabel="title"
+        valueKey="share"
+        valueLabel="Share"
+        xFormat={(d) => (desktop ? d : `’${d.slice(2)}`)}
+        maxTicks={decades.length}
+        format={pct}
+        table={{ format: (v) => String(Math.round(v)), unit: "%" }}
+        height={desktop ? 180 : 140}
+      />
+      {coverage.share < 0.98 && <p className="text-caption text-secondary">Release dates cover {fmtPct(coverage.share)} of listening hours in this range.</p>}
+    </Section>
+  );
+}
+
 function Untagged() {
   const pending = usePendingTags();
   const count = pending.data?.total;
@@ -203,7 +235,10 @@ export function Taste(): ReactNode {
   const { range } = useRange();
   return (
     <PatternsFrame icon={WaveformIcon} firstUse="Once plays come in and songs are tagged, this shows your genres, moods and energy over time.">
-      <TasteView range={range} />
+      <div className={SECTIONS}>
+        <TasteView range={range} />
+        <Decades range={range} />
+      </div>
     </PatternsFrame>
   );
 }

@@ -1,6 +1,6 @@
 import type { UseQueryResult } from "@tanstack/react-query";
 import { useState } from "react";
-import { useDigests, useLifetime, useLiving, useOnThisDay, useOverview, useStatus, useTimeSeries, useTimezone, useTopAlbums, useTopArtists, useTopTracks, useWeek } from "../api/queries";
+import { useDigests, useHighlight, useLifetime, useLiving, useOnThisDay, useOverview, useStatus, useTimeSeries, useTimezone, useTopAlbums, useTopArtists, useTopTracks, useWeek } from "../api/queries";
 import type { Overview as OverviewData, Status, WeekSoFar } from "../api/types";
 import { artistPath, recapPath, songPath } from "../app/paths";
 import { DitherArea, DitherBars } from "../charts/Dither";
@@ -8,6 +8,7 @@ import { InlineChange, InlinePair } from "../charts/Inline";
 import { periodTick, periodTitle } from "../charts/ticks";
 import { addDays, daysBetween, todayIn } from "../lib/dates";
 import { fmtAgo, fmtCompact, fmtDayShort, fmtHours, fmtHoursValue, fmtInt, hoursParts, WEEKDAYS_SHORT } from "../lib/format";
+import { highlightText } from "../lib/insights";
 import { periodFor, useRange, type Range } from "../lib/range";
 import { fillPeriods } from "../lib/series";
 import { useDesktop } from "../lib/useMedia";
@@ -46,6 +47,13 @@ function WeekLine({ week }: { week: WeekSoFar }) {
       <span className="min-w-0 text-secondary">against a usual {shortHours(usual.hours)} by now</span>
     </p>
   );
+}
+
+/** A record, milestone or streak of this week, when there is one. An extra line: it shows nothing while loading or after a failed load. */
+function WeekHighlight() {
+  const highlight = useHighlight().data?.highlight;
+  if (!highlight) return null;
+  return <p className="text-primary text-pretty">{highlightText(highlight)}</p>;
 }
 
 function WeekChart({ days }: { days: WeekSoFar["days"] }) {
@@ -114,6 +122,7 @@ function ThisWeek() {
               <span className="text-secondary">{hoursParts(week.hours).unit}</span>
             </p>
             <WeekLine week={week} />
+            <WeekHighlight />
             <WeekChart days={week.days} />
           </div>
           <WeekTop week={week} />

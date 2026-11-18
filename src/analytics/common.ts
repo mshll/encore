@@ -1,5 +1,6 @@
 import { sql, type SQL } from "drizzle-orm";
 import type { Db } from "../db/client";
+import type { PlayKind } from "../db/schema";
 
 export type Range = { from?: string; to?: string };
 export type Period = "day" | "week" | "month" | "year";
@@ -109,7 +110,12 @@ export type StatsRow = {
 };
 
 export function musicWhere(range: Range, ...extra: (SQL | undefined)[]): SQL {
-  const parts: SQL[] = [sql`p.kind = 'track'`];
+  return playsWhere("track", range, ...extra);
+}
+
+/** The plays of one kind in a range: the one place a filter shared by every stat belongs. */
+export function playsWhere(kind: PlayKind, range: Range, ...extra: (SQL | undefined)[]): SQL {
+  const parts: SQL[] = [sql`p.kind = ${kind}`];
   if (range.from) parts.push(sql`p.day >= ${range.from}`);
   if (range.to) parts.push(sql`p.day <= ${range.to}`);
   for (const e of extra) if (e) parts.push(e);

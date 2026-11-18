@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { cx } from "./cx";
 import { Icon, type IconGlyph } from "./Icon";
-import { MicrophoneStageIcon, MusicNoteIcon, PlaylistIcon, VinylRecordIcon } from "./icons";
+import { MicrophoneIcon, MicrophoneStageIcon, MusicNoteIcon, PlaylistIcon, VinylRecordIcon } from "./icons";
 
 const FAMILIES = [
   { prefixes: ["ab67616d00004851", "ab67616d00001e02", "ab67616d0000b273"], pick: { sm: 0, md: 1, lg: 2 } },
@@ -23,13 +23,14 @@ const BOX = { 20: "size-5", 24: "size-6", 32: "size-8", 40: "size-10", 48: "size
 export type ArtBox = keyof typeof BOX;
 
 /** What the artwork shows. Sets the shape (artists are round) and the glyph drawn when there is no image. */
-export type ArtKind = "artist" | "album" | "song" | "playlist";
+export type ArtKind = "artist" | "album" | "song" | "playlist" | "podcast";
 
 export const ART_GLYPH: Record<ArtKind, IconGlyph> = {
   artist: MicrophoneStageIcon,
   album: VinylRecordIcon,
   song: MusicNoteIcon,
   playlist: PlaylistIcon,
+  podcast: MicrophoneIcon,
 };
 
 /**

@@ -61,12 +61,15 @@ export const MUSIC_TABS: SurfaceTab[] = [
   { path: "/music/albums", label: "Albums", owns: ["/music/album/"] },
   { path: "/music/songs", label: "Songs", owns: ["/music/song/"] },
   { path: "/music/forgotten", label: "Forgotten" },
+  { path: "/music/podcasts", label: "Podcasts" },
 ];
 
 export const PATTERN_TABS: SurfaceTab[] = [
   { path: "/patterns/when", label: "When" },
   { path: "/patterns/eras", label: "Eras" },
   { path: "/patterns/taste", label: "Taste" },
+  { path: "/patterns/discovery", label: "Discovery" },
+  { path: "/patterns/records", label: "Records" },
   { path: "/patterns/skips", label: "Skips" },
   { path: "/patterns/places", label: "Places" },
 ];

@@ -31,6 +31,9 @@ function daily(db: Db, today: string) {
   });
 }
 
+/** The recap week that holds `today`. */
+export const currentWeek = (today: string, recapWeekday: number) => periodSpan("weekly", shiftKey("weekly", latestKey("weekly", today, recapWeekday), 1));
+
 /**
  * This week so far against the owner's usual. The week is the recap week that holds `now` (weeks end the day before
  * the recap weekday, as in `digest/periods`). Usual is the mean of the same stretch, to the same hour, of the
@@ -38,8 +41,7 @@ function daily(db: Db, today: string) {
  */
 export function weekSoFar(db: Db, { now, recapWeekday }: { now: LocalTime; recapWeekday: number }) {
   const today = now.day;
-  const key = shiftKey("weekly", latestKey("weekly", today, recapWeekday), 1);
-  const { from, to } = periodSpan("weekly", key);
+  const { from, to } = currentWeek(today, recapWeekday);
   const start = historyStart(db);
   const earlier = Array.from({ length: USUAL_WEEKS }, (_, i) => 7 * (i + 1))
     .filter((back) => start !== null && shiftDay(from, -back) >= start)

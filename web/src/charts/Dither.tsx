@@ -74,6 +74,7 @@ export function DitherBars({
   format,
   table,
   height = 220,
+  maxTicks,
 }: {
   label: string;
   rows: Row[];
@@ -85,9 +86,12 @@ export function DitherBars({
   format: (v: number) => string;
   table?: TableFormat;
   height?: number;
+  /** Most x labels to show; defaults to 7 on desktop, 4 on a phone. */
+  maxTicks?: number;
 }) {
   const config: ChartConfig = { [valueKey]: { label: valueLabel, color: "green" } };
-  const ticks = useDesktop() ? 7 : 4;
+  const desktop = useDesktop();
+  const ticks = maxTicks ?? (desktop ? 7 : 4);
   return (
     <Frame
       label={label}

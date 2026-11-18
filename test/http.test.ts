@@ -67,6 +67,18 @@ describe("http", () => {
     }
   });
 
+  test("insight routes answer on an empty history and validate months and years", async () => {
+    const { get } = signedIn();
+
+    const paths = ["discovery", "discovery/month?month=2026-01", "comebacks", "loyalty", "streaks", "records", "milestones", "decades", "years", "podcasts", "highlight"];
+    const statuses = await Promise.all(paths.map(async (path) => (await get(`/api/stats/${path}`)).status));
+
+    expect(statuses).toEqual(paths.map(() => 200));
+    expect(await (await get("/api/stats/highlight")).json()).toEqual({ highlight: null });
+    expect((await get("/api/stats/discovery/month?month=2026-13")).status).toBe(400);
+    expect((await get("/api/stats/years?a=99")).status).toBe(400);
+  });
+
   test("history filters by outcome", async () => {
     const { db, get } = signedIn();
     seed(db, [track("a", "A", "Artist", null, { durationMs: 200_000 })], [play("2026-01-01T10:00:00Z", uri("a"), 5_000, { skipped: true }), play("2026-01-01T11:00:00Z", uri("a"), 200_000)]);
