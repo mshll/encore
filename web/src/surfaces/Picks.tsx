@@ -190,6 +190,13 @@ function PicksSkeleton() {
   );
 }
 
+/** This week has no picks yet and they can be made now: making them is the page's one primary action, so Play steps back. */
+export function useNeedsPicks(active: boolean): boolean {
+  const thisWeek = usePicks(undefined, active);
+  const ai = useAi();
+  return active && ai.configured && thisWeek.data?.picks.length === 0;
+}
+
 const nextRun = (slot: { weekday: number; hour: number }) => `${WEEKDAYS[slot.weekday - 1]} at ${fmtHour(slot.hour)}`;
 
 /** This week has no picks: the scheduled time, and making them now as a server-owned run. */

@@ -6,9 +6,9 @@ import { fetchArt, isArtUrl } from "../src/covers/art";
 import { GRID, INK, PAPER, ditherIndices, floorFade, ringsField } from "../src/covers/field";
 import { cmapCodePoints } from "../src/covers/fonts";
 import { MARK_PATH } from "../src/covers/mark";
-import { base64Length, encodeToFit, makeCover, UPLOAD_LIMIT } from "../src/covers/render";
+import { base64Length, coverTitleClamped, encodeToFit, makeCover, UPLOAD_LIMIT } from "../src/covers/render";
 import { colourStops, dominantHue, rgbToHls, tone } from "../src/covers/tint";
-import { cleanTitle, isRtl, layoutTitle, titleCovered, type Measure } from "../src/covers/title";
+import { clampTitle, cleanTitle, isRtl, layoutTitle, titleCovered, type Measure } from "../src/covers/title";
 
 const fonts = join(import.meta.dir, "../assets/fonts");
 const flat = (v: number) => new Float32Array(GRID * GRID).fill(v);
@@ -94,6 +94,21 @@ describe("title", () => {
 
     expect(layout.px).toBe(32);
     expect(layout.lines.join("")).toBe(word);
+    expect(layout.lines.every((l) => measure(l, 32) <= 560)).toBe(true);
+  });
+
+  test("a clamped title that fits at its smallest size or larger is laid out as before", () => {
+    const title = "Late night drives through the city when it is slow";
+
+    expect(clampTitle(title, measure, fit)).toEqual({ ...layoutTitle(title, measure, fit), clamped: false });
+  });
+
+  test("a clamped title too long for its lines keeps its first lines at the smallest size and ends in an ellipsis", () => {
+    const title = Array.from({ length: 40 }, (_, i) => `word${i}`).join(" ");
+
+    const layout = clampTitle(title, measure, fit);
+
+    expect([layout.px, layout.lines.length, layout.lines.at(-1)!.endsWith("…"), layout.clamped]).toEqual([32, 3, true, true]);
     expect(layout.lines.every((l) => measure(l, 32) <= 560)).toBe(true);
   });
 
@@ -216,6 +231,12 @@ describe("rendering", () => {
     const px = canvas.getContext("2d").getImageData(0, 0, 64, 32).data;
     const pixels = Array.from({ length: px.length / 4 }, (_, i) => [px[i * 4]!, px[i * 4 + 1]!, px[i * 4 + 2]!] as const);
     expect(dominantHue(pixels)!.h).toBeCloseTo(0.33, 1);
+  });
+
+  test("only a title too long for the cover is clamped", () => {
+    const long = "Songs I kept coming back to on the long drives home from the coast every summer";
+
+    expect([coverTitleClamped("Late drive"), coverTitleClamped("Forgotten favourites"), coverTitleClamped(long)]).toEqual([false, false, true]);
   });
 
   test("a title in a script without a bundled font is left off", async () => {

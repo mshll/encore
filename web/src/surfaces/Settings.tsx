@@ -332,7 +332,7 @@ function ProviderBlock({ status, storage }: { status: Status; storage: boolean }
   const model = ai.model ?? spend?.defaultModels[ai.provider] ?? null;
   const priced = Boolean(model && spend?.knownModels[ai.provider].includes(model));
   const pricesSet = form.value("aiInputPrice") !== null || form.value("aiOutputPrice") !== null;
-  const showPrices = Boolean(spend) && (!priced || pricesSet);
+  const showPrices = status.ai.configured && Boolean(spend) && (!priced || pricesSet);
   const keys = ["aiProvider", "aiModel", "aiApiKey", ...(ai.compatible ? ["aiBaseUrl"] : []), ...(showPrices ? ["aiInputPrice", "aiOutputPrice"] : [])];
   const legacy = ai.legacyKey?.set ? (ai.legacyKey.source === "env" ? "ANTHROPIC_API_KEY from the server" : "the Anthropic key saved in Setup") : null;
   const unpriced = ai.compatible ? "Leave both empty for a local server: its calls count as free." : `Without both, this model is charged at the highest ${name} rate encore knows.`;
@@ -364,6 +364,13 @@ function AiTab({ status }: { status: Status }) {
   const storage = budget.settings.data?.secretStorage.available ?? true;
   const scheduleOff = !status.llm.schedule.enabled;
   const showSpend = status.llm.configured || status.llm.spentUsd > 0;
+  if (!status.ai.configured)
+    return (
+      <>
+        <SecretsNotice keys={["aiApiKey"]} />
+        <ProviderBlock status={status} storage={storage} />
+      </>
+    );
   return (
     <>
       <SecretsNotice keys={["aiApiKey"]} />

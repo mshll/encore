@@ -5,7 +5,7 @@ import { coverFonts, TITLE_FONT_STACK } from "./fonts";
 import { MARK_RUNS } from "./mark";
 import type { AbstractStyle, CoverStyle } from "./style";
 import { DEFAULT_HUE, colourStops, dominantHue, type Hue } from "./tint";
-import { cleanTitle, isRtl, layoutTitle, titleCovered } from "./title";
+import { clampTitle, cleanTitle, isRtl, titleCovered, type Measure } from "./title";
 
 export type CoverInput = {
   title: string;
@@ -35,6 +35,8 @@ export type Cover = {
 const MAX_COVERS = 8;
 const MARGIN = 40;
 const TITLE_BOTTOM = 600;
+/** The title never goes below 56 px (about 6 px when Spotify shows the cover at 64): longer titles end in an ellipsis instead. */
+const TITLE_FIT = { maxWidth: COVER_SIZE - 2 * MARGIN, maxPx: 78, minPx: 56, maxLines: 3 };
 const MARK_CELL = 3;
 /** Spotify's limit on the base64 body of a playlist cover upload. */
 export const UPLOAD_LIMIT = 256 * 1024;
@@ -107,15 +109,26 @@ function paintMark(ctx: SKRSContext2D) {
   for (const run of MARK_RUNS) ctx.fillRect(MARGIN + run.x * MARK_CELL, MARGIN + run.y * MARK_CELL, run.w * MARK_CELL, MARK_CELL);
 }
 
-function paintTitle(ctx: SKRSContext2D, text: string) {
-  const font = (px: number) => `600 ${px}px ${TITLE_FONT_STACK}`;
-  const measure = (s: string, px: number) => {
-    ctx.font = font(px);
+const titleFont = (px: number) => `600 ${px}px ${TITLE_FONT_STACK}`;
+
+function measureWith(ctx: SKRSContext2D): Measure {
+  return (s, px) => {
+    ctx.font = titleFont(px);
     return ctx.measureText(s).width;
   };
+}
+
+/** The title is too long for the cover and is drawn cut short with an ellipsis. A title no bundled font can draw is never clamped. */
+export function coverTitleClamped(title: string): boolean {
+  const text = cleanTitle(title);
+  if (!titleCovered(text, (cp) => coverFonts().has(cp))) return false;
+  return clampTitle(text, measureWith(createCanvas(1, 1).getContext("2d")), TITLE_FIT).clamped;
+}
+
+function paintTitle(ctx: SKRSContext2D, text: string) {
   const rtl = isRtl(text);
-  const { px, lines } = layoutTitle(text, measure, { maxWidth: COVER_SIZE - 2 * MARGIN, maxPx: 78, minPx: 32, maxLines: 3 });
-  ctx.font = font(px);
+  const { px, lines } = clampTitle(text, measureWith(ctx), TITLE_FIT);
+  ctx.font = titleFont(px);
   ctx.fillStyle = css(PAPER);
   ctx.direction = rtl ? "rtl" : "ltr";
   ctx.textAlign = rtl ? "right" : "left";

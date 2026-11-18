@@ -40,7 +40,7 @@ function hoursCounter(db: Db, start: string, today: string): (span: Span) => num
   }
   for (let i = 1; i < cumulative.length; i++) cumulative[i]! += cumulative[i - 1]!;
   const at = (i: number) => cumulative[Math.max(0, Math.min(cumulative.length - 1, i))]!;
-  return (span) => Math.round(((at(index(span.to) + 1) - at(index(span.from))) / 3_600_000) * 100) / 100;
+  return (span) => (at(index(span.to) + 1) - at(index(span.from))) / 3_600_000;
 }
 
 function recapOf(d: Stored, covered: Span & { inProgress: boolean }): TimelineRow["recap"] {

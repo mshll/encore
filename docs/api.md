@@ -18,7 +18,7 @@ Contract between the server and the web UI. All routes are JSON over HTTP on the
   `details` is present only on some errors. Status codes: `400` validation (`invalid_request`, `invalid_settings`), `401` not signed in, `402` monthly AI budget spent, `403` setup token wrong or `premium_required`, `404` not found, `409` precondition (`spotify_not_configured`, `spotify_not_connected`, `no_active_device`, `setup_complete`, `llm_not_configured` on key verify, `llm_price_required`, `discord_not_configured`, `discord_registration_unavailable`), `413` file too large, `415` wrong content type, `422` the model declined, `500` server error (`snapshot_failed`), `502` Spotify, AI provider or Discord call failed (`spotify_failed`, `llm_failed`, `discord_failed`), `503` AI not set up or Spotify calls paused (`spotify_paused`, `details: { reason, until }`). Assistant error codes are listed under [Assistant](#assistant-claude).
 - Timestamps (`ts`, `firstPlayed`, `lastPlayed`, `start`, `end`, ...) are ISO 8601 UTC strings.
 - Days, hours, weekdays, weeks, months are local time in `TIMEZONE` (default UTC). `day` is `YYYY-MM-DD`. `weekday` is ISO: 1 = Monday ... 7 = Sunday.
-- `hours` values are rounded to 2 decimals. Rates (`skipRate`, `shuffleRate`, `share`) are 0..1 rounded to 3 decimals, or `null` when the denominator is 0.
+- `hours` values are exact (milliseconds / 3,600,000, not rounded), so a few seconds stay above zero; clients format them. Rates (`skipRate`, `shuffleRate`, `share`) are 0..1 rounded to 3 decimals, or `null` when the denominator is 0.
 
 ### Common query parameters
 
@@ -397,7 +397,7 @@ Query `format` `csv` (default) or `json`. Every stored play, oldest first, strea
 | `outcome` | `through`, `early`, `midway`, `interrupted` (see Metric definitions), empty when unknown or for episodes |
 | `device`, `source` | The device enum and `export`, `api` or `live` |
 
-CSV follows RFC 4180: CRLF line ends, fields with a comma, quote or line break quoted, quotes doubled. JSON is one array of objects. `ip_addr` is never stored, so it is never exported.
+CSV follows RFC 4180: CRLF line ends, fields with a comma, quote or line break quoted, quotes doubled. A text field that starts with `=`, `+`, `-`, `@`, a tab or a carriage return gets a leading `'` so a spreadsheet shows it as text instead of running it as a formula; numbers are untouched. JSON is one array of objects and keeps every value as stored. `ip_addr` is never stored, so it is never exported.
 
 ## Alerts
 
@@ -769,7 +769,7 @@ No range. Params: `a`, `b` (years, 1900-2999). Default `b` is the latest year wi
 
 ### `GET /api/stats/podcasts`
 
-Params: `limit` (1-100, default 20) shows and episodes.
+Params: `limit` (1-100, default 20) shows and episodes. An episode's `minutes` is exact time played (not rounded), like `hours`.
 
 ```json
 { "hours": 0.17, "plays": 34,
@@ -1718,7 +1718,7 @@ The list item plus `text` (plain text for a chat message, dates written out), `f
   ] }
 ```
 
-- Sections appear only when the numbers support them, in this order: `listening` always; `years` for a year whose year before has music (`stats/years` for the two years, computed when the page is read; `artists` are those played this year); `months` for a year with two or more months of listening; `artists`, `songs` (the period's playlist: most listens, then most time, at least 2 listens, at most 15, 25 or 50 songs for a week, month or year; skips never lower a song), `finds` (songs and artists first played in the period and listened to again on another day of it, with `newShare`, the share of hours on songs first played in it, null on recaps stored before it was kept; needs earlier history), `comebacks` (artists back inside the period, at most 10, 50 for a year), `records` (all-time records set inside the period and milestones crossed in it), `taste` (only with a comparison and not in a year with `years`, tags whose share moved 5 points or more), `rhythm` (busiest day and hour, and `streak`, the longest run of days with a listen in the period). `quiet: true` (fewer than 5 listens or under half an hour) keeps only `listening`.
+- Sections appear only when the numbers support them, in this order: `listening` always; `years` for a year whose year before has music (`stats/years` for the two years, kept with the recap when it is written, like every other figure, so reading the page does not compute it; `artists` are those played this year; a yearly recap stored without it has no `years` section); `months` for a year with two or more months of listening; `artists`, `songs` (the period's playlist: most listens, then most time, at least 2 listens, at most 15, 25 or 50 songs for a week, month or year; skips never lower a song), `finds` (songs and artists first played in the period and listened to again on another day of it, with `newShare`, the share of hours on songs first played in it, null on recaps stored before it was kept; needs earlier history), `comebacks` (artists back inside the period, at most 10, 50 for a year), `records` (all-time records set inside the period and milestones crossed in it), `taste` (only with a comparison and not in a year with `years`, tags whose share moved 5 points or more), `rhythm` (busiest day and hour, and `streak`, the longest run of days with a listen in the period). `quiet: true` (fewer than 5 listens or under half an hour) keeps only `listening`.
 - `before` values are the compared period's. `share` values are 0 to 1. `byHour` is hours per local hour 0-23; `daily` hours per day of the period.
 - `facts` from recaps written after insights landed also hold `discovery` (`newSongs`, `newArtists`, `newHours`, `newShare`; `null` when the history starts inside the period), `comebacks` (returning inside the period, as in `stats/comebacks`), `records` (all-time records set inside the period, as in `stats/highlight`'s record kinds; empty when the history starts inside it), `streak` (the longest run of days with a listen in the period) and `milestones` (crossed inside the period). The page draws them as `finds.newShare`, `comebacks`, `records` and `rhythm.streak`; older recaps lack these fields and their sections.
 - Recaps stored before recaps were pages (`facts` without `version: 2`) open with the same sections from their stored numbers: `headlineBy: "text"`, `compare.scaled: true` (their comparison was a typical period, scaled), `daily` and `byHour` null, and `legacyText` holds the text Claude wrote then, ISO dates written out.

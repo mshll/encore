@@ -2,7 +2,7 @@ import { useState } from "react";
 import type { RecapTimeline, TimelineRow } from "../../api/types";
 import { recapPath } from "../../app/paths";
 import { InlineChange, InlinePair } from "../../charts/Inline";
-import { fmtDayShort, fmtHoursValue, fmtInt, fmtMonthShort } from "../../lib/format";
+import { fmtDayShort, fmtHours, fmtInt, fmtMonthShort } from "../../lib/format";
 import { AppLink } from "../../ui/AppLink";
 import { Button } from "../../ui/Button";
 import { cx } from "../../ui/cx";
@@ -14,8 +14,28 @@ const OPEN_YEARS = 2;
 
 type Level = "year" | "month" | "week";
 
+/** Finished periods that offer Write it in the list, newest first; every period still going offers it too. Older rows open their period, which can still be written. */
+const WRITE_RECENT: Record<TimelineRow["kind"], number> = { weekly: 4, monthly: 2, yearly: 1 };
+
+const rowId = (r: TimelineRow) => `${r.kind}:${r.key}`;
+
+function recentRows(t: RecapTimeline): Set<string> {
+  const rows = [t.current.week, t.current.month, ...t.current.weeks, ...t.years.flatMap((y) => [y.year, ...y.months.flatMap((m) => [m.month, ...m.weeks])])];
+  const taken: Record<TimelineRow["kind"], number> = { weekly: 0, monthly: 0, yearly: 0 };
+  const recent = new Set<string>();
+  for (const r of rows) {
+    if (!r) continue;
+    if (r.inProgress) recent.add(rowId(r));
+    else if (taken[r.kind] < WRITE_RECENT[r.kind]) {
+      taken[r.kind] += 1;
+      recent.add(rowId(r));
+    }
+  }
+  return recent;
+}
+
 const monthName = (key: string) => new Intl.DateTimeFormat("en-GB", { month: "long", timeZone: "UTC" }).format(new Date(`${key}-01T00:00:00Z`));
-const shortHours = (h: number) => (h <= 0 ? "0 h" : h * 60 < 60 ? `${Math.round(h * 60)} min` : `${fmtHoursValue(h)} h`);
+const shortHours = (h: number) => (h <= 0 ? "0 h" : fmtHours(h));
 const weekLabel = (r: TimelineRow) => (r.from.slice(0, 7) === r.to.slice(0, 7) ? `${Number(r.from.slice(8))} – ${fmtDayShort(r.to)}` : `${fmtDayShort(r.from)} – ${fmtDayShort(r.to)}`);
 
 function label(r: TimelineRow): string {
@@ -42,10 +62,10 @@ const LABEL: Record<Level, string> = {
 };
 
 /** The whole row is the link; Write it sits above the link, so a tap on it does not open the recap. */
-function Row({ r, level, writer }: { r: TimelineRow; level: Level; writer: RecapWriter }) {
+function Row({ r, level, writer, recent }: { r: TimelineRow; level: Level; writer: RecapWriter; recent: Set<string> }) {
   const said = line(r);
   const name = label(r);
-  const canWrite = writer.canWrite && !r.recap && r.hours > 0;
+  const canWrite = writer.canWrite && !r.recap && r.hours > 0 && recent.has(rowId(r));
   const writing = writer.writing(r.kind, r.key);
   return (
     <li
@@ -79,32 +99,32 @@ function Row({ r, level, writer }: { r: TimelineRow; level: Level; writer: Recap
   );
 }
 
-function Weeks({ weeks, writer }: { weeks: TimelineRow[]; writer: RecapWriter }) {
+function Weeks({ weeks, writer, recent }: { weeks: TimelineRow[]; writer: RecapWriter; recent: Set<string> }) {
   if (weeks.length === 0) return null;
   return (
     <ul aria-label="Weeks" className="flex flex-col">
       {weeks.map((w) => (
-        <Row key={w.key} r={w} level="week" writer={writer} />
+        <Row key={w.key} r={w} level="week" writer={writer} recent={recent} />
       ))}
     </ul>
   );
 }
 
-function Year({ y, open, writer }: { y: RecapTimeline["years"][number]; open: boolean; writer: RecapWriter }) {
+function Year({ y, open, writer, recent }: { y: RecapTimeline["years"][number]; open: boolean; writer: RecapWriter; recent: Set<string> }) {
   const [shown, setShown] = useState(open);
   return (
     <section aria-label={y.year.key} className="flex flex-col gap-2">
       <ul>
-        <Row r={y.year} level="year" writer={writer} />
+        <Row r={y.year} level="year" writer={writer} recent={recent} />
       </ul>
       {shown ? (
         <ul className="flex flex-col gap-2">
           {y.months.map((m) => (
             <li key={m.month.key} className="flex flex-col">
               <ul>
-                <Row r={m.month} level="month" writer={writer} />
+                <Row r={m.month} level="month" writer={writer} recent={recent} />
               </ul>
-              <Weeks weeks={m.weeks} writer={writer} />
+              <Weeks weeks={m.weeks} writer={writer} recent={recent} />
             </li>
           ))}
         </ul>
@@ -122,6 +142,7 @@ function Year({ y, open, writer }: { y: RecapTimeline["years"][number]; open: bo
 /** Every period the history reaches: the week and month still going, then each year with its months and weeks. */
 export function Timeline({ timeline, writer }: { timeline: RecapTimeline; writer: RecapWriter }) {
   const { week, month, weeks } = timeline.current;
+  const recent = recentRows(timeline);
   return (
     <div className="flex flex-col gap-10 md:gap-12">
       {writer.problem && (
@@ -132,14 +153,14 @@ export function Timeline({ timeline, writer }: { timeline: RecapTimeline; writer
       {(week || month) && (
         <section aria-label="So far" className="flex flex-col gap-2">
           <ul>
-            {week && <Row r={week} level="month" writer={writer} />}
-            {month && <Row r={month} level="month" writer={writer} />}
+            {week && <Row r={week} level="month" writer={writer} recent={recent} />}
+            {month && <Row r={month} level="month" writer={writer} recent={recent} />}
           </ul>
-          <Weeks weeks={weeks} writer={writer} />
+          <Weeks weeks={weeks} writer={writer} recent={recent} />
         </section>
       )}
       {timeline.years.map((y, i) => (
-        <Year key={y.year.key} y={y} open={i < OPEN_YEARS} writer={writer} />
+        <Year key={y.year.key} y={y} open={i < OPEN_YEARS} writer={writer} recent={recent} />
       ))}
     </div>
   );

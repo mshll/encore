@@ -25,6 +25,7 @@ import {
   MusicNoteIcon,
   PlayIcon,
   PlaylistIcon,
+  ProhibitIcon,
   PushPinIcon,
   QueueIcon,
   TrashIcon,
@@ -39,7 +40,7 @@ import { EmptyState, ErrorState } from "../../ui/States";
 import { PlaylistMissing } from "./LivingPage";
 import { gateNotice, songs } from "./shared";
 
-function TrackRow({ item, added, onPin, onRemove }: { item: SetTrack; added: boolean; onPin: () => void; onRemove: () => void }) {
+function TrackRow({ item, added, onPin, onRemove, onLeaveOut }: { item: SetTrack; added: boolean; onPin: () => void; onRemove: () => void; onLeaveOut: (() => void) | null }) {
   const playback = usePlayback();
   const [, navigate] = useLocation();
   const origin = item.kind === "new" ? "New to you" : item.history ? `${fmtInt(item.history.listens)} listens` : null;
@@ -98,6 +99,11 @@ function TrackRow({ item, added, onPin, onRemove }: { item: SetTrack; added: boo
               Open in Spotify
             </MenuLinkItem>
             <MenuSeparator />
+            {onLeaveOut && (
+              <MenuItem icon={ProhibitIcon} onClick={onLeaveOut}>
+                Leave out this song
+              </MenuItem>
+            )}
             <MenuItem icon={TrashIcon} danger onClick={onRemove}>
               Remove from set
             </MenuItem>
@@ -435,6 +441,17 @@ export function SetPage({ id }: { id: number }) {
     }
   };
 
+  const leaveOut = async (set: SetDetail, item: SetTrack) => {
+    const songs = [...set.constraints.exclude.songs, { songKey: item.songKey, label: `${item.name} - ${item.artist}` }];
+    try {
+      const next = await request<SetDetail>(`/api/sets/${id}/constraints`, { method: "PATCH", json: { exclude: { artists: set.constraints.exclude.artists, songs } } });
+      queryClient.setQueryData(["sets", id], next);
+      showToast(`${item.name} is left out of the next change.`);
+    } catch (error) {
+      showToast(assistantProblem(error), "problem");
+    }
+  };
+
   if (q.isError)
     return q.error instanceof ApiError && q.error.status === 404 ? (
       <PlaylistMissing />
@@ -487,6 +504,7 @@ export function SetPage({ id }: { id: number }) {
                     added={added.has(item.songKey)}
                     onPin={() => edit(item, { method: "PATCH", json: { pinned: !item.pinned } })}
                     onRemove={() => setRemoving(item)}
+                    onLeaveOut={set.constraints.exclude.songs.some((s) => s.songKey === item.songKey) ? null : () => void leaveOut(set, item)}
                   />
                 ))}
               </ol>

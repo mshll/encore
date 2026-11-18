@@ -33,6 +33,18 @@ describe("csv fields", () => {
       "42",
     ]);
   });
+
+  test("prefixes text that a spreadsheet would read as a formula with a quote", () => {
+    const fields = ["=SUM(A1)", "+1", "-cmd", "@x", "\tlead", "\rlead", "=a,b"].map(csvField);
+
+    expect(fields).toEqual(["'=SUM(A1)", "'+1", "'-cmd", "'@x", "'\tlead", "\"'\rlead\"", "\"'=a,b\""]);
+  });
+
+  test("leaves numbers and text with a formula character later on alone", () => {
+    const fields = [csvField(-3), csvField("a=b"), csvField("AC/DC - Live")];
+
+    expect(fields).toEqual(["-3", "a=b", "AC/DC - Live"]);
+  });
 });
 
 describe("plays export", () => {
@@ -71,6 +83,15 @@ describe("plays export", () => {
     const parsed = JSON.parse(await text(exportStream(db, "json"))) as unknown[];
 
     expect(parsed).toHaveLength(3);
+  });
+
+  test("JSON keeps a name that starts with a formula character as it is", async () => {
+    const db = testDb();
+    seed(db, [track("f", "=Formula", "-Artist", "Album")], [play("2026-01-05T10:00:00Z", uri("f"), 200_000)]);
+
+    const [row] = JSON.parse(await text(exportStream(db, "json"))) as { name: string; artist: string }[];
+
+    expect([row!.name, row!.artist]).toEqual(["=Formula", "-Artist"]);
   });
 
   test("JSON of no plays is an empty array", async () => {

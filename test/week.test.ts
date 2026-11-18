@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { hours as h } from "../src/analytics/common";
 import { weekSoFar } from "../src/analytics/week";
 import { play, seed, testDb, track, uri } from "./helpers";
 
@@ -29,7 +30,7 @@ describe("week so far", () => {
     ]);
     const week = weekSoFar(db, { now: NOW, recapWeekday: FRIDAY });
     expect(week.plays).toBe(1);
-    expect(week.usual).toEqual({ hours: 0.04, plays: 1, listens: 1, weeks: 4 });
+    expect(week.usual).toEqual({ hours: h(150_000), plays: 1, listens: 1, weeks: 4 });
   });
 
   test("counts only earlier weeks the history covers whole", () => {
@@ -54,7 +55,7 @@ describe("week so far", () => {
     expect(week.usual).toMatchObject({ weeks: 4, plays: 0 });
     expect(week.days).toHaveLength(30);
     expect(week.days.at(-1)).toEqual({ day: "2026-11-15", hours: 0 });
-    expect(week.days.find((d) => d.day === "2026-11-07")?.hours).toBe(0.06);
+    expect(week.days.find((d) => d.day === "2026-11-07")?.hours).toBe(h(200_000));
   });
 
   test("with no plays at all there is nothing to compare", () => {

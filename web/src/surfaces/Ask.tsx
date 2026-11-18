@@ -120,7 +120,7 @@ export function Ask({ id }: { id?: string }) {
   return (
     <Page crumb={crumb} fill>
       {header}
-      <div className="flex min-h-0 flex-1 flex-col">{synced && <Chat variant="page" empty={<div className="mb-10">{list}</div>} />}</div>
+      <div className="flex min-h-0 flex-1 flex-col">{synced && <Chat variant="page" empty={<div className="mb-8">{list}</div>} />}</div>
       {confirmDelete}
     </Page>
   );

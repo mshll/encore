@@ -1,10 +1,9 @@
 import { sql } from "drizzle-orm";
 import { withArtistImages } from "../analytics/common";
-import { yearCompare } from "../analytics/years";
 import type { Db } from "../db/client";
 import { withArtwork } from "../library/artwork";
 import { normalizeTitle, songKey } from "../plays/song";
-import { isRecapFacts, type LegacyFacts, type RecapFacts, type Share } from "./facts";
+import { isRecapFacts, type LegacyFacts, type RecapFacts, type Share, type YearSide } from "./facts";
 import { baselineLabel, humanDay, humanDatesIn, periodLabel, type RecapKind, type Span } from "./periods";
 import { definingSongs } from "./songs";
 
@@ -14,7 +13,6 @@ export type SectionId = (typeof SECTION_IDS)[number];
 /** Claude's words for a recap: a headline and one take per section, none with a digit in it. */
 export type RecapLines = { headline: string | null; takes: Partial<Record<SectionId, string>> };
 
-type YearSide = { year: number; hours: number; plays: number; artists: number; newArtists: number; newSongs: number };
 type Run = { days: number; from: string; to: string };
 type MilestoneSong = { songKey: string; uri: string; name: string; artist: string; albumArtUrl: string | null };
 export type RecapRecord =
@@ -87,7 +85,8 @@ const QUIET_HOURS = 0.5;
 const TASTE_MOVE = 0.05;
 
 export function fmtHoursPhrase(hours: number): string {
-  if (hours * 60 < 60) return `${Math.round(hours * 60)} minutes`;
+  if (hours * 60 < 1) return "under a minute";
+  if (Math.round(hours * 60) < 60) return `${Math.round(hours * 60)} minutes`;
   return `${hours < 10 ? Math.round(hours * 10) / 10 : Math.round(hours)} hours`;
 }
 
@@ -113,7 +112,7 @@ function pageFromFacts(db: Db, d: Stored, f: RecapFacts, label: string): Pick<Re
   const quiet = f.totals.listens < QUIET_LISTENS || f.totals.hours < QUIET_HOURS;
   const pics = images(
     db,
-    [...f.artists, ...f.movers.up, ...f.movers.down, ...(f.comebacks ?? [])]
+    [...f.artists, ...f.movers.up, ...f.movers.down, ...(f.comebacks ?? []), ...(f.years?.artists ?? [])]
       .map((a) => a.artist)
       .concat(f.months.flatMap((m) => (m.artist ? [m.artist] : [])), f.finds?.artists.top.map((a) => a.artist) ?? []),
   );
@@ -133,7 +132,7 @@ function pageFromFacts(db: Db, d: Stored, f: RecapFacts, label: string): Pick<Re
     },
   ];
   if (!quiet) {
-    const years = d.kind === "yearly" ? yearsSection(db, Number(d.periodKey), take(lines, "years")) : null;
+    const years = f.years ? { id: "years" as const, take: take(lines, "years"), ...f.years, artists: f.years.artists.map((a) => ({ ...a, imageUrl: pic(a.artist) })) } : null;
     if (years) sections.push(years);
     if (f.months.length >= 2)
       sections.push({ id: "months", take: take(lines, "months"), months: f.months.map((m) => ({ ...m, imageUrl: m.artist ? pic(m.artist) : null })) });
@@ -224,14 +223,6 @@ function pageFromLegacy(db: Db, d: Stored, f: LegacyFacts): Pick<RecapPage, "sec
     note: null,
     quiet: false,
   };
-}
-
-/** A year against the year before, as `stats/years` compares them; null when the year before has no listening. */
-function yearsSection(db: Db, year: number, take: string | null): Extract<RecapSection, { id: "years" }> | null {
-  const c = yearCompare(db, { a: year - 1, b: year });
-  if (!c.years.includes(year - 1)) return null;
-  const side = ({ year, hours, plays, artists, newArtists, newSongs }: (typeof c)["a"]): YearSide => ({ year, hours, plays, artists, newArtists, newSongs });
-  return { id: "years", take, a: side(c.a), b: side(c.b), artists: c.artists.filter((a) => a.b !== null).sort((x, y) => x.b!.rank - y.b!.rank), genres: c.genres, moods: c.moods };
 }
 
 /** The recap as a page: what the facts support, in order, with Claude's words where there are any. */

@@ -2,7 +2,7 @@ import { useState, type ReactNode } from "react";
 import type { RecapMilestone, RecapPage, RecapRecord, RecapSection, RecapShare } from "../../api/types";
 import { artistPath, songPath } from "../../app/paths";
 import { ArtChip, InlineChange, InlineColumns, InlineFact, InlinePair, InlineShare } from "../../charts/Inline";
-import { fmtDayShort, fmtHour, fmtHoursValue, fmtInt, fmtMonthLong, fmtMonthShort, hoursParts, WEEKDAYS } from "../../lib/format";
+import { fmtDayShort, fmtHour, fmtHours, fmtInt, fmtMonthLong, fmtMonthShort, hoursParts, WEEKDAYS } from "../../lib/format";
 import { AppLink } from "../../ui/AppLink";
 import { Button } from "../../ui/Button";
 import { cx } from "../../ui/cx";
@@ -15,7 +15,7 @@ const hours = (h: number) => {
   const p = hoursParts(h);
   return `${p.value} ${p.unit}`;
 };
-const shortHours = (h: number) => (h <= 0 ? "none" : h * 60 < 60 ? `${Math.round(h * 60)} min` : `${fmtHoursValue(h)} h`);
+const shortHours = (h: number) => (h <= 0 ? "none" : fmtHours(h));
 const pct = (share: number) => `${Math.round(share * 100)}%`;
 const plural = (n: number, one: string, many: string) => `${fmtInt(n)} ${n === 1 ? one : many}`;
 const weekday = (day: string) => WEEKDAYS[(new Date(`${day}T00:00:00Z`).getUTCDay() + 6) % 7]!;

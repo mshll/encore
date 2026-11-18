@@ -292,6 +292,15 @@ describe("podcasts", () => {
     expect(r.recent[0]).toEqual({ ts: "2026-01-07T10:00:00.000Z", day: "2026-01-07", show: "Show 2", episode: "e3", uri: "spotify:episode:e3", minutes: 30 });
     expect(podcasts(testDb(), { range: {}, limit: 10 })).toEqual({ hours: 0, plays: 0, shows: [], recent: [] });
   });
+
+  test("an episode played for a few seconds keeps those seconds, not rounded to zero minutes", () => {
+    const d = testDb();
+    seed(d, [], [play("2026-01-05T10:00:00Z", null as unknown as string, 20_000, { kind: "episode", episodeUri: "spotify:episode:e1", episodeName: "e1", showName: "Show" })]);
+
+    const [episode] = podcasts(d, { range: {}, limit: 10 }).recent;
+
+    expect(episode!.minutes).toBe(20_000 / 60_000);
+  });
 });
 
 describe("recap facts", () => {

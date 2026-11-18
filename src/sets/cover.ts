@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { asc, eq, inArray } from "drizzle-orm";
 import { isArtUrl } from "../covers/art";
-import { makeCover } from "../covers/render";
+import { coverTitleClamped, makeCover } from "../covers/render";
 import type { CoverStyle } from "../covers/style";
 import type { Db } from "../db/client";
 import { setCovers, setItems, sets } from "../db/schema";
@@ -28,8 +28,10 @@ export function coverArt(items: { albumArtUrl: string | null }[]): string[] {
 
 /** Everything the image is drawn from, hashed: the same key means the same cover. */
 export function coverKey(source: CoverSource): string {
+  // Only a clamped title adds to the key, so every other cover keeps the key it was uploaded under.
+  const clamped = coverTitleClamped(source.title) ? ["title-clamped"] : [];
   return createHash("sha256")
-    .update(JSON.stringify([COVER_VERSION, source.title, source.style, source.art]))
+    .update(JSON.stringify([COVER_VERSION, source.title, source.style, source.art, ...clamped]))
     .digest("hex")
     .slice(0, 16);
 }

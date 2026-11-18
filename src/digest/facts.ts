@@ -5,16 +5,26 @@ import { overview } from "../analytics/overview";
 import { longestStreak, milestones, recordsSetIn } from "../analytics/records";
 import { tagShares } from "../analytics/tags";
 import { topArtists, topTracks } from "../analytics/top";
+import { yearCompare } from "../analytics/years";
 import type { Db } from "../db/client";
 import { daysIn, shiftDay, type RecapKind, type Span } from "./periods";
 
-const r2 = (n: number) => Math.round(n * 100) / 100;
 const r3 = (n: number) => Math.round(n * 1000) / 1000;
-const hoursOf = (ms: number) => r2(ms / 3_600_000);
+const hoursOf = (ms: number) => ms / 3_600_000;
 
 export type Totals = { hours: number; listens: number; artists: number; songs: number };
 export type ArtistHours = { artist: string; hours: number; before: number | null };
 export type Share = { value: string; share: number; before: number | null };
+export type YearSide = { year: number; hours: number; plays: number; artists: number; newArtists: number; newSongs: number };
+type YearRank = { rank: number; hours: number };
+/** A year against the year before, as `stats/years` compares them, kept with the recap so the page does not compute it again. */
+export type YearFacts = {
+  a: YearSide;
+  b: YearSide;
+  artists: { artist: string; a: YearRank | null; b: YearRank | null; change: number | null }[];
+  genres: { value: string; a: number; b: number }[];
+  moods: { value: string; a: number; b: number }[];
+};
 export type Find = { count: number; ofNew: number; top: { key: string; name: string; artist: string; uri: string; listens: number; days: number }[] };
 
 /** Every number a recap shows, computed here: Claude only words them, the page draws them. */
@@ -48,6 +58,8 @@ export type RecapFacts = {
   streak?: ReturnType<typeof longestStreak>;
   /** Thresholds crossed inside the period, newest first. */
   milestones?: ReturnType<typeof milestones>["items"];
+  /** Yearly only: the year against the year before, null when the year before has no listening. */
+  years?: YearFacts | null;
 };
 
 /** The first day with a song play, or null before any import. */
@@ -57,7 +69,7 @@ export function historyStart(db: Db): string | null {
 
 function totals(db: Db, range: Span): Totals {
   const o = overview(db, { range });
-  return { hours: r2(o.hours), listens: o.listens, artists: o.uniqueArtists, songs: o.uniqueTracks };
+  return { hours: o.hours, listens: o.listens, artists: o.uniqueArtists, songs: o.uniqueTracks };
 }
 
 function daily(db: Db, period: Span): number[] {
@@ -91,7 +103,7 @@ function finds(db: Db, period: Span, column: "t.song_key" | "t.artist"): Find {
 
 function movers(period: (ArtistHours & { listens: number })[], before: Map<string, number>, periodHours: number) {
   const now = new Map(period.map((a) => [a.artist, a.hours]));
-  const all = [...new Set([...now.keys(), ...before.keys()])].map((artist) => ({ artist, hours: r2(now.get(artist) ?? 0), before: r2(before.get(artist) ?? 0) }));
+  const all = [...new Set([...now.keys(), ...before.keys()])].map((artist) => ({ artist, hours: now.get(artist) ?? 0, before: before.get(artist) ?? 0 }));
   const enough = Math.max(0.5, periodHours * 0.02);
   const by = (sign: 1 | -1) =>
     all
@@ -126,12 +138,23 @@ function months(db: Db, period: Span): RecapFacts["months"] {
   return hours.map((m) => ({ month: m.month, hours: hoursOf(m.ms), artist: artists.get(m.month) ?? null, song: songs.get(m.month) ?? null }));
 }
 
+function yearFacts(db: Db, year: number): YearFacts | null {
+  const c = yearCompare(db, { a: year - 1, b: year });
+  if (!c.years.includes(year - 1)) return null;
+  const side = ({ year, hours, plays, artists, newArtists, newSongs }: YearSide): YearSide => ({ year, hours, plays, artists, newArtists, newSongs });
+  const artists = c.artists
+    .filter((a) => a.b !== null)
+    .sort((x, y) => x.b!.rank - y.b!.rank)
+    .map(({ artist, a, b, change }) => ({ artist, a, b, change }));
+  return { a: side(c.a), b: side(c.b), artists, genres: c.genres, moods: c.moods };
+}
+
 export function recapFacts(db: Db, kind: RecapKind, period: Span & { inProgress: boolean }, baseline: Span | null): RecapFacts {
   const start = historyStart(db);
   const now = totals(db, period);
-  const artists = topArtists(db, { range: period, limit: 40 }).map((a) => ({ artist: a.artist, hours: r2(a.hours), listens: a.listens, before: null as number | null }));
+  const artists = topArtists(db, { range: period, limit: 40 }).map((a) => ({ artist: a.artist, hours: a.hours, listens: a.listens, before: null as number | null }));
   const beforeHours = new Map(baseline ? topArtists(db, { range: baseline, limit: 200 }).map((a) => [a.artist, a.hours]) : []);
-  if (baseline) for (const a of artists) a.before = r2(beforeHours.get(a.artist) ?? 0);
+  if (baseline) for (const a of artists) a.before = beforeHours.get(a.artist) ?? 0;
   const day = db.all<{ day: string; ms: number }>(sql`select p.day, sum(${MS}) as ms from ${MUSIC} where ${musicWhere(period)} group by p.day order by ms desc, p.day limit 1`)[0];
   const byHour = new Map(db.all<{ hour: number; ms: number }>(sql`select p.hour, sum(${MS}) as ms from ${MUSIC} where ${musicWhere(period)} group by p.hour`).map((r) => [r.hour, r.ms]));
   const peak = [...byHour.entries()].sort((a, b) => b[1] - a[1] || a[0] - b[0])[0];
@@ -145,7 +168,7 @@ export function recapFacts(db: Db, kind: RecapKind, period: Span & { inProgress:
     daily: daily(db, period),
     artists: artists.slice(0, 8),
     movers: baseline ? movers(artists, beforeHours, now.hours) : { up: [], down: [] },
-    songs: topTracks(db, { range: period, limit: 8, sort: "listens" }).map((s) => ({ songKey: s.songKey, uri: s.uri, name: s.name, artist: s.artist, listens: s.listens, hours: r2(s.hours) })),
+    songs: topTracks(db, { range: period, limit: 8, sort: "listens" }).map((s) => ({ songKey: s.songKey, uri: s.uri, name: s.name, artist: s.artist, listens: s.listens, hours: s.hours })),
     finds: start !== null && start < period.from ? { songs: finds(db, period, "t.song_key"), artists: finds(db, period, "t.artist") } : null,
     genres: shareChanges(db, "genres", period, baseline),
     moods: shareChanges(db, "moods", period, baseline),
@@ -160,6 +183,7 @@ export function recapFacts(db: Db, kind: RecapKind, period: Span & { inProgress:
     records: start !== null && start < period.from ? recordsSetIn(db, period) : [],
     streak: longestStreak(db, period),
     milestones: milestones(db, { range: period, limit: 10 }).items,
+    years: kind === "yearly" ? yearFacts(db, Number(period.from.slice(0, 4))) : null,
   };
 }
 

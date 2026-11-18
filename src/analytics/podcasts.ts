@@ -19,6 +19,6 @@ export function podcasts(db: Db, { range, limit }: { range: Range; limit: number
     hours: hours(total.ms ?? 0),
     plays: total.plays,
     shows: shows.map((s) => ({ show: s.show, hours: hours(s.ms), plays: s.plays, episodes: s.episodes, firstPlayed: iso(s.first_ts), lastPlayed: iso(s.last_ts) })),
-    recent: recent.map((r) => ({ ts: iso(r.ts)!, day: r.day, show: r.show, episode: r.episode, uri: r.uri, minutes: Math.round(r.ms / 60_000) })),
+    recent: recent.map((r) => ({ ts: iso(r.ts)!, day: r.day, show: r.show, episode: r.episode, uri: r.uri, minutes: r.ms / 60_000 })),
   };
 }

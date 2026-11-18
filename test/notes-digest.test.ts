@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { hours as h } from "../src/analytics/common";
 import type { Db } from "../src/db/client";
 import { digests, llmCalls } from "../src/db/schema";
 import { addAlias } from "../src/artists/aliases";
@@ -94,8 +95,8 @@ describe("recap facts", () => {
 
     const f = recapFacts(db, "monthly", { ...periodSpan("monthly", "2026-02"), inProgress: false }, periodSpan("monthly", "2026-01"));
 
-    expect(f.totals).toMatchObject({ hours: 0.56, listens: 10, artists: 1, songs: 1, before: { hours: 1.21, listens: 21 } });
-    expect(f.artists[0]).toMatchObject({ artist: "Mac Miller", hours: 0.56, before: 1.14 });
+    expect(f.totals).toMatchObject({ hours: h(2_000_000), listens: 10, artists: 1, songs: 1, before: { hours: h(4_350_000), listens: 21 } });
+    expect(f.artists[0]).toMatchObject({ artist: "Mac Miller", hours: h(2_000_000), before: h(4_100_000) });
     expect(f.daily).toHaveLength(28);
     expect(f.finds).toEqual({ songs: { count: 0, ofNew: 0, top: [] }, artists: { count: 0, ofNew: 0, top: [] } });
   });
@@ -128,7 +129,7 @@ describe("recaps", () => {
       ["taste", null],
       ["rhythm", null],
     ]);
-    expect(recap.text.split("\n").slice(0, 2)).toEqual(["A quieter month, still mostly Mac Miller", "Much less than January. 34 minutes of music, 54% less than January 2026 (1.2 hours), across 1 artist."]);
+    expect(recap.text.split("\n").slice(0, 2)).toEqual(["A quieter month, still mostly Mac Miller", "Much less than January. 33 minutes of music, 54% less than January 2026 (1.2 hours), across 1 artist."]);
   });
 
   test("lines with digits are sent back once, then dropped", async () => {
@@ -141,7 +142,7 @@ describe("recaps", () => {
 
     expect(String(fake.requests[1]!.messages.at(-1)!.content)).toBe("These lines have digits in them: Up 50%. Write them again with no digits; the page shows the numbers.");
     expect(recap.lines).toEqual({ headline: null, takes: { listening: "About twice as much." } });
-    expect(recap.page).toMatchObject({ headline: "34 minutes of music, most of it Mac Miller", headlineBy: "facts" });
+    expect(recap.page).toMatchObject({ headline: "33 minutes of music, most of it Mac Miller", headlineBy: "facts" });
   });
 
   test("without Claude the recap is stored with the numbers alone, and gets its words once Claude is there", async () => {
@@ -286,6 +287,18 @@ describe("recap sections from the insights", () => {
     const years = sectionOf(recap, "years") as { a: { year: number }; b: { year: number }; artists: { artist: string }[] };
     expect([years.a.year, years.b.year, years.artists[0]!.artist, sectionOf(recap, "taste")]).toEqual([2025, 2026, "Mac Miller", undefined]);
   });
+
+  test("the year against the year before is kept with the recap, so later plays do not change it", async () => {
+    const { ctx, db } = featureCtx(null, [], {}, "2026-03-02T08:00:00Z");
+    seedLibrary(db);
+    seed(db, [], [play("2025-06-01T20:00:00Z", uri("s1"), 200_000)]);
+    const recap = await generateDigest(ctx, "yearly", "2026");
+    seed(db, [], [play("2025-06-03T20:00:00Z", uri("s1"), 200_000), play("2025-06-04T20:00:00Z", uri("s1"), 200_000)]);
+
+    const years = sectionOf(getDigest(db, recap.id), "years") as { a: { plays: number } };
+
+    expect(years.a.plays).toBe(1);
+  });
 });
 
 describe("recap timeline", () => {
@@ -300,8 +313,8 @@ describe("recap timeline", () => {
     const year = t.years[0]!;
     expect(t.current.month).toMatchObject({ key: "2026-03", from: "2026-03-01", to: "2026-03-17", inProgress: true, hours: 0 });
     expect(year.months.map((m) => [m.month.key, m.month.hours, m.month.before, m.month.recap?.headline ?? null, m.month.recap?.topArtist ?? null])).toEqual([
-      ["2026-02", 0.56, 1.21, null, "Mac Miller"],
-      ["2026-01", 1.21, null, null, null],
+      ["2026-02", h(2_000_000), h(4_350_000), null, "Mac Miller"],
+      ["2026-01", h(4_350_000), null, null, null],
     ]);
     expect(year.months[0]!.weeks.map((w) => w.key)).toEqual(["2026-02-26", "2026-02-19", "2026-02-12", "2026-02-05"]);
   });

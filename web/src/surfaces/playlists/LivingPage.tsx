@@ -17,7 +17,7 @@ import { Page, PageHeader, SIDE_COLUMNS, Section, dimWhile, useDocumentTitle } f
 import { RowList, RowSkeleton } from "../../ui/Rows";
 import { EmptyState, ErrorState } from "../../ui/States";
 import { Switch } from "../../ui/Switch";
-import { WeeklyPicks } from "../Picks";
+import { useNeedsPicks, WeeklyPicks } from "../Picks";
 import { ReleasesSection } from "../Releases";
 import { describeRule } from "./rules";
 import { freshLine, gateNotice, isKind, NOTHING_YET, playable, SongRow, songs, useLivingAction, usePlayPlaylist, type Gate } from "./shared";
@@ -150,7 +150,7 @@ function HowItFills({ playlist }: { playlist: LivingDetail }) {
 
 type Action = ReturnType<typeof useLivingAction>;
 
-function LivingActions({ playlist, gate, action, onDelete }: { playlist: LivingDetail; gate: Gate | undefined; action: Action; onDelete: () => void }) {
+function LivingActions({ playlist, gate, action, onDelete, playSecondary }: { playlist: LivingDetail; gate: Gate | undefined; action: Action; onDelete: () => void; playSecondary: boolean }) {
   const blocked = gate ? !gate.connected || !gate.canWrite : false;
   const switchId = `living-${playlist.kind}`;
   const play = usePlayPlaylist();
@@ -158,7 +158,7 @@ function LivingActions({ playlist, gate, action, onDelete }: { playlist: LivingD
   return (
     <div className="flex flex-wrap items-center gap-2">
       {playable(playlist) && (
-        <Button variant="accent" icon={PlayIcon} onClick={() => void play(playlist)}>
+        <Button variant={playSecondary ? "secondary" : "accent"} icon={PlayIcon} onClick={() => void play(playlist)}>
           Play
         </Button>
       )}
@@ -264,6 +264,7 @@ export function LivingPage({ id }: { id: LivingId }) {
   const action = useLivingAction(id, q.data?.name ?? "");
   const del = useDeleteRule(q.data);
   const [confirm, setConfirm] = useState(false);
+  const needsPicks = useNeedsPicks(id === "picks");
   useDocumentTitle(q.data?.name ?? "Playlist");
 
   if (q.isError)
@@ -290,7 +291,7 @@ export function LivingPage({ id }: { id: LivingId }) {
         kind="playlist"
         credits={p.about || undefined}
         detail={<span className={fresh.problem ? "text-danger" : undefined}>{fresh.text}</span>}
-        actions={<LivingActions playlist={p} gate={gate} action={action} onDelete={() => setConfirm(true)} />}
+        actions={<LivingActions playlist={p} gate={gate} action={action} onDelete={() => setConfirm(true)} playSecondary={needsPicks} />}
       />
       {gate && gateNotice(gate)}
       <StateNotice playlist={p} onRetry={action.refresh} />

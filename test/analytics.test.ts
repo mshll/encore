@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { eq } from "drizzle-orm";
+import { hours as h } from "../src/analytics/common";
 import { albumPage, artistPage, trackPage } from "../src/analytics/entities";
 import { history } from "../src/analytics/history";
 import { clock, devices, overview, timeSeries } from "../src/analytics/overview";
@@ -45,7 +46,7 @@ function baseFixture() {
 describe("overview", () => {
   test("totals music plays only, using duration for api plays", () => {
     expect(overview(baseFixture(), { range: {} })).toEqual({
-      hours: 0.16,
+      hours: h(593_000),
       plays: 5,
       listens: 3,
       uniqueTracks: 2,
@@ -54,9 +55,18 @@ describe("overview", () => {
       shuffleRate: 0.25,
       firstPlayed: "2026-01-05T10:00:00.000Z",
       lastPlayed: "2026-03-01T10:00:00.000Z",
-      topArtist: { artist: "Artist X", imageUrl: null, hours: 0.11, listens: 2 },
-      topTrack: { songKey: KEY_A, uri: A1, name: "Song A", artist: "Artist X", albumArtUrl: null, hours: 0.11, listens: 2 },
+      topArtist: { artist: "Artist X", imageUrl: null, hours: h(410_000), listens: 2 },
+      topTrack: { songKey: KEY_A, uri: A1, name: "Song A", artist: "Artist X", albumArtUrl: null, hours: h(410_000), listens: 2 },
     });
+  });
+
+  test("a few seconds of listening count as those seconds, not rounded to zero", () => {
+    const db = testDb();
+    seed(db, [track("s", "Short", "Artist", null)], [play("2026-01-05T10:00:00Z", uri("s"), 20_000)]);
+
+    const { hours } = overview(db, { range: {} });
+
+    expect(hours).toBe(20_000 / 3_600_000);
   });
 
   test("respects the local date range and handles an empty range", () => {
@@ -71,8 +81,8 @@ describe("time series", () => {
   test("buckets by month and week", () => {
     const db = baseFixture();
     expect(timeSeries(db, { range: {}, period: "month" }).points).toEqual([
-      { period: "2026-01", hours: 0.06, plays: 3, listens: 1 },
-      { period: "2026-02", hours: 0.06, plays: 1, listens: 1 },
+      { period: "2026-01", hours: h(213_000), plays: 3, listens: 1 },
+      { period: "2026-02", hours: h(200_000), plays: 1, listens: 1 },
       { period: "2026-03", hours: 0.05, plays: 1, listens: 1 },
     ]);
     expect(timeSeries(db, { range: { to: "2026-01-31" }, period: "week" }).points.map((p) => [p.period, p.plays])).toEqual([["2026-01-05", 3]]);
@@ -138,17 +148,17 @@ describe("eras", () => {
     const result = eras(baseFixture(), { range: {}, limit: 2 });
     expect(result.months).toEqual(["2026-01", "2026-02", "2026-03"]);
     expect(result.series).toEqual([
-      { artist: "Artist X", hours: [0.06, 0.06, 0] },
-      { artist: "Artist Y", hours: [0, 0, 0.05] },
+      { artist: "Artist X", hours: [h(210_000), h(200_000), 0] },
+      { artist: "Artist Y", hours: [h(3_000), 0, 0.05] },
     ]);
     expect(result.artists[0]).toEqual({
       artist: "Artist X",
       imageUrl: null,
-      hours: 0.11,
+      hours: h(410_000),
       firstPlayed: "2026-01-05T10:00:00.000Z",
       lastPlayed: "2026-02-01T10:00:00.000Z",
       peakMonth: "2026-01",
-      peakMonthHours: 0.06,
+      peakMonthHours: h(210_000),
     });
     expect(eras(testDb(), { range: {}, limit: 5 })).toEqual({ months: [], series: [], artists: [] });
   });
@@ -158,7 +168,7 @@ describe("clock and devices", () => {
   test("weekday x hour matrix in Kuwait time", () => {
     const { cells } = clock(baseFixture(), { range: {} });
     expect(cells).toHaveLength(168);
-    expect(cells.find((c) => c.weekday === 1 && c.hour === 13)).toEqual({ weekday: 1, hour: 13, hours: 0.06, plays: 1 });
+    expect(cells.find((c) => c.weekday === 1 && c.hour === 13)).toEqual({ weekday: 1, hour: 13, hours: h(200_000), plays: 1 });
     expect(cells.find((c) => c.weekday === 1 && c.hour === 15)!.plays).toBe(1);
   });
 
@@ -316,8 +326,8 @@ describe("trips", () => {
         { country: "FR", plays: 1 },
       ],
       plays: 3,
-      hours: 0.11,
-      topTracks: [{ songKey: KEY_A, uri: A1, name: "Song A", artist: "Artist X", albumArtUrl: "https://img/a1", plays: 3, listens: 2, hours: 0.11 }],
+      hours: h(410_000),
+      topTracks: [{ songKey: KEY_A, uri: A1, name: "Song A", artist: "Artist X", albumArtUrl: "https://img/a1", plays: 3, listens: 2, hours: h(410_000) }],
     });
     expect(trips(db, { range: {}, homeCountry: "KW", minPlays: 1, topTracks: 0 }).trips.map((t) => t.startDay)).toEqual(["2026-02-01", "2026-01-02"]);
     expect(trips(db, { range: {}, minPlays: 2, topTracks: 1 })).toEqual(result);
@@ -391,7 +401,7 @@ describe("tag analytics", () => {
     const db = baseFixture();
     expect(genreSeries(db, { range: {}, period: "month" })).toEqual({
       period: "month",
-      coverage: { hoursTagged: 0, hoursTotal: 0.16, share: 0 },
+      coverage: { hoursTagged: 0, hoursTotal: h(593_000), share: 0 },
       totals: [],
       series: [],
     });
@@ -412,7 +422,7 @@ describe("tag analytics", () => {
       ["pop", 2],
     ]);
     expect(genres.coverage.share).toBe(1);
-    expect(moodSeries(db, { range: {}, period: "year" }).series).toContainEqual({ period: "2026", value: "chill", hours: 0.11, plays: 3 });
+    expect(moodSeries(db, { range: {}, period: "year" }).series).toContainEqual({ period: "2026", value: "chill", hours: h(410_000), plays: 3 });
     const at13 = energyByHour(db, { range: {} }).hours[13]!;
     expect(at13).toEqual({ hour: 13, energy: 3.33, valence: 2, listens: 3 });
   });

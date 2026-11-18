@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { makeCover } from "../covers/render";
+import { coverTitleClamped, makeCover } from "../covers/render";
 import type { LivingSpec } from "./kinds";
 
 /** Bump when the drawing changes, so every living cover is drawn and uploaded again. */
@@ -9,8 +9,10 @@ type CoverSpec = Pick<LivingSpec, "id" | "name" | "cover">;
 
 /** Everything the fixed cover is drawn from, hashed: the same key means the same image. */
 export function livingCoverKey({ name, cover }: CoverSpec): string {
+  // Only a clamped title adds to the key, so every other cover keeps the key it was uploaded under.
+  const clamped = coverTitleClamped(name) ? ["title-clamped"] : [];
   return createHash("sha256")
-    .update(JSON.stringify([COVER_VERSION, name, cover.style, cover.colours]))
+    .update(JSON.stringify([COVER_VERSION, name, cover.style, cover.colours, ...clamped]))
     .digest("hex")
     .slice(0, 16);
 }

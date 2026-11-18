@@ -16,7 +16,7 @@ export function fmtBytes(bytes: number): string {
 export function fmtHours(hours: number): string {
   const minutes = hours * 60;
   if (minutes < 1) return hours > 0 ? "<1 min" : "0 min";
-  if (minutes < 60) return `${Math.round(minutes)} min`;
+  if (Math.round(minutes) < 60) return `${Math.round(minutes)} min`;
   if (hours < 10) return `${one.format(hours)} h`;
   return `${int.format(Math.round(hours))} h`;
 }
@@ -201,6 +201,8 @@ export function contextPhrase(dimension: ContextDimension, value: string): strin
 }
 
 export function hoursParts(hours: number): { value: string; unit: string } {
-  if (hours * 60 < 60) return { value: fmtInt(Math.round(hours * 60)), unit: Math.round(hours * 60) === 1 ? "minute" : "minutes" };
+  const minutes = Math.round(hours * 60);
+  if (hours > 0 && hours * 60 < 1) return { value: "<1", unit: "minute" };
+  if (minutes < 60) return { value: fmtInt(minutes), unit: minutes === 1 ? "minute" : "minutes" };
   return { value: fmtHoursValue(hours), unit: "hours" };
 }

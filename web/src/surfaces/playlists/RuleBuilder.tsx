@@ -289,8 +289,20 @@ function usePreview(input: RuleInput | null) {
 
 const PREVIEW_FIRST = 20;
 
-function Preview({ input, id }: { input: RuleInput | null; id: LivingId | null }) {
-  const preview = usePreview(input);
+type PreviewState = ReturnType<typeof usePreview>;
+
+/** The preview's song count beside Create while the preview sits below the whole form (one column). */
+function PreviewCount({ preview, input }: { preview: PreviewState; input: RuleInput | null }) {
+  const d = preview.data;
+  const known = input && d && !preview.stale;
+  return (
+    <span aria-live="polite" className="text-secondary tabular @min-[700px]/page:hidden">
+      {known ? (d.count === 0 ? "No song meets the rule" : songs(d.count)) : null}
+    </span>
+  );
+}
+
+function Preview({ input, id, preview }: { input: RuleInput | null; id: LivingId | null; preview: PreviewState }) {
   const d = preview.data;
   const [all, setAll] = useState(false);
   return (
@@ -331,6 +343,7 @@ function Builder({ playlist }: { playlist: LivingDetail | null }) {
   const { input, errors } = toRule(form);
   const shown: RuleFormErrors = tried ? errors : { ...errors, name: undefined };
   const ruleInput = input ?? (Object.keys(errors).length === 1 && errors.name ? toRule({ ...form, name: "Preview" }).input : null);
+  const preview = usePreview(ruleInput);
   const title = playlist ? `Edit ${playlist.name}` : "New playlist";
   useDocumentTitle(title);
 
@@ -386,16 +399,17 @@ function Builder({ playlist }: { playlist: LivingDetail | null }) {
           <Section title="Order and size">
             <ShapeFields form={form} set={set} errors={shown} />
           </Section>
-          <div className="flex gap-2">
+          <div className="flex items-center gap-2">
             <Button type="submit" variant="primary" busy={busy} busyLabel="Saving">
               {playlist ? "Save" : "Create"}
             </Button>
             <AppLink to={playlist ? playlistPath(playlist.kind) : "/playlists"} className={buttonClass({ variant: "ghost" })}>
               Cancel
             </AppLink>
+            <PreviewCount preview={preview} input={ruleInput} />
           </div>
         </div>
-        <Preview input={ruleInput} id={playlist?.kind ?? null} />
+        <Preview input={ruleInput} id={playlist?.kind ?? null} preview={preview} />
       </form>
     </Page>
   );

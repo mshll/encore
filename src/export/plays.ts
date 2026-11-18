@@ -45,10 +45,12 @@ export function* playBatches(db: Db, batch = BATCH): Generator<ExportedPlay[]> {
   }
 }
 
-/** One CSV field (RFC 4180): quoted when it holds a comma, quote or line break, with quotes doubled. */
+const FORMULA_START = /^[=+\-@\t\r]/;
+
+/** One CSV field (RFC 4180): quoted when it holds a comma, quote or line break, with quotes doubled. Text a spreadsheet would run as a formula gets a leading `'`. */
 export function csvField(value: string | number | null): string {
   if (value === null) return "";
-  const text = String(value);
+  const text = typeof value === "string" && FORMULA_START.test(value) ? `'${value}` : String(value);
   return /[",\r\n]/.test(text) ? `"${text.replaceAll('"', '""')}"` : text;
 }
 

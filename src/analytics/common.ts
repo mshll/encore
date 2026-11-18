@@ -167,7 +167,7 @@ export type SongRow = StatsRow & {
   album_art_url: string | null;
 };
 
-export const hours = (ms: number) => Math.round(ms / 36_000) / 100;
+export const hours = (ms: number) => ms / 3_600_000;
 export const rate = (n: number, d: number) => (d ? Math.round((n / d) * 1000) / 1000 : null);
 export const iso = (ts: number | null | undefined) => (ts == null ? null : new Date(ts).toISOString());
 

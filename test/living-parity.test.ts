@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { createHash } from "node:crypto";
 import type { Db } from "../src/db/client";
 import { picks, releases, releaseTracks, type LivingKind } from "../src/db/schema";
 import { livingCoverKey } from "../src/living/cover";
@@ -95,4 +96,15 @@ test("built-in cover keys are the ones already uploaded, so no cover is drawn or
   const keys = HAND_WRITTEN.map((kind) => livingCoverKey(LIVING[kind]));
 
   expect(keys).toEqual(["fbf7ef747f464855", "562c55763218a67d", "40de48e57c3657e6", "2ca0fdea2adae85a", "7fef2e5043bf55ca", "a112e81b2d950823"]);
+});
+
+test("a rule playlist's cover key changes only when its name is too long for the cover", () => {
+  const cover = LIVING[HAND_WRITTEN[0]!].cover;
+  const unclamped = (name: string) => createHash("sha256").update(JSON.stringify([1, name, cover.style, cover.colours])).digest("hex").slice(0, 16);
+  const short = "Late drive";
+  const long = "Songs I kept coming back to on the long drives home from the coast every summer";
+
+  const keys = [livingCoverKey({ id: "u1", name: short, cover }), livingCoverKey({ id: "u2", name: long, cover })];
+
+  expect([keys[0] === unclamped(short), keys[1] === unclamped(long)]).toEqual([true, false]);
 });

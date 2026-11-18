@@ -316,7 +316,7 @@ export const useSets = () =>
 /** `id` 0 reads nothing (a caller with no set open). */
 export const useSet = (id: number) => useQuery({ queryKey: ["sets", id], queryFn: () => get<SetDetail>(`/api/sets/${id}`), retry: false, enabled: id > 0 });
 
-export const usePicks = (week?: string) => useQuery({ queryKey: ["picks", week ?? "current"], queryFn: () => get<PicksWeek>("/api/picks", { week }) });
+export const usePicks = (week?: string, enabled = true) => useQuery({ queryKey: ["picks", week ?? "current"], queryFn: () => get<PicksWeek>("/api/picks", { week }), enabled });
 
 export const usePickWeeks = () =>
   useQuery({

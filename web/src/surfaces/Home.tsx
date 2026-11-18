@@ -30,7 +30,6 @@ import { StartSessionButton } from "../ui/StartSessionButton";
 import { PlaylistRows, PlaylistRowsSkeleton } from "./playlists/shared";
 
 const weekdayShort = (day: string) => WEEKDAYS_SHORT[(new Date(`${day}T00:00:00Z`).getUTCDay() + 6) % 7]!;
-const shortHours = (h: number) => (h * 60 < 60 ? `${Math.round(h * 60)} min` : `${fmtHoursValue(h)} h`);
 const hoursText = (h: number) => {
   const p = hoursParts(h);
   return `${p.value} ${p.unit}`;
@@ -40,13 +39,13 @@ const hoursText = (h: number) => {
 function WeekLine({ week }: { week: WeekSoFar }) {
   const { usual } = week;
   if (week.hours === 0)
-    return <p className="text-secondary text-pretty">{usual && usual.hours > 0 ? `Nothing played yet. By now you usually have ${shortHours(usual.hours)}.` : "Nothing played yet."}</p>;
+    return <p className="text-secondary text-pretty">{usual && usual.hours > 0 ? `Nothing played yet. By now you usually have ${fmtHours(usual.hours)}.` : "Nothing played yet."}</p>;
   if (!usual) return <p className="text-secondary">{plural(week.listens, "play", "plays")}</p>;
   return (
     <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-body text-primary">
       <InlinePair now={week.hours} before={usual.hours} label={`${hoursText(week.hours)}, against a usual ${hoursText(usual.hours)} by now`} />
       <InlineChange now={week.hours} before={usual.hours} />
-      <span className="min-w-0 text-secondary">against a usual {shortHours(usual.hours)} by now</span>
+      <span className="min-w-0 text-secondary">against a usual {fmtHours(usual.hours)} by now</span>
     </p>
   );
 }

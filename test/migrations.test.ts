@@ -173,4 +173,32 @@ describe("migrations", () => {
       spend: [{ usd: 1.5 }],
     });
   });
+
+  test("a database at 0019 drops every recap and keeps recap playlists and share links", () => {
+    const dir = mkdtempSync(join(tmpdir(), "encore-mig-"));
+    const partial = join(dir, "drizzle");
+    cpSync(folder, partial, { recursive: true });
+    const journal = JSON.parse(readFileSync(join(partial, "meta/_journal.json"), "utf8"));
+    journal.entries = journal.entries.slice(0, 20);
+    writeFileSync(join(partial, "meta/_journal.json"), JSON.stringify(journal));
+    const path = join(dir, "dev.db");
+    const old = new Database(path, { create: true });
+    migrate(drizzle(old), { migrationsFolder: partial });
+    old.run("insert into digests (id, kind, period_key, from_day, to_day, facts, text, model, created_at) values (7, 'monthly', '2026-02', '2026-02-01', '2026-02-28', '{}', 't', 'm', 0)");
+    old.run("insert into recap_playlists (kind, period_key, playlist_id, playlist_url, source, saved_at) values ('monthly', '2026-02', 'p1', 'https://open.spotify.com/playlist/p1', 'recap', 0)");
+    old.run("insert into shares (token_hash, kind, ref_id, snapshot, created_at) values ('h', 'recap', 7, '{\"label\":\"February 2026\"}', 0)");
+    old.close();
+
+    const db = openDb(path).$client;
+
+    expect({
+      recaps: db.query("select count(*) as n from digests").get(),
+      playlists: db.query("select playlist_id from recap_playlists").all(),
+      shares: db.query("select ref_id, snapshot from shares").all(),
+    }).toEqual({
+      recaps: { n: 0 },
+      playlists: [{ playlist_id: "p1" }],
+      shares: [{ ref_id: 7, snapshot: '{"label":"February 2026"}' }],
+    });
+  });
 });

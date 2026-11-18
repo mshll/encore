@@ -116,8 +116,8 @@ export function Chat({ variant, empty }: { variant: "panel" | "page"; empty?: Re
       composer={composer}
       empty={
         <>
-          <Starters />
           {empty}
+          <Starters />
         </>
       }
       follow={`${threadKey(thread)}|${pending ?? ""}|${chat.finished?.thread ?? ""}`}
