@@ -7,6 +7,12 @@ const compact = new Intl.NumberFormat("en", { notation: "compact", maximumFracti
 export const fmtInt = (n: number) => int.format(n);
 export const fmtCompact = (n: number) => (n < 10_000 ? int.format(n) : compact.format(n));
 
+export function fmtBytes(bytes: number): string {
+  if (bytes < 1_000_000) return `${one.format(bytes / 1000)} KB`;
+  if (bytes < 1_000_000_000) return `${one.format(bytes / 1_000_000)} MB`;
+  return `${one.format(bytes / 1_000_000_000)} GB`;
+}
+
 export function fmtHours(hours: number): string {
   const minutes = hours * 60;
   if (minutes < 1) return hours > 0 ? "<1 min" : "0 min";

@@ -302,7 +302,7 @@ export type ImportResult = {
 
 export type Session = { authenticated: boolean; setupRequired: boolean; setupTokenConfigured: boolean };
 
-export type SettingGroup = "spotify" | "locale" | "claude" | "picks" | "digest" | "dj" | "discord" | "mcp" | "access" | "jobs" | "history";
+export type SettingGroup = "spotify" | "locale" | "claude" | "picks" | "digest" | "dj" | "discord" | "mcp" | "access" | "jobs" | "history" | "backup" | "alerts";
 export type SettingType = "string" | "integer" | "number" | "boolean" | "enum" | "timezone" | "weekdays" | "date";
 export type SettingUnit = "ms" | "seconds" | "minutes" | "hours" | "days" | "usd" | "weekday" | "hour";
 export type SettingValue = string | number | boolean | number[];
@@ -329,6 +329,15 @@ export type SettingField = {
 
 export type SecretStorage = { available: boolean; envVar: "SECRETS_KEY" };
 export type Settings = { groups: { id: SettingGroup; fields: SettingField[] }[]; secretStorage: SecretStorage };
+
+export type OpsJob = { lastRunAt: string | null; lastSuccessAt: string | null; lastError: string | null };
+export type BackupFile = { name: string; size: number; createdAt: string | null };
+export type Backups = { local: BackupFile[]; remote: BackupFile[] | null; remoteError: string | null; running: boolean; job: OpsJob };
+export type BackupRun = { backup: { file: string; size: number; pruned: string[]; remote: { uploaded: string; pruned: string[] } | null }; job: OpsJob };
+
+export type AlertChannel = "ntfy" | "discord_webhook" | "discord_channel";
+export type Alerts = { channels: AlertChannel[]; open: { key: string; title: string; since: string }[]; job: OpsJob };
+export type AlertTest = { results: { channel: AlertChannel; ok: boolean; error?: string }[] };
 
 export type PlaysBefore = { plays: number; firstDay: string | null; lastDay: string | null; hours: number };
 export type HistoryStartResult = Settings & { removed: PlaysBefore; snapshot: string | null };

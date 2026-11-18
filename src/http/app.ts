@@ -18,6 +18,7 @@ import { libraryRoutes } from "./routes/library";
 import { livingRoutes } from "./routes/living";
 import { mcpRoutes } from "./routes/mcp";
 import { mcpAccessRoutes, oauthRoutes, wellKnownRoutes } from "./routes/oauth";
+import { alertRoutes, backupRoutes, exportRoutes } from "./routes/ops";
 import { onboardingRoutes } from "./routes/onboarding";
 import { playerRoutes } from "./routes/player";
 import { radarRoutes } from "./routes/radar";
@@ -108,6 +109,9 @@ export function createApp(deps: Deps) {
   app.use("/api/*", requireSession);
   app.route("/api/status", statusRoutes);
   app.route("/api/settings", settingsRoutes);
+  app.route("/api/backups", backupRoutes);
+  app.route("/api/export", exportRoutes);
+  app.route("/api/alerts", alertRoutes);
   app.route("/api/onboarding", onboardingRoutes);
   app.route("/api/spotify", spotifyRoutes);
   app.route("/api/stats", statsRoutes);

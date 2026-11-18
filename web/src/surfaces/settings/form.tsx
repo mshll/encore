@@ -144,6 +144,8 @@ export function useSettingsForm(keys: string[]) {
       if (next.length === 0) showToast("Saved");
       void queryClient.invalidateQueries({ queryKey: ["status"] });
       void queryClient.invalidateQueries({ queryKey: ["onboarding"] });
+      void queryClient.invalidateQueries({ queryKey: ["alerts"] });
+      void queryClient.invalidateQueries({ queryKey: ["backups"] });
       return true;
     } catch (error) {
       if (error instanceof ApiError && error.code === "invalid_settings" && Array.isArray(error.details)) {

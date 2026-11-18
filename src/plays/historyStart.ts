@@ -1,6 +1,6 @@
-import { mkdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { lt, sql } from "drizzle-orm";
+import { snapshotName, writeSnapshot } from "../backup/snapshot";
 import type { Db, DbOrTx } from "../db/client";
 import { plays } from "../db/schema";
 import { SettingsValidationError, type SettingsStore } from "../settings/store";
@@ -24,10 +24,9 @@ export function playsBefore(db: DbOrTx, day: string): PlaysBefore {
 }
 
 function snapshot(db: Db, dir: string, at: number): string {
-  const name = `encore-${new Date(at).toISOString().replace(/\.\d{3}Z$/, "Z").replaceAll(":", "-")}.db`;
+  const name = snapshotName(at);
   try {
-    mkdirSync(dir, { recursive: true });
-    db.run(sql`vacuum into ${join(dir, name)}`);
+    writeSnapshot(db, dir, name);
   } catch (error) {
     throw new SnapshotError(error instanceof Error ? error.message : String(error));
   }

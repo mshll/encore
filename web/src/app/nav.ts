@@ -83,6 +83,8 @@ export const SETTINGS_TABS: SurfaceTab[] = [
   { path: "/settings/claude", label: "Claude" },
   { path: "/settings/integrations", label: "Integrations" },
   { path: "/settings/jobs", label: "Jobs" },
+  { path: "/settings/data", label: "Data" },
+  { path: "/settings/alerts", label: "Alerts" },
   { path: "/settings/account", label: "Account" },
 ];
 

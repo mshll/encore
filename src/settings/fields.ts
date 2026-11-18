@@ -2,7 +2,7 @@ import { z } from "zod";
 import { MAX_SET_ITEMS } from "../library/constraints";
 import { localTime } from "../plays/localTime";
 
-export const SETTING_GROUPS = ["spotify", "locale", "claude", "picks", "digest", "dj", "discord", "mcp", "access", "jobs", "history"] as const;
+export const SETTING_GROUPS = ["spotify", "locale", "claude", "picks", "digest", "dj", "discord", "mcp", "access", "jobs", "history", "backup", "alerts"] as const;
 export type SettingGroup = (typeof SETTING_GROUPS)[number];
 
 export type SettingType = "string" | "integer" | "number" | "boolean" | "enum" | "timezone" | "weekdays" | "date";
@@ -86,6 +86,8 @@ const choice = (base: Base, options: readonly [string, ...string[]], def: string
   schema: z.enum(options),
   options,
 });
+
+const webUrl = z.url({ protocol: /^https?$/, message: "expected an http or https address" }).transform((url) => url.replace(/\/+$/, ""));
 
 const snowflake = z.string().regex(/^\d+$/, "expected a numeric Discord id");
 const token = z.string().min(24, "must be at least 24 characters");
@@ -178,6 +180,25 @@ export function settingFields(models: readonly [string, ...string[]]): SettingFi
     numeric({ key: "radarBaselineDays", group: "jobs", env: "RADAR_BASELINE_DAYS" }, "integer", 30, { min: 0, unit: "days" }),
     numeric({ key: "librarySyncHours", group: "jobs", env: "LIBRARY_SYNC_HOURS" }, "number", 24, { min: 1, unit: "hours" }),
     numeric({ key: "libraryPageSeconds", group: "jobs", env: "LIBRARY_PAGE_SECONDS" }, "number", 20, { min: 2, unit: "seconds" }),
+
+    numeric({ key: "backupIntervalHours", group: "backup", env: "BACKUP_INTERVAL_HOURS" }, "number", 24, { min: 1, unit: "hours" }),
+    numeric({ key: "backupKeep", group: "backup", env: "BACKUP_KEEP" }, "integer", 14, { min: 1, max: 1000 }),
+    text({ key: "backupS3Endpoint", group: "backup", env: "BACKUP_S3_ENDPOINT" }, webUrl),
+    text({ key: "backupS3Bucket", group: "backup", env: "BACKUP_S3_BUCKET" }, z.string().regex(/^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$/, "expected a bucket name")),
+    text({ key: "backupS3Region", group: "backup", env: "BACKUP_S3_REGION" }, z.string().regex(/^[a-z0-9-]{1,32}$/, "expected a region such as us-east-1 or auto")),
+    text({ key: "backupS3AccessKeyId", group: "backup", env: "BACKUP_S3_ACCESS_KEY_ID" }, z.string().min(1), { secret: true }),
+    text({ key: "backupS3SecretAccessKey", group: "backup", env: "BACKUP_S3_SECRET_ACCESS_KEY" }, z.string().min(1), { secret: true }),
+
+    text({ key: "alertNtfyUrl", group: "alerts", env: "ALERT_NTFY_URL" }, webUrl, { default: "https://ntfy.sh" }),
+    text({ key: "alertNtfyTopic", group: "alerts", env: "ALERT_NTFY_TOPIC" }, z.string().regex(/^[A-Za-z0-9_-]{1,64}$/, "expected letters, digits, - or _"), { secret: true }),
+    text({ key: "alertNtfyToken", group: "alerts", env: "ALERT_NTFY_TOKEN" }, z.string().min(1), { secret: true }),
+    text(
+      { key: "alertDiscordWebhookUrl", group: "alerts", env: "ALERT_DISCORD_WEBHOOK_URL" },
+      z.url({ protocol: /^https$/, message: "expected an https webhook address" }),
+      { secret: true },
+    ),
+    { key: "alertDiscordChannel", group: "alerts", env: "ALERT_DISCORD_CHANNEL", type: "boolean", secret: false, default: false, schema: z.boolean() },
+    numeric({ key: "alertPollStaleHours", group: "alerts", env: "ALERT_POLL_STALE_HOURS" }, "number", 2, { min: 0.25, max: 168, unit: "hours" }),
   ];
 }
 

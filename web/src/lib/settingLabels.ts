@@ -42,6 +42,19 @@ export const SETTING_LABELS: Record<string, { label: string; hint?: string }> = 
   radarBaselineDays: { label: "Look back on an artist’s first check" },
   librarySyncHours: { label: "Sync the library every" },
   libraryPageSeconds: { label: "Gap between library pages" },
+  backupIntervalHours: { label: "Back up every" },
+  backupKeep: { label: "Backups to keep", hint: "Here and in the bucket." },
+  backupS3Endpoint: { label: "Endpoint" },
+  backupS3Bucket: { label: "Bucket" },
+  backupS3Region: { label: "Region" },
+  backupS3AccessKeyId: { label: "Access key ID" },
+  backupS3SecretAccessKey: { label: "Secret access key" },
+  alertNtfyUrl: { label: "Server" },
+  alertNtfyTopic: { label: "Topic" },
+  alertNtfyToken: { label: "Access token", hint: "Only for a topic that needs sign-in." },
+  alertDiscordWebhookUrl: { label: "Webhook URL" },
+  alertDiscordChannel: { label: "Post to the bot’s channel", hint: "The channel set in Integrations." },
+  alertPollStaleHours: { label: "Plays not logged for" },
 };
 
 export const settingLabel = (key: string) => SETTING_LABELS[key]?.label ?? key;

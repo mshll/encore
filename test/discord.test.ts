@@ -5,6 +5,7 @@ import { errorMessage } from "../src/discord/interactions";
 import { InteractionType, plain, type Interaction } from "../src/discord/types";
 import { createApp } from "../src/http/app";
 import { createJobs } from "../src/jobs/definitions";
+import { createOps } from "../src/ops";
 import { createServices } from "../src/services";
 import { SpotifyAuth } from "../src/spotify/auth";
 import { SpotifyClient } from "../src/spotify/client";
@@ -30,7 +31,9 @@ function setup(respond: (call: FetchCall) => Response | undefined = () => undefi
   const spotify = new SpotifyClient(db, spotifyAuth, settings, fn);
   const services = createServices(db, config, settings, spotify);
   const discord = createDiscord(settings.get().discord!, { db, config, settings, services, now: Date.now }, fn);
-  const app = createApp({ db, config, settings, passkeys: new Passkeys(db, config), spotifyAuth, spotify, jobs: createJobs(db, settings, spotifyAuth, spotify, services), services, discord: { current: () => discord }, now: Date.now });
+  const discordSource = { current: () => discord };
+  const ops = createOps({ db, config, settings, spotifyAuth, spotify, discord: discordSource, fetchFn: fn });
+  const app = createApp({ db, config, settings, passkeys: new Passkeys(db, config), spotifyAuth, spotify, jobs: createJobs(db, settings, spotifyAuth, spotify, services), services, discord: discordSource, ops, now: Date.now });
   const post = async (interaction: Partial<Interaction>, headers?: Record<string, string>) => {
     const body = JSON.stringify({ id: "i1", token: "tok", application_id: "123456789012345678", ...interaction });
     return app.request("/api/discord/interactions", { method: "POST", body, headers: { "content-type": "application/json", ...(headers ?? (await sign(body))) } });

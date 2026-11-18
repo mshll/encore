@@ -3,6 +3,8 @@ import { loadConfig, type Config } from "../src/config";
 import { DiscordHost } from "../src/discord";
 import { createApp } from "../src/http/app";
 import { createJobs } from "../src/jobs/definitions";
+import type { RemoteStore } from "../src/backup/remote";
+import { createOps } from "../src/ops";
 import { createServices } from "../src/services";
 import { SettingsStore } from "../src/settings/store";
 import { SpotifyAuth } from "../src/spotify/auth";
@@ -67,7 +69,7 @@ export function jsonResponse(body: unknown, status = 200, headers: Record<string
   return new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json", ...headers } });
 }
 
-export type TestAppOptions = { llmKeyCheck?: LlmKeyCheck };
+export type TestAppOptions = { llmKeyCheck?: LlmKeyCheck; remote?: () => RemoteStore };
 
 export function testApp(env: Record<string, string> = {}, fetchFn: typeof fetch = fetch, transport: LlmTransport | null = null, options: TestAppOptions = {}) {
   const db = testDb();
@@ -79,12 +81,13 @@ export function testApp(env: Record<string, string> = {}, fetchFn: typeof fetch 
   const jobs = createJobs(db, settings, spotifyAuth, spotify, services);
   const llm = services.llm;
   const discord = new DiscordHost(settings, { db, config, settings, services, now: Date.now }, fetchFn);
-  const app = createApp({ db, config, settings, passkeys: new Passkeys(db, config), spotifyAuth, spotify, jobs, services, discord, now: Date.now });
+  const ops = createOps({ db, config, settings, spotifyAuth, spotify, discord, fetchFn, remote: options.remote });
+  const app = createApp({ db, config, settings, passkeys: new Passkeys(db, config), spotifyAuth, spotify, jobs, services, discord, ops, now: Date.now });
   const request = (path: string, init: RequestInit & { json?: unknown } = {}) => {
     const { json, ...rest } = init;
     return app.request(path, json === undefined ? rest : { method: "POST", ...rest, body: JSON.stringify(json), headers: { "content-type": "application/json", ...rest.headers } });
   };
-  return { db, config, settings, app, request, services, spotify, spotifyAuth, jobs, llm, discord };
+  return { db, config, settings, app, request, services, spotify, spotifyAuth, jobs, llm, discord, ops };
 }
 
 export type FetchCall = { url: string; method: string; body: unknown };

@@ -9,6 +9,8 @@ const getOrNull = <T>(path: string, query: Record<string, string>) =>
     throw error;
   });
 import type {
+  Alerts,
+  Backups,
   LivingDetail,
   LivingKind,
   McpConnection,
@@ -308,6 +310,10 @@ export const useLatestRecapKey = (kind: RecapKind) => useQuery({ queryKey: ["dig
 export const useSpend = () => useQuery({ queryKey: ["spend"], queryFn: () => get<Spend>("/api/llm/spend", { limit: 12 }) });
 
 export const useSettings = () => useQuery({ queryKey: ["settings"], queryFn: () => get<Settings>("/api/settings") });
+
+export const useBackups = () => useQuery({ queryKey: ["backups"], queryFn: () => get<Backups>("/api/backups") });
+
+export const useAlerts = () => useQuery({ queryKey: ["alerts"], queryFn: () => get<Alerts>("/api/alerts"), refetchInterval: 60_000 });
 
 export const useMcpConsent = (id: string) => useQuery({ queryKey: ["mcp-consent", id], queryFn: () => getOrNull<McpConsentRequest>(`/api/mcp/requests/${encodeURIComponent(id)}`, {}), retry: false, staleTime: Infinity });
 

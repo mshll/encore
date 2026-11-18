@@ -23,10 +23,12 @@ import { Skeleton } from "../ui/Skeleton";
 import { describeError, ErrorState } from "../ui/States";
 import { TabNav } from "../ui/TabNav";
 import { SettingsBlock, useSettingsForm, type SettingsForm } from "./settings/form";
+import { ALERT_SECRET_KEYS, AlertsTab } from "./settings/Alerts";
+import { DataTab } from "./settings/Data";
 import { HistoryStart } from "./settings/HistoryStart";
 import { McpConnections } from "./settings/McpConnections";
 
-type Tab = "general" | "spotify" | "claude" | "integrations" | "jobs" | "account";
+type Tab = "general" | "spotify" | "claude" | "integrations" | "jobs" | "data" | "alerts" | "account";
 
 const usd = (n: number) => `$${n.toFixed(2)}`;
 
@@ -583,6 +585,18 @@ function TabBody({ tab }: { tab: Tab }) {
     claude: <ClaudeTab status={s} />,
     integrations: <IntegrationsTab status={s} />,
     jobs: <JobsTab status={s} />,
+    data: (
+      <>
+        <SecretsNotice keys={["backupS3AccessKeyId", "backupS3SecretAccessKey"]} />
+        <DataTab />
+      </>
+    ),
+    alerts: (
+      <>
+        <SecretsNotice keys={ALERT_SECRET_KEYS} />
+        <AlertsTab />
+      </>
+    ),
     account: <AccountTab />,
   };
   return <>{tabs[tab]}</>;

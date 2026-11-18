@@ -10,6 +10,7 @@ import { createJobs, enabledJobs } from "./jobs/definitions";
 import { startScheduler } from "./jobs/scheduler";
 import { recoverInterrupted } from "./library/apply";
 import { refreshProposals } from "./library/rules";
+import { createOps, opsJobs } from "./ops";
 import { createServices } from "./services";
 import { SettingsStore } from "./settings/store";
 import { SpotifyAuth } from "./spotify/auth";
@@ -32,10 +33,11 @@ const publish = async () => {
   return current?.config.botToken && current.config.channelId ? publishAssistantPosts(current, discordCtx) : undefined;
 };
 const assistantJobs = createAssistantJobs(services.assistant, spotifyAuth, publish);
-const app = createApp({ db, config, settings, passkeys: new Passkeys(db, config), spotifyAuth, spotify, jobs, services, discord, now: Date.now });
+const ops = createOps({ db, config, settings, spotifyAuth, spotify, discord });
+const app = createApp({ db, config, settings, passkeys: new Passkeys(db, config), spotifyAuth, spotify, jobs, services, discord, ops, now: Date.now });
 
 const server = Bun.serve({ hostname: config.host, port: config.port, fetch: app.fetch, maxRequestBodySize: IMPORT_BODY_BYTES });
-const scheduler = config.jobsEnabled ? startScheduler(db, [...enabledJobs(jobs, config), assistantJobs.picks, assistantJobs.digest, assistantJobs.outcomes, assistantJobs.library]) : null;
+const scheduler = config.jobsEnabled ? startScheduler(db, [...enabledJobs(jobs, config), assistantJobs.picks, assistantJobs.digest, assistantJobs.outcomes, assistantJobs.library, ...opsJobs(ops, config)]) : null;
 settings.subscribe(() => scheduler?.reschedule());
 console.log(`encore listening on http://${server.hostname}:${server.port} (public ${config.publicBaseUrl})`);
 const startupDiscord = discord.current();

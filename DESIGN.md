@@ -16,9 +16,9 @@ Listening                      Play                        Secondary            
 │   ├── Artists   /artists     │   ├── Most played lately    └── Setup   /setup          ├── claude
 │   ├── Albums    /albums      │   ├── New from your artists                             ├── integrations
 │   ├── Songs     /songs       │   ├── This month in past years                          ├── jobs
-│   │                          │   └── This year so far  (/for-you/:kind)                └── account
-│   ├── Forgotten /forgotten   ├── Sets       /sets
-│   │                          │   └── /sets/:id
+│   │                          │   └── This year so far  (/for-you/:kind)                ├── data
+│   ├── Forgotten /forgotten   ├── Sets       /sets                                      ├── alerts
+│   │                          │   └── /sets/:id                                         └── account
 │   ├── /music/artist/:name    └── Ask        /ask
 │   ├── /music/album/:artist/:album  └── /ask/:id
 │   └── /music/song/:songKey
@@ -71,7 +71,7 @@ The source of truth for paths, labels, icons and shortcuts is `web/src/app/nav.t
 | Library: plan `/library/plans/:id` | What exactly would this plan change? | Apply | `library/plans/:id` (paged by status), `library/plans/:id/items`, `.../apply`, `.../dismiss`, `.../restore`, `library/batches`, `library/conversations/:id` and its run | Built |
 | Library: Instructions `/library/instructions` | What does Claude plan on a schedule, and what is kept out of picks? | Add an instruction | `library/standing`, `blocks` | Built |
 | Setup `/setup` | Is encore connected and fed? | Do the next missing step | `onboarding`, `spotify/authorize`, `import`, `settings` | Built |
-| Settings `/settings/*` | How does encore run? | Save a change | `settings`, `settings/claude/verify`, `settings/discord/register`, `spotify/disconnect`, `spotify/poll`, `llm/spend`, `auth/logout`, passkey routes | Built |
+| Settings `/settings/*` | How does encore run? | Save a change | `settings`, `settings/claude/verify`, `settings/discord/register`, `backups`, `export/plays`, `alerts`, `spotify/disconnect`, `spotify/poll`, `llm/spend`, `auth/logout`, passkey routes | Built |
 
 Built surfaces are the reference implementations: Home (`surfaces/Home.tsx`), Plays (list-led), Patterns: When (chart-led). Music lists and the entity pages (`surfaces/Music.tsx`, `surfaces/entity/*`) follow Plays and Home's Most played.
 

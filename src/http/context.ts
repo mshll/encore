@@ -1,6 +1,8 @@
 import type { Config } from "../config";
 import type { Db } from "../db/client";
+import type { AlertMonitor } from "../alerts/monitor";
 import type { Passkeys } from "../auth/passkeys";
+import type { Backups } from "../backup/service";
 import type { DiscordSource } from "../discord";
 import type { Jobs } from "../jobs/definitions";
 import type { Services } from "../services";
@@ -18,6 +20,7 @@ export type Deps = {
   jobs: Jobs;
   services: Services;
   discord: DiscordSource;
+  ops: { backups: Backups; alerts: AlertMonitor };
   now: () => number;
 };
 

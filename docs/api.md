@@ -274,6 +274,8 @@ Fields by group (env var in brackets; `*` = secret):
 | `mcp` | `mcpToken`* [MCP_TOKEN], `mcpOAuth` [MCP_OAUTH, `true` or `false`] |
 | `access` | `adminToken`* [ADMIN_TOKEN] |
 | `history` | `historyStart` [HISTORY_START, e.g. `2024-01-01`] |
+| `backup` | `backupIntervalHours`, `backupKeep`, `backupS3Endpoint`, `backupS3Bucket`, `backupS3Region`, `backupS3AccessKeyId`*, `backupS3SecretAccessKey`* [BACKUP_*] |
+| `alerts` | `alertNtfyUrl`, `alertNtfyTopic`*, `alertNtfyToken`*, `alertDiscordWebhookUrl`*, `alertDiscordChannel`, `alertPollStaleHours` [ALERT_*] |
 | `jobs` | `pollIntervalSeconds`, `enrichIntervalSeconds`, `enrichBatchSize`, `artIntervalSeconds`, `spotifyMinIntervalMs`, `quotaBackoffHours`, `watcherActiveSeconds`, `watcherIdleSeconds`, `watcherBackoffMaxSeconds`, `radarMinListens`, `radarIntervalMinutes`, `radarArtistsPerRun`, `radarRecheckDays`, `radarBaselineDays`, `librarySyncHours`, `libraryPageSeconds` |
 
 Defaults and bounds match the table in [configuration.md](configuration.md).
@@ -337,6 +339,77 @@ Body `{ "apiKey"?: string }` (send `{}` to check the stored key). Asks the Anthr
 ### `POST /api/settings/discord/register`
 
 Body `{}`. Registers the guild commands now. `200 { "registered": 9, "commands": ["now", "..."] }`. `409 discord_not_configured` (application id, public key or owner id missing), `409 discord_registration_unavailable` (bot token or guild id missing), `502 discord_failed`.
+
+## Backups
+
+Scheduled snapshots of the database, written with SQLite `VACUUM INTO` to `backups/` next to the database file as `encore-backup-<UTC timestamp>.db`. The `backup` job runs every `backupIntervalHours` (default 24) and keeps the newest `backupKeep` (default 14); older scheduled backups are deleted. Snapshots taken before a history-start delete (`encore-<UTC timestamp>.db`) share the directory, are listed, and are never pruned.
+
+When `backupS3Endpoint`, `backupS3Bucket`, `backupS3AccessKeyId` and `backupS3SecretAccessKey` are set, each backup is also uploaded to that S3-compatible bucket under its file name, and the bucket keeps the same newest `backupKeep`. A failed upload fails the run after the local copy is saved. A failure is the job's `lastError`, and raises an alert (see Alerts).
+
+### `GET /api/backups`
+
+```json
+{
+  "local": [{ "name": "encore-backup-2026-11-18T03-00-00Z.db", "size": 52428800, "createdAt": "2026-11-18T03:00:01.000Z" }],
+  "remote": [{ "name": "encore-backup-2026-11-18T03-00-00Z.db", "size": 52428800, "createdAt": "2026-11-18T03:00:05.000Z" }],
+  "remoteError": null,
+  "running": false,
+  "job": { "lastRunAt": "2026-11-18T03:00:00.000Z", "lastSuccessAt": "2026-11-18T03:00:05.000Z", "lastError": null }
+}
+```
+
+Newest first. `remote` is `null` when no bucket is set. When listing the bucket fails, `remote` is `[]` and `remoteError` says why (no credentials in it).
+
+### `POST /api/backups`
+
+No body. Runs a backup now, as the job would, and records it in the job state. `200 { "backup": { "file", "size", "pruned": [names], "remote": { "uploaded", "pruned" } | null }, "job" }`. `409 backup_running` while one runs; `502 backup_failed` with the reason as the message.
+
+### `GET /api/backups/:name/download`
+
+Query `from` `local` (default) or `remote`. Streams the file as an attachment (`application/vnd.sqlite3`). Only names encore writes (`encore-*.db`) are served; anything else, or a missing file, is `404 backup_not_found`.
+
+## Export
+
+### `GET /api/export/plays`
+
+Query `format` `csv` (default) or `json`. Every stored play, oldest first, streamed as an attachment named `encore-plays-<local day>.<format>`. Columns (CSV header, JSON keys):
+
+| Column | Value |
+| --- | --- |
+| `timestamp` | UTC, ISO 8601 |
+| `day`, `hour` | Local day and hour in the timezone the play was stored with |
+| `kind` | `track` or `episode` |
+| `name`, `artist`, `album` | Song, artist and album; for an episode its name and show, no album |
+| `uri` | Track or episode URI |
+| `msPlayed` | Milliseconds played; empty (`null`) for recently-played rows |
+| `outcome` | `through`, `early`, `midway`, `interrupted` (see Metric definitions), empty when unknown or for episodes |
+| `device`, `source` | The device enum and `export`, `api` or `live` |
+
+CSV follows RFC 4180: CRLF line ends, fields with a comma, quote or line break quoted, quotes doubled. JSON is one array of objects. `ip_addr` is never stored, so it is never exported.
+
+## Alerts
+
+The `alerts` job checks once a minute and sends one alert when an incident starts and one ("Resolved: ...") when it clears, to every channel set: ntfy (`alertNtfyUrl` + `alertNtfyTopic`, `alertNtfyToken` as a bearer token when set), a Discord webhook (`alertDiscordWebhookUrl`), and the Discord channel used for posts (`alertDiscordChannel`, needs the bot token and channel ID). An alert no channel accepted is tried again on the next check; channel failures are the job's `lastError`. Alert text never holds a secret setting's value.
+
+| Incident | Starts | Clears |
+| --- | --- | --- |
+| Not logging plays | Spotify is connected and the poll job has not succeeded for `alertPollStaleHours` (default 2) | The poll succeeds, or Spotify is disconnected |
+| Spotify sign-in | Refreshing the Spotify token fails (revoked access disconnects Spotify) | Spotify grants a token again |
+| Quota | An endpoint is paused after `QUOTA_EXCEEDED`, one incident per endpoint | The pause ends |
+| Backup | The last backup run failed | A backup succeeds |
+| Claude cap | A Claude key is set and the month's spend reached `monthlyBudgetUsd` | A new month or a higher cap |
+
+### `GET /api/alerts`
+
+```json
+{ "channels": ["ntfy"], "open": [{ "key": "backup", "title": "Backup failed", "since": "2026-11-18T03:01:00.000Z" }], "job": { "lastRunAt": "...", "lastSuccessAt": "...", "lastError": null } }
+```
+
+`channels`: `ntfy`, `discord_webhook`, `discord_channel`, the ones set.
+
+### `POST /api/alerts/test`
+
+No body. Sends a test alert to every channel. `200 { "results": [{ "channel": "ntfy", "ok": true }, { "channel": "discord_webhook", "ok": false, "error": "Discord webhook answered 404" }] }`. `409 alerts_not_configured` when no channel is set.
 
 ## Onboarding
 

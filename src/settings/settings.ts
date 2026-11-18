@@ -24,6 +24,14 @@ export type LlmConfig = {
   constraints: ConstraintDefaults;
 };
 
+export type S3Settings = { endpoint: string; bucket: string; region?: string; accessKeyId: string; secretAccessKey: string };
+
+export type BackupConfig = { intervalMs: number; keep: number; s3: S3Settings | null };
+
+export type NtfyConfig = { url: string; topic: string; token?: string };
+
+export type AlertsConfig = { ntfy: NtfyConfig | null; discordWebhookUrl?: string; discordChannel: boolean; pollStaleMs: number };
+
 /** Settings resolved from env, the settings table and defaults, in the units services use. */
 export type Settings = {
   spotifyClientId?: string;
@@ -57,6 +65,8 @@ export type Settings = {
   /** OAuth sign-in for `/mcp`, for clients such as claude.ai that cannot send a fixed token. */
   mcpOAuth: boolean;
   adminToken?: string;
+  backup: BackupConfig;
+  alerts: AlertsConfig;
 };
 
 /** Read on each use, so a change made from the dashboard reaches every service without a restart. */
@@ -111,6 +121,19 @@ export type RawSettings = {
   radarBaselineDays: number;
   librarySyncHours: number;
   libraryPageSeconds: number;
+  backupIntervalHours: number;
+  backupKeep: number;
+  backupS3Endpoint?: string;
+  backupS3Bucket?: string;
+  backupS3Region?: string;
+  backupS3AccessKeyId?: string;
+  backupS3SecretAccessKey?: string;
+  alertNtfyUrl: string;
+  alertNtfyTopic?: string;
+  alertNtfyToken?: string;
+  alertDiscordWebhookUrl?: string;
+  alertDiscordChannel: boolean;
+  alertPollStaleHours: number;
 };
 
 const SECOND = 1000;
@@ -170,5 +193,19 @@ export function resolveSettings(v: RawSettings, prices: Record<string, ModelPric
     mcpToken: v.mcpToken,
     mcpOAuth: v.mcpOAuth,
     adminToken: v.adminToken,
+    backup: {
+      intervalMs: v.backupIntervalHours * HOUR,
+      keep: v.backupKeep,
+      s3:
+        v.backupS3Endpoint && v.backupS3Bucket && v.backupS3AccessKeyId && v.backupS3SecretAccessKey
+          ? { endpoint: v.backupS3Endpoint, bucket: v.backupS3Bucket, region: v.backupS3Region, accessKeyId: v.backupS3AccessKeyId, secretAccessKey: v.backupS3SecretAccessKey }
+          : null,
+    },
+    alerts: {
+      ntfy: v.alertNtfyTopic ? { url: v.alertNtfyUrl, topic: v.alertNtfyTopic, token: v.alertNtfyToken } : null,
+      discordWebhookUrl: v.alertDiscordWebhookUrl,
+      discordChannel: v.alertDiscordChannel,
+      pollStaleMs: v.alertPollStaleHours * HOUR,
+    },
   };
 }

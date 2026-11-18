@@ -7,7 +7,7 @@ Two kinds of configuration:
 
 To move settings from env vars to the dashboard, use Save them here in Settings (`POST /api/settings/adopt-env`): it stores the current env values without changing them. Then remove those env vars and restart; the stored values apply from then on.
 
-Secrets set from the dashboard (Claude key, Discord bot token, MCP token, admin token) are encrypted with `SECRETS_KEY` before they are stored. Without `SECRETS_KEY` they can only come from env vars. Changing `SECRETS_KEY` makes stored secrets unreadable; save them again.
+Secrets set from the dashboard (Claude key, Discord bot token, MCP token, admin token, S3 keys, ntfy topic and token, Discord webhook) are encrypted with `SECRETS_KEY` before they are stored. Without `SECRETS_KEY` they can only come from env vars. Changing `SECRETS_KEY` makes stored secrets unreadable; save them again.
 
 All env values are validated at boot (the process exits on invalid values). See [.env.example](../.env.example).
 
@@ -33,7 +33,7 @@ All env values are validated at boot (the process exits on invalid values). See 
 | `ART_INTERVAL_SECONDS` | `4` | Seconds between album-art lookups through Spotify's public oEmbed endpoint |
 | `SPOTIFY_MIN_INTERVAL_MS` | `2000` | Minimum spacing between Spotify Web API calls. All calls share one queue; calls made for a request go before calls made by jobs |
 | `QUOTA_BACKOFF_HOURS` | `12` | Pause after a Spotify `QUOTA_EXCEEDED` 429 |
-| `JOBS_DISABLED` | empty | Comma-separated job names to skip: `poll`, `enrich`, `art`, `watch`, `radar`, `library`, `living` |
+| `JOBS_DISABLED` | empty | Comma-separated job names to skip: `poll`, `enrich`, `art`, `watch`, `radar`, `library`, `living`, `backup`, `alerts` |
 | `WATCHER_ACTIVE_SECONDS`, `WATCHER_IDLE_SECONDS`, `WATCHER_BACKOFF_MAX_SECONDS` | `15`, `60`, `900` | Player watcher cadence while playing, while idle, and the longest back-off after a 429 |
 | `DJ_SKIP_TRIGGER` | `2` | Consecutive skips in a DJ session that trigger a re-plan |
 | `DJ_REPLANNER`, `DJ_REPLAN_TIMEOUT_SECONDS` | `deterministic`, `20` | `llm` re-plans with Claude; any error, refusal, spent budget or timeout falls back to the deterministic plan |
@@ -51,6 +51,13 @@ All env values are validated at boot (the process exits on invalid values). See 
 | `DEFAULT_MAX_PER_ARTIST`, `DEFAULT_MAX_PER_ALBUM`, `DEFAULT_NEW_SONGS` | unset | Default constraints (unset: no limit). A new set copies them, field by field, unless its request gives a value. Caps are 1-80; `DEFAULT_NEW_SONGS` is 0-80, the exact number of songs the owner has never played. DJ sessions not started from a set use the artist and album caps; weekly picks use the album cap |
 | `PICKS_PER_WEEK`, `PICKS_FAR_OUT` | `5`, `1` | Weekly picks, and how many of them are far from the owner's taste |
 | `PICKS_WEEKDAY`, `PICKS_HOUR` | `5`, `10` | When weekly picks run (ISO weekday, local hour) |
+| `BACKUP_INTERVAL_HOURS`, `BACKUP_KEEP` | `24`, `14` | Hours between scheduled backups (min 1) to `backups/` next to the database, and how many to keep (1 to 1000), here and in the bucket |
+| `BACKUP_S3_ENDPOINT`, `BACKUP_S3_BUCKET`, `BACKUP_S3_REGION` | unset | S3-compatible bucket for a copy of each backup. Region is optional (`auto` for Cloudflare R2) |
+| `BACKUP_S3_ACCESS_KEY_ID`, `BACKUP_S3_SECRET_ACCESS_KEY` | unset | Secrets. With the endpoint and bucket, turn the bucket copy on |
+| `ALERT_NTFY_URL`, `ALERT_NTFY_TOPIC`, `ALERT_NTFY_TOKEN` | `https://ntfy.sh`, unset, unset | ntfy server, topic (secret: on a public server it is the only access control) and optional access token (secret). Alerts go to ntfy when the topic is set |
+| `ALERT_DISCORD_WEBHOOK_URL` | unset | Secret. A Discord webhook for alerts |
+| `ALERT_DISCORD_CHANNEL` | `false` | Also post alerts to `DISCORD_CHANNEL_ID` with the bot |
+| `ALERT_POLL_STALE_HOURS` | `2` | Alert when recently played has not been checked for this long while Spotify is connected (0.25 to 168) |
 | `DIGEST_WEEKDAY`, `DIGEST_HOUR` | `5`, `9` | Weekly digest slot; the monthly recap runs on the 1st at `DIGEST_HOUR` |
 
 Weekend days are a setting (`WEEKEND_DAYS`, default Friday and Saturday). Unlike the timezone, a change applies to all stored plays at once: the weekday is stored, the weekend is decided at query time.

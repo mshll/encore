@@ -2,6 +2,7 @@ import { eq, lt } from "drizzle-orm";
 import type { Config } from "../config";
 import type { Db } from "../db/client";
 import { oauthStates, spotifyAuth } from "../db/schema";
+import { setJobState } from "../jobs/state";
 import type { SettingsSource } from "../settings/settings";
 import { SpotifyAuthError, SpotifyNotConfiguredError, SpotifyNotConnectedError } from "./errors";
 
@@ -21,6 +22,9 @@ export const SPOTIFY_SCOPES = [
   "user-modify-playback-state",
   "user-read-currently-playing",
 ];
+
+/** Job state holding the last failed token refresh, cleared by the next token Spotify grants. Read by the alert monitor. */
+export const SPOTIFY_AUTH_STATE = "spotify_auth";
 
 const accountsUrl = "https://accounts.spotify.com";
 const stateTtlMs = 10 * 60_000;
@@ -120,7 +124,11 @@ export class SpotifyAuth {
     try {
       tokens = await this.requestToken({ grant_type: "refresh_token", refresh_token: refreshToken });
     } catch (error) {
-      if (error instanceof SpotifyAuthError && error.message.includes("invalid_grant")) this.disconnect();
+      if (error instanceof SpotifyAuthError) {
+        const revoked = error.message.includes("invalid_grant");
+        setJobState(this.db, SPOTIFY_AUTH_STATE, { lastRunAt: this.now(), lastError: error.message, data: { revoked } });
+        if (revoked) this.disconnect();
+      }
       throw error;
     }
     const row = this.grant();
@@ -137,6 +145,7 @@ export class SpotifyAuth {
       .values(values)
       .onConflictDoUpdate({ target: spotifyAuth.id, set: { accessToken, refreshToken, expiresAt: values.expiresAt, scope, clientId, updatedAt: now } })
       .run();
+    setJobState(this.db, SPOTIFY_AUTH_STATE, { lastRunAt: now, lastSuccessAt: now, lastError: null, data: null });
   }
 
   private async requestToken(params: Record<string, string>): Promise<TokenResponse> {
