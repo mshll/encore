@@ -1,31 +1,72 @@
-import { useQueryClient } from "@tanstack/react-query";
 import { useState, type ReactNode } from "react";
 import { Redirect, useLocation } from "wouter";
-import { ApiError, request } from "../api/client";
-import { useDigest, useDigests, useLatestRecapKey, useLifetime, useRecapPeriod, useTimezone } from "../api/queries";
+import { ApiError } from "../api/client";
+import { useDigest, useLatestRecapKey, useLifetime, useRecapPeriod, useRecapTimeline, useTimezone } from "../api/queries";
 import type { Digest, RecapKind, RecapPeriod } from "../api/types";
 import { recapPath, RECAP_SLUGS, type RecapSlug } from "../app/paths";
-import { assistantProblem } from "../lib/assistant";
 import { fmtDate, fmtDay, fmtDayShort } from "../lib/format";
-import { useRun } from "../lib/useRun";
 import { AppLink } from "../ui/AppLink";
 import { Button, IconButton } from "../ui/Button";
-import { useClaudeGate } from "../ui/ClaudeNotice";
+import { Dialog, DialogClose } from "../ui/Dialog";
 import { CaretLeftIcon, CaretRightIcon, NewspaperIcon } from "../ui/icons";
 import { Notice } from "../ui/Notice";
-import { dimWhile, Page, PageHeader, Section, SECTIONS, useDocumentTitle, type HeaderAction } from "../ui/Page";
+import { dimWhile, Page, PageHeader, SECTIONS, useDocumentTitle, type HeaderAction } from "../ui/Page";
 import { Segmented } from "../ui/Segmented";
 import { Skeleton } from "../ui/Skeleton";
 import { EmptyState, ErrorState, FirstUseState } from "../ui/States";
 import { RecapPlaylistActions } from "./recaps/Playlist";
-import { ShareRecap } from "./recaps/Share";
 import { RecapSections } from "./recaps/Sections";
+import { ShareRecap } from "./recaps/Share";
+import { Timeline } from "./recaps/Timeline";
+import { useWriteRecap, type RecapWriter } from "./recaps/write";
 
 const KIND_OF: Record<RecapSlug, RecapKind> = { week: "weekly", month: "monthly", year: "yearly" };
 const KIND_OPTIONS = (Object.entries(RECAP_SLUGS) as [RecapKind, RecapSlug][]).map(([, slug]) => ({ value: slug, label: slug === "week" ? "Week" : slug === "month" ? "Month" : "Year" }));
 const NOUN: Record<RecapKind, string> = { weekly: "week", monthly: "month", yearly: "year" };
 
 const isRecapSlug = (slug: string): slug is RecapSlug => slug in KIND_OF;
+
+function TimelineSkeleton() {
+  return (
+    <div aria-busy className="flex flex-col gap-10">
+      {[0, 1].map((group) => (
+        <div key={group} className="flex flex-col gap-3">
+          <Skeleton className="h-8 w-24" />
+          {[0, 1, 2, 3].map((i) => (
+            <div key={i} className="flex items-center gap-4">
+              <Skeleton className="h-4 w-28" />
+              <Skeleton className="h-4 flex-1" />
+              <Skeleton className="h-4 w-14" />
+            </div>
+          ))}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/** `/recaps`: every period the history reaches, the ones still going first. */
+export function Recaps() {
+  const timeline = useRecapTimeline();
+  const lifetime = useLifetime();
+  const writer = useWriteRecap();
+  useDocumentTitle("Recaps");
+  const firstUse = (lifetime.data && !lifetime.data.firstPlayed) || (timeline.data && timeline.data.historyStart === null);
+  return (
+    <Page>
+      <PageHeader title="Recaps" />
+      {firstUse ? (
+        <FirstUseState icon={NewspaperIcon} description="Recaps of each week, month and year appear here once your listening is imported." />
+      ) : timeline.isError ? (
+        <ErrorState error={timeline.error} onRetry={() => timeline.refetch()} />
+      ) : !timeline.data ? (
+        <TimelineSkeleton />
+      ) : (
+        <Timeline timeline={timeline.data} writer={writer} />
+      )}
+    </Page>
+  );
+}
 
 /** Week, Month and Year, then the arrows to the period before and after. The title names the period, so the arrows carry no label of their own. */
 function PeriodNav({ kind, period }: { kind: RecapKind; period?: RecapPeriod }) {
@@ -54,12 +95,12 @@ function PeriodNav({ kind, period }: { kind: RecapKind; period?: RecapPeriod }) 
 }
 
 /**
- * Every recap address renders in the page frame at the reading measure. `title` names the page (the period, or "Recaps"
- * before one is known); undefined shows a skeleton while it loads. `crumb` is the period in the trail.
+ * Every recap address renders in the page frame. `title` names the page (the period, or "Recap" before one is known);
+ * undefined shows a skeleton while it loads. `crumb` is the period in the trail.
  */
 function Frame({ kind, period, title, crumb, secondary, children }: { kind: RecapKind; period?: RecapPeriod; title?: string; crumb?: string | null; secondary?: HeaderAction[]; children: ReactNode }) {
   return (
-    <Page width="read" crumb={crumb}>
+    <Page crumb={crumb}>
       {title ? (
         <PageHeader title={title} secondary={secondary}>
           <PeriodNav kind={kind} period={period} />
@@ -75,33 +116,7 @@ function Frame({ kind, period, title, crumb, secondary, children }: { kind: Reca
   );
 }
 
-/** `/recaps`: the newest recap written, or the month that just ended. */
-export function Recaps() {
-  const list = useDigests();
-  const lifetime = useLifetime();
-  const latest = list.data?.items[0];
-  if (lifetime.data && !lifetime.data.firstPlayed)
-    return (
-      <Frame kind="monthly" title="Recaps">
-        <FirstUseState icon={NewspaperIcon} description="Recaps of each week, month and year appear here once your listening is imported." />
-      </Frame>
-    );
-  if (list.isError)
-    return (
-      <Frame kind="monthly" title="Recaps">
-        <ErrorState error={list.error} onRetry={() => list.refetch()} />
-      </Frame>
-    );
-  if (!list.data)
-    return (
-      <Frame kind="monthly" title="Recaps">
-        <BodySkeleton />
-      </Frame>
-    );
-  return latest ? <Redirect to={recapPath(latest.kind, latest.periodKey)} replace /> : <Redirect to="/recaps/month" replace />;
-}
-
-/** `/recaps/week` and friends: the newest period of that length. */
+/** `/recaps/week` and friends: the newest period of that length that has ended. */
 export function RecapKindLatest({ slug }: { slug: string }) {
   const kind = isRecapSlug(slug) ? KIND_OF[slug] : null;
   const latest = useLatestRecapKey(kind ?? "monthly");
@@ -112,7 +127,9 @@ export function RecapKindLatest({ slug }: { slug: string }) {
         <ErrorState error={latest.error} onRetry={() => latest.refetch()} />
       </Frame>
     );
-  return latest.data ? <Redirect to={recapPath(kind, latest.data.key)} replace /> : (
+  return latest.data ? (
+    <Redirect to={recapPath(kind, latest.data.key)} replace />
+  ) : (
     <Frame kind={kind}>
       <BodySkeleton />
     </Frame>
@@ -139,7 +156,7 @@ export function RecapById({ id }: { id: number }) {
 
 function BodySkeleton() {
   return (
-    <div aria-busy className="flex flex-col gap-10">
+    <div aria-busy className="flex max-w-(--measure) flex-col gap-10">
       <div className="flex flex-col gap-3">
         <Skeleton className="h-10 w-4/5" />
         <Skeleton className="h-4 w-48" />
@@ -155,44 +172,12 @@ function BodySkeleton() {
   );
 }
 
-const yesterday = (timezone: string) => {
-  const today = new Intl.DateTimeFormat("en-CA", { timeZone: timezone, year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
-  return new Date(Date.parse(`${today}T00:00:00Z`) - 86_400_000).toISOString().slice(0, 10);
-};
-
-/** Writes, completes or brings up to date one period's recap. With Claude ready it runs on the server as a run; without, it is a plain request. */
-function useWriteRecap(kind: RecapKind, key: string) {
-  const queryClient = useQueryClient();
-  const gate = useClaudeGate({ needsSpotify: false });
-  const refresh = () => void queryClient.invalidateQueries({ queryKey: ["digests"] });
-  const run = useRun<Digest>({ key: "/api/digests/generate", onDone: refresh });
-  const [busy, setBusy] = useState(false);
-  const [problem, setProblem] = useState<string | null>(null);
-  const write = async () => {
-    setProblem(null);
-    if (gate.ready && !gate.blocked) {
-      const done = await run.start("/api/digests/generate", { kind, key });
-      if (done) refresh();
-      return;
-    }
-    setBusy(true);
-    try {
-      await request("/api/digests/generate", { json: { kind, key } });
-      refresh();
-    } catch (error) {
-      setProblem(assistantProblem(error));
-    } finally {
-      setBusy(false);
-    }
-  };
-  return { gate, run, busy, problem: problem ?? run.problem, write, withClaude: gate.ready && !gate.blocked };
-}
-
 /** Writes the recap. While a run is going (also one resumed after leaving the page) it shows busy, with Cancel beside it. */
-function WriteButton({ writer, label, variant, size }: { writer: ReturnType<typeof useWriteRecap>; label: string; variant?: "primary"; size?: "sm" }) {
+function WriteButton({ writer, period, label, variant, size }: { writer: RecapWriter; period: RecapPeriod; label: string; variant?: "primary"; size?: "sm" }) {
+  const busy = writer.writing(period.kind, period.key);
   return (
     <div className="flex items-center gap-2">
-      <Button variant={variant} size={size} busy={writer.busy || writer.run.running} busyLabel="Writing" onClick={() => void writer.write()}>
+      <Button variant={variant} size={size} busy={busy} busyLabel={writer.canWrite ? "Writing" : "Making"} disabled={writer.working && !busy} onClick={() => void writer.write(period.kind, period.key)}>
         {label}
       </Button>
       {writer.run.running && (
@@ -205,10 +190,10 @@ function WriteButton({ writer, label, variant, size }: { writer: ReturnType<type
 }
 
 function Missing({ period }: { period: RecapPeriod }) {
-  const writer = useWriteRecap(period.kind, period.key);
+  const writer = useWriteRecap();
   if (period.reason === "before_history")
     return <EmptyState size="page" icon={NewspaperIcon} title={`Your history starts ${period.historyStart ? fmtDay(period.historyStart) : "later"}`} description={`There is nothing to recap for ${period.label}.`} />;
-  if (period.reason === "not_ended") return <EmptyState size="page" icon={NewspaperIcon} title={`${period.label} is not over yet`} />;
+  if (period.reason === "not_ended") return <EmptyState size="page" icon={NewspaperIcon} title={`${period.label} has not started yet`} />;
   return (
     <div className="flex flex-col items-center gap-4">
       <EmptyState
@@ -216,46 +201,54 @@ function Missing({ period }: { period: RecapPeriod }) {
         icon={NewspaperIcon}
         title={`No recap of ${period.label} yet`}
         description={period.inProgress ? `It covers ${fmtDayShort(period.from)} to ${fmtDayShort(period.to)} so far.` : undefined}
-        action={<WriteButton writer={writer} variant="primary" label="Write the recap" />}
+        action={<WriteButton writer={writer} period={period} variant="primary" label={writer.canWrite ? "Write it" : "Show the figures"} />}
       />
-      {writer.gate.blocked && <Notice tone="info">The recap will show the numbers alone. {writer.gate.blocked}</Notice>}
-      {writer.problem && <Notice tone="danger" onRetry={() => void writer.write()}>{writer.problem}</Notice>}
+      {writer.problem && (
+        <Notice tone="danger" onRetry={() => void writer.write(period.kind, period.key)}>
+          {writer.problem}
+        </Notice>
+      )}
     </div>
   );
 }
 
+const yesterday = (timezone: string) => {
+  const today = new Intl.DateTimeFormat("en-CA", { timeZone: timezone, year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
+  return new Date(Date.parse(`${today}T00:00:00Z`) - 86_400_000).toISOString().slice(0, 10);
+};
+
 function Recap({ period, recap }: { period: RecapPeriod; recap: Digest }) {
   const timezone = useTimezone();
-  const writer = useWriteRecap(period.kind, period.key);
+  const writer = useWriteRecap();
   const page = recap.page;
   const wordless = recap.lines === null && page.legacyText === null;
   const behind = page.inProgress && recap.to < yesterday(timezone);
-  const action = behind ? "Bring up to date" : wordless && writer.withClaude ? "Add Claude’s lines" : null;
+  const action = behind ? "Bring up to date" : wordless && writer.canWrite ? "Write it" : null;
   return (
     <>
-      <div className="flex flex-col gap-3">
-        <p className="font-display text-display text-balance text-primary">{page.headline}</p>
+      <div className="flex max-w-(--measure) flex-col gap-3">
+        <p className="font-display text-display text-balance text-primary [overflow-wrap:anywhere]">{page.headline}</p>
         <p className="text-secondary">
-          {[
-            page.inProgress ? `So far, to ${fmtDayShort(page.span.to)}` : null,
-            page.compare ? `Compared with ${page.compare.label}` : null,
-            `Written ${fmtDate(recap.createdAt, timezone)}`,
-          ]
+          {[page.inProgress ? `So far, to ${fmtDayShort(page.span.to)}` : null, page.compare ? `Compared with ${page.compare.label}` : null, `Made ${fmtDate(recap.createdAt, timezone)}`]
             .filter(Boolean)
             .join(" · ")}
         </p>
         {page.note && <p className="text-secondary text-pretty">{page.note}</p>}
-        {(action || writer.run.running) && <WriteButton writer={writer} size="sm" label={action ?? "Write the recap"} />}
+        {(action || writer.working) && <WriteButton writer={writer} period={period} size="sm" label={action ?? "Write it"} />}
         {writer.problem && <Notice tone="danger">{writer.problem}</Notice>}
       </div>
       {page.quiet && <p className="text-secondary">Almost no listening this {NOUN[page.kind]}, so there is little to show.</p>}
       <RecapSections page={page} songsActions={<RecapPlaylistActions period={period} songs={page.sections.find((s) => s.id === "songs")?.songs ?? []} />} />
-      {page.legacyText && (
-        <Section title="As written then">
-          <div className="text-body whitespace-pre-line text-pretty text-secondary">{page.legacyText}</div>
-        </Section>
-      )}
     </>
+  );
+}
+
+/** The text a recap from before recaps were pages was written as, kept reachable from the header. */
+function WrittenThen({ text, open, onOpenChange }: { text: string; open: boolean; onOpenChange: (open: boolean) => void }) {
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange} title="Text written then" footer={<DialogClose render={<Button variant="ghost">Done</Button>} />}>
+      <div className="text-body whitespace-pre-line text-pretty text-primary">{text}</div>
+    </Dialog>
   );
 }
 
@@ -264,19 +257,19 @@ export function RecapPeriodPage({ slug, periodKey }: { slug: string; periodKey: 
   const kind = isRecapSlug(slug) ? KIND_OF[slug] : null;
   const q = useRecapPeriod(kind ?? "monthly", periodKey);
   const [sharing, setSharing] = useState(false);
-  useDocumentTitle(q.data ? `Recap, ${q.data.label}` : "Recap");
+  const [reading, setReading] = useState(false);
+  const period = q.data;
+  const title = period ? (period.inProgress ? `${period.label} so far` : period.label) : undefined;
+  useDocumentTitle(title ? `Recap, ${title}` : "Recap");
   if (!kind) return <Redirect to="/recaps" replace />;
   const notFound = q.error instanceof ApiError && q.error.status === 404;
-  const period = q.data;
   const recap = period?.recap;
+  const legacyText = recap?.page.legacyText ?? null;
+  const secondary: HeaderAction[] = [];
+  if (recap) secondary.push({ label: "Share", onClick: () => setSharing(true) });
+  if (legacyText) secondary.push({ label: "Text written then", onClick: () => setReading(true) });
   return (
-    <Frame
-      kind={kind}
-      period={period}
-      title={period?.label ?? (q.isError ? "Recap" : undefined)}
-      crumb={period?.label ?? (q.isError ? null : undefined)}
-      secondary={recap ? [{ label: "Share", onClick: () => setSharing(true) }] : undefined}
-    >
+    <Frame kind={kind} period={period} title={title ?? (q.isError ? "Recap" : undefined)} crumb={period?.label ?? (q.isError ? null : undefined)} secondary={secondary.length ? secondary : undefined}>
       {notFound ? (
         <EmptyState size="page" icon={NewspaperIcon} title="This recap does not exist" action={<AppLink to="/recaps">Open Recaps</AppLink>} />
       ) : q.isError ? (
@@ -287,6 +280,7 @@ export function RecapPeriodPage({ slug, periodKey }: { slug: string; periodKey: 
         <div className={`${SECTIONS} ${dimWhile(q.isPlaceholderData)}`}>{recap ? <Recap key={period.key} period={period} recap={recap} /> : <Missing key={period.key} period={period} />}</div>
       )}
       {recap && <ShareRecap recap={recap} open={sharing} onOpenChange={setSharing} />}
+      {legacyText && <WrittenThen text={legacyText} open={reading} onOpenChange={setReading} />}
     </Frame>
   );
 }

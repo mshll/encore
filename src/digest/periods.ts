@@ -59,21 +59,26 @@ export function latestKey(kind: RecapKind, today: string, recapWeekday: number):
 }
 
 /**
- * What the period covers on `today`: the whole period once it has ended, the days so far for the current
- * year (up to yesterday), and null when nothing of it has passed.
+ * What the period covers on `today`: the whole period once it has ended, the days so far of the period still
+ * going (up to yesterday), and null when nothing of it has passed.
  */
 export function coveredSpan(kind: RecapKind, key: string, today: string): (Span & { inProgress: boolean }) | null {
   const whole = periodSpan(kind, key);
   if (whole.to < today) return { ...whole, inProgress: false };
-  if (kind !== "yearly") return null;
   const yesterday = shiftDay(today, -1);
   return yesterday >= whole.from ? { from: whole.from, to: yesterday, inProgress: true } : null;
 }
 
-/** The same stretch of the period before: the previous week or month, or the previous year up to the same day. */
+/**
+ * The same stretch of the period before: the previous week or month, as many days into it as the period covers,
+ * or the previous year up to the same day.
+ */
 export function baselineSpan(kind: RecapKind, key: string, covered: Span): Span {
   const before = periodSpan(kind, shiftKey(kind, key, -1));
-  if (kind !== "yearly") return before;
+  if (kind !== "yearly") {
+    const to = shiftDay(before.from, daysIn(covered) - 1);
+    return { from: before.from, to: to < before.to ? to : before.to };
+  }
   const to = `${before.from.slice(0, 4)}${covered.to.slice(4)}`;
   return { from: before.from, to: to.endsWith("02-29") ? `${to.slice(0, 8)}28` : to };
 }
@@ -106,10 +111,10 @@ export function periodLabel(kind: RecapKind, key: string): string {
   return key;
 }
 
-/** How a period is named next to its numbers: "the week before", "September 2026", "2025 to 15 Nov". */
+/** How a period is named next to its numbers: "the week before", "September 2026", "1 – 17 Oct 2026", "2025 to 15 Nov". */
 export function baselineLabel(kind: RecapKind, key: string, baseline: Span, inProgress: boolean): string {
-  if (kind === "weekly") return "the week before";
-  if (kind === "monthly") return periodLabel("monthly", shiftKey(kind, key, -1));
+  if (kind === "weekly") return inProgress ? "the same days the week before" : "the week before";
+  if (kind === "monthly") return inProgress ? humanSpan(baseline) : periodLabel("monthly", shiftKey(kind, key, -1));
   return inProgress ? `${baseline.from.slice(0, 4)} to ${dayNoYear.format(at(baseline.to))}` : baseline.from.slice(0, 4);
 }
 

@@ -966,9 +966,19 @@ function bendRecapPage(page: Json, state: string): Json {
       };
     }
     if (s.id === "taste") return { ...s, genres: (s.genres as Json[]).map((g, i) => (i === 0 ? { ...g, value: "traditional vietnamese ca trù with chamber orchestra" } : g)) };
+    if (s.id === "years") return { ...s, artists: (s.artists as Json[]).map((a, i) => ({ ...a, artist: name(i), imageUrl: art(i) })) };
+    if (s.id === "records")
+      return { ...s, milestones: (s.milestones as Json[]).map((m, i) => (m.kind === "song" ? { ...m, song: { ...(m.song as Json), name: LONG_SONG, artist: name(i) } } : m.kind === "artist" ? { ...m, artist: name(i) } : m)) };
     return s;
   });
-  return { ...page, headline: `${LONG_ARTIST} took over the month, with 坂本龍一 close behind and almost nothing else`, sections: bent };
+  const others = bent.filter((s) => s.id !== "comebacks");
+  const at = others.findIndex((s) => s.id === "records" || s.id === "taste" || s.id === "rhythm");
+  others.splice(at < 0 ? others.length : at, 0, {
+    id: "comebacks",
+    take: null,
+    items: Array.from({ length: 50 }, (_, i) => ({ artist: name(i), imageUrl: art(i), lastBefore: "2025-01-10", returned: "2026-03-02", gapDays: 40 + i * 9 })),
+  });
+  return { ...page, headline: `${LONG_ARTIST} took over the month, with 坂本龍一 close behind and almost nothing else`, sections: others };
 }
 
 const RECAP_CONNECTED = ["spotify", "saved"];

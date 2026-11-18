@@ -5,7 +5,10 @@ import { join } from "node:path";
 import * as sessions from "../src/auth/sessions";
 import { createSession } from "../src/auth/sessions";
 import { digests, llmCalls, plays, shares, spotifyAuth } from "../src/db/schema";
+import type { RecapPage } from "../src/digest/page";
 import { generateDigest } from "../src/digest/service";
+import { sharePage } from "../src/share/html";
+import { recapSnapshot } from "../src/share/snapshot";
 import { play, seed, testApp, track, uri } from "./helpers";
 
 const ORIGIN = "https://encore.example";
@@ -246,5 +249,49 @@ describe("share card", () => {
       'attachment; filename="encore-january-2026.png"',
       'attachment; filename="encore-january-2026-square.png"',
     ]);
+  });
+});
+
+describe("the shared page's newer sections", () => {
+  const woods = { songKey: "woods|mac miller", uri: "spotify:track:0000000000000000000000w1", name: "Woods", artist: "Mac Miller", albumArtUrl: null };
+  const page: RecapPage = {
+    kind: "yearly",
+    key: "2026",
+    label: "2026",
+    span: { from: "2026-01-01", to: "2026-12-31" },
+    inProgress: false,
+    headline: "A year of Mac Miller",
+    headlineBy: "claude",
+    compare: { label: "2025", from: "2025-01-01", to: "2025-12-31", scaled: false },
+    note: null,
+    quiet: false,
+    legacyText: null,
+    sections: [
+      {
+        id: "years",
+        take: null,
+        a: { year: 2025, hours: 100, plays: 2000, artists: 300, newArtists: 120, newSongs: 400 },
+        b: { year: 2026, hours: 140, plays: 2600, artists: 280, newArtists: 90, newSongs: 350 },
+        artists: [{ artist: "Mac Miller", imageUrl: null, a: { rank: 4, hours: 8 }, b: { rank: 1, hours: 20 }, change: 3 }],
+        genres: [{ value: "hip-hop", a: 0.3, b: 0.4 }],
+        moods: [],
+      },
+      { id: "comebacks", take: null, items: [{ artist: "Tame Impala", imageUrl: null, lastBefore: "2025-10-26", returned: "2026-08-02", gapDays: 280 }] },
+      { id: "records", take: null, records: [{ record: "songDay", day: "2026-02-15", listens: 20, song: woods }], milestones: [{ kind: "song", threshold: 25, day: "2026-02-15", song: woods }] },
+      { id: "rhythm", take: null, day: { day: "2026-02-15", hours: 1.1 }, hour: null, byHour: null, streak: { days: 10, from: "2026-02-02", to: "2026-02-11" } },
+    ],
+  };
+
+  test("show the year against the year before, comebacks, records, milestones and the longest run", () => {
+    const html = sharePage(recapSnapshot(page), "https://encore.example/s/x/card.png");
+
+    const shown = ["Against 2025", "Back again", "Tame Impala", "after 9 months", "Most plays of one song in a day yet", "reached 25 plays", "Longest run: 10 days in a row"].filter((t) => html.includes(t));
+    expect(shown).toHaveLength(7);
+  });
+
+  test("carry no song keys", () => {
+    const json = JSON.stringify(recapSnapshot(page));
+
+    expect(json).not.toContain("songKey");
   });
 });

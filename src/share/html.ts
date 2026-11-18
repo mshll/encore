@@ -32,6 +32,9 @@ const tag = (t: string) => t.charAt(0).toUpperCase() + t.slice(1).replace(/-/g, 
 const day = (d: string) => new Intl.DateTimeFormat("en-GB", { weekday: "long", day: "numeric", month: "long", timeZone: "UTC" }).format(new Date(`${d}T00:00:00Z`));
 const month = (m: string) => new Intl.DateTimeFormat("en-GB", { month: "short", timeZone: "UTC" }).format(new Date(`${m}-01T00:00:00Z`));
 const hour = (h: number) => `${String(h).padStart(2, "0")}:00`;
+const shortDay = (d: string) => new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" }).format(new Date(`${d}T00:00:00Z`));
+const monthLong = (m: string) => new Intl.DateTimeFormat("en-GB", { month: "long", year: "numeric", timeZone: "UTC" }).format(new Date(`${m}-01T00:00:00Z`));
+const gap = (days: number) => (days >= 60 ? `${Math.round(days / 30.4)} months` : plural(days, "day", "days"));
 const spotifyUrl = (uri: string | null) => {
   const m = uri?.match(/^spotify:track:([A-Za-z0-9]{22})$/);
   return m ? `https://open.spotify.com/track/${m[1]}` : null;
@@ -61,6 +64,32 @@ const take = (t: string | null) => (t ? `<p class="take">${esc(t)}</p>` : "");
 
 type Of<K extends SnapshotSection["id"]> = Extract<SnapshotSection, { id: K }>;
 
+function recordLine(r: Of<"records">["records"][number]): string {
+  switch (r.record) {
+    case "day":
+      return `Biggest day yet: ${esc(hours(r.hours))} on ${esc(day(r.day))}`;
+    case "session":
+      return `Longest session yet: ${esc(hours(r.minutes / 60))} on ${esc(day(r.day))}`;
+    case "songDay":
+      return `Most plays of one song in a day yet: ${esc(r.song.name)} <span class="muted">${esc(r.song.artist)}</span>, ${esc(plural(r.listens, "play", "plays"))}`;
+    case "week":
+      return `Biggest week yet: ${esc(hours(r.hours))}, week of ${esc(shortDay(r.week))}`;
+    case "month":
+      return `Biggest month yet: ${esc(hours(r.hours))} in ${esc(monthLong(r.month))}`;
+  }
+}
+
+function milestoneLine(m: Of<"records">["milestones"][number]): string {
+  switch (m.kind) {
+    case "song":
+      return `${esc(m.song.name)} <span class="muted">${esc(m.song.artist)}</span> reached ${esc(plural(m.threshold, "play", "plays"))}`;
+    case "artist":
+      return `${esc(m.artist)} reached ${esc(plural(m.threshold, "hour", "hours"))}`;
+    case "total":
+      return `All your music reached ${esc(plural(m.threshold, "hour", "hours"))}`;
+  }
+}
+
 function sectionHtml(s: SnapshotSection, r: RecapSnapshot["recap"]): string {
   const compare = r.compare?.label ?? null;
   switch (s.id) {
@@ -84,6 +113,8 @@ function sectionHtml(s: SnapshotSection, r: RecapSnapshot["recap"]): string {
         list.length && compare
           ? `<div><h3>${esc(title)} ${esc(compare)}</h3><ul class="rows">${list.map((a) => `<li class="line"><span class="name">${art(a.imageUrl, true)}<span class="clip">${esc(a.artist)}</span></span>${pair(a.hours, a.before ?? 0, `${a.artist}: ${hours(a.hours)}, from ${hours(a.before ?? 0)}`)}<span class="muted num">${esc(hours(a.before ?? 0))} to ${esc(hours(a.hours))}</span></li>`).join("")}</ul></div>`
           : "";
+      if (r.sections.some((x) => x.id === "years"))
+        return s.up.length || s.down.length ? `<section><h2>Rising and falling</h2>${take(s.take)}${movers("More than", s.up)}${movers("Less than", s.down)}</section>` : "";
       return `<section><h2>Artists</h2>${take(s.take)}<ol class="rows">${s.top
         .slice(0, 5)
         .map((a, i) => `<li class="grid artists"><span class="rank">${i + 1}</span><span class="name">${art(a.imageUrl, true)}<span class="clip">${esc(a.artist)}</span></span>${bar(a.share / top, `${Math.round(a.share * 100)}% of the listening`)}<span class="num">${esc(hours(a.hours))}</span></li>`)
@@ -106,13 +137,40 @@ function sectionHtml(s: SnapshotSection, r: RecapSnapshot["recap"]): string {
       return `<section><h2>Genres and moods</h2>${take(s.take)}<div class="two">${rows("Genres", s.genres)}${rows("Moods", s.moods)}</div></section>`;
     }
     case "finds":
-      return `<section><h2>New finds</h2>${take(s.take)}${
+      return `<section><h2>New to you</h2>${take(s.take)}${
+        s.newShare != null ? `<p class="line">${bar(s.newShare, `${Math.round(s.newShare * 100)}% of the time on songs new to you`)}<span>${Math.round(s.newShare * 100)}% of the time on songs new to you</span></p>` : ""
+      }${
         s.songs.count ? `<p>${esc(`${count(s.songs.count)} of ${plural(s.songs.ofNew, "new song", "new songs")} came back on another day`)}</p><ul class="rows">${s.songs.top.map((t) => `<li class="line"><span class="name">${art(t.albumArtUrl)}<span class="clip">${esc(t.name)} <span class="muted">${esc(t.artist)}</span></span></span></li>`).join("")}</ul>` : ""
       }${s.artists.count ? `<p>${esc(`${count(s.artists.count)} of ${plural(s.artists.ofNew, "new artist", "new artists")} came back on another day`)}</p><ul class="rows">${s.artists.top.map((a) => `<li class="line"><span class="name">${art(a.imageUrl, true)}<span class="clip">${esc(a.artist)}</span></span></li>`).join("")}</ul>` : ""}</section>`;
     case "rhythm":
       return `<section><h2>When</h2>${take(s.take)}<p>Busiest day: ${esc(day(s.day.day))}, ${esc(hours(s.day.hours))}</p>${
         s.hour ? `<p class="line"><span>Busiest hour: ${esc(hour(s.hour.hour))} to ${esc(hour((s.hour.hour + 1) % 24))}</span>${s.byHour ? columns(s.byHour, s.hour.hour, `Listening by hour of the day; the most from ${hour(s.hour.hour)}`, 24) : ""}</p>` : ""
-      }</section>`;
+      }${s.streak && s.streak.days >= 2 ? `<p>Longest run: ${esc(plural(s.streak.days, "day", "days"))} in a row, ${esc(shortDay(s.streak.from))} to ${esc(shortDay(s.streak.to))}</p>` : ""}</section>`;
+    case "comebacks":
+      return `<section><h2>Back again</h2>${take(s.take)}<ul class="rows">${s.items
+        .slice(0, 10)
+        .map((c) => `<li class="grid comebacks"><span class="name">${art(c.imageUrl, true)}<span class="clip">${esc(c.artist)}</span></span><span class="num muted">${esc(`after ${gap(c.gapDays)}`)}</span></li>`)
+        .join("")}</ul>${s.items.length > 10 ? `<p class="muted">${esc(`And ${plural(s.items.length - 10, "more artist", "more artists")}`)}</p>` : ""}</section>`;
+    case "records":
+      return `<section><h2>Records</h2>${take(s.take)}<ul class="rows">${[...s.records.map(recordLine), ...s.milestones.map(milestoneLine)].map((l) => `<li>${l}</li>`).join("")}</ul></section>`;
+    case "years": {
+      const rows: [string, number, number][] = [
+        ["Plays", s.a.plays, s.b.plays],
+        ["New artists", s.a.newArtists, s.b.newArtists],
+        ["New songs", s.a.newSongs, s.b.newSongs],
+      ];
+      const tags = (title: string, list: Of<"years">["genres"]) =>
+        list.length
+          ? `<div><h3>${esc(title)}</h3><ul class="rows">${list.map((g) => `<li class="grid taste"><span class="clip">${esc(tag(g.value))}</span>${bar(g.b, `${Math.round(g.b * 100)}% from ${Math.round(g.a * 100)}%`, g.a)}<span class="num muted">${Math.round(g.b * 100)}% from ${Math.round(g.a * 100)}%</span></li>`).join("")}</ul></div>`
+          : "";
+      const rank = (a: Of<"years">["artists"][number]) =>
+        a.change === null ? (a.a ? "" : "new") : a.change === 0 ? "same place" : `${a.change > 0 ? "↑" : "↓"} ${Math.abs(a.change)}`;
+      return `<section><h2>Against ${esc(s.a.year)}</h2>${take(s.take)}<ul class="rows">${(r.inProgress ? [] : rows)
+        .map(([label, a, b]) => `<li class="grid compare"><span>${esc(label)}</span>${pair(b, a, `${label}: ${count(b)}, against ${count(a)} in ${s.a.year}`)}<span class="num">${esc(count(b))} <span class="muted">${esc(`${change(b, a)} from ${count(a)}`)}</span></span></li>`)
+        .join("")}</ul><h3>Top artists</h3><ol class="rows">${s.artists
+        .map((a) => `<li class="grid artists"><span class="rank">${a.b?.rank ?? ""}</span><span class="name">${art(a.imageUrl, true)}<span class="clip">${esc(a.artist)}</span></span><span class="num muted">${esc(rank(a))}</span></li>`)
+        .join("")}</ol><div class="two">${tags("Genres", s.genres)}${tags("Moods", s.moods)}</div></section>`;
+    }
   }
 }
 
@@ -165,6 +223,7 @@ section{margin-bottom:48px}
 .axis{display:flex;justify-content:space-between;color:var(--faint);font-size:13px;margin-top:6px}
 .ranked{grid-template-columns:20px minmax(0,1fr) 64px auto}
 .compare{grid-template-columns:minmax(0,1fr) 48px auto}
+.comebacks{grid-template-columns:minmax(0,1fr) auto}
 .prose{max-width:60ch;text-wrap:pretty;margin:0 0 16px}
 .prose .pair,.prose .bar,.prose .cols{vertical-align:middle;margin:0 4px}
 .unchecked{text-decoration:underline dotted;text-underline-offset:4px}

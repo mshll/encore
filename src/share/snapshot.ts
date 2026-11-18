@@ -2,7 +2,7 @@ import type { Answer } from "../answers/answer";
 import { answerCardInput, publicVisual, type AnswerCardInput, type PublicVisual } from "../answers/card";
 import type { CardInput } from "../covers/card";
 import { recapCardInput } from "../digest/card";
-import type { RecapPage, RecapSection } from "../digest/page";
+import type { RecapMilestone, RecapPage, RecapRecord, RecapSection } from "../digest/page";
 import type { RecapKind } from "../digest/periods";
 
 /**
@@ -29,6 +29,18 @@ export type RecapSnapshot = {
 };
 
 type Song = { uri: string | null; name: string; artist: string; albumArtUrl: string | null; listens: number };
+type NamedSong = { uri: string | null; name: string; artist: string; albumArtUrl: string | null };
+type YearSide = { year: number; hours: number; plays: number; artists: number; newArtists: number; newSongs: number };
+type SnapshotRecord =
+  | { record: "day"; day: string; hours: number }
+  | { record: "session"; day: string; minutes: number; hours: number }
+  | { record: "songDay"; day: string; listens: number; song: NamedSong }
+  | { record: "week"; week: string; hours: number }
+  | { record: "month"; month: string; hours: number };
+type SnapshotMilestone =
+  | { kind: "song"; threshold: number; day: string; song: NamedSong }
+  | { kind: "artist"; threshold: number; day: string; artist: string; imageUrl: string | null }
+  | { kind: "total"; threshold: number; day: string };
 type Artist = { artist: string; imageUrl: string | null; hours: number; before: number | null };
 
 export type SnapshotSection =
@@ -37,8 +49,19 @@ export type SnapshotSection =
   | { id: "artists"; take: string | null; top: (Artist & { share: number })[]; up: Artist[]; down: Artist[] }
   | { id: "songs"; take: string | null; songs: Song[] }
   | { id: "taste"; take: string | null; genres: { value: string; share: number; before: number | null }[]; moods: { value: string; share: number; before: number | null }[] }
-  | { id: "finds"; take: string | null; songs: { count: number; ofNew: number; top: Song[] }; artists: { count: number; ofNew: number; top: { artist: string; imageUrl: string | null }[] } }
-  | { id: "rhythm"; take: string | null; day: { day: string; hours: number }; hour: { hour: number; hours: number } | null; byHour: number[] | null };
+  | { id: "finds"; take: string | null; newShare?: number | null; songs: { count: number; ofNew: number; top: Song[] }; artists: { count: number; ofNew: number; top: { artist: string; imageUrl: string | null }[] } }
+  | { id: "comebacks"; take: string | null; items: { artist: string; imageUrl: string | null; lastBefore: string; returned: string; gapDays: number }[] }
+  | { id: "records"; take: string | null; records: SnapshotRecord[]; milestones: SnapshotMilestone[] }
+  | {
+      id: "years";
+      take: string | null;
+      a: YearSide;
+      b: YearSide;
+      artists: { artist: string; imageUrl: string | null; a: { rank: number } | null; b: { rank: number } | null; change: number | null }[];
+      genres: { value: string; a: number; b: number }[];
+      moods: { value: string; a: number; b: number }[];
+    }
+  | { id: "rhythm"; take: string | null; day: { day: string; hours: number }; hour: { hour: number; hours: number } | null; byHour: number[] | null; streak?: { days: number; from: string; to: string } | null };
 
 const song = (s: { uri: string | null; name: string; artist: string; albumArtUrl: string | null; listens: number }): Song => ({
   uri: s.uri,
@@ -49,6 +72,35 @@ const song = (s: { uri: string | null; name: string; artist: string; albumArtUrl
 });
 const artist = (a: { artist: string; imageUrl: string | null; hours: number; before: number | null }): Artist => ({ artist: a.artist, imageUrl: a.imageUrl, hours: a.hours, before: a.before });
 const share = (s: { value: string; share: number; before: number | null }) => ({ value: s.value, share: s.share, before: s.before });
+const named = (s: { uri: string | null; name: string; artist: string; albumArtUrl: string | null }): NamedSong => ({ uri: s.uri, name: s.name, artist: s.artist, albumArtUrl: s.albumArtUrl });
+const side = (y: YearSide): YearSide => ({ year: y.year, hours: y.hours, plays: y.plays, artists: y.artists, newArtists: y.newArtists, newSongs: y.newSongs });
+const tagPair = (t: { value: string; a: number; b: number }) => ({ value: t.value, a: t.a, b: t.b });
+
+function record(r: RecapRecord): SnapshotRecord {
+  switch (r.record) {
+    case "day":
+      return { record: r.record, day: r.day, hours: r.hours };
+    case "session":
+      return { record: r.record, day: r.day, minutes: r.minutes, hours: r.hours };
+    case "songDay":
+      return { record: r.record, day: r.day, listens: r.listens, song: named(r.song) };
+    case "week":
+      return { record: r.record, week: r.week, hours: r.hours };
+    case "month":
+      return { record: r.record, month: r.month, hours: r.hours };
+  }
+}
+
+function milestone(m: RecapMilestone): SnapshotMilestone {
+  switch (m.kind) {
+    case "song":
+      return { kind: m.kind, threshold: m.threshold, day: m.day, song: named(m.song) };
+    case "artist":
+      return { kind: m.kind, threshold: m.threshold, day: m.day, artist: m.artist, imageUrl: m.imageUrl };
+    case "total":
+      return { kind: m.kind, threshold: m.threshold, day: m.day };
+  }
+}
 
 function section(s: RecapSection): SnapshotSection {
   switch (s.id) {
@@ -66,11 +118,33 @@ function section(s: RecapSection): SnapshotSection {
       return {
         id: s.id,
         take: s.take,
+        newShare: s.newShare,
         songs: { count: s.songs.count, ofNew: s.songs.ofNew, top: s.songs.top.map(song) },
         artists: { count: s.artists.count, ofNew: s.artists.ofNew, top: s.artists.top.map((a) => ({ artist: a.artist, imageUrl: a.imageUrl })) },
       };
     case "rhythm":
-      return { id: s.id, take: s.take, day: { day: s.day.day, hours: s.day.hours }, hour: s.hour ? { hour: s.hour.hour, hours: s.hour.hours } : null, byHour: s.byHour };
+      return {
+        id: s.id,
+        take: s.take,
+        day: { day: s.day.day, hours: s.day.hours },
+        hour: s.hour ? { hour: s.hour.hour, hours: s.hour.hours } : null,
+        byHour: s.byHour,
+        streak: s.streak ? { days: s.streak.days, from: s.streak.from, to: s.streak.to } : null,
+      };
+    case "comebacks":
+      return { id: s.id, take: s.take, items: s.items.map((c) => ({ artist: c.artist, imageUrl: c.imageUrl, lastBefore: c.lastBefore, returned: c.returned, gapDays: c.gapDays })) };
+    case "records":
+      return { id: s.id, take: s.take, records: s.records.map(record), milestones: s.milestones.map(milestone) };
+    case "years":
+      return {
+        id: s.id,
+        take: s.take,
+        a: side(s.a),
+        b: side(s.b),
+        artists: s.artists.map((a) => ({ artist: a.artist, imageUrl: a.imageUrl, a: a.a ? { rank: a.a.rank } : null, b: a.b ? { rank: a.b.rank } : null, change: a.change })),
+        genres: s.genres.map(tagPair),
+        moods: s.moods.map(tagPair),
+      };
   }
 }
 

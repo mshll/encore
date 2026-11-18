@@ -249,7 +249,7 @@ export type Note = Artwork & {
 export type RecapKind = "weekly" | "monthly" | "yearly";
 export type SavedRecapPlaylist = { kind: RecapKind; key: string; label: string; url: string; source: "recap" | "living"; savedAt: string; songs: number; coverUrl: string | null };
 export type DigestItem = { id: number; kind: RecapKind; periodKey: string; from: string; to: string; label: string; title: string; headline: string; inProgress: boolean; createdAt: string };
-export type RecapSectionId = "listening" | "months" | "artists" | "songs" | "taste" | "finds" | "rhythm";
+export type RecapSectionId = RecapSection["id"];
 export type RecapLines = { headline: string | null; takes: Partial<Record<RecapSectionId, string>> };
 export type RecapShare = { value: string; share: number; before: number | null };
 export type RecapMover = { artist: string; imageUrl: string | null; hours: number; before: number };
@@ -260,8 +260,48 @@ export type RecapSection =
   | { id: "artists"; take: string | null; top: { artist: string; imageUrl: string | null; hours: number; share: number; before: number | null }[]; up: RecapMover[]; down: RecapMover[] }
   | { id: "songs"; take: string | null; songs: (RecapSong & { hours: number })[] }
   | { id: "taste"; take: string | null; genres: RecapShare[]; moods: RecapShare[] }
-  | { id: "finds"; take: string | null; songs: { count: number; ofNew: number; top: RecapSong[] }; artists: { count: number; ofNew: number; top: { artist: string; imageUrl: string | null; listens: number }[] } }
-  | { id: "rhythm"; take: string | null; day: { day: string; hours: number }; hour: { hour: number; hours: number } | null; byHour: number[] | null };
+  | { id: "finds"; take: string | null; newShare: number | null; songs: { count: number; ofNew: number; top: RecapSong[] }; artists: { count: number; ofNew: number; top: { artist: string; imageUrl: string | null; listens: number }[] } }
+  | { id: "comebacks"; take: string | null; items: { artist: string; imageUrl: string | null; lastBefore: string; returned: string; gapDays: number }[] }
+  | { id: "records"; take: string | null; records: RecapRecord[]; milestones: RecapMilestone[] }
+  | {
+      id: "years";
+      take: string | null;
+      a: RecapYearSide;
+      b: RecapYearSide;
+      artists: { artist: string; imageUrl: string | null; a: { rank: number; hours: number } | null; b: { rank: number; hours: number } | null; change: number | null }[];
+      genres: { value: string; a: number; b: number }[];
+      moods: { value: string; a: number; b: number }[];
+    }
+  | { id: "rhythm"; take: string | null; day: { day: string; hours: number }; hour: { hour: number; hours: number } | null; byHour: number[] | null; streak: { days: number; from: string; to: string } | null };
+export type RecapYearSide = { year: number; hours: number; plays: number; artists: number; newArtists: number; newSongs: number };
+type RecapMilestoneSong = { songKey: string; uri: string; name: string; artist: string; albumArtUrl: string | null };
+export type RecapRecord =
+  | { record: "day"; day: string; hours: number }
+  | { record: "session"; day: string; minutes: number; hours: number }
+  | { record: "songDay"; day: string; listens: number; song: RecapMilestoneSong }
+  | { record: "week"; week: string; hours: number }
+  | { record: "month"; month: string; hours: number };
+export type RecapMilestone =
+  | { kind: "song"; threshold: number; day: string; song: RecapMilestoneSong }
+  | { kind: "artist"; threshold: number; day: string; artist: string; imageUrl: string | null }
+  | { kind: "total"; threshold: number; day: string };
+/** One period on the Recaps timeline: its hours so far against the same stretch before, and its recap when one is stored. */
+export type TimelineRow = {
+  kind: RecapKind;
+  key: string;
+  label: string;
+  from: string;
+  to: string;
+  inProgress: boolean;
+  hours: number;
+  before: number | null;
+  recap: { id: number; headline: string | null; topArtist: string | null; stale: boolean } | null;
+};
+export type RecapTimeline = {
+  historyStart: string | null;
+  current: { week: TimelineRow | null; month: TimelineRow | null; weeks: TimelineRow[] };
+  years: { year: TimelineRow; months: { month: TimelineRow; weeks: TimelineRow[] }[] }[];
+};
 export type RecapPage = {
   kind: RecapKind;
   key: string;

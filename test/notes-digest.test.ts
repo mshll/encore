@@ -5,6 +5,7 @@ import { recapFacts } from "../src/digest/facts";
 import { RECAP_SCHEMA } from "../src/digest/lines";
 import { baselineSpan, coveredSpan, humanDatesIn, latestKey, periodLabel, periodSpan } from "../src/digest/periods";
 import { CODE_RENDERED, generateDigest, getDigest, isDigestDue, RecapPeriodError } from "../src/digest/service";
+import { recapTimeline } from "../src/digest/timeline";
 import { Llm } from "../src/llm/client";
 import { createAssistantJobs } from "../src/jobs/assistant";
 import { trackNote } from "../src/notes/service";
@@ -58,7 +59,19 @@ describe("recap periods", () => {
 
     expect(covered).toEqual({ from: "2026-01-01", to: "2026-11-14", inProgress: true });
     expect(baselineSpan("yearly", "2026", covered)).toEqual({ from: "2025-01-01", to: "2025-11-14" });
-    expect(coveredSpan("monthly", "2026-11", "2026-11-15")).toBeNull();
+  });
+
+  test("a week or month still going is covered up to yesterday and compared with as many days of the one before", () => {
+    const month = coveredSpan("monthly", "2026-11", "2026-11-15")!;
+    const week = coveredSpan("weekly", "2026-11-19", "2026-11-15")!;
+
+    expect([month, baselineSpan("monthly", "2026-11", month), week, baselineSpan("weekly", "2026-11-19", week), coveredSpan("monthly", "2026-12", "2026-12-01")] as unknown[]).toEqual([
+      { from: "2026-11-01", to: "2026-11-14", inProgress: true },
+      { from: "2026-10-01", to: "2026-10-14" },
+      { from: "2026-11-13", to: "2026-11-14", inProgress: true },
+      { from: "2026-11-06", to: "2026-11-07" },
+      null,
+    ]);
   });
 
   test("labels and dates are written for people", () => {
@@ -143,11 +156,11 @@ describe("recaps", () => {
     expect([worded.created, worded.id, worded.page.headline]).toEqual([false, bare.id, "Mostly Mac Miller"]);
   });
 
-  test("a period that has not ended, or that the history does not reach, cannot be recapped", async () => {
+  test("a period that has not started, or that the history does not reach, cannot be recapped", async () => {
     const { ctx, db } = featureCtx(null, [], {}, "2026-03-02T08:00:00Z");
     seedLibrary(db);
 
-    await expect(generateDigest(ctx, "monthly", "2026-03")).rejects.toBeInstanceOf(RecapPeriodError);
+    await expect(generateDigest(ctx, "monthly", "2026-04")).rejects.toBeInstanceOf(RecapPeriodError);
     await expect(generateDigest(ctx, "monthly", "2025-11")).rejects.toBeInstanceOf(RecapPeriodError);
   });
 
@@ -224,5 +237,77 @@ describe("scheduled LLM jobs", () => {
   test("picks are not due before the configured slot", async () => {
     const { ctx, auth } = featureCtx(scripted().transport, [], {}, "2026-01-29T08:00:00Z");
     expect(await createAssistantJobs(ctx, auth).picks.run()).toEqual({ skipped: "not_due" });
+  });
+});
+
+const sectionOf = <K extends string>(recap: { page: { sections: { id: string }[] } }, id: K) => recap.page.sections.find((s) => s.id === id) as Record<string, unknown> | undefined;
+
+describe("recap sections from the insights", () => {
+  test("a period's records, milestones and longest run of days come from the facts", async () => {
+    const { ctx, db } = featureCtx(null, [], {}, "2026-03-02T08:00:00Z");
+    seedLibrary(db);
+    seedFebruary(db);
+    seed(db, [], Array.from({ length: 20 }, (_, i) => play(`2026-02-15T${String(i + 1).padStart(2, "0")}:00:00Z`, uri("w1"), 200_000, { skipped: false })));
+
+    const recap = await generateDigest(ctx, "monthly", "2026-02");
+
+    const records = sectionOf(recap, "records") as { records: { record: string }[]; milestones: { kind: string; threshold: number }[] };
+    const rhythm = sectionOf(recap, "rhythm") as { streak: { days: number } };
+    expect([records.records.map((r) => r.record), records.milestones.map((m) => [m.kind, m.threshold]), rhythm.streak.days]).toEqual([["day", "songDay", "week", "month"], [["song", 25]], 10]);
+  });
+
+  test("a year is compared with the year before, in place of the genre shift", async () => {
+    const { ctx, db } = featureCtx(null, [], {}, "2026-03-02T08:00:00Z");
+    seedLibrary(db);
+    seed(db, [], [play("2025-06-01T20:00:00Z", uri("s1"), 200_000), play("2025-06-02T20:00:00Z", uri("s1"), 200_000)]);
+
+    const recap = await generateDigest(ctx, "yearly", "2026");
+
+    const years = sectionOf(recap, "years") as { a: { year: number }; b: { year: number }; artists: { artist: string }[] };
+    expect([years.a.year, years.b.year, years.artists[0]!.artist, sectionOf(recap, "taste")]).toEqual([2025, 2026, "Mac Miller", undefined]);
+  });
+});
+
+describe("recap timeline", () => {
+  test("the month still going comes first, then each year with its months and weeks, each with its hours against the period before", async () => {
+    const { ctx, db } = featureCtx(null, [], {}, "2026-03-18T08:00:00Z");
+    seedLibrary(db);
+    seedFebruary(db);
+    await generateDigest(ctx, "monthly", "2026-02");
+
+    const t = recapTimeline(db, "2026-03-18", 5);
+
+    const year = t.years[0]!;
+    expect(t.current.month).toMatchObject({ key: "2026-03", from: "2026-03-01", to: "2026-03-17", inProgress: true, hours: 0 });
+    expect(year.months.map((m) => [m.month.key, m.month.hours, m.month.before, m.month.recap?.headline ?? null, m.month.recap?.topArtist ?? null])).toEqual([
+      ["2026-02", 0.56, 1.21, null, "Mac Miller"],
+      ["2026-01", 1.21, null, null, null],
+    ]);
+    expect(year.months[0]!.weeks.map((w) => w.key)).toEqual(["2026-02-26", "2026-02-19", "2026-02-12", "2026-02-05"]);
+  });
+
+  test("a week recapped under an earlier recap weekday keeps its place among the weeks", async () => {
+    const { ctx, db } = featureCtx(null, [], {}, "2026-03-18T08:00:00Z");
+    seedLibrary(db);
+    seedFebruary(db);
+    await generateDigest(ctx, "weekly", "2026-02-08");
+
+    const t = recapTimeline(db, "2026-03-18", 5);
+
+    expect(t.years[0]!.months[0]!.weeks.map((w) => [w.key, w.recap !== null])).toEqual([
+      ["2026-02-26", false],
+      ["2026-02-19", false],
+      ["2026-02-12", false],
+      ["2026-02-08", true],
+      ["2026-02-05", false],
+    ]);
+  });
+
+  test("an empty history has no periods", () => {
+    const { db } = featureCtx(null);
+
+    const t = recapTimeline(db, "2026-03-18", 5);
+
+    expect(t).toEqual({ historyStart: null, current: { week: null, month: null, weeks: [] }, years: [] });
   });
 });

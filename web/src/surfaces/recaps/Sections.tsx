@@ -1,10 +1,11 @@
 import { useState, type ReactNode } from "react";
-import type { RecapPage, RecapSection, RecapShare } from "../../api/types";
+import type { RecapMilestone, RecapPage, RecapRecord, RecapSection, RecapShare } from "../../api/types";
 import { artistPath, songPath } from "../../app/paths";
 import { ArtChip, InlineChange, InlineColumns, InlineFact, InlinePair, InlineShare } from "../../charts/Inline";
-import { fmtDayShort, fmtHour, fmtHoursValue, fmtInt, fmtMonthShort, hoursParts, WEEKDAYS } from "../../lib/format";
+import { fmtDayShort, fmtHour, fmtHoursValue, fmtInt, fmtMonthLong, fmtMonthShort, hoursParts, WEEKDAYS } from "../../lib/format";
 import { AppLink } from "../../ui/AppLink";
 import { Button } from "../../ui/Button";
+import { cx } from "../../ui/cx";
 import { Section } from "../../ui/Page";
 import { RowList, TrackRow } from "../../ui/Rows";
 
@@ -20,14 +21,27 @@ const plural = (n: number, one: string, many: string) => `${fmtInt(n)} ${n === 1
 const weekday = (day: string) => WEEKDAYS[(new Date(`${day}T00:00:00Z`).getUTCDay() + 6) % 7]!;
 const dayLong = (day: string) => `${weekday(day)} ${new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "long", timeZone: "UTC" }).format(new Date(`${day}T00:00:00Z`))}`;
 const tagName = (tag: string) => tag.charAt(0).toUpperCase() + tag.slice(1).replace(/-/g, " ");
+const gap = (days: number) => (days >= 60 ? `${Math.round(days / 30.4)} months` : plural(days, "day", "days"));
+
+/** A short list that shows its first few and opens the rest on a tap. */
+function useMore<T>(items: T[], first: number) {
+  const [all, setAll] = useState(false);
+  const toggle =
+    items.length > first ? (
+      <Button variant="ghost" size="sm" className="-ml-2.5 self-start" onClick={() => setAll((v) => !v)}>
+        {all ? "Show fewer" : `Show all ${fmtInt(items.length)}`}
+      </Button>
+    ) : null;
+  return { shown: all ? items : items.slice(0, first), toggle };
+}
 
 function Take({ text }: { text: string | null }) {
-  return text ? <p className="text-body text-pretty text-primary">{text}</p> : null;
+  return text ? <p className="max-w-(--measure) text-body text-pretty text-primary">{text}</p> : null;
 }
 
 /** A line of figures and the small charts that draw them. */
 function Line({ children, className }: { children: ReactNode; className?: string }) {
-  return <p className={`flex flex-wrap items-center gap-x-2 gap-y-1 text-body text-primary ${className ?? ""}`}>{children}</p>;
+  return <p className={cx("flex flex-wrap items-center gap-x-2 gap-y-1 text-body text-primary", className)}>{children}</p>;
 }
 
 function ArtistLink({ name, imageUrl }: { name: string; imageUrl: string | null }) {
@@ -39,6 +53,22 @@ function ArtistLink({ name, imageUrl }: { name: string; imageUrl: string | null 
     </AppLink>
   );
 }
+
+function SongLink({ song }: { song: { songKey: string; name: string; artist: string; albumArtUrl: string | null } }) {
+  return (
+    <AppLink to={songPath(song.songKey)} className="inline-flex min-h-7 min-w-0 items-center rounded-xs hover:underline hover:underline-offset-2" title={`${song.name}, ${song.artist}`}>
+      <ArtChip src={song.albumArtUrl} kind="song">
+        {song.name} <span className="text-secondary">{song.artist}</span>
+      </ArtChip>
+    </AppLink>
+  );
+}
+
+function SubHeading({ children }: { children: ReactNode }) {
+  return <h3 className="text-body-sm font-medium text-secondary">{children}</h3>;
+}
+
+const addDays = (day: string, n: number) => new Date(Date.parse(`${day}T00:00:00Z`) + n * 86_400_000).toISOString().slice(0, 10);
 
 function Listening({ s, page }: { s: Of<"listening">; page: RecapPage }) {
   const figure = hoursParts(s.hours);
@@ -70,14 +100,87 @@ function Listening({ s, page }: { s: Of<"listening">; page: RecapPage }) {
             bars={page.kind === "yearly" ? 53 : 31}
             label={`Listening each ${page.kind === "yearly" ? "week" : "day"} from ${fmtDayShort(page.span.from)} to ${fmtDayShort(page.span.to)}; the most on ${fmtDayShort(addDays(page.span.from, busiest))}`}
           />
-          <span className="text-caption">{page.kind === "yearly" ? "Each week" : "Each day"}, {fmtDayShort(page.span.from)} to {fmtDayShort(page.span.to)}</span>
+          <span className="text-caption">
+            {page.kind === "yearly" ? "Each week" : "Each day"}, {fmtDayShort(page.span.from)} to {fmtDayShort(page.span.to)}
+          </span>
         </Line>
       )}
     </Section>
   );
 }
 
-const addDays = (day: string, n: number) => new Date(Date.parse(`${day}T00:00:00Z`) + n * 86_400_000).toISOString().slice(0, 10);
+const rankChange = (change: number | null, before: { rank: number } | null) => {
+  if (change === null) return before ? "" : "new";
+  if (change === 0) return "same place";
+  return `${change > 0 ? "↑" : "↓"} ${fmtInt(Math.abs(change))}`;
+};
+
+function YearShares({ title, rows, before }: { title: string; rows: Of<"years">["genres"]; before: number }) {
+  if (rows.length === 0) return null;
+  return (
+    <div className="flex min-w-0 flex-col gap-2">
+      <SubHeading>{title}</SubHeading>
+      <ul className="flex flex-col gap-1.5">
+        {rows.map((r) => (
+          <li key={r.value} className="grid grid-cols-[minmax(0,1fr)_4rem_auto] items-center gap-x-3">
+            <span className="line-clamp-1 [overflow-wrap:anywhere]">{tagName(r.value)}</span>
+            <InlineShare share={r.b} before={r.a} label={`${tagName(r.value)}: ${pct(r.b)} of tagged listening, from ${pct(r.a)} in ${before}`} />
+            <span className="text-secondary tabular">
+              {pct(r.b)} <span className="text-tertiary">from {pct(r.a)}</span>
+            </span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+/** A year against the year before. Hours stay with Listening; while the year runs, so do the totals, which Listening compares over the same days. */
+function Years({ s, page }: { s: Of<"years">; page: RecapPage }) {
+  const figures: [string, number, number, (n: number) => string][] = [
+    ["Plays", s.a.plays, s.b.plays, fmtInt],
+    ["New artists", s.a.newArtists, s.b.newArtists, fmtInt],
+    ["New songs", s.a.newSongs, s.b.newSongs, fmtInt],
+  ];
+  return (
+    <Section title={`Against ${s.a.year}`}>
+      <Take text={s.take} />
+      {!page.inProgress && (
+        <ul className="flex flex-col">
+          {figures.map(([label, a, b, fmt]) => (
+            <li key={label} className="grid min-h-(--row-h-compact) grid-cols-[minmax(0,1fr)_3rem_4.5rem_4rem] items-center gap-x-3 py-1 sm:grid-cols-[10rem_3rem_4.5rem_minmax(0,1fr)]">
+              <span className="text-secondary">{label}</span>
+              <InlinePair now={b} before={a} label={`${label}: ${fmt(b)} in ${s.b.year}, against ${fmt(a)} in ${s.a.year}`} />
+              <span className="text-right text-primary tabular">{fmt(b)}</span>
+              <span className="text-secondary tabular">
+                <InlineChange now={b} before={a} /> <span className="hidden sm:inline">from {fmt(a)}</span>
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+      <div className="flex flex-col gap-2">
+        <SubHeading>Top artists, with their place in {s.a.year}</SubHeading>
+        <ol className="flex flex-col">
+          {s.artists.map((a) => (
+            <li key={a.artist} className="grid min-h-(--row-h-compact) grid-cols-[1.25rem_minmax(0,1fr)_auto_3.5rem] items-center gap-x-3 py-1">
+              <span className="text-right text-caption text-tertiary tabular">{a.b?.rank}</span>
+              <ArtistLink name={a.artist} imageUrl={a.imageUrl} />
+              <span className="text-secondary tabular whitespace-nowrap">{rankChange(a.change, a.a)}</span>
+              <span className="text-right text-secondary tabular">{a.b ? shortHours(a.b.hours) : ""}</span>
+            </li>
+          ))}
+        </ol>
+      </div>
+      {(s.genres.length > 0 || s.moods.length > 0) && (
+        <div className="grid gap-6 md:grid-cols-2">
+          <YearShares title="Genres" rows={s.genres} before={s.a.year} />
+          <YearShares title="Moods" rows={s.moods} before={s.a.year} />
+        </div>
+      )}
+    </Section>
+  );
+}
 
 function Months({ s }: { s: Of<"months"> }) {
   const max = Math.max(...s.months.map((m) => m.hours)) || 1;
@@ -111,11 +214,14 @@ function Mover({ m }: { m: { artist: string; imageUrl: string | null; hours: num
   );
 }
 
+/** In a year with a year before, Against already ranks the top artists, so only who rose and fell is added. */
 function Artists({ s, page }: { s: Of<"artists">; page: RecapPage }) {
+  const ranked = page.sections.some((x) => x.id === "years");
+  if (ranked && s.up.length === 0 && s.down.length === 0) return null;
   return (
-    <Section title="Artists">
+    <Section title={ranked ? "Rising and falling" : "Artists"}>
       <Take text={s.take} />
-      <ol className="flex flex-col">
+      {!ranked && <ol className="flex flex-col">
         {s.top.map((a, i) => (
           <li key={a.artist} className="grid min-h-(--row-h-compact) grid-cols-[1.25rem_minmax(0,1fr)_auto_3.5rem] items-center gap-x-3 py-1">
             <span className="text-right text-caption text-tertiary tabular">{i + 1}</span>
@@ -124,19 +230,27 @@ function Artists({ s, page }: { s: Of<"artists">; page: RecapPage }) {
             <span className="text-right text-secondary tabular">{shortHours(a.hours)}</span>
           </li>
         ))}
-      </ol>
+      </ol>}
       {(s.up.length > 0 || s.down.length > 0) && page.compare && (
         <div className="grid gap-4 md:grid-cols-2">
           {s.up.length > 0 && (
             <div className="flex min-w-0 flex-col gap-2">
-              <h3 className="text-body-sm font-medium text-secondary">More than {page.compare.label}</h3>
-              <ul className="flex flex-col gap-2">{s.up.map((m) => <Mover key={m.artist} m={m} />)}</ul>
+              <SubHeading>More than {page.compare.label}</SubHeading>
+              <ul className="flex flex-col gap-2">
+                {s.up.map((m) => (
+                  <Mover key={m.artist} m={m} />
+                ))}
+              </ul>
             </div>
           )}
           {s.down.length > 0 && (
             <div className="flex min-w-0 flex-col gap-2">
-              <h3 className="text-body-sm font-medium text-secondary">Less than {page.compare.label}</h3>
-              <ul className="flex flex-col gap-2">{s.down.map((m) => <Mover key={m.artist} m={m} />)}</ul>
+              <SubHeading>Less than {page.compare.label}</SubHeading>
+              <ul className="flex flex-col gap-2">
+                {s.down.map((m) => (
+                  <Mover key={m.artist} m={m} />
+                ))}
+              </ul>
             </div>
           )}
         </div>
@@ -148,13 +262,12 @@ function Artists({ s, page }: { s: Of<"artists">; page: RecapPage }) {
 const SONGS_SHOWN = 10;
 
 export function Songs({ s, title, actions }: { s: Of<"songs">; title: string; actions?: ReactNode }) {
-  const [all, setAll] = useState(false);
+  const { shown, toggle } = useMore(s.songs, SONGS_SHOWN);
   return (
-    <Section title={title}>
+    <Section title={title} actions={actions}>
       <Take text={s.take} />
-      {actions}
       <RowList label={title}>
-        {(all ? s.songs : s.songs.slice(0, SONGS_SHOWN)).map((t, i) => (
+        {shown.map((t, i) => (
           <TrackRow
             key={t.songKey}
             rank={i + 1}
@@ -163,11 +276,7 @@ export function Songs({ s, title, actions }: { s: Of<"songs">; title: string; ac
           />
         ))}
       </RowList>
-      {s.songs.length > SONGS_SHOWN && (
-        <Button variant="ghost" size="sm" className="-ml-2.5 self-start" onClick={() => setAll((v) => !v)}>
-          {all ? "Show fewer" : `Show all ${fmtInt(s.songs.length)}`}
-        </Button>
-      )}
+      {toggle}
     </Section>
   );
 }
@@ -176,7 +285,7 @@ function ShareRows({ title, rows, compare }: { title: string; rows: RecapShare[]
   if (rows.length === 0) return null;
   return (
     <div className="flex min-w-0 flex-col gap-2">
-      <h3 className="text-body-sm font-medium text-secondary">{title}</h3>
+      <SubHeading>{title}</SubHeading>
       <ul className="flex flex-col gap-1.5">
         {rows.map((r) => (
           <li key={r.value} className="grid grid-cols-[minmax(0,1fr)_4rem_auto] items-center gap-x-3">
@@ -197,10 +306,8 @@ function Taste({ s, page }: { s: Of<"taste">; page: RecapPage }) {
   return (
     <Section title="Genres and moods">
       <Take text={s.take} />
-      <div className="grid gap-6 md:grid-cols-2">
-        <ShareRows title="Genres" rows={s.genres} compare={compare} />
-        <ShareRows title="Moods" rows={s.moods} compare={compare} />
-      </div>
+      <ShareRows title="Genres" rows={s.genres} compare={compare} />
+      <ShareRows title="Moods" rows={s.moods} compare={compare} />
     </Section>
   );
 }
@@ -212,20 +319,20 @@ function Finds({ s, page }: { s: Of<"finds">; page: RecapPage }) {
   return (
     <Section title="New to you">
       <Take text={s.take} />
+      {s.newShare !== null && s.newShare !== undefined && (
+        <InlineFact label="On new songs" figure={pct(s.newShare)} mark={<InlineShare share={s.newShare} label={`${pct(s.newShare)} of the time on songs new to you`} />}>
+          of the time
+        </InlineFact>
+      )}
       {s.songs.count > 0 && (
         <div className="flex flex-col gap-2">
           <Line>
-            {!legacy && <InlineShare share={s.songs.count / Math.max(1, s.songs.ofNew)} label={lead(s.songs.count, s.songs.ofNew, "song", "songs")} />}
-            <span className="min-w-0 flex-1">{lead(s.songs.count, s.songs.ofNew, "song", "songs")}</span>
+            <span className="min-w-0 flex-1 text-secondary">{lead(s.songs.count, s.songs.ofNew, "song", "songs")}</span>
           </Line>
           <ul className="flex flex-col gap-1.5">
             {s.songs.top.map((t) => (
-              <li key={t.songKey} className="flex min-w-0 items-center gap-2">
-                <AppLink to={songPath(t.songKey)} className="inline-flex min-h-7 min-w-0 items-center rounded-xs hover:underline hover:underline-offset-2" title={`${t.name}, ${t.artist}`}>
-                  <ArtChip src={t.albumArtUrl} kind="song">
-                    {t.name} <span className="text-secondary">{t.artist}</span>
-                  </ArtChip>
-                </AppLink>
+              <li key={t.songKey} className="flex min-w-0 items-center justify-between gap-2">
+                <SongLink song={t} />
                 <span className="shrink-0 text-secondary tabular">{plural(t.listens, "play", "plays")}</span>
               </li>
             ))}
@@ -235,8 +342,7 @@ function Finds({ s, page }: { s: Of<"finds">; page: RecapPage }) {
       {s.artists.count > 0 && (
         <div className="flex flex-col gap-2">
           <Line>
-            {!legacy && <InlineShare share={s.artists.count / Math.max(1, s.artists.ofNew)} label={lead(s.artists.count, s.artists.ofNew, "artist", "artists")} />}
-            <span className="min-w-0 flex-1">{lead(s.artists.count, s.artists.ofNew, "artist", "artists")}</span>
+            <span className="min-w-0 flex-1 text-secondary">{lead(s.artists.count, s.artists.ofNew, "artist", "artists")}</span>
           </Line>
           <ul className="flex flex-col gap-1.5">
             {s.artists.top.map((a) => (
@@ -251,7 +357,96 @@ function Finds({ s, page }: { s: Of<"finds">; page: RecapPage }) {
   );
 }
 
+const COMEBACKS_SHOWN = 5;
+
+function Comebacks({ s }: { s: Of<"comebacks"> }) {
+  const { shown, toggle } = useMore(s.items, COMEBACKS_SHOWN);
+  return (
+    <Section title="Back again">
+      <Take text={s.take} />
+      <ul className="flex flex-col gap-1.5">
+        {shown.map((c) => (
+          <li key={`${c.artist}:${c.returned}`} className="flex min-w-0 items-center justify-between gap-3">
+            <ArtistLink name={c.artist} imageUrl={c.imageUrl} />
+            <span className="shrink-0 text-secondary" title={`Last played ${fmtDayShort(c.lastBefore)}, back ${fmtDayShort(c.returned)}`}>
+              after {gap(c.gapDays)}
+            </span>
+          </li>
+        ))}
+      </ul>
+      {toggle}
+    </Section>
+  );
+}
+
+function RecordItem({ r }: { r: RecapRecord }) {
+  switch (r.record) {
+    case "day":
+      return <InlineFact label="Biggest day yet" figure={shortHours(r.hours)}>{dayLong(r.day)}</InlineFact>;
+    case "session":
+      return <InlineFact label="Longest session yet" figure={hours(r.minutes / 60)}>{dayLong(r.day)}</InlineFact>;
+    case "week":
+      return <InlineFact label="Biggest week yet" figure={shortHours(r.hours)}>from {fmtDayShort(r.week)}</InlineFact>;
+    case "month":
+      return <InlineFact label="Biggest month yet" figure={shortHours(r.hours)}>{fmtMonthLong(r.month)}</InlineFact>;
+    case "songDay":
+      return (
+        <div className="flex flex-col gap-1">
+          <InlineFact label="One song, most in a day" figure={plural(r.listens, "play", "plays")}>{dayLong(r.day)}</InlineFact>
+          <SongLink song={r.song} />
+        </div>
+      );
+  }
+}
+
+function MilestoneItem({ m }: { m: RecapMilestone }) {
+  const when = <span className="shrink-0 text-secondary">{fmtDayShort(m.day)}</span>;
+  if (m.kind === "total")
+    return (
+      <li className="flex items-center justify-between gap-3">
+        <span>All your music passed {plural(m.threshold, "hour", "hours")}</span>
+        {when}
+      </li>
+    );
+  return (
+    <li className="flex min-w-0 flex-col gap-0.5">
+      {m.kind === "song" ? <SongLink song={m.song} /> : <ArtistLink name={m.artist} imageUrl={m.imageUrl} />}
+      <span className="flex justify-between gap-3 text-secondary">
+        <span>passed {m.kind === "song" ? plural(m.threshold, "play", "plays") : plural(m.threshold, "hour", "hours")}</span>
+        {when}
+      </span>
+    </li>
+  );
+}
+
+const MILESTONES_SHOWN = 5;
+
+function Records({ s }: { s: Of<"records"> }) {
+  const { shown, toggle } = useMore(s.milestones, MILESTONES_SHOWN);
+  return (
+    <Section title="Records">
+      <Take text={s.take} />
+      {s.records.map((r) => (
+        <RecordItem key={r.record} r={r} />
+      ))}
+      {s.milestones.length > 0 && (
+        <div className="flex flex-col gap-2">
+          <SubHeading>Milestones</SubHeading>
+          <ul className="flex flex-col gap-2.5">
+            {shown.map((m, i) => (
+              <MilestoneItem key={i} m={m} />
+            ))}
+          </ul>
+          {toggle}
+        </div>
+      )}
+    </Section>
+  );
+}
+
 const DAY_BARS: Record<RecapPage["kind"], number> = { weekly: 7, monthly: 31, yearly: 53 };
+/** A run of days worth a line: shorter ones happen in almost every period. */
+const STREAK_SHOWN_FROM = 3;
 
 function Rhythm({ s, page }: { s: Of<"rhythm">; page: RecapPage }) {
   const listening = page.sections.find((x): x is Of<"listening"> => x.id === "listening");
@@ -281,6 +476,11 @@ function Rhythm({ s, page }: { s: Of<"rhythm">; page: RecapPage }) {
           {fmtHour(s.hour.hour)} to {fmtHour((s.hour.hour + 1) % 24)}
         </InlineFact>
       )}
+      {s.streak && s.streak.days >= STREAK_SHOWN_FROM && (
+        <InlineFact label="Longest run" figure={plural(s.streak.days, "day", "days")}>
+          in a row, {fmtDayShort(s.streak.from)} to {fmtDayShort(s.streak.to)}
+        </InlineFact>
+      )}
     </Section>
   );
 }
@@ -291,28 +491,55 @@ const SONGS_TITLE: Record<RecapPage["kind"], (label: string) => string> = {
   yearly: (label) => `Songs of ${label}`,
 };
 
-/** The recap's sections in the order the page gives them. `songsActions` sits on the songs section (play, save). */
+/** Sections that answer how much and what: they read down the main column. The rest are side lists. */
+const MAIN: RecapSection["id"][] = ["listening", "years", "months", "artists", "songs"];
+
+function SectionView({ s, page, songsActions }: { s: RecapSection; page: RecapPage; songsActions?: ReactNode }) {
+  switch (s.id) {
+    case "listening":
+      return <Listening s={s} page={page} />;
+    case "years":
+      return <Years s={s} page={page} />;
+    case "months":
+      return <Months s={s} />;
+    case "artists":
+      return <Artists s={s} page={page} />;
+    case "songs":
+      return <Songs s={s} title={SONGS_TITLE[page.kind](page.label)} actions={songsActions} />;
+    case "taste":
+      return <Taste s={s} page={page} />;
+    case "finds":
+      return <Finds s={s} page={page} />;
+    case "comebacks":
+      return <Comebacks s={s} />;
+    case "records":
+      return <Records s={s} />;
+    case "rhythm":
+      return <Rhythm s={s} page={page} />;
+  }
+}
+
+/**
+ * The recap's sections: how much and what down the main column, held to the reading measure; discoveries, comebacks,
+ * records, when and genres in the side column. On a phone the side follows the main.
+ */
 export function RecapSections({ page, songsActions }: { page: RecapPage; songsActions?: ReactNode }) {
+  const main = page.sections.filter((s) => MAIN.includes(s.id));
+  const side = page.sections.filter((s) => !MAIN.includes(s.id));
   return (
-    <>
-      {page.sections.map((s) => {
-        switch (s.id) {
-          case "listening":
-            return <Listening key={s.id} s={s} page={page} />;
-          case "months":
-            return <Months key={s.id} s={s} />;
-          case "artists":
-            return <Artists key={s.id} s={s} page={page} />;
-          case "songs":
-            return <Songs key={s.id} s={s} title={SONGS_TITLE[page.kind](page.label)} actions={songsActions} />;
-          case "taste":
-            return <Taste key={s.id} s={s} page={page} />;
-          case "finds":
-            return <Finds key={s.id} s={s} page={page} />;
-          case "rhythm":
-            return <Rhythm key={s.id} s={s} page={page} />;
-        }
-      })}
-    </>
+    <div className="grid gap-10 md:gap-12 lg:grid-cols-[minmax(0,1fr)_minmax(0,320px)] lg:gap-16">
+      <div className="flex min-w-0 max-w-(--measure) flex-col gap-10 md:gap-12">
+        {main.map((s) => (
+          <SectionView key={s.id} s={s} page={page} songsActions={songsActions} />
+        ))}
+      </div>
+      {side.length > 0 && (
+        <div className="flex min-w-0 flex-col gap-10 md:gap-12">
+          {side.map((s) => (
+            <SectionView key={s.id} s={s} page={page} />
+          ))}
+        </div>
+      )}
+    </div>
   );
 }

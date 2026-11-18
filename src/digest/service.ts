@@ -33,9 +33,8 @@ const inProgress = (d: Row) => isRecapFacts(d.facts) && (d.facts as RecapFacts).
 
 function title(d: Pick<Row, "kind" | "periodKey"> & { inProgress: boolean }): string {
   const label = periodLabel(d.kind, d.periodKey);
-  if (d.kind === "weekly") return `Your week, ${label}`;
-  if (d.kind === "monthly") return `Your month, ${label}`;
-  return d.inProgress ? `Your year so far, ${label}` : `Your year, ${label}`;
+  const noun = d.kind === "weekly" ? "week" : d.kind === "monthly" ? "month" : "year";
+  return `Your ${noun}${d.inProgress ? " so far" : ""}, ${label}`;
 }
 
 function headlineOf(d: Row): string {
@@ -187,5 +186,5 @@ export function isDigestDue(db: Db, kind: RecapKind, timezone: string, slot: { w
   if (kind === "yearly" && !t.day.endsWith("-01-01")) return false;
   const key = dueKey(kind, t.day, slot.weekday);
   const stored = find(db, kind, key);
-  return !stored || (kind === "yearly" && stored.toDay < periodSpan(kind, key).to);
+  return !stored || stored.toDay < periodSpan(kind, key).to;
 }

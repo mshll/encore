@@ -51,8 +51,13 @@ Every field, and nothing else (`src/share/snapshot.ts` builds it field by field 
   - `artists`: the top artists with image, hours, share and hours before; artists up and down
   - `songs`: name, artist, Spotify track URI (linked to open.spotify.com), album art, listens
   - `taste`: genre and mood shares, now and before
-  - `finds`: counts of new songs and artists that came back, with the top few
-  - `rhythm`: busiest day and hour, hours per hour of the day
+  - `years` (a year): the two years' plays, hours, artists, new artists and new songs; the top artists with image,
+    their rank in each year and the change; genre and mood shares in each year
+  - `finds`: counts of new songs and artists that came back, with the top few; the share of time on new songs
+  - `comebacks`: artist, image, the day last played before the gap and the day back, the gap in days
+  - `records`: all-time records set in the period (day, week, month, session length, the song played most in a day
+    with its name, artist, Spotify track URI and art) and milestones (song or artist name, threshold, day)
+  - `rhythm`: busiest day and hour, hours per hour of the day, the longest run of days with music
 - `card`: the card's label, headline, a fallback headline, two or three figures, and the art URLs it is drawn from
 
 For an answer (`src/share/snapshot.ts`, `answerSnapshot`):

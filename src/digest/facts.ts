@@ -156,7 +156,7 @@ export function recapFacts(db: Db, kind: RecapKind, period: Span & { inProgress:
     },
     months: kind === "yearly" ? months(db, period) : [],
     discovery: periodDiscovery(db, period),
-    comebacks: comebacks(db, { range: period, limit: 5 }).items,
+    comebacks: comebacks(db, { range: period, limit: kind === "yearly" ? 50 : 10 }).items,
     records: start !== null && start < period.from ? recordsSetIn(db, period) : [],
     streak: longestStreak(db, period),
     milestones: milestones(db, { range: period, limit: 10 }).items,

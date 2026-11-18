@@ -35,8 +35,8 @@
 
   /* Text. Opaque greys, so icons drawn in them stay crisp where strokes overlap. */
   --text-primary: #202020;
-  --text-secondary: #696969;
-  --text-tertiary: #878787;
+  --text-secondary: #5e5e5e;
+  --text-tertiary: #6f6f6f;
   --text-disabled: #b8b8b8;
   --text-inverted: #ffffff;
   --text-on-standout: #eeeeee;
@@ -130,7 +130,7 @@
 
   --text-primary: #eeeeee;
   --text-secondary: #a9a9a9;
-  --text-tertiary: #787878;
+  --text-tertiary: #888888;
   --text-disabled: #535353;
   --text-inverted: #000000;
   --text-on-standout: #eeeeee;

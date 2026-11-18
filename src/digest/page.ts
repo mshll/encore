@@ -1,4 +1,5 @@
 import { withArtistImages } from "../analytics/common";
+import { yearCompare } from "../analytics/years";
 import type { Db } from "../db/client";
 import { withArtwork } from "../library/artwork";
 import { songKey } from "../plays/song";
@@ -6,11 +7,25 @@ import { isRecapFacts, type LegacyFacts, type RecapFacts, type Share } from "./f
 import { baselineLabel, humanDay, humanDatesIn, periodLabel, type RecapKind, type Span } from "./periods";
 import { definingSongs } from "./songs";
 
-export const SECTION_IDS = ["listening", "months", "artists", "songs", "taste", "finds", "rhythm"] as const;
+export const SECTION_IDS = ["listening", "years", "months", "artists", "songs", "finds", "comebacks", "records", "taste", "rhythm"] as const;
 export type SectionId = (typeof SECTION_IDS)[number];
 
 /** Claude's words for a recap: a headline and one take per section, none with a digit in it. */
 export type RecapLines = { headline: string | null; takes: Partial<Record<SectionId, string>> };
+
+type YearSide = { year: number; hours: number; plays: number; artists: number; newArtists: number; newSongs: number };
+type Run = { days: number; from: string; to: string };
+type MilestoneSong = { songKey: string; uri: string; name: string; artist: string; albumArtUrl: string | null };
+export type RecapRecord =
+  | { record: "day"; day: string; hours: number }
+  | { record: "session"; day: string; minutes: number; hours: number }
+  | { record: "songDay"; day: string; listens: number; song: MilestoneSong }
+  | { record: "week"; week: string; hours: number }
+  | { record: "month"; month: string; hours: number };
+export type RecapMilestone =
+  | { kind: "song"; threshold: number; day: string; song: MilestoneSong }
+  | { kind: "artist"; threshold: number; day: string; artist: string; imageUrl: string | null }
+  | { kind: "total"; threshold: number; day: string };
 
 type Mover = { artist: string; imageUrl: string | null; hours: number; before: number };
 type SongItem = { songKey: string; uri: string | null; name: string; artist: string; albumArtUrl: string | null; listens: number };
@@ -21,8 +36,26 @@ export type RecapSection =
   | { id: "artists"; take: string | null; top: { artist: string; imageUrl: string | null; hours: number; share: number; before: number | null }[]; up: Mover[]; down: Mover[] }
   | { id: "songs"; take: string | null; songs: (SongItem & { hours: number })[] }
   | { id: "taste"; take: string | null; genres: Share[]; moods: Share[] }
-  | { id: "finds"; take: string | null; songs: { count: number; ofNew: number; top: SongItem[] }; artists: { count: number; ofNew: number; top: { artist: string; imageUrl: string | null; listens: number }[] } }
-  | { id: "rhythm"; take: string | null; day: { day: string; hours: number }; hour: { hour: number; hours: number } | null; byHour: number[] | null };
+  | {
+      id: "finds";
+      take: string | null;
+      /** Share of the period's hours on songs first played in it; null on recaps written before it was kept. */
+      newShare: number | null;
+      songs: { count: number; ofNew: number; top: SongItem[] };
+      artists: { count: number; ofNew: number; top: { artist: string; imageUrl: string | null; listens: number }[] };
+    }
+  | { id: "comebacks"; take: string | null; items: { artist: string; imageUrl: string | null; lastBefore: string; returned: string; gapDays: number }[] }
+  | { id: "records"; take: string | null; records: RecapRecord[]; milestones: RecapMilestone[] }
+  | {
+      id: "years";
+      take: string | null;
+      a: YearSide;
+      b: YearSide;
+      artists: { artist: string; imageUrl: string | null; a: { rank: number; hours: number } | null; b: { rank: number; hours: number } | null; change: number | null }[];
+      genres: { value: string; a: number; b: number }[];
+      moods: { value: string; a: number; b: number }[];
+    }
+  | { id: "rhythm"; take: string | null; day: { day: string; hours: number }; hour: { hour: number; hours: number } | null; byHour: number[] | null; streak: Run | null };
 
 export type RecapPage = {
   kind: RecapKind;
@@ -77,7 +110,12 @@ function noteFor(facts: RecapFacts, label: string): string | null {
 function pageFromFacts(db: Db, d: Stored, f: RecapFacts, label: string): Pick<RecapPage, "sections" | "headline" | "headlineBy" | "compare" | "note" | "quiet"> {
   const lines = d.lines;
   const quiet = f.totals.listens < QUIET_LISTENS || f.totals.hours < QUIET_HOURS;
-  const pics = images(db, [...f.artists, ...f.movers.up, ...f.movers.down].map((a) => a.artist).concat(f.months.flatMap((m) => (m.artist ? [m.artist] : [])), f.finds?.artists.top.map((a) => a.artist) ?? []));
+  const pics = images(
+    db,
+    [...f.artists, ...f.movers.up, ...f.movers.down, ...(f.comebacks ?? [])]
+      .map((a) => a.artist)
+      .concat(f.months.flatMap((m) => (m.artist ? [m.artist] : [])), f.finds?.artists.top.map((a) => a.artist) ?? []),
+  );
   const pic = (artist: string) => pics.get(artist) ?? null;
   const mover = (a: { artist: string; hours: number; before: number | null }) => ({ artist: a.artist, imageUrl: pic(a.artist), hours: a.hours, before: a.before ?? 0 });
   const sections: RecapSection[] = [
@@ -94,6 +132,8 @@ function pageFromFacts(db: Db, d: Stored, f: RecapFacts, label: string): Pick<Re
     },
   ];
   if (!quiet) {
+    const years = d.kind === "yearly" ? yearsSection(db, Number(d.periodKey), take(lines, "years")) : null;
+    if (years) sections.push(years);
     if (f.months.length >= 2)
       sections.push({ id: "months", take: take(lines, "months"), months: f.months.map((m) => ({ ...m, imageUrl: m.artist ? pic(m.artist) : null })) });
     if (f.artists.length)
@@ -107,17 +147,21 @@ function pageFromFacts(db: Db, d: Stored, f: RecapFacts, label: string): Pick<Re
     const songs = definingSongs(db, d.kind, { from: f.period.from, to: f.period.to });
     if (songs.length) sections.push({ id: "songs", take: take(lines, "songs"), songs: songs.map(({ album: _album, ...s }) => s) });
     const moved = (s: Share[]) => s.filter((x) => x.before !== null && Math.abs(x.share - x.before) >= TASTE_MOVE).slice(0, 4);
-    if (moved(f.genres).length || moved(f.moods).length) sections.push({ id: "taste", take: take(lines, "taste"), genres: moved(f.genres), moods: moved(f.moods) });
+    if (!years && (moved(f.genres).length || moved(f.moods).length)) sections.push({ id: "taste", take: take(lines, "taste"), genres: moved(f.genres), moods: moved(f.moods) });
+    if (f.comebacks?.length)
+      sections.push({ id: "comebacks", take: take(lines, "comebacks"), items: f.comebacks.map((c) => ({ artist: c.artist, imageUrl: pic(c.artist), lastBefore: c.lastBefore, returned: c.returned, gapDays: c.gapDays })) });
+    if (f.records?.length || f.milestones?.length) sections.push({ id: "records", take: take(lines, "records"), records: f.records ?? [], milestones: f.milestones ?? [] });
     if (f.finds && (f.finds.songs.count || f.finds.artists.count)) {
       const art = new Map(withArtwork(db, f.finds.songs.top.map((s) => ({ songKey: s.key, artist: s.artist }))).map((s) => [s.songKey, s.albumArtUrl]));
       sections.push({
         id: "finds",
         take: take(lines, "finds"),
+        newShare: f.discovery?.newShare ?? null,
         songs: { count: f.finds.songs.count, ofNew: f.finds.songs.ofNew, top: f.finds.songs.top.map((s) => ({ songKey: s.key, uri: s.uri, name: s.name, artist: s.artist, albumArtUrl: art.get(s.key) ?? null, listens: s.listens })) },
         artists: { count: f.finds.artists.count, ofNew: f.finds.artists.ofNew, top: f.finds.artists.top.map((a) => ({ artist: a.key, imageUrl: pic(a.key), listens: a.listens })) },
       });
     }
-    if (f.busiest.day) sections.push({ id: "rhythm", take: take(lines, "rhythm"), day: f.busiest.day, hour: f.busiest.hour, byHour: f.busiest.byHour });
+    if (f.busiest.day) sections.push({ id: "rhythm", take: take(lines, "rhythm"), day: f.busiest.day, hour: f.busiest.hour, byHour: f.busiest.byHour, streak: f.streak ?? null });
   }
   const headline = lines?.headline?.trim();
   return {
@@ -157,11 +201,12 @@ function pageFromLegacy(db: Db, d: Stored, f: LegacyFacts): Pick<RecapPage, "sec
     sections.push({
       id: "finds",
       take: null,
+      newShare: null,
       songs: { count: f.newSongs?.count ?? 0, ofNew: f.newSongs?.count ?? 0, top: top.map((s) => ({ songKey: s.songKey, uri: null, name: s.name, artist: s.artist, albumArtUrl: s.albumArtUrl, listens: s.listens })) },
       artists: { count: f.newArtists?.count ?? 0, ofNew: f.newArtists?.count ?? 0, top: (f.newArtists?.top ?? []).map((a) => ({ artist: a.artist, imageUrl: pic(a.artist), listens: a.listens })) },
     });
   }
-  if (f.busiestDay) sections.push({ id: "rhythm", take: null, day: f.busiestDay, hour: f.peakHour ?? null, byHour: null });
+  if (f.busiestDay) sections.push({ id: "rhythm", take: null, day: f.busiestDay, hour: f.peakHour ?? null, byHour: null, streak: null });
   const first = d.text.split(/\n+/).map((l) => l.trim()).find(Boolean);
   return {
     sections,
@@ -171,6 +216,14 @@ function pageFromLegacy(db: Db, d: Stored, f: LegacyFacts): Pick<RecapPage, "sec
     note: null,
     quiet: false,
   };
+}
+
+/** A year against the year before, as `stats/years` compares them; null when the year before has no listening. */
+function yearsSection(db: Db, year: number, take: string | null): Extract<RecapSection, { id: "years" }> | null {
+  const c = yearCompare(db, { a: year - 1, b: year });
+  if (!c.years.includes(year - 1)) return null;
+  const side = ({ year, hours, plays, artists, newArtists, newSongs }: (typeof c)["a"]): YearSide => ({ year, hours, plays, artists, newArtists, newSongs });
+  return { id: "years", take, a: side(c.a), b: side(c.b), artists: c.artists.filter((a) => a.b !== null).sort((x, y) => x.b!.rank - y.b!.rank), genres: c.genres, moods: c.moods };
 }
 
 /** The recap as a page: what the facts support, in order, with Claude's words where there are any. */

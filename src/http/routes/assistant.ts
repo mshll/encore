@@ -9,6 +9,7 @@ import { recapCover, recapCoverSource } from "../../digest/cover";
 import { RECAP_KINDS, latestKey } from "../../digest/periods";
 import { listRecapPlaylists, recapPlaylistSongs, saveRecapPlaylist } from "../../digest/playlist";
 import { generateDigest, getDigest, listDigests, recapPeriod, renderDigest } from "../../digest/service";
+import { recapTimeline } from "../../digest/timeline";
 import { localTime } from "../../plays/localTime";
 import { DEFAULT_MODELS, priceFor, WEB_SEARCH_PRICE, type ModelPrice } from "../../llm/providers";
 import { AI_PROVIDERS } from "../../llm/types";
@@ -180,6 +181,11 @@ export const digestRoutes = new Hono<Env>()
   .get("/", (c) => {
     const q = parse(z.object({ kind: kind.optional(), limit: z.coerce.number().int().min(1).max(100).default(20) }), c.req.query());
     return c.json({ items: listDigests(c.var.deps.db, q.kind, q.limit) });
+  })
+  .get("/timeline", (c) => {
+    const { db, now, settings } = c.var.deps;
+    const { timezone, llm } = settings.get();
+    return c.json(recapTimeline(db, localTime(now(), timezone).day, llm.digestSlot.weekday));
   })
   .get("/playlists", (c) => {
     const { db, now, settings } = c.var.deps;

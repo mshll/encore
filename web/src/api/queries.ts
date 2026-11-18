@@ -26,6 +26,7 @@ import type {
   DigestItem,
   RecapKind,
   RecapPeriod,
+  RecapTimeline,
   ShareLink,
   Note,
   PicksWeek,
@@ -334,6 +335,8 @@ export const useNote = (songKey: string) =>
   useQuery({ queryKey: ["note", songKey], queryFn: () => getOrNull<Note>("/api/notes", { songKey }), staleTime: Infinity });
 
 export const useRecapPlaylists = () => useQuery({ queryKey: ["recap-playlists"], queryFn: () => get<{ items: SavedRecapPlaylist[] }>("/api/digests/playlists") });
+
+export const useRecapTimeline = () => useQuery({ queryKey: ["digests", "timeline"], queryFn: () => get<RecapTimeline>("/api/digests/timeline") });
 
 export const useDigests = () => useQuery({ queryKey: ["digests"], queryFn: () => get<{ items: DigestItem[] }>("/api/digests", { limit: 30 }) });
 
