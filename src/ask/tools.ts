@@ -11,6 +11,11 @@ import { MOMENT_CLASSES, momentSplit } from "../analytics/skips";
 import { energyByHour, genreSeries, moodSeries } from "../analytics/tags";
 import { eras, topAlbums, topArtists, topTracks } from "../analytics/top";
 import { trips } from "../analytics/trips";
+import { obsessions } from "../analytics/obsessions";
+import { encoreFinds, stayingPower } from "../analytics/rotation";
+import { playStarts } from "../analytics/starts";
+import { seasonal, variety } from "../analytics/variety";
+import { listeningSessions } from "../analytics/when";
 import { listeningYears, yearCompare } from "../analytics/years";
 import type { Db } from "../db/client";
 import { tool, ToolError, type AgentTool } from "../llm/agent";
@@ -202,6 +207,67 @@ export function askTools(db: Db, { homeCountry, weekendDays, timezone }: { homeC
       description: "Hours by release decade of the songs played, and the listening age: the median release year weighted by hours. Songs without a release date are left out; check coverage.",
       schema: z.strictObject(range),
       run: (r) => decades(db, { range: checkRange(r) }),
+    }),
+    tool({
+      name: "listening_sessions",
+      description:
+        "How the owner's listening falls into sittings in a period (a session ends after 15 minutes with nothing playing): the count, days with one, the mean per such day, the average length in minutes, how many start in each local hour (startHours[0] is midnight), the usual start hour, and the longest.",
+      schema: z.strictObject(range),
+      run: (r) => listeningSessions(db, { range: checkRange(r) }),
+    }),
+    tool({
+      name: "play_starts",
+      description:
+        "How music plays began in a period, overall and by month, from the Spotify export's start reason: chosen (the owner clicked a row or pressed play), playedOn (the song before ended and this followed), nextBack (next or back pressed), other; shuffled is the share on shuffle. API and live plays are left out: check coverage. A play reached by next is not a judgement of the song before.",
+      schema: z.strictObject(range),
+      run: (r) => playStarts(db, { range: checkRange(r) }),
+    }),
+    tool({
+      name: "variety",
+      description:
+        "How varied the owner's listening is, week by week (local weeks from Monday): distinct artists with a listen each week, and the share of the week's hours on its 10 most played artists (higher means more concentrated), with averages. Use it for questions about listening wider or narrower over time.",
+      schema: z.strictObject(range),
+      run: (r) => variety(db, { range: checkRange(r) }),
+    }),
+    tool({
+      name: "seasonal",
+      description:
+        "Seasonal favourites: artists (hours) and songs (listens) that peak in the same calendar month (1-12) in at least 2 years: a month holding 1 h or 5 listens and 3 times the mean of that year's other months with music. Years with music in under 6 months are not judged, so a short history has none.",
+      schema: z.strictObject(range),
+      run: (r) => {
+        const found = seasonal(db, { range: checkRange(r), limit: 15 });
+        return { ...found, artists: found.artists.map(noImage), songs: found.songs.map(({ albumArtUrl: _art, ...s }) => s) };
+      },
+    }),
+    tool({
+      name: "staying_power",
+      description:
+        "How long songs first heard in a period stayed in rotation: a run starts on the first listen day and ends at the last listen day before a gap of more than 30 days. Songs listened to on 2+ days of their run entered rotation; median run in days, runs by length, and the longest runs (ongoing: still within 30 days of today).",
+      schema: z.strictObject(range),
+      run: (r) => {
+        const found = stayingPower(db, { range: checkRange(r), today, limit: 15 });
+        return { ...found, longest: found.longest.map(({ albumArtUrl: _art, ...s }) => s) };
+      },
+    }),
+    tool({
+      name: "encore_finds",
+      description:
+        "Songs encore itself suggested (weekly picks, new songs in sets, releases in New from your artists) that the owner had not listened to before, with listens since the first suggestion (only listens after it count). The range picks suggestions by day. Use it for how well encore's suggestions landed.",
+      schema: z.strictObject(range),
+      run: (r) => {
+        const found = encoreFinds(db, { range: checkRange(r), timezone, limit: 20 });
+        return { ...found, items: found.items.map(({ albumArtUrl: _art, ...s }) => s) };
+      },
+    }),
+    tool({
+      name: "obsessions",
+      description:
+        "Songs the owner was briefly obsessed with: a song's busiest 7 days in a row holding 8+ listens and 5 times its usual weekly listens, after which the next 28 days held at most a quarter as many. Biggest first, with dates, listens, usual listens a week and listens in the 28 days after. The range picks bursts by their first day.",
+      schema: z.strictObject(range),
+      run: (r) => {
+        const found = obsessions(db, { range: checkRange(r), today, limit: 15 });
+        return { ...found, items: found.items.map(({ albumArtUrl: _art, ...s }) => s) };
+      },
     }),
     tool({
       name: "year_compare",

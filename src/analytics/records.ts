@@ -51,16 +51,17 @@ export function currentStreak(db: Db, today: string): Run | null {
   return last && last.to >= shiftDay(today, -1) ? last : null;
 }
 
-type SessionPlay = { ts: number; day: string; ms: number };
+export type SessionPlay = { ts: number; day: string; hour: number; ms: number };
+export type SessionSpan = { start: number; end: number; ms: number; plays: number; day: string; hour: number };
 
-/** Plays in order, cut where the gap from one play's end to the next play's start passes `SESSION_GAP_MINUTES`; the longest by wall time. */
-function longestSession(plays: SessionPlay[]) {
-  const spans: { start: number; end: number; ms: number; plays: number; day: string }[] = [];
+/** Plays in order, cut where the gap from one play's end to the next play's start passes `SESSION_GAP_MINUTES`. */
+export function sessionSpans(plays: SessionPlay[]): SessionSpan[] {
+  const spans: SessionSpan[] = [];
   for (const p of plays) {
     const start = p.ts - p.ms;
     let current = spans.at(-1);
     if (!current || start - current.end > SESSION_GAP_MINUTES * 60_000) {
-      current = { start, end: p.ts, ms: 0, plays: 0, day: p.day };
+      current = { start, end: p.ts, ms: 0, plays: 0, day: p.day, hour: p.hour };
       spans.push(current);
     }
     current.start = Math.min(current.start, start);
@@ -68,7 +69,14 @@ function longestSession(plays: SessionPlay[]) {
     current.ms += p.ms;
     current.plays++;
   }
-  const best = spans.reduce<(typeof spans)[number] | null>((b, s) => (!b || s.end - s.start > b.end - b.start ? s : b), null);
+  return spans;
+}
+
+export const sessionPlays = (db: Db, range: Range) => db.all<SessionPlay>(sql`select p.ts, p.day, p.hour, ${MS} as ms from ${MUSIC} where ${musicWhere(range)} order by p.ts, p.id`);
+
+/** The longest session by wall time. */
+export function longestSession(spans: SessionSpan[]) {
+  const best = spans.reduce<SessionSpan | null>((b, s) => (!b || s.end - s.start > b.end - b.start ? s : b), null);
   if (!best) return null;
   return {
     start: new Date(best.start).toISOString(),
@@ -93,7 +101,6 @@ export function records(db: Db, { range }: { range: Range }) {
     select p.day, sum(${LISTEN}) as listens, t.song_key, min(t.uri) as uri, min(t.name) as name, min(t.artist) as artist, max(t.album_art_url) as album_art_url
     from ${MUSIC} where ${musicWhere(range)}
     group by p.day, t.song_key order by listens desc, p.day, t.song_key limit 1`)[0];
-  const plays = db.all<SessionPlay>(sql`select p.ts, p.day, ${MS} as ms from ${MUSIC} where ${musicWhere(range)} order by p.ts, p.id`);
   return {
     sessionGapMinutes: SESSION_GAP_MINUTES,
     day: day ? { day: day.period, hours: hours(day.ms) } : null,
@@ -103,7 +110,7 @@ export function records(db: Db, { range }: { range: Range }) {
       song && song.listens > 0
         ? { day: song.day, listens: song.listens, song: { songKey: song.song_key, uri: song.uri, name: song.name, artist: song.artist, albumArtUrl: song.album_art_url } }
         : null,
-    session: longestSession(plays),
+    session: longestSession(sessionSpans(sessionPlays(db, range))),
   };
 }
 

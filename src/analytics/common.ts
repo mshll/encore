@@ -211,4 +211,18 @@ export function withArtistImages<T extends { artist: string }>(db: Db, rows: T[]
   return rows.map((r) => ({ ...r, imageUrl: byName.get(r.artist) ?? null }));
 }
 
+export type SongIdentity = { songKey: string; uri: string; name: string; artist: string; albumArtUrl: string | null };
+
+/** The name, artist, a URI and any art of each song key, from the tracks table. */
+export function songIdentities(db: Db, keys: string[]): Map<string, SongIdentity> {
+  if (keys.length === 0) return new Map();
+  const rows = db.all<{ song_key: string; uri: string; name: string; artist: string; album_art_url: string | null }>(sql`
+    select song_key, min(uri) as uri, min(name) as name, min(artist) as artist, max(album_art_url) as album_art_url from tracks
+    where song_key in (${sql.join(
+      keys.map((k) => sql`${k}`),
+      sql`, `,
+    )}) group by song_key`);
+  return new Map(rows.map((r) => [r.song_key, { songKey: r.song_key, uri: r.uri, name: r.name, artist: r.artist, albumArtUrl: r.album_art_url }]));
+}
+
 export const songWithStats = (row: SongRow) => ({ ...song(row), ...stats(row) });

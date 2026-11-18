@@ -5,6 +5,7 @@ const one = new Intl.NumberFormat("en", { maximumFractionDigits: 1 });
 const compact = new Intl.NumberFormat("en", { notation: "compact", maximumFractionDigits: 1 });
 
 export const fmtInt = (n: number) => int.format(n);
+export const fmtOne = (n: number) => one.format(n);
 export const fmtCompact = (n: number) => (n < 10_000 ? int.format(n) : compact.format(n));
 
 export function fmtBytes(bytes: number): string {

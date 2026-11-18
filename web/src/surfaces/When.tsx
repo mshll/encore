@@ -17,6 +17,8 @@ import { ChartSkeleton, Skeleton } from "../ui/Skeleton";
 import { StatStrip, type StatItem } from "../ui/Stat";
 import { EmptyState, ErrorState } from "../ui/States";
 import { PatternsFrame } from "./PatternsFrame";
+import { CalendarSection } from "./when/Calendar";
+import { SessionsSection } from "./when/Sessions";
 
 type Metric = "hours" | "plays";
 type Cell = Clock["cells"][number];
@@ -209,7 +211,10 @@ function ClockView({ range }: { range: Range }) {
       </StatStrip>
       <div className={SIDE_COLUMNS}>
         <SlotDetail slot={slot} cell={cell} range={range} />
-        <ByWeekday days={days} metric={metric} />
+        <div className={SECTIONS}>
+          <ByWeekday days={days} metric={metric} />
+          <SessionsSection range={range} />
+        </div>
       </div>
     </div>
   );
@@ -219,7 +224,10 @@ export function When() {
   const { range } = useRange();
   return (
     <PatternsFrame icon={ClockIcon} firstUse="Once plays come in, this shows the hours and weekdays you listen most.">
-      <ClockView range={range} />
+      <div className={SECTIONS}>
+        <ClockView range={range} />
+        <CalendarSection />
+      </div>
     </PatternsFrame>
   );
 }

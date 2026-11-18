@@ -14,6 +14,7 @@ import { Row, RowList, RowSkeleton } from "../ui/Rows";
 import { Skeleton } from "../ui/Skeleton";
 import { EmptyState, ErrorState } from "../ui/States";
 import { PatternsFrame } from "./PatternsFrame";
+import { ObsessionsSection } from "./records/Obsessions";
 
 /** The streak that leads the page: the current one, else the longest in the range. */
 function StreakFigure({ streaks }: { streaks: Streaks }) {
@@ -154,7 +155,10 @@ function RecordsView({ range }: { range: Range }) {
           <Bests records={records.data} />
           <MilestoneList range={range} />
         </div>
-        <ArtistRuns streaks={streaks.data} />
+        <div className={SECTIONS}>
+          <ArtistRuns streaks={streaks.data} />
+          <ObsessionsSection range={range} />
+        </div>
       </div>
     </div>
   );

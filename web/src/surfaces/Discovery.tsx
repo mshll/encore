@@ -22,6 +22,7 @@ import { ChartSkeleton, Skeleton } from "../ui/Skeleton";
 import { StatStrip, type StatItem } from "../ui/Stat";
 import { EmptyState, ErrorState } from "../ui/States";
 import { PatternsFrame } from "./PatternsFrame";
+import { FindsSection, RotationSection } from "./discovery/Rotation";
 
 type Metric = "artists" | "songs" | "share";
 
@@ -263,6 +264,10 @@ function DiscoveryView({ range }: { range: Range }) {
       <div className={SIDE_COLUMNS}>
         <LoyaltyList range={range} />
         <ComebackList range={range} />
+      </div>
+      <div className={SIDE_COLUMNS}>
+        <RotationSection range={range} />
+        <FindsSection range={range} />
       </div>
     </div>
   );

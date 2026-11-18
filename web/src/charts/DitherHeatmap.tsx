@@ -24,13 +24,15 @@ type Props = {
   cellHeight: number;
   rowLabelWidth?: number;
   colLabelsAt?: "top" | "bottom";
+  /** Cells that are not part of the data (days outside a calendar year): drawn as nothing and not selectable. */
+  blank?: (cell: HeatCell) => boolean;
 };
 
 /**
  * A grid of halftone cells: density follows the value, an empty cell keeps the faint well.
  * One tab stop; arrow keys move the selection (roving active descendant), Home and End jump within a row.
  */
-export function DitherHeatmap({ values, rowLabels, colLabels, showCol = () => true, showRow = () => true, cellLabel, selected, onSelect, label, cellHeight, rowLabelWidth = 40, colLabelsAt = "bottom" }: Props) {
+export function DitherHeatmap({ values, rowLabels, colLabels, showCol = () => true, showRow = () => true, cellLabel, selected, onSelect, label, cellHeight, rowLabelWidth = 40, colLabelsAt = "bottom", blank = () => false }: Props) {
   const id = useId();
   const rows = values.length;
   const cols = values[0]?.length ?? 0;
@@ -48,7 +50,7 @@ export function DitherHeatmap({ values, rowLabels, colLabels, showCol = () => tr
       End: { row: at.row, col: cols - 1 },
     };
     const next = moves[e.key];
-    if (!next) return;
+    if (!next || blank(next)) return;
     e.preventDefault();
     onSelect(next);
   };
@@ -83,6 +85,7 @@ export function DitherHeatmap({ values, rowLabels, colLabels, showCol = () => tr
             </span>
             {row.map((v, c) => {
               const isSel = selected?.row === r && selected.col === c;
+              if (blank({ row: r, col: c })) return <div key={c} id={cellId({ row: r, col: c })} role="gridcell" aria-hidden style={{ height: cellHeight }} />;
               return (
                 <div
                   key={c}

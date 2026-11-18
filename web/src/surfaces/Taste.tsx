@@ -18,6 +18,7 @@ import { Segmented } from "../ui/Segmented";
 import { ChartSkeleton, Skeleton } from "../ui/Skeleton";
 import { EmptyState, ErrorState } from "../ui/States";
 import { PatternsFrame } from "./PatternsFrame";
+import { VarietyAndSeasons } from "./taste/Variety";
 
 type Kind = "genres" | "moods";
 
@@ -238,6 +239,7 @@ export function Taste(): ReactNode {
       <div className={SECTIONS}>
         <TasteView range={range} />
         <Decades range={range} />
+        <VarietyAndSeasons range={range} />
       </div>
     </PatternsFrame>
   );

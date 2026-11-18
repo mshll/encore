@@ -11,6 +11,11 @@ import { milestones, records, streaks } from "../analytics/records";
 import { forgotten, onThisDay } from "../analytics/recall";
 import { search } from "../analytics/search";
 import { topAlbums, topArtists, topTracks } from "../analytics/top";
+import { obsessions } from "../analytics/obsessions";
+import { encoreFinds, stayingPower } from "../analytics/rotation";
+import { playStarts } from "../analytics/starts";
+import { seasonal, variety } from "../analytics/variety";
+import { calendar, listeningSessions } from "../analytics/when";
 import { listeningYears, yearCompare } from "../analytics/years";
 import type { Db } from "../db/client";
 import { MissingScopeError } from "../living/refresh";
@@ -37,6 +42,14 @@ export const MCP_TOOLS = {
     "loyalty",
     "records",
     "decades",
+    "listening_calendar",
+    "listening_sessions",
+    "play_starts",
+    "variety",
+    "seasonal",
+    "staying_power",
+    "encore_finds",
+    "obsessions",
     "year_compare",
     "podcasts",
     "now_playing",
@@ -219,6 +232,85 @@ export function createEncoreMcpServer({ db, settings, services, spotify, now }: 
       inputSchema: z.object(range),
     },
     async ({ from, to }) => json(decades(db, { range: { from, to } })),
+  );
+
+  server.registerTool(
+    "listening_calendar",
+    {
+      description: "Hours and plays of music on each local day of one calendar year (only days with plays). Default: the latest year with music; years lists every year with music.",
+      inputSchema: z.object({ year: z.number().int().min(1900).max(2999).optional() }),
+    },
+    async ({ year }) => json(calendar(db, { year })),
+  );
+
+  server.registerTool(
+    "listening_sessions",
+    {
+      description:
+        "Listening sessions in a date range (plays less than 15 minutes apart): how many, on how many days, sessions per day with one, the average length in minutes, how many start in each local hour and the usual start hour, and the longest.",
+      inputSchema: z.object(range),
+    },
+    async ({ from, to }) => json(listeningSessions(db, { range: { from, to } })),
+  );
+
+  server.registerTool(
+    "play_starts",
+    {
+      description:
+        "How music plays began in a date range, overall and by month, from the Spotify export's start reason: chosen (clicked a row or pressed play), playedOn (the song before ended), nextBack (next or back pressed), other (app opened, remote, error); shuffled is the share played on shuffle. API and live plays are left out; coverage says how many plays count.",
+      inputSchema: z.object(range),
+    },
+    async ({ from, to }) => json(playStarts(db, { range: { from, to } })),
+  );
+
+  server.registerTool(
+    "variety",
+    {
+      description:
+        "How varied listening is, week by week (local weeks from Monday): distinct artists with a listen (30 s or more) each week, and the share of each week's hours on that week's 10 most played artists; with the averages over the weeks.",
+      inputSchema: z.object(range),
+    },
+    async ({ from, to }) => json(variety(db, { range: { from, to } })),
+  );
+
+  server.registerTool(
+    "seasonal",
+    {
+      description:
+        "Seasonal favourites: artists (by hours) and songs (by listens) that peak in the same calendar month in at least 2 years. A month peaks when it holds 1 h (an artist) or 5 listens (a song) and 3 times the mean of that year's other months with music; years with music in under 6 months are not judged.",
+      inputSchema: z.object({ ...range, limit: z.number().int().min(1).max(50).default(20) }),
+    },
+    async ({ from, to, limit }) => json(seasonal(db, { range: { from, to }, limit })),
+  );
+
+  server.registerTool(
+    "staying_power",
+    {
+      description:
+        "How long songs first heard in a date range stayed in rotation: a song's first run starts on its first listen day and ends at the last listen day before a gap of more than 30 days. Songs listened to on 2+ days of their run entered rotation; median run length in days, runs by length, and the longest runs (ongoing when the last listen is within 30 days of today).",
+      inputSchema: z.object({ ...range, limit: z.number().int().min(1).max(50).default(20) }),
+    },
+    async ({ from, to, limit }) => json(stayingPower(db, { range: { from, to }, today: localTime(now(), settings.get().timezone).day, limit })),
+  );
+
+  server.registerTool(
+    "encore_finds",
+    {
+      description:
+        "Songs encore suggested (weekly picks, new songs in sets, tracks of releases in New from your artists) that had not been listened to before, and the listens since: a song suggested twice counts from its first suggestion, and only listens after it count. The date range picks suggestions by their local day.",
+      inputSchema: z.object({ ...range, limit: z.number().int().min(1).max(100).default(50) }),
+    },
+    async ({ from, to, limit }) => json(encoreFinds(db, { range: { from, to }, timezone: settings.get().timezone, limit })),
+  );
+
+  server.registerTool(
+    "obsessions",
+    {
+      description:
+        "Short intense bursts of one song that then faded: a song's 7 local days in a row with the most listens, when they hold 8+ listens, 5 times its usual weekly listens outside them, and the 28 days after hold at most a quarter of the burst. Listed biggest first; the date range picks bursts by their first day.",
+      inputSchema: z.object({ ...range, limit: z.number().int().min(1).max(50).default(20) }),
+    },
+    async ({ from, to, limit }) => json(obsessions(db, { range: { from, to }, today: localTime(now(), settings.get().timezone).day, limit })),
   );
 
   server.registerTool(

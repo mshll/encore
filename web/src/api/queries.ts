@@ -85,6 +85,14 @@ import type {
   Trips,
   Onboarding,
   Settings,
+  ListeningCalendar,
+  SessionHabits,
+  PlayStarts,
+  Variety,
+  Seasonal,
+  Rotation,
+  EncoreFinds,
+  Obsessions,
 } from "./types";
 
 const ranged = <T>(path: string, range: Range, extra: Record<string, string | number | undefined> = {}) => ({
@@ -373,3 +381,21 @@ export const useMcpConsent = (id: string) => useQuery({ queryKey: ["mcp-consent"
 export const useMcpConnections = () => useQuery({ queryKey: ["mcp-connections"], queryFn: () => get<{ connections: McpConnection[] }>("/api/mcp/connections") });
 
 export const useOnboarding = () => useQuery({ queryKey: ["onboarding"], queryFn: () => get<Onboarding>("/api/onboarding") });
+
+// More stats (November 2026)
+
+export const useCalendar = (year: number | null) =>
+  useQuery({ queryKey: ["/api/stats/calendar", year], queryFn: () => get<ListeningCalendar>("/api/stats/calendar", { year: year ?? undefined }), placeholderData: keepPreviousData });
+
+export const useSessionHabits = (range: Range) => useQuery(ranged<SessionHabits>("/api/stats/sessions", range));
+export const usePlayStarts = (range: Range) => useQuery(ranged<PlayStarts>("/api/stats/starts", range));
+
+export const useVariety = (range: Range) => useQuery(ranged<Variety>("/api/stats/variety", range));
+
+export const useSeasonal = (range: Range) => useQuery(ranged<Seasonal>("/api/stats/seasonal", range, { limit: 10 }));
+
+export const useRotation = (range: Range) => useQuery(ranged<Rotation>("/api/stats/rotation", range, { limit: 10 }));
+
+export const useEncoreFinds = (range: Range) => useQuery(ranged<EncoreFinds>("/api/stats/finds", range, { limit: 10 }));
+
+export const useObsessions = (range: Range) => useQuery(ranged<Obsessions>("/api/stats/obsessions", range, { limit: 10 }));

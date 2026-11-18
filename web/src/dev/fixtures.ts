@@ -200,6 +200,69 @@ function emptyFor(path: string, isNew: boolean): unknown {
   if (path === "/api/tags/pending") return { items: [], total: 0, limit: 1, offset: 0 };
   if (path === "/api/library/batches" || path === "/api/library/plans" || path === "/api/library/standing" || path === "/api/blocks") return { items: [] };
   if (path === "/api/library/analysis") return unsyncedLibrary(isNew);
+  return emptyMoreStats(path, isNew);
+}
+
+/** More stats (November 2026), empty. */
+function emptyMoreStats(path: string, isNew: boolean): unknown {
+  if (path === "/api/stats/calendar") return isNew ? { years: [], year: null, days: [] } : { years: [2026], year: 2026, days: [] };
+  if (path === "/api/stats/starts") {
+    const zero = { plays: 0, chosen: 0, playedOn: 0, nextBack: 0, other: 0, shuffled: 0, shares: { chosen: null, playedOn: null, nextBack: null, other: null, shuffled: null } };
+    return { coverage: { plays: 0, counted: 0, share: null }, totals: zero, months: [] };
+  }
+  if (path === "/api/stats/variety") return { topArtists: 10, averageArtists: null, averageTopShare: null, weeks: [] };
+  if (path === "/api/stats/seasonal") return { rules: { artistHours: 1, songListens: 5, ratio: 3, minYears: 2, minMonths: 6 }, artists: [], songs: [] };
+  if (path === "/api/stats/rotation") return { rules: { gapDays: 30 }, songs: 0, inRotation: 0, medianDays: null, medianActiveDays: null, buckets: [], longest: [] };
+  if (path === "/api/stats/finds") return { suggested: 0, heardBefore: 0, listened: 0, listens: 0, hours: 0, items: [] };
+  if (path === "/api/stats/obsessions") return { rules: { windowDays: 7, minListens: 8, ratio: 5, fadeDays: 28, fadeShare: 0.25 }, items: [] };
+  if (path === "/api/stats/sessions") return { gapMinutes: 15, count: 0, days: 0, perDay: null, averageMinutes: null, usualStart: null, startHours: Array(24).fill(0), longest: null };
+  return null;
+}
+
+/** More stats (November 2026) at their limits. */
+function worstMoreStats(path: string, body: Json): unknown {
+  if (path === "/api/stats/calendar") return { ...body, days: [{ day: `${body.year as number}-01-01`, hours: 23.99, plays: 98765 }] };
+  if (path === "/api/stats/starts") {
+    const counts = { plays: 9876543, chosen: 9876543, playedOn: 0, nextBack: 0, other: 0, shuffled: 1, shares: { chosen: 1, playedOn: 0, nextBack: 0, other: 0, shuffled: 0 } };
+    return { coverage: { plays: 98765432, counted: 9876543, share: 0.1 }, totals: counts, months: [{ ...counts, month: "2026-11" }] };
+  }
+  if (path === "/api/stats/variety") return { topArtists: 10, averageArtists: 12345.6, averageTopShare: 1, weeks: [{ week: "2026-11-16", artists: 12345, hours: 167.9, topShare: 1 }] };
+  if (path === "/api/stats/seasonal") {
+    const years = Array.from({ length: 12 }, (_, i) => 2015 + i);
+    const seasons = Array.from({ length: 12 }, (_, i) => ({ month: i + 1, years }));
+    return {
+      ...body,
+      artists: [{ artist: LONG_ARTIST, imageUrl: BROKEN_ART, hours: 98765.4, seasons: seasons.map((s) => ({ ...s, hours: 1 })) }],
+      songs: [{ songKey: "worst|worst", uri: "spotify:track:0000000000000000000000", name: LONG_SONG, artist: LONG_ARTIST, albumArtUrl: BROKEN_ART, listens: 1234567, seasons: seasons.map((s) => ({ ...s, listens: 5 })) }],
+    };
+  }
+  if (path === "/api/stats/rotation") {
+    const song = { songKey: "worst|worst", uri: "spotify:track:0000000000000000000000", name: LONG_SONG, artist: LONG_ARTIST, albumArtUrl: BROKEN_ART };
+    return {
+      ...body,
+      songs: 1234567,
+      inRotation: 1,
+      medianDays: 12345,
+      buckets: (body.buckets as Json[]).map((b, i) => ({ ...b, songs: i === 0 ? 1234566 : i === 5 ? 1 : 0 })),
+      longest: [{ ...song, from: "1992-08-01", to: "2026-11-14", days: 12523, activeDays: 12000, listens: 98765, ongoing: true }],
+    };
+  }
+  if (path === "/api/stats/finds")
+    return {
+      suggested: 1234567,
+      heardBefore: 0,
+      listened: 1,
+      listens: 98765,
+      hours: 9876.5,
+      items: [{ songKey: "worst|worst", uri: "spotify:track:0000000000000000000000", name: LONG_SONG, artist: LONG_ARTIST, albumArtUrl: BROKEN_ART, sources: ["picks", "sets", "releases"], suggested: "2026-01-01", listens: 98765, hours: 9876.5, firstListen: "2026-01-02", lastListen: "2026-11-14" }],
+    };
+  if (path === "/api/stats/obsessions")
+    return {
+      ...body,
+      items: [{ songKey: "worst|worst", uri: "spotify:track:0000000000000000000000", name: LONG_SONG, artist: LONG_ARTIST, albumArtUrl: BROKEN_ART, from: "2025-12-29", to: "2026-01-04", listens: 98765, usualPerWeek: 0, after: 0 }],
+    };
+  if (path === "/api/stats/sessions")
+    return { ...body, count: 1234567, days: 12345, perDay: 99.9, averageMinutes: 1439, usualStart: 23, startHours: Array.from({ length: 24 }, (_, h) => (h === 23 ? 1234567 : 0)), longest: { start: "2026-01-01T00:00:00.000Z", end: "2026-01-01T23:59:00.000Z", day: "2026-01-01", minutes: 1439, hours: 23.98, plays: 98765 } };
   return null;
 }
 
@@ -468,7 +531,7 @@ function worsen(path: string, body: Json): unknown {
       ...body,
       groups: (body.groups as { fields: Json[] }[]).map((g) => ({ ...g, fields: g.fields.map((f) => (f.key === "aiApiKey" ? { ...f, set: true, unreadable: true, source: "db" } : f)) })),
     };
-  return body;
+  return worstMoreStats(path, body) ?? body;
 }
 
 const PLAYING_NOW = {

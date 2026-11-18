@@ -21,6 +21,7 @@ import { SongContext, SongMenu } from "../ui/SongMenu";
 import { EmptyState, ErrorState } from "../ui/States";
 import { StartSessionButton } from "../ui/StartSessionButton";
 import { PatternsFrame } from "./PatternsFrame";
+import { StartsSection } from "./skips/Starts";
 
 const CLASSES: MomentClass[] = ["wrong_moment", "keeper", "mixed", "skipped_everywhere"];
 const CLASS_LINE: Record<MomentClass, string> = {
@@ -185,6 +186,7 @@ function SkipsView({ range }: { range: Range }) {
     <div className={cx(SECTIONS, dimWhile(q.isPlaceholderData))}>
       <Stat item={{ id: "rate", label: "Plays skipped", value: fmtPct(summary.skipRate) }} />
       <Endings summary={summary} />
+      <StartsSection range={range} />
       <ContextGroups profile={q.data.profile} plays={summary.plays} overall={summary.skipRate} />
       <ClassSongs range={range} cls={cls} onClass={setCls} />
     </div>

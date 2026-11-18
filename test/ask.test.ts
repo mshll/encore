@@ -78,6 +78,13 @@ const VALID_INPUTS: Record<string, unknown> = {
   decades: {},
   year_compare: { a: 2025, b: 2026 },
   podcasts: {},
+  listening_sessions: {},
+  play_starts: {},
+  variety: {},
+  seasonal: {},
+  staying_power: {},
+  encore_finds: {},
+  obsessions: {},
 };
 
 describe("ask tools are read-only and scoped to listening data", () => {

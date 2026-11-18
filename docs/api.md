@@ -112,6 +112,17 @@ Runs live in memory: a restart ends them.
 - **History start** (`historyStart` setting): plays on a local day before it are never stored, whichever path brings them (export import, recently-played poll, watcher). Saving the setting only filters what arrives from then on; plays already stored are removed only by `POST /api/settings/history-start`. Clearing it removes nothing and restores nothing: removed plays return only by importing the export again.
 - **One play, two sources**: recently-played reports the same play the watcher saw. An API play matches a live row of the same track when its `played_at` falls between the live row's `ts - ms_played - 15 s` and `ts + 60 s`. The live row wins: the poller skips a matched API play (`skippedCoveredByLive`), and a live row recorded after the API row replaces the nearest matching one.
 
+### Definitions: more stats (November 2026)
+
+- **Listening calendar**: music hours (see Hours) and plays on each local day of one calendar year; only days with plays are listed.
+- **Session habits**: sessions as defined above (Session), over the range's music plays. `perDay` is sessions over days with a session (a session belongs to the local day of its first play); `averageMinutes` is the mean wall time; a session starts in the local hour stored with its first play (the hour that play ended); `usualStart` is the hour with the most starts, ties to the earliest.
+- **How plays start**: counted over export rows with a `reason_start` (Spotify's own start reason); API rows have none and live rows infer theirs, so both are left out and `coverage` says how many plays count. `chosen`: `clickrow` or `playbtn` (a row clicked, a search result, the play button); `playedOn`: `trackdone` (the song before ended and this one followed: the queue, an album, a playlist, autoplay); `nextBack`: `fwdbtn` or `backbtn`; `other`: any other reason (`appload`, `remote`, `trackerror`, `unknown`). `shuffled` counts those plays with `shuffle` on. Shares are of counted plays. Unlike the skip context `startMode`, going back is not counted as chosen.
+- **Variety**: per local week (Monday start, as Records), `artists` counts artists with at least one listen that week and `topShare` is the hours on the week's 10 artists with the most hours over the week's hours. `averageArtists` and `averageTopShare` are plain means over the weeks with plays.
+- **Seasonal favourites**: per artist (by hours) and song (by listens), per calendar year and local month. A month *peaks* in a year when it holds at least 1 h (artist) or 5 listens (song) and at least 3 times the mean of that year's other months with any music. A year with music in fewer than 6 months is not judged. A calendar month that peaks in 2 or more years is a season; items with a season are listed by the number of peak years, then by the amount in them.
+- **Staying power**: per song, over all time, its local days with a listen. Its first run starts on its first listen day; each later listen day within 30 days of the one before extends it, and it ends at the last listen day before a gap of more than 30 days. `days` is calendar days from the first to the last day of the run, inclusive; `activeDays` the days with a listen in it. A song *entered rotation* when `activeDays` is 2 or more; `medianDays` and `medianActiveDays` are over those songs. The range picks songs by their first listen day. A run is `ongoing` when no gap has ended it and its last listen is within 30 days of today.
+- **What encore found**: a suggestion is a weekly pick (when it was picked), a `new` song in a set (when the set change that added it was made, else when the set was made), or a track of a release in New from your artists (when encore first saw the release). A song suggested more than once counts once, from its first suggestion, with every source. A song listened to (see Listen) at or before that moment is left out (`heardBefore`): it was not new. `listens` and `hours` count only plays after the suggestion. The range picks suggestions by the local day of the first suggestion.
+- **Obsession**: per song, its listens per local day over all time. Its burst is the 7 days in a row with the most listens (the earliest on a tie), trimmed to its first and last listen day. The burst is an obsession when it holds at least 8 listens; at least 5 times the song's usual weekly listens, which are the listens outside the burst over the weeks from its first listen day to today, less the burst's 7 days (1 week at least); and the 28 days after its last day hold at most a quarter of its listens. A burst that ended less than 28 days ago is not judged. One burst per song; the range picks bursts by their first day.
+
 ### Enums
 
 - `device`: `ios`, `android`, `mac`, `windows`, `linux`, `web`, `console`, `tv`, `speaker`, `car`, `unknown`, `other`. Derived from the export `platform` string, or for live rows from the Spotify device name and type (raw value kept server-side). API rows are always `unknown`: recently-played has no device field.
@@ -796,6 +807,100 @@ Params: `limit` (1-100, default 20) shows and episodes. An episode's `minutes` i
   "recent": [{ "ts": "...", "day": "2025-07-25", "show": "Show", "episode": "Episode", "uri": "spotify:episode:...", "minutes": 4 }] }
 ```
 
+### More stats (November 2026)
+
+#### `GET /api/stats/calendar`
+
+No range. Params: `year` (1900-2999; default the latest year with music). See Listening calendar.
+
+```json
+{ "years": [2021, 2024, 2025, 2026], "year": 2026,
+  "days": [{ "day": "2026-01-01", "hours": 1.51, "plays": 61 }] }
+```
+
+Empty history: `years: []`, `year: null`, no days. A year with no music: no days.
+
+#### `GET /api/stats/sessions`
+
+See Session habits.
+
+```json
+{ "gapMinutes": 15, "count": 3988, "days": 703, "perDay": 5.67, "averageMinutes": 25, "usualStart": 7,
+  "startHours": [202, 159, 125, 98, 48, 36, 61, 334, 119, 91, 78, 94, 97, 137, 176, 328, 268, 226, 263, 263, 219, 192, 198, 176],
+  "longest": { "start": "...", "end": "...", "day": "2025-02-21", "minutes": 295, "hours": 4.86, "plays": 71 } | null }
+```
+
+`startHours` has 24 entries, local hours 0 to 23. With no plays: `count: 0`, `perDay`, `averageMinutes`, `usualStart` and `longest` are `null`.
+
+#### `GET /api/stats/starts`
+
+See How plays start. Months are local, oldest first, only months with counted plays.
+
+```json
+{ "coverage": { "plays": 39339, "counted": 39328, "share": 1 },
+  "totals": { "plays": 39328, "chosen": 2683, "playedOn": 17012, "nextBack": 18358, "other": 1275, "shuffled": 28144,
+    "shares": { "chosen": 0.068, "playedOn": 0.433, "nextBack": 0.467, "other": 0.032, "shuffled": 0.716 } },
+  "months": [{ "month": "2021-05", "plays": 14, "chosen": 1, "playedOn": 6, "nextBack": 6, "other": 1, "shuffled": 0, "shares": { ... } }] }
+```
+
+Shares are `null` when nothing counts.
+
+#### `GET /api/stats/variety`
+
+See Variety. Weeks oldest first.
+
+```json
+{ "topArtists": 10, "averageArtists": 80.6, "averageTopShare": 0.584,
+  "weeks": [{ "week": "2024-12-09", "artists": 123, "hours": 31.24, "topShare": 0.555 }] }
+```
+
+#### `GET /api/stats/seasonal`
+
+Params: `limit` (1-100, default 20) artists and songs. See Seasonal favourites; `month` is 1 to 12.
+
+```json
+{ "rules": { "artistHours": 1, "songListens": 5, "ratio": 3, "minYears": 2, "minMonths": 6 },
+  "artists": [{ "artist": "Future", "imageUrl": "...", "hours": 7.28, "seasons": [{ "month": 12, "years": [2024, 2025], "hours": 7.28 }] }],
+  "songs": [{ "songKey", "uri", "name", "artist", "albumArtUrl", "listens": 29, "seasons": [{ "month": 4, "years": [2025, 2026], "listens": 29 }] }] }
+```
+
+`hours` and `listens` count only the peak months.
+
+#### `GET /api/stats/rotation`
+
+Params: `limit` (1-100, default 20) longest runs. See Staying power.
+
+```json
+{ "rules": { "gapDays": 30 }, "songs": 3975, "inRotation": 1430, "medianDays": 22, "medianActiveDays": 3,
+  "buckets": [{ "from": 1, "to": 1, "songs": 2545 }, { "from": 2, "to": 7, "songs": 320 }, ..., { "from": 366, "to": null, "songs": 1 }],
+  "longest": [{ "songKey", "uri", "name", "artist", "albumArtUrl", "from": "2024-12-23", "to": "2026-01-07", "days": 381, "activeDays": 45, "listens": 54, "ongoing": false }] }
+```
+
+`buckets` count every song first heard in the range by run length in days (`to: null` is open). `medianDays` is `null` when no song entered rotation.
+
+#### `GET /api/stats/finds`
+
+Params: `limit` (1-200, default 50). See What encore found. Items are the songs listened to since, by listens.
+
+```json
+{ "suggested": 8, "heardBefore": 0, "listened": 1, "listens": 6, "hours": 0.31,
+  "items": [{ "songKey", "uri", "name", "artist", "albumArtUrl", "sources": ["picks", "sets"], "suggested": "2026-11-10",
+    "listens": 6, "hours": 0.31, "firstListen": "2026-11-11", "lastListen": "2026-11-14" }] }
+```
+
+`sources` is any of `picks`, `sets`, `releases`. `suggested` at the top counts songs new when suggested; `heardBefore` those left out.
+
+#### `GET /api/stats/obsessions`
+
+Params: `limit` (1-100, default 20). See Obsession. Biggest burst first, then the newest.
+
+```json
+{ "rules": { "windowDays": 7, "minListens": 8, "ratio": 5, "fadeDays": 28, "fadeShare": 0.25 },
+  "items": [{ "songKey", "uri", "name", "artist", "albumArtUrl", "from": "2026-08-08", "to": "2026-08-12", "listens": 16, "usualPerWeek": 0.7, "after": 2 }] }
+```
+
+`listens` are in the burst, `after` in the 28 days after it.
+
 ### Tag-based stats
 
 Work with zero tags (empty `totals`/`series`, `null` energy). Tags attach to songs; untagged plays are left out, so check `coverage`.
@@ -1404,6 +1509,12 @@ Seams for other modules (`src/discord/`): `DiscordRegistry.addCommand({ definiti
 | `records` | `from?`, `to?`. Records, `streaks` and `milestones` in one result |
 | `decades` | `from?`, `to?` |
 | `year_compare` | `a?`, `b?` |
+| `listening_calendar` | `year?` |
+| `listening_sessions` | `from?`, `to?` |
+| `play_starts` | `from?`, `to?` |
+| `variety` | `from?`, `to?` |
+| `seasonal` | `from?`, `to?`, `limit?` |
+| `staying_power`, `encore_finds`, `obsessions` | `from?`, `to?`, `limit?` |
 | `now_playing` | none |
 | `releases` | `status?` (`new`, `recent`), `days?`, `includeSeen?` (default `false`), `includeReissues?` (default `false`) |
 | `mark_release_seen` | `ids` (release ids, album URIs or links) or `all: true` (every unseen release). `{ "marked": 2 }` |

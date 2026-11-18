@@ -975,3 +975,66 @@ export type Podcasts = {
   shows: { show: string | null; hours: number; plays: number; episodes: number; firstPlayed: string | null; lastPlayed: string | null }[];
   recent: { ts: string; day: string; show: string | null; episode: string | null; uri: string | null; minutes: number }[];
 };
+
+// More stats (November 2026): Patterns additions. docs/api.md, "More stats (November 2026)".
+
+export type ListeningCalendar = { years: number[]; year: number | null; days: { day: string; hours: number; plays: number }[] };
+
+export type SessionHabits = {
+  gapMinutes: number;
+  count: number;
+  days: number;
+  perDay: number | null;
+  averageMinutes: number | null;
+  usualStart: number | null;
+  startHours: number[];
+  longest: { start: string; end: string; day: string; minutes: number; hours: number; plays: number } | null;
+};
+
+export type StartKind = "chosen" | "playedOn" | "nextBack" | "other";
+export type StartCounts = Record<StartKind | "plays" | "shuffled", number> & { shares: Record<StartKind | "shuffled", number | null> };
+
+export type PlayStarts = {
+  coverage: { plays: number; counted: number; share: number | null };
+  totals: StartCounts;
+  months: (StartCounts & { month: string })[];
+};
+
+export type Variety = {
+  topArtists: number;
+  averageArtists: number | null;
+  averageTopShare: number | null;
+  weeks: { week: string; artists: number; hours: number; topShare: number | null }[];
+};
+
+export type Seasonal = {
+  rules: { artistHours: number; songListens: number; ratio: number; minYears: number; minMonths: number };
+  artists: { artist: string; imageUrl: string | null; hours: number; seasons: { month: number; years: number[]; hours: number }[] }[];
+  songs: (MilestoneSong & { listens: number; seasons: { month: number; years: number[]; listens: number }[] })[];
+};
+
+export type Rotation = {
+  rules: { gapDays: number };
+  songs: number;
+  inRotation: number;
+  medianDays: number | null;
+  medianActiveDays: number | null;
+  buckets: { from: number; to: number | null; songs: number }[];
+  longest: (MilestoneSong & { from: string; to: string; days: number; activeDays: number; listens: number; ongoing: boolean })[];
+};
+
+export type FindSource = "picks" | "sets" | "releases";
+
+export type EncoreFinds = {
+  suggested: number;
+  heardBefore: number;
+  listened: number;
+  listens: number;
+  hours: number;
+  items: (MilestoneSong & { sources: FindSource[]; suggested: string; listens: number; hours: number; firstListen: string | null; lastListen: string | null })[];
+};
+
+export type Obsessions = {
+  rules: { windowDays: number; minListens: number; ratio: number; fadeDays: number; fadeShare: number };
+  items: (MilestoneSong & { from: string; to: string; listens: number; usualPerWeek: number; after: number })[];
+};

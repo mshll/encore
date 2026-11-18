@@ -19,6 +19,11 @@ import { eras, topAlbums, topArtists, topTracks } from "../../analytics/top";
 import { trips } from "../../analytics/trips";
 import { currentWeek, weekSoFar } from "../../analytics/week";
 import { listeningYears, yearCompare } from "../../analytics/years";
+import { obsessions } from "../../analytics/obsessions";
+import { encoreFinds, stayingPower } from "../../analytics/rotation";
+import { playStarts } from "../../analytics/starts";
+import { seasonal, variety } from "../../analytics/variety";
+import { calendar, listeningSessions } from "../../analytics/when";
 import { DEVICES, PLAY_KINDS, PLAY_SOURCES } from "../../db/schema";
 import { localTime } from "../../plays/localTime";
 import type { Env } from "../context";
@@ -76,12 +81,27 @@ export const statsRoutes = new Hono<Env>()
     const q = parse(ranged({ limit: int(1, 100, 20) }), c.req.query());
     return c.json(loyalty(c.var.deps.db, { range: range(q), limit: q.limit }));
   })
+  .get("/rotation", (c) => {
+    const { db, settings, now } = c.var.deps;
+    const q = parse(ranged({ limit: int(1, 100, 20) }), c.req.query());
+    return c.json(stayingPower(db, { range: range(q), today: localTime(now(), settings.get().timezone).day, limit: q.limit }));
+  })
+  .get("/finds", (c) => {
+    const { db, settings } = c.var.deps;
+    const q = parse(ranged({ limit: int(1, 200, 50) }), c.req.query());
+    return c.json(encoreFinds(db, { range: range(q), timezone: settings.get().timezone, limit: q.limit }));
+  })
   .get("/streaks", (c) => {
     const { db, settings, now } = c.var.deps;
     const q = parse(ranged({ limit: int(1, 50, 5) }), c.req.query());
     return c.json(streaks(db, { range: range(q), today: localTime(now(), settings.get().timezone).day, limit: q.limit }));
   })
   .get("/records", (c) => c.json(records(c.var.deps.db, { range: range(parse(ranged({}), c.req.query())) })))
+  .get("/obsessions", (c) => {
+    const { db, settings, now } = c.var.deps;
+    const q = parse(ranged({ limit: int(1, 100, 20) }), c.req.query());
+    return c.json(obsessions(db, { range: range(q), today: localTime(now(), settings.get().timezone).day, limit: q.limit }));
+  })
   .get("/milestones", (c) => {
     const q = parse(ranged({ limit: int(1, 200, 20) }), c.req.query());
     return c.json(milestones(c.var.deps.db, { range: range(q), limit: q.limit }));
@@ -118,6 +138,13 @@ export const statsRoutes = new Hono<Env>()
     const q = parse(ranged({ limit: int(1, 30, 10) }), c.req.query());
     return c.json(eras(c.var.deps.db, { range: range(q), limit: q.limit }));
   })
+  .get("/calendar", (c) => c.json(calendar(c.var.deps.db, parse(z.object({ year: year.optional() }), c.req.query()))))
+  .get("/sessions", (c) => c.json(listeningSessions(c.var.deps.db, { range: range(parse(ranged({}), c.req.query())) })))
+  .get("/variety", (c) => c.json(variety(c.var.deps.db, { range: range(parse(ranged({}), c.req.query())) })))
+  .get("/seasonal", (c) => {
+    const q = parse(ranged({ limit: int(1, 100, 20) }), c.req.query());
+    return c.json(seasonal(c.var.deps.db, { range: range(q), limit: q.limit }));
+  })
   .get("/clock", (c) => c.json(clock(c.var.deps.db, { range: range(parse(ranged({}), c.req.query())) })))
   .get("/devices", (c) => {
     const q = parse(ranged({ period }), c.req.query());
@@ -128,6 +155,7 @@ export const statsRoutes = new Hono<Env>()
     const db = c.var.deps.db;
     return c.json({ ...skips(db, { range: range(q), minPlays: q.minPlays, limit: q.limit }), ...skipContext(db, { range: range(q), weekendDays: c.var.deps.settings.get().weekendDays }) });
   })
+  .get("/starts", (c) => c.json(playStarts(c.var.deps.db, { range: range(parse(ranged({}), c.req.query())) })))
   .get("/skips/split", (c) => {
     const q = parse(
       ranged({
