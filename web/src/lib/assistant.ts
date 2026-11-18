@@ -21,16 +21,16 @@ export function assistantProblem(error: unknown): string {
       const spent = usd(d.spentUsd);
       const cap = usd(d.capUsd);
       const amounts = spent && cap ? ` (${spent} of ${cap})` : "";
-      return `This month’s Claude budget is spent${amounts}. It resets on ${typeof d.month === "string" ? resetDay(d.month) : "the 1st"}.`;
+      return `This month’s AI budget is spent${amounts}. It resets on ${typeof d.month === "string" ? resetDay(d.month) : "the 1st"}.`;
     }
     case "llm_not_configured":
-      return "Claude is not set up. Add an API key in Settings.";
+      return "AI is not set up. Set it up in Settings › AI.";
     case "llm_refused":
       return "This request was declined. Try wording it differently.";
     case "llm_incomplete":
       return "It stopped before finishing. Try again.";
     case "llm_failed":
-      return "The Anthropic API did not answer. Try again in a minute.";
+      return "The AI provider did not answer. Try again in a minute.";
     case "set_empty":
       return "This set has no songs yet.";
     case "picks_exist":

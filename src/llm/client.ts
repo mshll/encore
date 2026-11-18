@@ -1,179 +1,126 @@
-import Anthropic from "@anthropic-ai/sdk";
-import type { BetaMessageStreamParams } from "@anthropic-ai/sdk/resources/beta/messages";
 import type { Db } from "../db/client";
 import type { LlmFeature } from "../db/schema";
-import type { SettingsSource } from "../settings/settings";
+import type { AiConfig, SettingsSource } from "../settings/settings";
 import { callCost } from "./cost";
 import { LlmAbortedError, LlmNotConfiguredError, LlmRefusalError } from "./errors";
 import { assertWithinBudget, recordCall } from "./ledger";
+import { priceFor, WEB_SEARCH_PRICE } from "./providers";
+import type { ChatMessage, Effort, LlmReply, LlmTransport, ToolSpec } from "./types";
 
-export type StreamParams = BetaMessageStreamParams;
-export type LlmMessage = Anthropic.Beta.BetaMessage;
-export type MessageParam = Anthropic.Beta.BetaMessageParam;
-export type ToolDefinition = Anthropic.Beta.BetaToolUnion;
-export type Effort = "low" | "medium" | "high" | "xhigh" | "max";
-
-/** One API request. Swapped for a scripted fake in tests. */
-export type LlmTransport = (params: StreamParams, onText: (delta: string) => void, signal?: AbortSignal) => Promise<LlmMessage>;
-
-/** A request that failed after it may have been billed. `partial` carries whatever usage the stream reported. */
-export class LlmAttemptError extends Error {
-  constructor(
-    readonly reason: unknown,
-    readonly partial: LlmMessage | undefined,
-    readonly retryable: boolean,
-  ) {
-    super(reason instanceof Error ? reason.message : String(reason));
-  }
-}
+/** The transport for a provider configuration, or null when it cannot make calls (no key, no base URL). */
+export type Connect = (ai: AiConfig) => LlmTransport | null;
 
 export type CallInput = {
   feature: LlmFeature;
   ref?: string;
   system: string[];
-  tools?: ToolDefinition[];
-  messages: MessageParam[];
+  tools?: ToolSpec[];
+  /** Lets the model search the web, when the provider has a search tool. */
+  webSearch?: { maxUses: number };
+  messages: ChatMessage[];
   effort: Effort;
   maxTokens: number;
-  /** Constrains the reply to JSON matching this schema (structured outputs). */
+  /** Constrains the reply to JSON matching this schema (structured output). */
   jsonSchema?: Record<string, unknown>;
   onText?: (delta: string) => void;
-};
-
-const BETAS = ["server-side-fallback-2026-07-01", "thinking-binding-controls-2026-08-01"];
-const MAX_JSON_RETRIES = 2;
-
-export function sdkTransport(apiKey: string): LlmTransport {
-  const client = new Anthropic({ apiKey });
-  return async (params, onText, signal) => {
-    const stream = client.beta.messages.stream(params);
-    const abort = () => stream.abort();
-    signal?.addEventListener("abort", abort, { once: true });
-    if (signal?.aborted) abort();
-    stream.on("text", onText);
-    try {
-      return await stream.finalMessage();
-    } catch (error) {
-      throw new LlmAttemptError(error, stream.currentMessage, !(error instanceof Anthropic.APIError) && !signal?.aborted);
-    } finally {
-      signal?.removeEventListener("abort", abort);
-    }
-  };
-}
-
-/** The SDK transport for the current API key, rebuilt only when the key changes. */
-export function keyedSdkTransport(settings: SettingsSource): () => LlmTransport | null {
-  let cached: { apiKey: string; transport: LlmTransport } | null = null;
-  return () => {
-    const apiKey = settings.get().llm.apiKey;
-    if (!apiKey) return null;
-    if (cached?.apiKey !== apiKey) cached = { apiKey, transport: sdkTransport(apiKey) };
-    return cached.transport;
-  };
-}
-
-export class LlmKeyRejectedError extends Error {}
-
-/** Checks a key against the Models API, which costs nothing and records nothing in the ledger. Throws LlmKeyRejectedError when the key or model is refused. */
-export type LlmKeyCheck = (apiKey: string, model: string) => Promise<void>;
-
-export const sdkKeyCheck: LlmKeyCheck = async (apiKey, model) => {
-  try {
-    await new Anthropic({ apiKey, maxRetries: 0, timeout: 15_000 }).models.retrieve(model);
-  } catch (error) {
-    if (error instanceof Anthropic.AuthenticationError) throw new LlmKeyRejectedError("The API key was rejected");
-    if (error instanceof Anthropic.PermissionDeniedError) throw new LlmKeyRejectedError("This key is not allowed to use the API");
-    if (error instanceof Anthropic.NotFoundError) throw new LlmKeyRejectedError(`Model ${model} is not available to this key`);
-    throw error;
-  }
 };
 
 export class Llm {
   constructor(
     private readonly db: Db,
     private readonly settings: SettingsSource,
-    private readonly transport: () => LlmTransport | null,
+    private readonly connect: Connect,
     private readonly now: () => number = Date.now,
     private readonly signal?: AbortSignal,
   ) {}
 
   /** The same client, with every request cancelled when `signal` aborts. */
   withSignal(signal: AbortSignal): Llm {
-    return new Llm(this.db, this.settings, this.transport, this.now, signal);
+    return new Llm(this.db, this.settings, this.connect, this.now, signal);
   }
 
-  get configured() {
-    return this.transport() !== null;
+  private get ai(): AiConfig {
+    return this.settings.get().llm.ai;
   }
 
-  get model() {
-    return this.settings.get().llm.model;
+  get configured(): boolean {
+    return this.ai.model !== null && this.connect(this.ai) !== null;
   }
 
-  assertAvailable() {
-    if (!this.transport()) throw new LlmNotConfiguredError();
+  get provider() {
+    return this.ai.provider;
+  }
+
+  get model(): string | null {
+    return this.ai.model;
+  }
+
+  /** Whether runs that want sources (weekly picks, notes) can search the web with this provider. */
+  get webSearch(): boolean {
+    return this.ai.webSearch;
+  }
+
+  assertAvailable(ai: AiConfig = this.ai) {
+    if (ai.model === null || !this.connect(ai)) throw new LlmNotConfiguredError();
     const { timezone, llm } = this.settings.get();
     assertWithinBudget(this.db, timezone, llm.monthlyBudgetUsd, this.now());
   }
 
-  async call(input: CallInput): Promise<LlmMessage> {
-    this.assertAvailable();
-    const transport = this.transport()!;
+  call(input: CallInput): Promise<LlmReply> {
+    return this.callWith(this.ai, input);
+  }
+
+  /** One short request with `ai` in place of the saved provider settings, through the ledger and the cap. Returns the model that answered. */
+  async verify(ai: AiConfig): Promise<string> {
+    const reply = await this.callWith(ai, {
+      feature: "verify",
+      system: ["Reply with the single word OK."],
+      messages: [{ role: "user", content: "OK?" }],
+      effort: "low",
+      maxTokens: 64,
+    });
+    return reply.model;
+  }
+
+  private async callWith(ai: AiConfig, input: CallInput): Promise<LlmReply> {
+    this.assertAvailable(ai);
+    const transport = this.connect(ai)!;
+    const model = ai.model!;
     const { timezone, llm } = this.settings.get();
-    const system = input.system.map((text, i): Anthropic.Beta.BetaTextBlockParam =>
-      i === input.system.length - 1 ? { type: "text", text, cache_control: { type: "ephemeral" } } : { type: "text", text },
-    );
-    const params: StreamParams = {
-      model: llm.model,
-      max_tokens: input.maxTokens,
-      system,
-      messages: input.messages,
-      ...(input.tools?.length ? { tools: input.tools } : {}),
-      thinking: { type: "adaptive", block_binding: { prefix_mismatch_behavior: "drop_block" } },
-      output_config: { effort: input.effort, ...(input.jsonSchema ? { format: { type: "json_schema", schema: input.jsonSchema } } : {}) },
-      cache_control: { type: "ephemeral" },
-      fallbacks: "default",
-      betas: BETAS,
-    };
-    for (let attempt = 0; ; attempt++) {
+    if (this.signal?.aborted) throw new LlmAbortedError();
+    const started = this.now();
+    let reply: LlmReply;
+    try {
+      reply = await transport(
+        {
+          model,
+          system: input.system,
+          messages: input.messages,
+          tools: input.tools ?? [],
+          webSearch: ai.webSearch ? (input.webSearch ?? null) : null,
+          effort: input.effort,
+          maxTokens: input.maxTokens,
+          jsonSchema: input.jsonSchema,
+        },
+        input.onText ?? (() => {}),
+        this.signal,
+      );
+    } catch (error) {
       if (this.signal?.aborted) throw new LlmAbortedError();
-      const started = this.now();
-      const record = (message: LlmMessage, stopReason: string | null) =>
-        recordCall(this.db, timezone, {
-          ...callCost(message.usage, llm.model, llm.prices, llm.webSearchPerRequest),
-          ts: started,
-          feature: input.feature,
-          ref: input.ref ?? null,
-          requestedModel: llm.model,
-          model: message.model,
-          stopReason,
-          durationMs: this.now() - started,
-        });
-      try {
-        const message = await transport(params, input.onText ?? (() => {}), this.signal);
-        record(message, message.stop_reason);
-        return this.checked(message);
-      } catch (error) {
-        if (!(error instanceof LlmAttemptError)) throw error;
-        if (error.partial?.usage) record(error.partial, this.signal?.aborted ? "aborted" : "error");
-        if (this.signal?.aborted) throw new LlmAbortedError();
-        if (!error.retryable || attempt >= MAX_JSON_RETRIES) throw error.reason;
-        console.error(`[llm] tool input was not parseable JSON, re-issuing the request: ${error.message}`);
-        this.assertAvailable();
-      }
+      throw error;
     }
+    const { price } = priceFor(llm.prices, ai.provider, llm.prices[reply.model] ? reply.model : model, ai.ownerPrice);
+    recordCall(this.db, timezone, {
+      ...callCost(reply.usage, price, WEB_SEARCH_PRICE[ai.provider]),
+      ts: started,
+      feature: input.feature,
+      ref: input.ref ?? null,
+      requestedModel: model,
+      model: reply.model,
+      stopReason: reply.stopReason,
+      durationMs: this.now() - started,
+    });
+    if (reply.stopReason === "refusal") throw new LlmRefusalError(null);
+    return reply;
   }
-
-  private checked(message: LlmMessage): LlmMessage {
-    if (message.stop_reason === "refusal") throw new LlmRefusalError(message.stop_details?.category ?? null);
-    return message;
-  }
-}
-
-export function textOf(message: LlmMessage): string {
-  return message.content
-    .filter((b): b is Anthropic.Beta.BetaTextBlock => b.type === "text")
-    .map((b) => b.text)
-    .join("")
-    .trim();
 }

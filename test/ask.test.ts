@@ -158,7 +158,6 @@ describe("ask", () => {
     const [result] = toolResults(fake.requests[1]!);
     expect(result!.value.ref).toBe("r1");
     expect(((result!.value.result as { rows: { name: string }[] }).rows).map((r) => r.name)).toEqual(["Woods", "Surf"]);
-    expect(fake.requests[0]!.tool_choice).toBeUndefined();
 
     const second = await ask(ctx, "and Surf?", first.threadId);
     expect(second.threadId).toBe(first.threadId);

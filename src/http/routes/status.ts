@@ -46,6 +46,7 @@ export const statusRoutes = new Hono<Env>().get("/", (c) => {
     tags: tagCoverage(db),
     live: { watch: job(getJobState(db, "watch")), radar: job(getJobState(db, "radar")), library: job(getJobState(db, "library")), living: job(getJobState(db, "living")) },
     plays: counts,
+    ai: { configured: llm.configured, provider: llm.provider, model: llm.model, webSearch: llm.webSearch },
     integrations: { discord: settings.discord !== null, mcp: settings.mcpToken !== undefined || settings.mcpOAuth },
     llm: {
       configured: llm.configured,

@@ -82,8 +82,8 @@ describe("visuals are bound to tool results", () => {
     const { ctx, db } = featureCtx(fake.transport);
     seedLibrary(db);
     await ask(ctx, "q", null);
-    const last = fake.requests[2]!.messages.at(-1)!.content as { is_error?: boolean; content: string }[];
-    expect(last[0]!.is_error).toBe(true);
+    const last = fake.requests[2]!.messages.at(-1)!.content as { isError?: boolean; content: string }[];
+    expect(last[0]!.isError).toBe(true);
     expect(last[0]!.content).toContain("INVALID_INPUT");
   });
 

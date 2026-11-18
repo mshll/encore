@@ -19,7 +19,7 @@ import { WeekdayPicker } from "../../ui/WeekdayPicker";
 /** A pending edit. Numbers stay as typed text until save; `null` clears a stored value (the default applies again). */
 type Draft = Record<string, SettingValue | null>;
 
-const ENUM_LABELS: Record<string, string> = { deterministic: "Rules", llm: "Claude" };
+const ENUM_LABELS: Record<string, string> = { deterministic: "Rules", llm: "AI", anthropic: "Anthropic", openai: "OpenAI", google: "Google Gemini", "openai-compatible": "OpenAI-compatible" };
 
 export function fieldsByKey(settings: Settings | undefined): Map<string, SettingField> {
   return new Map((settings?.groups ?? []).flatMap((g) => g.fields.map((f) => [f.key, f] as const)));
@@ -60,6 +60,7 @@ export function displayValue(field: SettingField): string {
   if (field.unit === "weekday") return WEEKDAYS[Number(v) - 1] ?? String(v);
   if (field.unit === "hour") return fmtHour(Number(v));
   if (field.unit === "usd") return `$${fmtInt(Number(v))}`;
+  if (field.unit === "usdPerMTok") return `$${Number(v)} per 1M tokens`;
   if (field.key === "homeCountry") return `${countryName(String(v))} (${String(v)})`;
   if (field.type === "enum") return ENUM_LABELS[String(v)] ?? String(v);
   if (typeof v === "number" && field.unit) return `${fmtInt(v)} ${UNIT_LABELS[field.unit] ?? field.unit}`;
@@ -171,7 +172,7 @@ function issueText(issue: SettingIssue): string {
   return issue.message.charAt(0).toUpperCase() + issue.message.slice(1).replace(/\.?$/, ".");
 }
 
-function FieldControl({ field, form, control }: { field: SettingField; form: SettingsForm; control: SettingControlProps }) {
+function FieldControl({ field, form, control, placeholder }: { field: SettingField; form: SettingsForm; control: SettingControlProps; placeholder?: string }) {
   const v = form.value(field.key);
   const zones = useZoneOptions(field);
   const label = settingLabel(field.key);
@@ -215,7 +216,7 @@ function FieldControl({ field, form, control }: { field: SettingField; form: Set
         {...control}
         inputMode={field.type === "integer" ? "numeric" : "decimal"}
         value={v === null ? "" : String(v)}
-        placeholder={field.default === null ? undefined : String(field.default)}
+        placeholder={placeholder ?? (field.default === null ? undefined : String(field.default))}
         onChange={(e) => form.set(field.key, e.target.value)}
         end={field.unit ? <span className="shrink-0 text-tertiary">{UNIT_LABELS[field.unit]}</span> : undefined}
       />
@@ -224,6 +225,7 @@ function FieldControl({ field, form, control }: { field: SettingField; form: Set
     <Input
       {...control}
       value={typeof v === "string" ? v : ""}
+      placeholder={placeholder}
       spellCheck={false}
       autoComplete="off"
       onChange={(e) => form.set(field.key, field.key === "homeCountry" ? e.target.value.toUpperCase() : e.target.value)}
@@ -272,7 +274,7 @@ function SecretControl({ field, form, control, storage }: { field: SettingField;
 }
 
 /** One field: the right control for its type, read-only when an env var sets it. `hint` overrides the stock hint. */
-export function SettingFieldRow({ field, form, hint, storage = true }: { field: SettingField; form: SettingsForm; hint?: ReactNode; storage?: boolean }) {
+export function SettingFieldRow({ field, form, hint, placeholder, storage = true }: { field: SettingField; form: SettingsForm; hint?: ReactNode; placeholder?: string; storage?: boolean }) {
   const label = settingLabel(field.key);
   if (field.locked)
     return (
@@ -287,7 +289,7 @@ export function SettingFieldRow({ field, form, hint, storage = true }: { field: 
   const unreadable = field.unreadable && !(field.key in form.draft) ? "The stored value cannot be read with the current SECRETS_KEY. Save it again." : null;
   return (
     <SettingRow label={label} hint={unreadable ?? hint ?? settingHint(field.key)} error={form.errors[field.key]} wide={field.type === "weekdays"}>
-      {(control) => (field.secret ? <SecretControl field={field} form={form} control={control} storage={storage} /> : <FieldControl field={field} form={form} control={control} />)}
+      {(control) => (field.secret ? <SecretControl field={field} form={form} control={control} storage={storage} /> : <FieldControl field={field} form={form} control={control} placeholder={placeholder} />)}
     </SettingRow>
   );
 }
@@ -347,6 +349,7 @@ export function SettingsBlock({
   keys,
   form,
   hints,
+  placeholders,
   storage,
   children,
   footer,
@@ -357,6 +360,7 @@ export function SettingsBlock({
   keys: string[];
   form: SettingsForm;
   hints?: Record<string, ReactNode>;
+  placeholders?: Record<string, string>;
   storage?: boolean;
   children?: ReactNode;
   footer?: ReactNode;
@@ -373,7 +377,7 @@ export function SettingsBlock({
       )}
       <SettingRows>
         {fields.map((f) => (
-          <SettingFieldRow key={f.key} field={f} form={form} hint={hints?.[f.key]} storage={storage} />
+          <SettingFieldRow key={f.key} field={f} form={form} hint={hints?.[f.key]} placeholder={placeholders?.[f.key]} storage={storage} />
         ))}
         {children}
       </SettingRows>

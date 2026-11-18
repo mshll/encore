@@ -82,7 +82,7 @@ export const LIBRARY_TABS: SurfaceTab[] = [
 export const SETTINGS_TABS: SurfaceTab[] = [
   { path: "/settings/general", label: "General" },
   { path: "/settings/spotify", label: "Spotify" },
-  { path: "/settings/claude", label: "Claude" },
+  { path: "/settings/ai", label: "AI" },
   { path: "/settings/integrations", label: "Integrations" },
   { path: "/settings/jobs", label: "Jobs" },
   { path: "/settings/data", label: "Data" },

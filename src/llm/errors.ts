@@ -1,6 +1,6 @@
 export class LlmNotConfiguredError extends Error {
   constructor() {
-    super("ANTHROPIC_API_KEY is not set");
+    super("AI is not set up: choose a provider, model and API key in Settings");
   }
 }
 
@@ -10,7 +10,7 @@ export class LlmBudgetExceededError extends Error {
     readonly spentUsd: number,
     readonly capUsd: number,
   ) {
-    super(`Monthly LLM budget reached for ${month}: $${spentUsd.toFixed(2)} of $${capUsd.toFixed(2)}`);
+    super(`Monthly AI budget reached for ${month}: $${spentUsd.toFixed(2)} of $${capUsd.toFixed(2)}`);
   }
 }
 
@@ -31,5 +31,15 @@ export class LlmIncompleteError extends Error {}
 export class LlmAbortedError extends Error {
   constructor() {
     super("The request was cancelled");
+  }
+}
+
+/** The provider refused or failed the request. Carries the HTTP status only: provider messages can echo request details. */
+export class LlmProviderError extends Error {
+  constructor(
+    readonly status: number | null,
+    kind?: string,
+  ) {
+    super(`AI provider error${status ? ` ${status}` : kind ? ` (${kind})` : ""}`);
   }
 }

@@ -138,4 +138,39 @@ describe("migrations", () => {
     ]);
     expect(db.$client.query("select kind, calls from living_refreshes").all()).toEqual([{ kind: "most-played", calls: 2 }]);
   });
+
+  test("a database at 0018 drops ask threads and empties set and plan conversations, keeping sets, picks and the ledger", () => {
+    const dir = mkdtempSync(join(tmpdir(), "encore-mig-"));
+    const partial = join(dir, "drizzle");
+    cpSync(folder, partial, { recursive: true });
+    const journal = JSON.parse(readFileSync(join(partial, "meta/_journal.json"), "utf8"));
+    journal.entries = journal.entries.slice(0, 19);
+    writeFileSync(join(partial, "meta/_journal.json"), JSON.stringify(journal));
+    const path = join(dir, "dev.db");
+    const old = new Database(path, { create: true });
+    migrate(drizzle(old), { migrationsFolder: partial });
+    const anthropicTurn = JSON.stringify([{ role: "assistant", content: [{ type: "tool_use", id: "toolu_1", name: "x", input: {} }] }]);
+    old.run(`insert into llm_threads (id, feature, system, messages, created_at, updated_at) values (1, 'ask', '[]', '${anthropicTurn}', 0, 0), (2, 'sets', '["s"]', '${anthropicTurn}', 0, 0)`);
+    old.run("insert into llm_answers (thread_id, message_index, content, created_at) values (1, 0, '{}', 0)");
+    old.run("insert into sets (id, thread_id, request, title, description, version, created_at, updated_at) values (1, 2, 'r', 'Late drive', '', 1, 0, 0)");
+    old.run("insert into picks (week, position, uri, song_key, name, artist, reason, distance, state_at, created_at) values ('2026-01-05', 1, 'spotify:track:a', 'a|b', 'A', 'B', 'why', 'near', 0, 0)");
+    old.run("insert into llm_calls (ts, month, feature, requested_model, model, input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, web_searches, usd, duration_ms) values (0, '2026-01', 'ask', 'm', 'm', 1, 1, 0, 0, 0, 1.5, 1)");
+    old.close();
+
+    const db = openDb(path).$client;
+
+    expect({
+      threads: db.query("select id, feature, system, messages from llm_threads").all(),
+      answers: db.query("select count(*) as n from llm_answers").get(),
+      sets: db.query("select title from sets").all(),
+      picks: db.query("select reason from picks").all(),
+      spend: db.query("select usd from llm_calls").all(),
+    }).toEqual({
+      threads: [{ id: 2, feature: "sets", system: '["s"]', messages: "[]" }],
+      answers: { n: 0 },
+      sets: [{ title: "Late drive" }],
+      picks: [{ reason: "why" }],
+      spend: [{ usd: 1.5 }],
+    });
+  });
 });

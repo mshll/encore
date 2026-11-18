@@ -3,7 +3,7 @@ import { createDiscord } from "../src/discord";
 import { publishAssistantPosts } from "../src/discord/posts";
 import { InteractionType, ResponseType, type Interaction } from "../src/discord/types";
 import { digests, llmCalls, picks, releases, spotifyAuth } from "../src/db/schema";
-import type { LlmTransport } from "../src/llm/client";
+import type { LlmTransport } from "../src/llm/types";
 import { listBlocks } from "../src/library/blocks";
 import { weekOf } from "../src/picks/service";
 import { songKey } from "../src/plays/song";

@@ -30,7 +30,7 @@ type Entry = {
   ask?: string;
 };
 
-const SET_UP_AI: Entry = { id: "page:ai", group: "Go to", label: "Set up AI", path: "/settings/claude", icon: SparkleIcon };
+const SET_UP_AI: Entry = { id: "page:ai", group: "Go to", label: "Set up AI", path: "/settings/ai", icon: SparkleIcon };
 
 /** Search and go: surfaces, then artists, songs and albums from your history, then a question for the chat (with AI set up). */
 export function CommandPalette({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {

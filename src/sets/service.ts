@@ -4,7 +4,7 @@ import { z } from "zod";
 import type { Db } from "../db/client";
 import { setChanges, setItems, sets, type SetChangeMove, type SetChangeTrack } from "../db/schema";
 import { runAgent, tool, type AgentEvent } from "../llm/agent";
-import type { MessageParam } from "../llm/client";
+import { replyText, type ChatMessage } from "../llm/types";
 import { localNow, tagged, type FeatureContext } from "../llm/context";
 import { pageContextNote, type PageContext } from "../llm/pageContext";
 import { leaksInternals } from "../llm/plainText";
@@ -253,7 +253,7 @@ function fillHidden(hidden: Blocked, blocked: Blocked, c: Constraints) {
   for (const k of [...blocked.artists, ...c.exclude.artists.map(artistKey)]) hidden.artists.add(k);
 }
 
-async function converse(ctx: FeatureContext, setId: number, threadId: number, system: string[], messages: MessageParam[], change: Change, onEvent?: (e: AgentEvent) => void) {
+async function converse(ctx: FeatureContext, setId: number, threadId: number, system: string[], messages: ChatMessage[], change: Change, onEvent?: (e: AgentEvent) => void) {
   const { db, spotify, llm } = ctx;
   const blocked = blockedSets(db);
   const verifier = new CandidateVerifier(db, spotify, blocked, MAX_SEARCHES_PER_RUN, ctx.now);
@@ -307,7 +307,7 @@ export async function createSet(ctx: FeatureContext, request: string, onEvent?: 
   const constraints = withDefaults(llmSettings.constraints, given);
   const now = ctx.now();
   const system = [SETS_SYSTEM, tagged("taste_profile", tasteProfile(db, { timezone, weekendDays }, now))];
-  const messages: MessageParam[] = [
+  const messages: ChatMessage[] = [
     { role: "user", content: `${ownerMessage(request)}\nOwner's local time: ${localNow({ timezone, weekendDays }, now)}.${constraintsNote(constraints)}${pageContextNote(context)}` },
   ];
   const { setId, threadId } = db.transaction((tx) => {
@@ -355,14 +355,7 @@ export async function refineSet(ctx: FeatureContext, setId: number, message: str
   return { set: getSet(db, setId)!, changed: getSetRow(db, setId)!.version !== before, reply: result.terminal ? null : textReply(result.final.content) };
 }
 
-function textReply(content: { type: string }[]): string | null {
-  const text = content
-    .filter((b): b is { type: "text"; text: string } => b.type === "text")
-    .map((b) => b.text)
-    .join("")
-    .trim();
-  return text || null;
-}
+const textReply = (content: Parameters<typeof replyText>[0]): string | null => replyText(content) || null;
 
 const getSetRow = (db: Db, id: number) => db.select().from(sets).where(eq(sets.id, id)).get();
 

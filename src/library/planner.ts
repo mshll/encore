@@ -3,7 +3,7 @@ import { z } from "zod";
 import type { Db } from "../db/client";
 import { libraryPlans, PLAN_ACTIONS, type PlanAction, type PlanSource } from "../db/schema";
 import { runAgent, tool, type AgentEvent, type AgentTool } from "../llm/agent";
-import type { MessageParam } from "../llm/client";
+import { replyText, type ChatMessage } from "../llm/types";
 import { localNow, type FeatureContext } from "../llm/context";
 import { pageContextNote, type PageContext } from "../llm/pageContext";
 import { leaksInternals } from "../llm/plainText";
@@ -328,17 +328,10 @@ export class PlanNotBuiltError extends Error {
 
 type Conversation = { planId: number | null; source: PlanSource; request: string; standingId?: number };
 
-function textReply(content: { type: string }[]): string | null {
-  const text = content
-    .filter((b): b is { type: "text"; text: string } => b.type === "text")
-    .map((b) => b.text)
-    .join("")
-    .trim();
-  return text || null;
-}
+const textReply = (content: Parameters<typeof replyText>[0]): string | null => replyText(content) || null;
 
 /** Runs one turn of the planning conversation. Creates the plan on its first accepted submission. */
-async function converse(ctx: FeatureContext, threadId: number, system: string[], messages: MessageParam[], conv: Conversation, onEvent?: (e: AgentEvent) => void) {
+async function converse(ctx: FeatureContext, threadId: number, system: string[], messages: ChatMessage[], conv: Conversation, onEvent?: (e: AgentEvent) => void) {
   const { db, llm } = ctx;
   const settings = ctx.settings.get();
   const snapshot = loadLibrary(db, ctx.now(), settings);
@@ -390,7 +383,7 @@ export async function startPlanConversation(
   llm.assertAvailable();
   const now = ctx.now();
   const system = [LIBRARY_SYSTEM];
-  const messages: MessageParam[] = [{ role: "user", content: `${ownerMessage(request)}\nOwner's local time: ${localNow(ctx.settings.get(), now)}.${pageContextNote(context)}` }];
+  const messages: ChatMessage[] = [{ role: "user", content: `${ownerMessage(request)}\nOwner's local time: ${localNow(ctx.settings.get(), now)}.${pageContextNote(context)}` }];
   const threadId = createThread(db, "library", system, [], now);
   try {
     const turn = await converse(ctx, threadId, system, messages, { planId: null, source: standing ? "standing" : "claude", request, standingId: standing?.id }, onEvent);
@@ -425,11 +418,11 @@ export function planConversation(db: Db, threadId: number | null) {
   const messages = getThread(db, threadId)?.messages ?? [];
   return messages.flatMap((m, i) => {
     const turns = transcript([m]);
-    if (m.role !== "assistant" || typeof m.content === "string") return turns;
+    if (m.role !== "assistant") return turns;
     for (const block of m.content) {
-      if (block.type !== "tool_use" || block.name !== "submit_plan") continue;
+      if (block.type !== "tool_call" || block.name !== "submit_plan") continue;
       const next = messages[i + 1];
-      const result = next && Array.isArray(next.content) ? next.content.find((b) => b.type === "tool_result" && b.tool_use_id === block.id) : undefined;
+      const result = next?.role === "user" && Array.isArray(next.content) ? next.content.find((b) => b.id === block.id) : undefined;
       const accepted = !result || JSON.stringify(result).includes('\\"accepted\\":true');
       const summary = (block.input as { summary?: string; title?: string }).summary || (block.input as { title?: string }).title;
       if (accepted && summary) turns.push({ role: "assistant", text: summary });

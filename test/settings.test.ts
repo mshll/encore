@@ -64,12 +64,12 @@ describe("settings validation", () => {
   test("rejects unknown keys and out-of-range values, and writes nothing when any value fails", () => {
     const { settings } = store();
 
-    const issues = issuesOf(() => settings.update({ picksHour: 7, pollIntervalSeconds: 10, bogus: 1, claudeModel: "gpt-5" }));
+    const issues = issuesOf(() => settings.update({ picksHour: 7, pollIntervalSeconds: 10, bogus: 1, aiProvider: "mistral" }));
 
     expect(issues.map((i) => [i.key, i.reason])).toEqual([
       ["pollIntervalSeconds", "invalid"],
       ["bogus", "unknown"],
-      ["claudeModel", "invalid"],
+      ["aiProvider", "invalid"],
     ]);
     expect(settings.entry("picksHour")!.source).toBe("default");
   });
@@ -98,7 +98,7 @@ describe("secrets", () => {
 
     const raw = JSON.stringify(db.select().from(settingsTable).all());
     expect(raw).not.toContain(CLAUDE_KEY);
-    expect(settings.get().llm.apiKey).toBe(CLAUDE_KEY);
+    expect(settings.get().llm.ai.apiKey).toBe(CLAUDE_KEY);
   });
 
   test("cannot be stored without SECRETS_KEY, while env-provided secrets keep working", () => {
@@ -117,7 +117,7 @@ describe("secrets", () => {
     const reopened = testSettings(db, testConfig({ SECRETS_KEY: "x".repeat(40) }));
 
     expect(reopened.entry("claudeApiKey")).toMatchObject({ value: null, source: "default", unreadable: true });
-    expect(reopened.get().llm.apiKey).toBeUndefined();
+    expect(reopened.get().llm.ai.apiKey).toBeUndefined();
   });
 });
 
@@ -138,11 +138,11 @@ describe("runtime changes", () => {
 
   test("services read the new value on their next use, without a restart", () => {
     const { settings } = store({ SECRETS_KEY: KEY });
-    const before = settings.get().llm.apiKey;
+    const before = settings.get().llm.ai.apiKey;
 
     settings.update({ claudeApiKey: CLAUDE_KEY, djReplanner: "llm" });
 
-    expect([before, settings.get().llm.apiKey, settings.get().djReplanner]).toEqual([undefined, CLAUDE_KEY, "llm"]);
+    expect([before, settings.get().llm.ai.apiKey, settings.get().djReplanner]).toEqual([undefined, CLAUDE_KEY, "llm"]);
   });
 
   test("listeners hear which keys changed, and rescheduling re-times waiting jobs with the new interval", async () => {
@@ -196,7 +196,7 @@ describe("adopting env values", () => {
     expect(JSON.stringify(db.select().from(settingsTable).all())).not.toContain(CLAUDE_KEY);
     for (const [key, value] of [["timezone", "Asia/Kuwait"], ["claudeApiKey", CLAUDE_KEY], ["spotifyClientId", "test-client"]] as const)
       expect(settings.entry(key)).toMatchObject({ value, source: "db", stored: true });
-    expect(settings.get().llm.apiKey).toBe(CLAUDE_KEY);
+    expect(settings.get().llm.ai.apiKey).toBe(CLAUDE_KEY);
     expect(new SpotifyAuth(db, config, settings).status().connected).toBe(true);
   });
 

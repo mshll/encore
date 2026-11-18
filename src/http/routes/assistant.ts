@@ -10,6 +10,8 @@ import { RECAP_KINDS, latestKey } from "../../digest/periods";
 import { listRecapPlaylists, recapPlaylistSongs, saveRecapPlaylist } from "../../digest/playlist";
 import { generateDigest, getDigest, listDigests, recapPeriod, renderDigest } from "../../digest/service";
 import { localTime } from "../../plays/localTime";
+import { DEFAULT_MODELS, priceFor, WEB_SEARCH_PRICE, type ModelPrice } from "../../llm/providers";
+import { AI_PROVIDERS } from "../../llm/types";
 import { budgetStatus, spendDetail } from "../../llm/ledger";
 import { listBlocks, removeBlock } from "../../library/blocks";
 import { cachedNote, trackNote } from "../../notes/service";
@@ -230,8 +232,18 @@ export const llmRoutes = new Hono<Env>().get("/spend", (c) => {
   const q = parse(z.object({ month: z.string().regex(/^\d{4}-\d{2}$/).optional(), limit: z.coerce.number().int().min(1).max(500).default(50) }), c.req.query());
   const budget = budgetStatus(db, timezone, llm.monthlyBudgetUsd, now());
   const detail = spendDetail(db, q.month ?? budget.month, q.limit);
-  const perMTok = Object.fromEntries(
-    Object.entries(llm.prices).map(([model, p]) => [model, Object.fromEntries(Object.entries(p).map(([k, v]) => [k, Math.round(v * 1e6 * 1000) / 1000]))]),
-  );
-  return c.json({ ...detail, budget, model: llm.model, pricesPerMTok: perMTok, webSearchPerRequest: llm.webSearchPerRequest });
+  const perMTok = (p: ModelPrice) => Object.fromEntries(Object.entries(p).map(([k, v]) => [k, Math.round(v * 1e6 * 1000) / 1000]));
+  const { provider, model, ownerPrice } = llm.ai;
+  const current = model ? priceFor(llm.prices, provider, model, ownerPrice) : null;
+  return c.json({
+    ...detail,
+    budget,
+    provider,
+    model,
+    price: current && { source: current.source, perMTok: perMTok(current.price) },
+    pricesPerMTok: Object.fromEntries(Object.entries(llm.prices).filter(([, m]) => m.provider === provider).map(([id, m]) => [id, perMTok(m.price)])),
+    webSearchPerRequest: WEB_SEARCH_PRICE[provider],
+    defaultModels: DEFAULT_MODELS,
+    knownModels: Object.fromEntries(AI_PROVIDERS.map((p) => [p, Object.keys(llm.prices).filter((id) => llm.prices[id]!.provider === p)])),
+  });
 });

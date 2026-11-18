@@ -15,7 +15,7 @@ Contract between the server and the web UI. All routes are JSON over HTTP on the
   { "error": { "code": "invalid_request", "message": "Request validation failed", "details": [{ "path": "from", "message": "expected YYYY-MM-DD" }] } }
   ```
 
-  `details` is present only on some errors. Status codes: `400` validation (`invalid_request`, `invalid_settings`), `401` not signed in, `402` monthly LLM budget spent, `403` setup token wrong or `premium_required`, `404` not found, `409` precondition (`spotify_not_configured`, `spotify_not_connected`, `no_active_device`, `setup_complete`, `llm_not_configured` on key verify, `discord_not_configured`, `discord_registration_unavailable`), `413` file too large, `415` wrong content type, `422` Claude declined, `500` server error (`snapshot_failed`), `502` Spotify, Claude or Discord call failed (`spotify_failed`, `llm_failed`, `discord_failed`), `503` LLM not configured or Spotify calls paused (`spotify_paused`, `details: { reason, until }`). Assistant error codes are listed under [Assistant](#assistant-claude).
+  `details` is present only on some errors. Status codes: `400` validation (`invalid_request`, `invalid_settings`), `401` not signed in, `402` monthly AI budget spent, `403` setup token wrong or `premium_required`, `404` not found, `409` precondition (`spotify_not_configured`, `spotify_not_connected`, `no_active_device`, `setup_complete`, `llm_not_configured` on key verify, `discord_not_configured`, `discord_registration_unavailable`), `413` file too large, `415` wrong content type, `422` the model declined, `500` server error (`snapshot_failed`), `502` Spotify, AI provider or Discord call failed (`spotify_failed`, `llm_failed`, `discord_failed`), `503` AI not set up or Spotify calls paused (`spotify_paused`, `details: { reason, until }`). Assistant error codes are listed under [Assistant](#assistant-claude).
 - Timestamps (`ts`, `firstPlayed`, `lastPlayed`, `start`, `end`, ...) are ISO 8601 UTC strings.
 - Days, hours, weekdays, weeks, months are local time in `TIMEZONE` (default UTC). `day` is `YYYY-MM-DD`. `weekday` is ISO: 1 = Monday ... 7 = Sunday.
 - `hours` values are rounded to 2 decimals. Rates (`skipRate`, `shuffleRate`, `share`) are 0..1 rounded to 3 decimals, or `null` when the denominator is 0.
@@ -175,6 +175,7 @@ Artist rows (top artists, eras, skips, search, the artist page, the overview's `
   "plays": { "plays": 39821, "music": 39338, "api": 10, "live": 152 },
   "live": { "watch": { "lastRunAt": "...", "...": "same shape as poll" }, "radar": { "...": "..." }, "library": { "...": "..." }, "living": { "...": "..." } },
   "integrations": { "discord": false, "mcp": true },
+  "ai": { "configured": true, "provider": "anthropic", "model": "claude-opus-5-5", "webSearch": true },
   "llm": {
     "configured": true, "model": "claude-opus-5-5", "month": "2026-11",
     "spentUsd": 1.18, "capUsd": 100, "remainingUsd": 98.82, "exhausted": false,
@@ -200,7 +201,8 @@ Artist rows (top artists, eras, skips, search, the artist page, the overview's `
 - `tags`: `songs` known (distinct song keys in `tracks`), `tagged` songs with tags, `coverage` = tagged / songs (0..1, not rounded).
 - `plays`: stored rows: all kinds, music only, and rows by source `api` and `live` (the rest are `export`).
 - `live`: the `watch`, `radar`, `library` and `living` jobs, same shape as `poll`. `watch.lastResult` is `{ "current": Observation | null, "inserted", "replacedApi", "coveredByExport", "playing" }` for the last tick, or `{ "current", "skipped": "spotify_not_connected" | "spotify_paused", "until"? }`.
-- `llm`: Claude spend for the current local month against `MONTHLY_BUDGET_USD`. `exhausted: true` means every LLM endpoint returns `402` and scheduled LLM jobs skip until the next month. `configured: false` means no Claude key (`claudeApiKey` setting or `ANTHROPIC_API_KEY`). `schedule`: when the weekly picks and digest jobs run (ISO weekday 1-7 and local hour, from `PICKS_WEEKDAY`/`PICKS_HOUR` and `DIGEST_WEEKDAY`/`DIGEST_HOUR`); `enabled` is `JOBS_ENABLED`. `byFeature` features: `sets`, `picks`, `ask`, `notes`, `digest`, `dj`, `library`. Job `lastResult` may be `{ "skipped": "not_due" | "budget_exceeded" | "llm_not_configured" | "spotify_not_connected" | "attempts_exhausted" }`; the `digest` job runs without Claude too and stores recaps with the numbers alone (`{ "generated": ["monthly:2026-10"] }`). When Discord posting is configured, `picks` and `digest` results also carry `publish: { "posted": ["picks:2026-11-09"] }` or `publish: { "error": "..." }` (see Discord). `outcomes.lastResult` has set and pick outcome refresh counts and, once a day, `library` (pick library state).
+- `ai`: the AI provider in use. `configured: false` means the settings lack a model and an API key (or, for `openai-compatible`, a base URL); every AI route then returns `503 llm_not_configured`. `provider`: `anthropic`, `openai`, `google` or `openai-compatible`. `model` is `null` only for `openai-compatible` with no model set. `webSearch`: whether weekly picks and liner notes can search the web; `false` for `openai-compatible`, where picks carry no source.
+- `llm`: AI spend for the current local month against `MONTHLY_BUDGET_USD`. `exhausted: true` means every AI endpoint returns `402` and scheduled AI jobs skip until the next month. `configured` and `model` repeat `ai`. `schedule`: when the weekly picks and digest jobs run (ISO weekday 1-7 and local hour, from `PICKS_WEEKDAY`/`PICKS_HOUR` and `DIGEST_WEEKDAY`/`DIGEST_HOUR`); `enabled` is `JOBS_ENABLED`. `byFeature` features: `sets`, `picks`, `ask`, `notes`, `digest`, `dj`, `library`, `verify` (the settings check). Job `lastResult` may be `{ "skipped": "not_due" | "budget_exceeded" | "llm_not_configured" | "spotify_not_connected" | "attempts_exhausted" }`; the `digest` job runs without AI too and stores recaps with the numbers alone (`{ "generated": ["monthly:2026-10"] }`). When Discord posting is configured, `picks` and `digest` results also carry `publish: { "posted": ["picks:2026-11-09"] }` or `publish: { "error": "..." }` (see Discord). `outcomes.lastResult` has set and pick outcome refresh counts and, once a day, `library` (pick library state).
 
 
 ## Auth (passkeys)
@@ -256,8 +258,8 @@ Runtime configuration, edited from the dashboard. Boot config (`HOST`, `PORT`, `
       { "key": "weekendDays", "env": "WEEKEND_DAYS", "type": "weekdays", "secret": false, "value": [5, 6], "default": [5, 6],
         "source": "default", "locked": false, "set": true, "hint": null, "unreadable": false, "stored": false, "min": 1, "max": 7, "unit": "weekday" }
     ] },
-    { "id": "claude", "fields": [
-      { "key": "claudeApiKey", "env": "ANTHROPIC_API_KEY", "type": "string", "secret": true, "value": null, "default": null,
+    { "id": "ai", "fields": [
+      { "key": "aiApiKey", "env": "AI_API_KEY", "type": "string", "secret": true, "value": null, "default": null,
         "source": "db", "locked": false, "set": true, "hint": "WXYZ", "unreadable": false, "stored": true }
     ] }
   ],
@@ -267,7 +269,7 @@ Runtime configuration, edited from the dashboard. Boot config (`HOST`, `PORT`, `
 
 - `type`: `string`, `integer`, `number`, `boolean`, `enum` (pick from `options`), `timezone` (IANA, `options` lists the zones the server accepts), `weekdays` (array of ISO weekdays 1-7, no repeats, returned sorted), `date` (a local day `YYYY-MM-DD` in the configured timezone, not after today there).
 - `stored`: the settings table holds a valid value for this field, whatever the `source`. With `source: "env"`, it is the value that applies once the env var is removed and the server restarts.
-- `min`/`max` bound numbers (for `weekdays`, each day). `unit`: `ms`, `seconds`, `minutes`, `hours`, `days`, `usd`, `weekday` (ISO 1-7), `hour` (local 0-23).
+- `min`/`max` bound numbers (for `weekdays`, each day). `unit`: `ms`, `seconds`, `minutes`, `hours`, `days`, `usd`, `usdPerMTok` (USD per million tokens), `weekday` (ISO 1-7), `hour` (local 0-23).
 - `value` is `null` for secrets and for unset optional fields; `set` is false for the latter.
 
 Fields by group (env var in brackets; `*` = secret):
@@ -276,7 +278,7 @@ Fields by group (env var in brackets; `*` = secret):
 | --- | --- |
 | `spotify` | `spotifyClientId` [SPOTIFY_CLIENT_ID] |
 | `locale` | `timezone` [TIMEZONE], `homeCountry` [HOME_COUNTRY], `weekendDays` [WEEKEND_DAYS, e.g. `5,6`] |
-| `claude` | `claudeApiKey`* [ANTHROPIC_API_KEY], `claudeModel` [LLM_MODEL], `monthlyBudgetUsd` [MONTHLY_BUDGET_USD], `defaultMaxPerArtist`, `defaultMaxPerAlbum`, `defaultNewSongs` [DEFAULT_*] |
+| `ai` | `aiProvider` [AI_PROVIDER: `anthropic`, `openai`, `google`, `openai-compatible`], `aiModel` [AI_MODEL], `aiApiKey`* [AI_API_KEY], `aiBaseUrl` [AI_BASE_URL], `aiInputPrice`, `aiOutputPrice` [AI_INPUT_PRICE, AI_OUTPUT_PRICE], `claudeApiKey`* [ANTHROPIC_API_KEY] and `claudeModel` [LLM_MODEL] (earlier names, used for Anthropic when `aiApiKey` or `aiModel` is unset), `monthlyBudgetUsd` [MONTHLY_BUDGET_USD], `defaultMaxPerArtist`, `defaultMaxPerAlbum`, `defaultNewSongs` [DEFAULT_*] |
 | `picks` | `picksPerWeek`, `picksFarOut`, `picksWeekday`, `picksHour` [PICKS_*] |
 | `digest` | `digestWeekday`, `digestHour` [DIGEST_*] |
 | `dj` | `djReplanner`, `djReplanTimeoutSeconds`, `djSkipTrigger` [DJ_*] |
@@ -292,7 +294,7 @@ Defaults and bounds match the table in [configuration.md](configuration.md).
 
 ### `PATCH /api/settings`
 
-Body: an object of field key to value, e.g. `{ "timezone": "Europe/London", "picksHour": 8, "claudeApiKey": "sk-ant-..." }`. `null` or `""` clears the stored value (the default applies again). The patch is checked as a whole: one bad field and nothing is saved.
+Body: an object of field key to value, e.g. `{ "timezone": "Europe/London", "picksHour": 8, "aiApiKey": "sk-..." }`. `null` or `""` clears the stored value (the default applies again). The patch is checked as a whole: one bad field and nothing is saved.
 
 `200`: the `GET` shape plus `changed` (keys whose effective value changed) and `effects`:
 
@@ -342,9 +344,9 @@ Body `{ "historyStart": "2024-01-01" }`. In this order:
 
 Open plan items keep the play counts in their `evidence` until the next library pass refreshes them. Stored recaps (`/api/digests`) keep their text.
 
-### `POST /api/settings/claude/verify`
+### `POST /api/settings/ai/verify`
 
-Body `{ "apiKey"?: string }` (send `{}` to check the stored key). Asks the Anthropic Models API whether the key can use the configured model. Free, not recorded in the spend ledger, and the key is not stored. `200 { "valid": true, "model" }` or `{ "valid": false, "model", "message" }`. `409 llm_not_configured` when no key is given or set; `502 llm_failed` when the API cannot be reached.
+Body `{ "provider"?, "model"?, "apiKey"?, "baseUrl"? }`: unsaved values to check over the saved ones (send `{}` to check the saved settings). A `provider` other than the saved one, without `model`, checks that provider's default model, and without `apiKey` checks no key. Makes one short call through the AI layer: it is recorded in the spend ledger as `verify` (a few tokens) and the monthly cap applies (`402`). Nothing is stored. `200 { "valid": true, "provider", "model" }` (`model` as the provider reported it) or `{ "valid": false, "provider", "model", "message" }` when the provider rejects the key (`401`/`403`), does not know the model (`404`) or refuses the request (`400`/`422`). `409 llm_not_configured` when there is no model, or no key (no base URL for `openai-compatible`); `502 llm_failed` when the provider cannot be reached or fails otherwise. `POST /api/settings/claude/verify` is the same route under its earlier name.
 
 ### `POST /api/settings/discord/register`
 
@@ -449,7 +451,7 @@ State of each first-run step after sign-in. The steps before sign-in come from `
 - `spotifyApp`: a client id is set. Register `redirectUri` in the Spotify app. `spotifyConnect`: a grant for that client id exists; start it with `GET /api/spotify/authorize`.
 - `locale.done`: the timezone was chosen (env or stored), not left at the default. Choose it before the import; `playsStored` shows whether plays already carry buckets in the old zone.
 - `import.done`: at least one export row is stored. Upload with `POST /api/import`.
-- `claude.done`: a Claude key is set (not verified; use `POST /api/settings/claude/verify`). `discord.done`: application id, public key and owner id are set; put `interactionsUrl` in the Discord app. `mcp.done`: an MCP token is set or MCP OAuth is on.
+- `claude.done`: an AI provider is set up (not verified; use `POST /api/settings/ai/verify`). Its `source` and `locked` describe `claudeApiKey`, the Anthropic key this step stores. `discord.done`: application id, public key and owner id are set; put `interactionsUrl` in the Discord app. `mcp.done`: an MCP token is set or MCP OAuth is on.
 
 ## Spotify
 
@@ -1423,17 +1425,17 @@ Session routes for the consent page and Settings (cookie, same-origin JSON write
 
 ## Assistant (Claude)
 
-Claude-backed features: sets, weekly picks, ask, liner notes, digests, and the optional DJ re-planner. HTTP routes are session only (the admin token is rejected); the same features are in Discord (see Discord). Every call is recorded in a ledger and priced; see `GET /api/llm/spend`.
+AI features, through the provider chosen in Settings (Anthropic, OpenAI, Google or an OpenAI-compatible server): sets, weekly picks, ask, liner notes, digests, and the optional DJ re-planner. HTTP routes are session only (the admin token is rejected); the same features are in Discord (see Discord). Every call is recorded in a ledger and priced; see `GET /api/llm/spend`.
 
 ### Errors
 
 | Status | `code` | When |
 | --- | --- | --- |
-| 503 | `llm_not_configured` | No `ANTHROPIC_API_KEY` |
+| 503 | `llm_not_configured` | No AI provider set up (see `ai` in `GET /api/status`) |
 | 402 | `llm_budget_exceeded` | This month's spend reached `MONTHLY_BUDGET_USD`. `details: { month, spentUsd, capUsd }` |
-| 422 | `llm_refused` | Claude declined the request. `details: { category }` |
-| 502 | `llm_incomplete` | Claude stopped without a result (no set or picks submitted, output cut off) |
-| 502 | `llm_failed` | Claude API error after retries |
+| 422 | `llm_refused` | The model declined the request. `details: { category }`, `null` (providers do not report one) |
+| 502 | `llm_incomplete` | The model stopped without a result (no set or picks submitted, output cut off) |
+| 502 | `llm_failed` | Provider error after retries. The message carries the HTTP status only |
 | 409 | `spotify_not_connected` | A Spotify lookup or playlist write was needed |
 | 503 | `spotify_paused` | Spotify rate limit or quota pause. `details: { reason, until }` |
 | 502 | `spotify_failed` | Spotify call failed |
@@ -1563,7 +1565,7 @@ Pick shape:
 ```
 
 - `distance`: `near` or `far`.
-- `source`: the web search result from the run that supports the reason. A pick is stored only when its source was returned by that run's search and names the song or its artist. `null` only on picks made before this field existed.
+- `source`: the web search result from the run that supports the reason. With a provider that has web search (`ai.webSearch` in `GET /api/status`), a pick is stored only when its source was returned by that run's search and names the song or its artist. `null` on picks made without web search (an OpenAI-compatible provider) and on picks made before this field existed.
 - Constraints: one pick per artist. The `defaultMaxPerAlbum` setting caps picks per album (by album name) and is checked like a set's constraints; `defaultMaxPerArtist` and `defaultNewSongs` do not apply (every pick is new).
 - `state`: `new`, `saved`, `not_now`, `never`. `never` blocks the song from all future suggestions (sets and picks); a second `never` for the same artist blocks the artist. Moving a pick out of `never` lifts those blocks. `not_now` songs may be picked again after 28 days.
 - `outcome.hit`: played through at least once and (played on 2+ days, or in the Spotify library, or state `saved`). Plays are refreshed hourly, library state daily.
@@ -1745,15 +1747,19 @@ Params `month` (`YYYY-MM`, default current local month), `limit` (1-500, default
   "byFeature": [{ "feature": "picks", "calls": 6, "usd": 0.6399, "inputTokens": 21000, "outputTokens": 9000, "cacheReadTokens": 160000, "cacheWriteTokens": 30000, "webSearches": 12 }],
   "recent": [{ "id": 12, "ts": "...", "feature": "picks", "ref": "week:2026-11-09", "requestedModel": "claude-opus-5-5", "model": "claude-opus-5-5",
                "inputTokens": 3000, "outputTokens": 1500, "cacheReadTokens": 30000, "cacheWriteTokens": 0, "webSearches": 3,
-               "usd": 0.072, "stopReason": "tool_use", "durationMs": 21000 }],
+               "usd": 0.072, "stopReason": "tool_calls", "durationMs": 21000 }],
   "budget": { "month": "2026-11", "spentUsd": 1.18, "capUsd": 100, "remainingUsd": 98.82, "exhausted": false },
+  "provider": "anthropic",
   "model": "claude-opus-5-5",
-  "pricesPerMTok": { "claude-opus-5-5": { "input": 4, "output": 20, "cacheWrite5m": 5, "cacheWrite1h": 8, "cacheRead": 0.2 } },
-  "webSearchPerRequest": 0.01
+  "price": { "source": "known", "perMTok": { "input": 4, "output": 20, "cacheRead": 0.2, "cacheWrite": 5 } },
+  "pricesPerMTok": { "claude-opus-5-5": { "input": 4, "output": 20, "cacheRead": 0.2, "cacheWrite": 5 } },
+  "webSearchPerRequest": 0.01,
+  "defaultModels": { "anthropic": "claude-opus-5-5", "openai": "gpt-6.2-sol", "google": "gemini-4-carbon", "openai-compatible": null },
+  "knownModels": { "anthropic": ["claude-opus-5-5", "..."], "openai": ["gpt-6.2-sol", "..."], "google": ["gemini-4-carbon", "..."], "openai-compatible": [] }
 }
 ```
 
-`model` in `recent` differs from `requestedModel` when the API fell back to another model.
+`defaultModels`: the model each provider uses when `aiModel` is unset (`null`: an OpenAI-compatible server needs one). `knownModels`: the model ids with a known price, by provider; any other model needs `aiInputPrice` and `aiOutputPrice` to be priced. `model` in `recent` is the model the provider reported; it can carry a dated suffix. `stopReason`: `end`, `tool_calls`, `max_tokens`, `refusal`, `pause` or `other` (rows from before the provider change hold Anthropic's names, such as `end_turn`). `price`: what the current model is charged at, `null` with no model; `source` is `known` (built-in table or `LLM_PRICES`), `owner` (`aiInputPrice` and `aiOutputPrice`), `local` (an OpenAI-compatible model with no price: free, tokens still recorded) or `highest` (an unknown model of a hosted provider, charged at that provider's highest known rate). `pricesPerMTok` lists the current provider's known models. `webSearchPerRequest` is the current provider's rate.
 
 ### Chat integrations
 

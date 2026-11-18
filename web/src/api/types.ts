@@ -60,16 +60,21 @@ export type Status = {
   plays: { plays: number; music: number; api: number; live: number };
   live: { watch: JobStatus; radar: JobStatus; library: JobStatus; living: JobStatus };
   integrations: { discord: boolean; mcp: boolean };
+  ai: AiStatus;
   llm: LlmStatus;
 };
 
-export type LlmFeature = "sets" | "picks" | "ask" | "notes" | "digest" | "dj" | "library";
+export type AiProvider = "anthropic" | "openai" | "google" | "openai-compatible";
+
+export type AiStatus = { configured: boolean; provider: AiProvider; model: string | null; webSearch: boolean };
+
+export type LlmFeature = "sets" | "picks" | "ask" | "notes" | "digest" | "dj" | "library" | "verify";
 
 export type Budget = { month: string; spentUsd: number; capUsd: number; remainingUsd: number; exhausted: boolean };
 
 export type LlmStatus = Budget & {
   configured: boolean;
-  model: string;
+  model: string | null;
   byFeature: { feature: LlmFeature; calls: number; usd: number }[];
   jobs: { picks: JobStatus; digest: JobStatus; outcomes: JobStatus };
   schedule: { enabled: boolean; picks: Slot; digest: Slot };
@@ -92,8 +97,19 @@ export type Spend = {
     webSearches: number;
   }[];
   budget: Budget;
-  model: string;
+  provider: AiProvider;
+  model: string | null;
+  price: { source: PriceSource; perMTok: ModelPrice } | null;
+  pricesPerMTok: Record<string, ModelPrice>;
+  webSearchPerRequest: number;
+  defaultModels: Record<AiProvider, string | null>;
+  knownModels: Record<AiProvider, string[]>;
 };
+
+export type ModelPrice = { input: number; output: number; cacheRead: number; cacheWrite: number };
+
+/** known: built-in or LLM_PRICES; owner: the prices entered in Settings; local: an OpenAI-compatible model with no price (free); highest: an unknown hosted model, charged at its provider's top rate. */
+export type PriceSource = "known" | "owner" | "local" | "highest";
 
 export type Artwork = { albumArtUrl: string | null; artistImageUrl: string | null };
 
@@ -302,9 +318,9 @@ export type ImportResult = {
 
 export type Session = { authenticated: boolean; setupRequired: boolean; setupTokenConfigured: boolean };
 
-export type SettingGroup = "spotify" | "locale" | "claude" | "picks" | "digest" | "dj" | "discord" | "mcp" | "access" | "jobs" | "history" | "backup" | "alerts";
+export type SettingGroup = "spotify" | "locale" | "ai" | "picks" | "digest" | "dj" | "discord" | "mcp" | "access" | "jobs" | "history" | "backup" | "alerts";
 export type SettingType = "string" | "integer" | "number" | "boolean" | "enum" | "timezone" | "weekdays" | "date";
-export type SettingUnit = "ms" | "seconds" | "minutes" | "hours" | "days" | "usd" | "weekday" | "hour";
+export type SettingUnit = "ms" | "seconds" | "minutes" | "hours" | "days" | "usd" | "usdPerMTok" | "weekday" | "hour";
 export type SettingValue = string | number | boolean | number[];
 export type SettingSource = "env" | "db" | "default";
 
@@ -352,7 +368,7 @@ export type SettingsPatchResult = Settings & { changed: string[]; effects: Setti
 export type SettingsAdoptResult = Settings & { adopted: string[]; replaced: string[]; skipped: { key: string; reason: "invalid" | "secrets_key_missing" }[] };
 export type SettingIssue = { key: string; reason: "unknown" | "locked" | "invalid" | "secrets_key_missing"; message: string };
 
-export type ClaudeKeyCheck = { valid: true; model: string } | { valid: false; model: string; message: string };
+export type AiKeyCheck = { valid: true; provider: AiProvider; model: string } | { valid: false; provider: AiProvider; model: string; message: string };
 export type DiscordRegistration = { registered: number; commands: string[] };
 
 type OnboardingStep = { required: boolean; done: boolean };

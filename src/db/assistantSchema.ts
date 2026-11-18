@@ -4,7 +4,7 @@ import { RECAP_KINDS } from "../digest/periods";
 import type { RecapLines } from "../digest/page";
 import type { Constraints } from "../library/constraints";
 
-export const LLM_FEATURES = ["sets", "picks", "ask", "notes", "digest", "dj", "library"] as const;
+export const LLM_FEATURES = ["sets", "picks", "ask", "notes", "digest", "dj", "library", "verify"] as const;
 export type LlmFeature = (typeof LLM_FEATURES)[number];
 
 export const PICK_STATES = ["new", "saved", "not_now", "never"] as const;

@@ -5,6 +5,6 @@ export type Ai = { known: boolean; configured: boolean };
 
 /** The one place the UI reads whether AI features exist. */
 export function useAi(): Ai {
-  const llm = useStatus().data?.llm;
-  return { known: llm !== undefined, configured: llm?.configured === true };
+  const ai = useStatus().data?.ai;
+  return { known: ai !== undefined, configured: ai?.configured === true };
 }

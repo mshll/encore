@@ -63,7 +63,7 @@ describe("generate picks", () => {
           toolUse("verify_new_song", { title: "Beta", artist: "Artist B" }),
           toolUse("verify_new_song", { title: "Woods", artist: "Mac Miller" }),
         ],
-        "tool_use",
+        "tool_calls",
       ),
       toolCall("submit_picks", {
         picks: [
@@ -106,12 +106,43 @@ describe("generate picks", () => {
       ["Beta", "far", "new"],
     ]);
     const req = fake.requests[0]!;
-    expect(req.output_config).toEqual({ effort: "high" });
-    expect(req.tools).toContainEqual({ type: "web_search_20260209", name: "web_search", max_uses: 15 });
+    expect(req.effort).toBe("high");
+    expect(req.webSearch).toEqual({ maxUses: 15 });
     expect(JSON.stringify(req.messages[0])).toContain("1 near the owner's taste and 1 further out");
     expect(spotifyCalls.every((c) => c.method === "GET")).toBe(true);
 
     await expect(generatePicks(ctx)).rejects.toBeInstanceOf(PicksExistError);
+  });
+
+  test("without a provider web search, picks need no source, carry none, and the prompt does not promise one", async () => {
+    const fake = scripted(
+      message([toolUse("verify_new_song", { title: "Alpha", artist: "Artist A" }), toolUse("verify_new_song", { title: "Beta", artist: "Artist B" })]),
+      toolCall("submit_picks", {
+        picks: [
+          { uri: uri("a1"), reason: "Shares the producer of Woods.", distance: "near" },
+          { uri: uri("b1"), reason: "Far: a genre you have 0 plays in.", distance: "far" },
+        ],
+      }),
+    );
+    const { ctx, db } = featureCtx(fake.transport, CATALOG, {
+      PICKS_PER_WEEK: "2",
+      PICKS_FAR_OUT: "1",
+      AI_PROVIDER: "openai-compatible",
+      AI_BASE_URL: "http://localhost:11434/v1",
+      AI_MODEL: "llama4",
+    });
+    seedLibrary(db);
+
+    const result = await generatePicks(ctx);
+
+    const req = fake.requests[0]!;
+    const submit = req.tools.find((t) => t.name === "submit_picks")!;
+    expect({
+      webSearch: req.webSearch,
+      promptMentionsSearch: req.system[0]!.includes("web_search"),
+      schema: JSON.stringify(submit.inputSchema).includes("sourceUrl"),
+      sources: result.picks.map((p) => p.source),
+    }).toEqual({ webSearch: null, promptMentionsSearch: false, schema: false, sources: [null, null] });
   });
 
   test("the week is the local Monday", () => {
@@ -240,7 +271,7 @@ describe("concurrent generation", () => {
     const { ctx } = featureCtx(async () => {
       calls++;
       await held;
-      return message([toolUse("noop", {})], "end_turn");
+      return message([toolUse("noop", {})], "end");
     });
     const first = generatePicks(ctx).catch((e) => e);
     await expect(generatePicks(ctx)).rejects.toBeInstanceOf(PicksExistError);

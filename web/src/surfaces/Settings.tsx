@@ -2,7 +2,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState, type ReactNode } from "react";
 import { ApiError, request } from "../api/client";
 import { useOnboarding, useSettings, useSpend, useStatus } from "../api/queries";
-import type { ClaudeKeyCheck, DiscordRegistration, JobStatus, LlmFeature, Session, Settings as SettingsData, SettingsAdoptResult, Status } from "../api/types";
+import type { AiKeyCheck, AiProvider, DiscordRegistration, JobStatus, LlmFeature, Session, SettingValue, Settings as SettingsData, SettingsAdoptResult, Status } from "../api/types";
 import { SETTINGS_TABS } from "../app/nav";
 import { BudgetBar } from "../charts/BudgetBar";
 import { resetDay } from "../lib/assistant";
@@ -28,14 +28,14 @@ import { DataTab } from "./settings/Data";
 import { HistoryStart } from "./settings/HistoryStart";
 import { McpConnections } from "./settings/McpConnections";
 
-type Tab = "general" | "spotify" | "claude" | "integrations" | "jobs" | "data" | "alerts" | "account";
+type Tab = "general" | "spotify" | "ai" | "integrations" | "jobs" | "data" | "alerts" | "account";
 
 const usd = (n: number) => `$${n.toFixed(2)}`;
 
 const SKIP_REASONS: Record<string, string> = {
   not_due: "not due yet",
-  budget_exceeded: "this month’s Claude budget is spent",
-  llm_not_configured: "Claude is not set up",
+  budget_exceeded: "this month’s AI budget is spent",
+  llm_not_configured: "AI is not set up",
   spotify_not_connected: "Spotify is not connected",
   attempts_exhausted: "it failed too many times",
 };
@@ -269,7 +269,7 @@ function SpotifyTab({ status }: { status: Status }) {
   );
 }
 
-const FEATURE_LABELS: Record<LlmFeature, string> = { sets: "Sets", picks: "Picks", ask: "Ask", notes: "Liner notes", digest: "Recaps", dj: "Session re-plans", library: "Library plans" };
+const FEATURE_LABELS: Record<LlmFeature, string> = { sets: "Sets", picks: "Picks", ask: "Ask", notes: "Liner notes", digest: "Recaps", dj: "Session re-plans", library: "Library plans", verify: "Connection checks" };
 
 function Spend() {
   const q = useSpend();
@@ -318,18 +318,37 @@ function Spend() {
   );
 }
 
-function VerifyClaude({ form }: { form: SettingsForm }) {
+const PROVIDER_KEYS = ["aiProvider", "aiModel", "aiApiKey", "aiBaseUrl", "aiInputPrice", "aiOutputPrice"];
+const DEFAULT_KEYS = ["defaultMaxPerArtist", "defaultMaxPerAlbum", "defaultNewSongs"];
+
+const PROVIDER_NAMES: Record<AiProvider, string> = { anthropic: "Anthropic", openai: "OpenAI", google: "Google Gemini", "openai-compatible": "OpenAI-compatible" };
+
+const text = (v: SettingValue | null) => (typeof v === "string" && v.trim() ? v.trim() : null);
+
+/** The provider, model, key and address as the form holds them now, saved or not, with the earlier Anthropic fields filling in. */
+function draftAi(form: SettingsForm) {
+  const provider = (text(form.value("aiProvider")) ?? "anthropic") as AiProvider;
+  const anthropic = provider === "anthropic";
+  return {
+    provider,
+    model: text(form.value("aiModel")) ?? (anthropic ? text(form.value("claudeModel")) : null),
+    legacyKey: anthropic && !form.fields.get("aiApiKey")?.set ? form.fields.get("claudeApiKey") : undefined,
+    compatible: provider === "openai-compatible",
+  };
+}
+
+function VerifyAi({ form, configured }: { form: SettingsForm; configured: boolean }) {
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<{ ok: boolean; text: string } | null>(null);
-  const typed = form.draft.claudeApiKey;
-  const field = form.fields.get("claudeApiKey");
-  if (!field || (!field.set && !(typeof typed === "string" && typed))) return null;
+  const edited = ["aiProvider", "aiModel", "aiApiKey", "aiBaseUrl"].filter((k) => k in form.draft && text(form.draft[k]!) !== null);
+  if (!configured && edited.length === 0) return null;
   const verify = async () => {
     setBusy(true);
     setResult(null);
+    const body = Object.fromEntries(edited.map((k) => [{ aiProvider: "provider", aiModel: "model", aiApiKey: "apiKey", aiBaseUrl: "baseUrl" }[k]!, text(form.draft[k]!)]));
     try {
-      const r = await request<ClaudeKeyCheck>("/api/settings/claude/verify", { json: typeof typed === "string" && typed ? { apiKey: typed } : {} });
-      setResult(r.valid ? { ok: true, text: `The key works with ${r.model}.` } : { ok: false, text: r.message });
+      const r = await request<AiKeyCheck>("/api/settings/ai/verify", { json: body });
+      setResult(r.valid ? { ok: true, text: `${r.model} answered.` } : { ok: false, text: r.message });
     } catch (error) {
       setResult({ ok: false, text: describeError(error) });
     } finally {
@@ -337,11 +356,11 @@ function VerifyClaude({ form }: { form: SettingsForm }) {
     }
   };
   return (
-    <SettingRow label="Check the key" hint={result?.ok ? result.text : undefined} error={result && !result.ok ? result.text : null}>
+    <SettingRow label="Check the connection" hint={result?.ok ? result.text : undefined} error={result && !result.ok ? result.text : null}>
       {() => (
         <div className="flex md:justify-end">
           <Button size="sm" busy={busy} busyLabel="Checking" onClick={() => void verify()}>
-            {typeof typed === "string" && typed ? "Check new key" : "Check key"}
+            {edited.length ? "Check before saving" : "Check"}
           </Button>
         </div>
       )}
@@ -349,20 +368,54 @@ function VerifyClaude({ form }: { form: SettingsForm }) {
   );
 }
 
-function ClaudeTab({ status }: { status: Status }) {
-  const claude = useSettingsForm(["claudeApiKey", "claudeModel", "monthlyBudgetUsd"]);
+function ProviderBlock({ status, storage }: { status: Status; storage: boolean }) {
+  const form = useSettingsForm([...PROVIDER_KEYS, "claudeModel"]);
+  const spend = useSpend().data;
+  const ai = draftAi(form);
+  const name = PROVIDER_NAMES[ai.provider];
+  const otherProvider = ai.model ? (Object.entries(spend?.knownModels ?? {}) as [AiProvider, string[]][]).find(([p, ids]) => p !== ai.provider && ids.includes(ai.model!))?.[0] : undefined;
+  const model = ai.model ?? spend?.defaultModels[ai.provider] ?? null;
+  const priced = Boolean(model && spend?.knownModels[ai.provider].includes(model));
+  const pricesSet = form.value("aiInputPrice") !== null || form.value("aiOutputPrice") !== null;
+  const showPrices = Boolean(spend) && (!priced || pricesSet);
+  const keys = ["aiProvider", "aiModel", "aiApiKey", ...(ai.compatible ? ["aiBaseUrl"] : []), ...(showPrices ? ["aiInputPrice", "aiOutputPrice"] : [])];
+  const legacy = ai.legacyKey?.set ? (ai.legacyKey.source === "env" ? "ANTHROPIC_API_KEY from the server" : "the Anthropic key saved in Setup") : null;
+  const unpriced = ai.compatible ? "Leave both empty for a local server: its calls count as free." : `Without both, this model is charged at the highest ${name} rate encore knows.`;
+  return (
+    <SettingsBlock
+      title="Provider"
+      keys={keys}
+      form={form}
+      storage={storage}
+      placeholders={{ aiModel: model ?? "Model id", aiBaseUrl: "http://localhost:11434/v1" }}
+      hints={{
+        aiProvider: ai.compatible ? "No web search here, so weekly picks come without sources." : undefined,
+        aiModel: otherProvider ? `${ai.model} is a ${PROVIDER_NAMES[otherProvider]} model.` : undefined,
+        aiApiKey: legacy ? `Uses ${legacy} until you add one here.` : ai.compatible ? "Only if the server asks for one." : undefined,
+        aiInputPrice: unpriced,
+      }}
+    >
+      <VerifyAi key={status.ai.provider} form={form} configured={status.ai.configured} />
+    </SettingsBlock>
+  );
+}
+
+function AiTab({ status }: { status: Status }) {
+  const budget = useSettingsForm(["monthlyBudgetUsd"]);
+  const defaults = useSettingsForm(DEFAULT_KEYS);
   const picks = useSettingsForm(["picksPerWeek", "picksFarOut", "picksWeekday", "picksHour"]);
   const digest = useSettingsForm(["digestWeekday", "digestHour"]);
   const dj = useSettingsForm(["djReplanner", "djReplanTimeoutSeconds", "djSkipTrigger"]);
-  const storage = claude.settings.data?.secretStorage.available ?? true;
+  const storage = budget.settings.data?.secretStorage.available ?? true;
   const scheduleOff = !status.llm.schedule.enabled;
+  const showSpend = status.llm.configured || status.llm.spentUsd > 0;
   return (
     <>
-      <SecretsNotice keys={["claudeApiKey"]} />
-      {status.llm.configured || status.llm.spentUsd > 0 ? <Spend /> : null}
-      <SettingsBlock title="Claude" keys={["claudeApiKey", "claudeModel", "monthlyBudgetUsd"]} form={claude} storage={storage}>
-        <VerifyClaude form={claude} />
-      </SettingsBlock>
+      <SecretsNotice keys={["aiApiKey"]} />
+      <ProviderBlock status={status} storage={storage} />
+      {showSpend && <Spend />}
+      <SettingsBlock title={showSpend ? undefined : "Spending"} keys={["monthlyBudgetUsd"]} form={budget} />
+      <SettingsBlock title="Defaults for new sets" description="Empty means no limit. Sessions use the artist and album limits; weekly picks use the album limit." keys={DEFAULT_KEYS} form={defaults} />
       <SettingsBlock
         title="Weekly picks"
         description={
@@ -582,7 +635,7 @@ function TabBody({ tab }: { tab: Tab }) {
   const tabs: Record<Tab, ReactNode> = {
     general: <General />,
     spotify: <SpotifyTab status={s} />,
-    claude: <ClaudeTab status={s} />,
+    ai: <AiTab status={s} />,
     integrations: <IntegrationsTab status={s} />,
     jobs: <JobsTab status={s} />,
     data: (

@@ -1,4 +1,4 @@
-import { textOf, type MessageParam } from "../llm/client";
+import { replyText, type ChatMessage } from "../llm/types";
 import { tagged, type FeatureContext } from "../llm/context";
 import { LlmTruncatedError } from "../llm/errors";
 import type { RecapPage, RecapLines, RecapSection, SectionId } from "./page";
@@ -108,19 +108,19 @@ const withDigits = (w: Written) => [w.headline, ...w.takes.map((t) => t.text)].f
  * after that, any line that still has one is dropped and the page shows the numbers alone there.
  */
 export async function writeLines(ctx: FeatureContext, page: RecapPage, ref: string): Promise<{ lines: RecapLines; model: string }> {
-  const messages: MessageParam[] = [{ role: "user", content: recapPrompt(page) }];
+  const messages: ChatMessage[] = [{ role: "user", content: recapPrompt(page) }];
   const sections = new Set(page.sections.map((s) => s.id));
   let last: { written: Written; model: string } | null = null;
   for (let attempt = 0; attempt < 2; attempt++) {
     const message = await ctx.llm.call({ feature: "digest", ref, system: [RECAP_SYSTEM], messages, effort: "low", maxTokens: 4000, jsonSchema: RECAP_SCHEMA });
-    if (message.stop_reason === "max_tokens") throw new LlmTruncatedError();
-    const text = textOf(message);
+    if (message.stopReason === "max_tokens") throw new LlmTruncatedError();
+    const text = replyText(message.content);
     const written = parse(text);
     if (!written) break;
     last = { written, model: message.model };
     const digits = withDigits(written);
     if (digits.length === 0) break;
-    messages.push({ role: "assistant", content: text }, { role: "user", content: `These lines have digits in them: ${digits.join(" | ")}. Write them again with no digits; the page shows the numbers.` });
+    messages.push({ role: "assistant", content: [{ type: "text", text }] }, { role: "user", content: `These lines have digits in them: ${digits.join(" | ")}. Write them again with no digits; the page shows the numbers.` });
   }
   return last ? { lines: keep(last.written, sections), model: last.model } : { lines: { headline: null, takes: {} }, model: "code" };
 }

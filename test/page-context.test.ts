@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { ask, getAskThread } from "../src/ask/service";
 import { createSession } from "../src/auth/sessions";
-import type { LlmTransport, StreamParams } from "../src/llm/client";
+import type { LlmRequest, LlmTransport } from "../src/llm/types";
 import { pageContextNote, pageContextSchema } from "../src/llm/pageContext";
 import { startPlanConversation } from "../src/library/planner";
 import { testApp } from "./helpers";
@@ -17,7 +17,7 @@ function signedIn(transport: LlmTransport | null) {
 }
 
 /** The text of the owner's message in a request to Claude. */
-const ownerText = (params: StreamParams) => {
+const ownerText = (params: LlmRequest) => {
   const first = params.messages.findLast((m) => m.role === "user")!;
   return typeof first.content === "string" ? first.content : JSON.stringify(first.content);
 };

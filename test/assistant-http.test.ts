@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { createSession } from "../src/auth/sessions";
 import { llmCalls, picks } from "../src/db/schema";
-import type { LlmTransport } from "../src/llm/client";
+import type { LlmTransport } from "../src/llm/types";
 import { monthOf } from "../src/llm/ledger";
 import type { Env } from "../src/http/context";
 import { connectSpotify, noContent, routeFetch, testApp, TZ, uri } from "./helpers";
@@ -68,8 +68,8 @@ describe("status and spend", () => {
       jobs: { picks: expect.anything(), digest: expect.anything(), outcomes: expect.anything() },
     });
     const detail = (await (await get("/api/llm/spend")).json()) as Record<string, unknown>;
-    expect(detail).toMatchObject({ model: "claude-opus-5-5", webSearchPerRequest: 0.01, budget: { spentUsd: 1.25 } });
-    expect((detail.pricesPerMTok as Record<string, unknown>)["claude-opus-5-5"]).toEqual({ input: 4, output: 20, cacheWrite5m: 5, cacheWrite1h: 8, cacheRead: 0.2 });
+    expect(detail).toMatchObject({ model: "claude-opus-5-5", webSearchPerRequest: 0.01, budget: { spentUsd: 1.25 }, knownModels: { anthropic: expect.arrayContaining(["claude-opus-5-5"]), "openai-compatible": [] } });
+    expect((detail.pricesPerMTok as Record<string, unknown>)["claude-opus-5-5"]).toEqual({ input: 4, output: 20, cacheRead: 0.2, cacheWrite: 5 });
   });
 });
 

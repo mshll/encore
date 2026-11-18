@@ -1,8 +1,8 @@
 import { eq } from "drizzle-orm";
-import type Anthropic from "@anthropic-ai/sdk";
 import type { Db } from "../db/client";
 import { trackNotes, tracks } from "../db/schema";
 import { runAgent } from "../llm/agent";
+import { replyText, type SourcePart } from "../llm/types";
 import { tagged, type FeatureContext } from "../llm/context";
 import { loadCatalog } from "../library/catalog";
 import { withArtwork } from "../library/artwork";
@@ -21,7 +21,7 @@ Use web_search to confirm credits and samples you are not certain of; state only
 
 export class NoteSubjectNotFoundError extends Error {}
 
-const MAX_FALLBACK_SOURCES = 5;
+const MAX_SOURCES = 5;
 
 type Subject = { songKey: string; uri: string; name: string; artist: string; album: string | null; releaseDate: string | null; albumArtUrl: string | null };
 
@@ -93,25 +93,19 @@ export async function trackNote(ctx: FeatureContext, input: { songKey?: string; 
     ref: `song:${subject.songKey}`,
     system: [NOTES_SYSTEM, tagged("taste_profile", tasteProfile(db, { timezone, weekendDays }, now))],
     tools: [],
-    serverTools: [{ type: "web_search_20260209", name: "web_search", max_uses: 4 }],
+    webSearch: { maxUses: 4 },
     messages: [{ role: "user", content: prompt }],
     effort: "medium",
     maxTokens: 16_000,
     maxCalls: 4,
   });
-  const textBlocks = result.final.content.filter((b): b is Anthropic.Beta.BetaTextBlock => b.type === "text");
-  const text = textBlocks
-    .map((b) => b.text)
-    .join("")
-    .trim();
-  const sources = new Map<string, string>();
-  for (const b of textBlocks) for (const c of b.citations ?? []) if (c.type === "web_search_result_location") sources.set(c.url, c.title ?? c.url);
-  if (sources.size === 0) {
-    for (const b of result.final.content) {
-      if (b.type !== "web_search_tool_result" || !Array.isArray(b.content)) continue;
-      for (const r of b.content.slice(0, MAX_FALLBACK_SOURCES)) sources.set(r.url, r.title);
-    }
-  }
+  const text = replyText(result.final.content);
+  const sources = new Map(
+    result.final.content
+      .filter((p): p is SourcePart => p.type === "source")
+      .slice(0, MAX_SOURCES)
+      .map((p) => [p.url, p.title]),
+  );
   const row = {
     songKey: subject.songKey,
     uri: subject.uri,

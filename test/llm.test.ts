@@ -1,141 +1,160 @@
 import { describe, expect, test } from "bun:test";
 import { z } from "zod";
-import { DEFAULT_PRICES } from "../src/config";
-import { echoable, runAgent, tool, ToolError } from "../src/llm/agent";
-import { LlmAttemptError, type LlmTransport } from "../src/llm/client";
+import { runAgent, tool, ToolError } from "../src/llm/agent";
+import { Llm } from "../src/llm/client";
 import { callCost } from "../src/llm/cost";
 import { LlmAbortedError, LlmBudgetExceededError, LlmNotConfiguredError, LlmRefusalError, LlmTruncatedError } from "../src/llm/errors";
 import { budgetStatus, monthSpend, spendByFeature } from "../src/llm/ledger";
+import { KNOWN_MODELS, priceFor } from "../src/llm/providers";
+import { sdkConnect } from "../src/llm/sdk";
+import type { LlmTransport, ToolResultPart } from "../src/llm/types";
+import { testConfig, testDb, testSettings } from "./helpers";
 import { featureCtx, message, scripted, text, toolCall, toolUse, usage } from "./llmFakes";
 
-const prices = DEFAULT_PRICES;
+const callInput = { feature: "ask" as const, system: ["s"], messages: [{ role: "user" as const, content: "q" }], effort: "low" as const, maxTokens: 100 };
 
 describe("cost", () => {
-  test("prices input, output, 5m and 1h cache writes, cache reads and web searches", () => {
-    const cost = callCost(
-      usage({
-        input_tokens: 1_000,
-        output_tokens: 2_000,
-        cache_read_input_tokens: 10_000,
-        cache_creation_input_tokens: 3_000,
-        cache_creation: { ephemeral_5m_input_tokens: 2_000, ephemeral_1h_input_tokens: 1_000 },
-        server_tool_use: { web_search_requests: 3, web_fetch_requests: 0 },
-      }),
-      "claude-opus-5-5",
-      prices,
-      0.01,
-    );
-    const expected = (1_000 * 4 + 2_000 * 20 + 10_000 * 0.2 + 2_000 * 5 + 1_000 * 8) / 1e6 + 0.03;
-    expect(cost.usd).toBeCloseTo(expected, 10);
+  test("prices input, output, cache reads, cache writes and web searches", () => {
+    const price = KNOWN_MODELS["claude-opus-5-5"]!.price;
+    const cost = callCost(usage({ inputTokens: 1_000, outputTokens: 2_000, cacheReadTokens: 10_000, cacheWriteTokens: 3_000, webSearches: 3 }), price, 0.01);
+    expect(cost.usd).toBeCloseTo((1_000 * 4 + 2_000 * 20 + 10_000 * 0.2 + 3_000 * 5) / 1e6 + 0.03, 10);
     expect(cost).toMatchObject({ inputTokens: 1_000, outputTokens: 2_000, cacheReadTokens: 10_000, cacheWriteTokens: 3_000, webSearches: 3 });
   });
 
-  test("a fallback attempt is priced at the fallback model's rates", () => {
-    const cost = callCost(
-      usage({
-        input_tokens: 500,
-        output_tokens: 50,
-        iterations: [
-          { type: "message", model: null, input_tokens: 1_000, output_tokens: 0, cache_read_input_tokens: 0, cache_creation_input_tokens: 0, cache_creation: null },
-          { type: "fallback_message", model: "claude-opus-4-8", input_tokens: 500, output_tokens: 50, cache_read_input_tokens: 0, cache_creation_input_tokens: 0, cache_creation: null },
-        ],
-      }),
-      "claude-opus-5-5",
-      prices,
-      0.01,
-    );
-    expect(cost.usd).toBeCloseTo((1_000 * 4 + 500 * 5 + 50 * 25) / 1e6, 10);
-    expect(cost.inputTokens).toBe(1_500);
+  test("LLM_PRICES overrides a model's price, in the old format too", async () => {
+    const { ctx } = featureCtx(scripted(message([text("hi")])).transport, [], { LLM_PRICES: JSON.stringify({ "claude-opus-5-5": { input: 1, output: 1, cacheWrite5m: 1, cacheWrite1h: 1, cacheRead: 1 } }) });
+    await ctx.llm.call(callInput);
+    expect(monthSpend(ctx.db, "2026-02")).toBeCloseTo(1_100 / 1e6, 10);
   });
 
-  test("LLM_PRICES overrides a model's price", async () => {
-    const { ctx } = featureCtx(scripted(message([text("hi")])).transport, [], { LLM_PRICES: JSON.stringify({ "claude-opus-5-5": { input: 1, output: 1, cacheWrite5m: 1, cacheWrite1h: 1, cacheRead: 1 } }) });
-    await ctx.llm.call({ feature: "ask", system: ["s"], messages: [{ role: "user", content: "q" }], effort: "low", maxTokens: 100 });
-    expect(monthSpend(ctx.db, "2026-02")).toBeCloseTo(1_100 / 1e6, 10);
+  test("an unknown model is charged at the price the owner entered", async () => {
+    const { ctx } = featureCtx(scripted(message([text("hi")], undefined, { model: "mystery-1" })).transport, [], {
+      AI_PROVIDER: "openai",
+      AI_MODEL: "mystery-1",
+      AI_INPUT_PRICE: "2",
+      AI_OUTPUT_PRICE: "8",
+    });
+    await ctx.llm.call(callInput);
+    expect(monthSpend(ctx.db, "2026-02")).toBeCloseTo((1_000 * 2 + 100 * 8) / 1e6, 10);
+  });
+
+  test("an unknown hosted model with no entered price is charged at its provider's highest known rate", () => {
+    const { price, source } = priceFor(KNOWN_MODELS, "google", "gemini-unknown", null);
+    const googleOutputs = Object.values(KNOWN_MODELS).filter((m) => m.provider === "google").map((m) => m.price.output);
+    expect([source, price.output]).toEqual(["highest", Math.max(...googleOutputs)]);
+  });
+
+  test("a local model with no price costs nothing, and its tokens are still recorded", async () => {
+    const { ctx } = featureCtx(scripted(message([text("hi")], undefined, { model: "llama4" })).transport, [], {
+      AI_PROVIDER: "openai-compatible",
+      AI_BASE_URL: "http://localhost:11434/v1",
+      AI_MODEL: "llama4",
+    });
+    await ctx.llm.call(callInput);
+    expect(spendByFeature(ctx.db, "2026-02")[0]).toMatchObject({ calls: 1, usd: 0, inputTokens: 1000, outputTokens: 100 });
   });
 });
 
 describe("ledger and budget", () => {
   test("every call is recorded with feature, model, tokens and cost", async () => {
     const { ctx } = featureCtx(scripted(message([text("one")]), message([text("two")])).transport);
-    await ctx.llm.call({ feature: "ask", ref: "thread:1", system: ["s"], messages: [{ role: "user", content: "q" }], effort: "low", maxTokens: 100 });
-    await ctx.llm.call({ feature: "digest", system: ["s"], messages: [{ role: "user", content: "q" }], effort: "low", maxTokens: 100 });
+    await ctx.llm.call({ ...callInput, ref: "thread:1" });
+    await ctx.llm.call({ ...callInput, feature: "digest" });
     const byFeature = spendByFeature(ctx.db, "2026-02");
     expect(byFeature.map((f) => f.feature).sort()).toEqual(["ask", "digest"]);
     expect(byFeature[0]).toMatchObject({ calls: 1, inputTokens: 1000, outputTokens: 100, usd: 0.006 });
   });
 
-  test("once the month's spend reaches the cap, calls refuse without reaching the API", async () => {
-    const fake = scripted(message([text("a")], "end_turn", { usage: usage({ input_tokens: 0, output_tokens: 50_000 }) }));
+  test("once the month's spend reaches the cap, calls refuse without reaching the provider", async () => {
+    const fake = scripted(message([text("a")], "end", { usage: usage({ inputTokens: 0, outputTokens: 50_000 }) }));
     const { ctx } = featureCtx(fake.transport, [], { MONTHLY_BUDGET_USD: "1" });
-    await ctx.llm.call({ feature: "ask", system: ["s"], messages: [{ role: "user", content: "q" }], effort: "low", maxTokens: 100 });
+    await ctx.llm.call(callInput);
     expect(budgetStatus(ctx.db, ctx.settings.get().timezone, 1, ctx.now())).toMatchObject({ spentUsd: 1, exhausted: true, remainingUsd: 0 });
-    const call = ctx.llm.call({ feature: "ask", system: ["s"], messages: [{ role: "user", content: "q" }], effort: "low", maxTokens: 100 });
-    await expect(call).rejects.toBeInstanceOf(LlmBudgetExceededError);
+    await expect(ctx.llm.call(callInput)).rejects.toBeInstanceOf(LlmBudgetExceededError);
     expect(fake.requests).toHaveLength(1);
   });
 
   test("the cap is per local month: last month's spend does not count", async () => {
-    const fake = scripted(message([text("a")], "end_turn", { usage: usage({ input_tokens: 0, output_tokens: 50_000 }) }), message([text("b")]));
+    const fake = scripted(message([text("a")], "end", { usage: usage({ inputTokens: 0, outputTokens: 50_000 }) }), message([text("b")]));
     const { ctx, time } = featureCtx(fake.transport, [], { MONTHLY_BUDGET_USD: "1" }, "2026-01-31T20:00:00Z");
-    await ctx.llm.call({ feature: "ask", system: ["s"], messages: [{ role: "user", content: "q" }], effort: "low", maxTokens: 100 });
+    await ctx.llm.call(callInput);
     time.set("2026-01-31T21:30:00Z");
     expect(budgetStatus(ctx.db, ctx.settings.get().timezone, 1, ctx.now()).month).toBe("2026-02");
-    await ctx.llm.call({ feature: "ask", system: ["s"], messages: [{ role: "user", content: "q" }], effort: "low", maxTokens: 100 });
+    await ctx.llm.call(callInput);
     expect(fake.requests).toHaveLength(2);
   });
 
-  test("a missing API key is a typed error", () => {
+  test("no provider is a typed error", () => {
     const { ctx } = featureCtx(null);
     expect(() => ctx.llm.assertAvailable()).toThrow(LlmNotConfiguredError);
   });
 
   test("a refusal is recorded and raised", async () => {
-    const fake = scripted(message([], "refusal", { stop_details: { type: "refusal", category: "cyber", explanation: null } } as never));
-    const { ctx } = featureCtx(fake.transport);
-    const call = ctx.llm.call({ feature: "ask", system: ["s"], messages: [{ role: "user", content: "q" }], effort: "low", maxTokens: 100 });
-    await expect(call).rejects.toBeInstanceOf(LlmRefusalError);
-    await call.catch(() => {});
+    const { ctx } = featureCtx(scripted(message([], "refusal")).transport);
+    await expect(ctx.llm.call(callInput)).rejects.toBeInstanceOf(LlmRefusalError);
     expect(spendByFeature(ctx.db, "2026-02")[0]?.calls).toBe(1);
+  });
+
+  test("cancelling stops the request and makes no further call", async () => {
+    const cancel = new AbortController();
+    let calls = 0;
+    const transport: LlmTransport = async () => {
+      calls++;
+      cancel.abort();
+      throw new Error("aborted");
+    };
+    const { ctx } = featureCtx(transport);
+    await expect(ctx.llm.withSignal(cancel.signal).call(callInput)).rejects.toBeInstanceOf(LlmAbortedError);
+    await expect(ctx.llm.withSignal(cancel.signal).call(callInput)).rejects.toBeInstanceOf(LlmAbortedError);
+    expect(calls).toBe(1);
+  });
+});
+
+describe("provider settings", () => {
+  const llmFor = (env: Record<string, string>) => {
+    const db = testDb();
+    const settings = testSettings(db, testConfig(env));
+    return { settings, llm: new Llm(db, settings, sdkConnect()) };
+  };
+
+  test("ANTHROPIC_API_KEY and LLM_MODEL configure Anthropic when the AI fields are unset", () => {
+    const { settings, llm } = llmFor({ ANTHROPIC_API_KEY: "sk-ant-test-key", LLM_MODEL: "claude-sonnet-5-5", MONTHLY_BUDGET_USD: "7" });
+    expect(settings.get().llm.ai).toMatchObject({ provider: "anthropic", apiKey: "sk-ant-test-key", model: "claude-sonnet-5-5", webSearch: true });
+    expect([llm.configured, settings.get().llm.monthlyBudgetUsd]).toEqual([true, 7]);
+  });
+
+  test("the AI fields win over the old Anthropic ones, and an Anthropic key does not carry to another provider", () => {
+    expect(llmFor({ ANTHROPIC_API_KEY: "sk-ant-test-key", AI_API_KEY: "sk-new" }).settings.get().llm.ai.apiKey).toBe("sk-new");
+    const other = llmFor({ ANTHROPIC_API_KEY: "sk-ant-test-key", AI_PROVIDER: "openai" });
+    expect([other.settings.get().llm.ai.apiKey, other.settings.get().llm.ai.model, other.llm.configured]).toEqual([undefined, "gpt-6.2-sol", false]);
+  });
+
+  test("an OpenAI-compatible server needs a base URL and a model, not a key, and has no web search", () => {
+    expect(llmFor({ AI_PROVIDER: "openai-compatible", AI_BASE_URL: "http://localhost:1234/v1" }).llm.configured).toBe(false);
+    const local = llmFor({ AI_PROVIDER: "openai-compatible", AI_BASE_URL: "http://localhost:1234/v1", AI_MODEL: "qwen3" });
+    expect([local.llm.configured, local.llm.webSearch]).toEqual([true, false]);
   });
 });
 
 describe("request shape", () => {
-  test("adaptive thinking, explicit effort, fallbacks, cached system prefix and streamed tool inputs", async () => {
-    const fake = scripted(message([text("ok")]));
+  test("model, effort, system prompt and tool schemas reach the transport; web search only when asked for", async () => {
+    const fake = scripted(message([text("ok")]), message([text("ok")]));
     const { ctx } = featureCtx(fake.transport);
     const echo = tool({ name: "echo", description: "Echo", schema: z.strictObject({ v: z.string().max(5), n: z.number().min(1).optional() }), run: (i) => i });
     await runAgent(ctx.llm, { feature: "ask", system: ["rules", "profile"], tools: [echo], messages: [{ role: "user", content: "q" }], effort: "medium" });
-    const req = fake.requests[0]!;
-    expect(req).toMatchObject({
-      model: "claude-opus-5-5",
-      thinking: { type: "adaptive" },
-      output_config: { effort: "medium" },
-      fallbacks: "default",
-      cache_control: { type: "ephemeral" },
-      betas: expect.arrayContaining(["server-side-fallback-2026-07-01"]),
-    });
-    expect(req.tool_choice).toBeUndefined();
-    expect(req.system).toEqual([
-      { type: "text", text: "rules" },
-      { type: "text", text: "profile", cache_control: { type: "ephemeral" } },
+    await runAgent(ctx.llm, { feature: "picks", system: ["s"], tools: [], webSearch: { maxUses: 3 }, messages: [{ role: "user", content: "q" }], effort: "high" });
+    const [first, second] = fake.requests;
+    expect(first).toMatchObject({ model: "claude-opus-5-5", effort: "medium", system: ["rules", "profile"], webSearch: null, maxTokens: 64_000 });
+    expect(first!.tools).toEqual([
+      { name: "echo", description: "Echo", inputSchema: { type: "object", properties: { v: { type: "string" }, n: { type: "number" } }, required: ["v"], additionalProperties: false } },
     ]);
-    expect(req.tools![0]).toEqual({
-      name: "echo",
-      description: "Echo",
-      eager_input_streaming: true,
-      input_schema: { type: "object", properties: { v: { type: "string" }, n: { type: "number" } }, required: ["v"], additionalProperties: false },
-    });
+    expect(second!.webSearch).toEqual({ maxUses: 3 });
   });
 });
 
 describe("agent loop", () => {
   test("runs tools, returns invalid input and tool errors to the model, and continues paused turns", async () => {
-    const fake = scripted(
-      message([toolUse("add", { a: 1, b: 2 }), toolUse("add", { a: "x" }), toolUse("fail", {})], "tool_use"),
-      message([text("searching")], "pause_turn"),
-      message([text("3")]),
-    );
+    const fake = scripted(message([toolUse("add", { a: 1, b: 2 }), toolUse("add", { a: "x" }), toolUse("fail", {})]), message([text("searching")], "pause"), message([text("3")]));
     const { ctx } = featureCtx(fake.transport);
     const add = tool({ name: "add", description: "Add", schema: z.strictObject({ a: z.number(), b: z.number() }), run: ({ a, b }) => ({ sum: a + b }) });
     const fail = tool({
@@ -148,11 +167,11 @@ describe("agent loop", () => {
     });
     const messages = [{ role: "user" as const, content: "q" }];
     const result = await runAgent(ctx.llm, { feature: "ask", system: ["s"], tools: [add, fail], messages, effort: "low" });
-    const second = fake.requests[1]!.messages.at(-1)!.content as { content: string; is_error?: boolean }[];
+    const second = fake.requests[1]!.messages.at(-1)!.content as ToolResultPart[];
     expect(JSON.parse(second[0]!.content)).toEqual({ sum: 3 });
-    expect(second[1]!.is_error).toBe(true);
+    expect([second[0]!.name, second[1]!.isError]).toEqual(["add", true]);
     expect(second[1]!.content).toContain("INVALID_INPUT");
-    expect(second[2]).toMatchObject({ is_error: true, content: "no data" });
+    expect(second[2]).toMatchObject({ isError: true, content: "no data" });
     expect(result.calls).toBe(3);
     expect(fake.requests[2]!.messages.at(-1)!.role).toBe("assistant");
     expect(messages).toHaveLength(5);
@@ -174,67 +193,5 @@ describe("agent loop", () => {
     const result = await runAgent(ctx.llm, { feature: "ask", system: ["s"], tools: [done], messages: [{ role: "user", content: "q" }], effort: "low" });
     expect(result.terminal).toEqual({ accepted: true });
     expect(fake.remaining()).toBe(1);
-  });
-
-  test("after a mid-output fallback, blocks the next model cannot read are not echoed", () => {
-    const content = [
-      { type: "thinking", thinking: "", signature: "sig" },
-      { type: "text", text: "partial", citations: null },
-      { type: "tool_use", id: "t1", name: "x", input: {} },
-      { type: "fallback", from: { model: "claude-opus-5-5" }, to: { model: "claude-opus-4-8" } },
-      { type: "thinking", thinking: "", signature: "sig2" },
-      { type: "text", text: "rest", citations: null },
-    ] as never[];
-    expect(echoable(content).map((b: { type: string }) => b.type)).toEqual(["text", "fallback", "thinking", "text"]);
-  });
-});
-
-describe("spend that used to escape the ledger", () => {
-  const callInput = { feature: "ask" as const, system: ["s"], messages: [{ role: "user" as const, content: "q" }], effort: "low" as const, maxTokens: 100 };
-
-  test("a failed attempt that reported usage is recorded before the retry", async () => {
-    let attempts = 0;
-    const transport: LlmTransport = async () => {
-      if (attempts++ === 0) throw new LlmAttemptError(new SyntaxError("bad tool json"), message([text("partial")]), true);
-      return message([text("ok")]);
-    };
-    const { ctx } = featureCtx(transport);
-    await ctx.llm.call(callInput);
-    const rows = spendByFeature(ctx.db, "2026-02");
-    expect(rows[0]!.calls).toBe(2);
-    expect(monthSpend(ctx.db, "2026-02")).toBeCloseTo((2 * (1_000 * 4 + 100 * 20)) / 1e6, 10);
-  });
-
-  test("a retry stops when the failed attempts reach the cap", async () => {
-    const transport: LlmTransport = async () => {
-      throw new LlmAttemptError(new SyntaxError("bad tool json"), message([text("x")], "end_turn", { usage: usage({ output_tokens: 1_000_000 }) }), true);
-    };
-    const { ctx } = featureCtx(transport, [], { MONTHLY_BUDGET_USD: "5" });
-    await expect(ctx.llm.call(callInput)).rejects.toBeInstanceOf(LlmBudgetExceededError);
-    expect(spendByFeature(ctx.db, "2026-02")[0]!.calls).toBe(1);
-  });
-
-  test("a model with no price is charged at the highest configured rate", () => {
-    const cost = callCost(usage({ input_tokens: 0, output_tokens: 1_000_000 }), "claude-unknown", prices, 0);
-    expect(cost.usd).toBe(Math.max(...Object.values(prices).map((p) => p.output)) * 1_000_000);
-  });
-
-  test("an unpriced LLM_MODEL fails at boot", () => {
-    expect(() => featureCtx(null, [], { LLM_MODEL: "claude-unknown" })).toThrow(/LLM_MODEL/);
-  });
-
-  test("cancelling stops the request, records what was used and makes no further call", async () => {
-    const cancel = new AbortController();
-    let calls = 0;
-    const transport: LlmTransport = async (_params, _onText, signal) => {
-      calls++;
-      cancel.abort();
-      throw new LlmAttemptError(new Error("aborted"), message([text("half")]), !signal?.aborted);
-    };
-    const { ctx } = featureCtx(transport);
-    await expect(ctx.llm.withSignal(cancel.signal).call(callInput)).rejects.toBeInstanceOf(LlmAbortedError);
-    await expect(ctx.llm.withSignal(cancel.signal).call(callInput)).rejects.toBeInstanceOf(LlmAbortedError);
-    expect(calls).toBe(1);
-    expect(spendByFeature(ctx.db, "2026-02")[0]!.calls).toBe(1);
   });
 });

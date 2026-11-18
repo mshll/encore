@@ -1,12 +1,11 @@
 import { desc, eq } from "drizzle-orm";
-import type Anthropic from "@anthropic-ai/sdk";
 import { answerText, checkNumbers, numbersOf, parseAnswer, type Answer } from "../answers/answer";
 import { answersOf, saveAnswer } from "../answers/store";
 import { ResultRefs, RunVisuals, showTool, withRefs } from "../answers/visuals";
 import type { Db } from "../db/client";
 import { llmThreads } from "../db/schema";
 import { runAgent, type AgentEvent } from "../llm/agent";
-import type { MessageParam } from "../llm/client";
+import { replyText, type ChatMessage } from "../llm/types";
 import { localNow, tagged, type FeatureContext } from "../llm/context";
 import { pageContextNote, type PageContext } from "../llm/pageContext";
 import { plainText } from "../llm/plainText";
@@ -34,18 +33,18 @@ export class ThreadNotFoundError extends Error {}
 
 type ToolCall = { name: string; input: unknown };
 
-const maxId = (messages: MessageParam[], pattern: RegExp) =>
+const maxId = (messages: ChatMessage[], pattern: RegExp) =>
   Math.max(0, ...toolResultTexts(messages).flatMap((t) => [...t.matchAll(pattern)].map((m) => Number(m[1]))));
 
 /** The JSON a tool returned, for each result that is not an error message. */
-function toolResultTexts(messages: MessageParam[]): string[] {
+function toolResultTexts(messages: ChatMessage[]): string[] {
   return messages.flatMap((m) =>
-    typeof m.content === "string" ? [] : (m.content ?? []).flatMap((b) => (b.type === "tool_result" && !b.is_error && typeof b.content === "string" ? [b.content] : [])),
+    m.role !== "user" || typeof m.content === "string" ? [] : m.content.flatMap((p) => (p.isError ? [] : [p.content])),
   );
 }
 
 /** Every number the tools returned in these messages: what a sentence of the answer may quote. */
-function knownNumbers(messages: MessageParam[], question: string): number[] {
+function knownNumbers(messages: ChatMessage[], question: string): number[] {
   const known = [...question.matchAll(/\d+(?:\.\d+)?/g)].map((m) => Number(m[0]));
   for (const text of toolResultTexts(messages)) numbersOf(JSON.parse(text), known);
   return known;
@@ -59,7 +58,7 @@ export async function ask(ctx: FeatureContext, question: string, threadId: numbe
   if (threadId !== null && (!existing || existing.feature !== "ask")) throw new ThreadNotFoundError();
   llm.assertAvailable();
   const system = existing?.system ?? [ASK_SYSTEM, tagged("taste_profile", tasteProfile(db, { timezone, weekendDays }, now))];
-  const messages: MessageParam[] = existing?.messages ?? [];
+  const messages: ChatMessage[] = existing?.messages ?? [];
   const refs = new ResultRefs(maxId(messages, /"ref":"r(\d+)"/g) + 1);
   const visuals = new RunVisuals(maxId(messages, /"id":"v(\d+)"/g));
   messages.push({ role: "user", content: `${ownerMessage(question)}\nOwner's local time: ${localNow({ timezone, weekendDays }, now)}.${pageContextNote(context)}` });
@@ -78,12 +77,7 @@ export async function ask(ctx: FeatureContext, question: string, threadId: numbe
       onEvent?.(e);
     },
   });
-  const text = plainText(
-    result.final.content
-      .filter((b): b is Anthropic.Beta.BetaTextBlock => b.type === "text")
-      .map((b) => b.text)
-      .join(""),
-  );
+  const text = plainText(replyText(result.final.content));
   const content = checkNumbers(parseAnswer(text, Object.fromEntries(visuals.byId)), knownNumbers(messages.slice(turnStart), question));
   const id = db.transaction((tx) => {
     const id = existing ? existing.id : createThread(tx, "ask", system, messages, ctx.now());
@@ -107,7 +101,7 @@ export function listAskThreads(db: Db, limit: number) {
     .all()
     .map((t) => ({
       id: t.id,
-      title: threadTitle(transcript(t.messages as MessageParam[])),
+      title: threadTitle(transcript(t.messages as ChatMessage[])),
       createdAt: new Date(t.createdAt).toISOString(),
       updatedAt: new Date(t.updatedAt).toISOString(),
     }));

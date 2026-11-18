@@ -1,3 +1,4 @@
+import { aiReady } from "../settings/settings";
 import { BACKUP_JOB } from "../backup/service";
 import type { Db } from "../db/client";
 import type { DiscordSource } from "../discord";
@@ -75,7 +76,7 @@ export class AlertMonitor {
         .filter((g) => g.reason === "quota_exceeded" && g.route !== "*")
         .map((g) => ({ route: g.route, until: g.blockedUntil })),
       backupError: clean(getJobState(db, BACKUP_JOB)?.lastError),
-      claude: { configured: Boolean(current.llm.apiKey), exhausted: budget.exhausted, month: budget.month, spentUsd: budget.spentUsd, capUsd: budget.capUsd },
+      claude: { configured: aiReady(current.llm.ai), exhausted: budget.exhausted, month: budget.month, spentUsd: budget.spentUsd, capUsd: budget.capUsd },
     };
   }
 

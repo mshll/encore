@@ -1,5 +1,5 @@
 import { eq } from "drizzle-orm";
-import { pricedModels, type Config } from "../config";
+import type { Config } from "../config";
 import type { Db } from "../db/client";
 import { settings as settingsTable } from "../db/schema";
 import { settingFields, type SettingField, type SettingValue } from "./fields";
@@ -55,7 +55,7 @@ export class SettingsStore implements SettingsSource {
     private readonly config: Pick<Config, "envSettings" | "secretsKey" | "llmPrices">,
     private readonly now: () => number = Date.now,
   ) {
-    this.fields = settingFields(pricedModels(config.llmPrices));
+    this.fields = settingFields();
     this.byKey = new Map(this.fields.map((f) => [f.key, f]));
     this.box = config.secretsKey ? new SecretBox(config.secretsKey) : null;
   }

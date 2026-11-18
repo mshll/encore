@@ -35,7 +35,7 @@ describe("Claude DJ re-planner", () => {
     const prompt = JSON.stringify(fake.requests[0]!.messages[0]);
     expect(prompt).toContain("1. Nights - Frank Ocean");
     expect(prompt).toContain("<skipped_this_session>\\n- Nights - Frank Ocean");
-    expect(fake.requests[0]!.output_config).toEqual({ effort: "low" });
+    expect(fake.requests[0]!.effort).toBe("low");
     expect(db.select().from(llmCalls).all().map((c) => c.feature)).toEqual(["dj", "dj"]);
   });
 

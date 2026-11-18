@@ -2,7 +2,7 @@
 
 # encore
 
-A self-hosted dashboard for your own Spotify listening. It imports your full streaming history, keeps logging new plays, and shows what you listen to, when, and how that changes. With an Anthropic API key it also builds playlists from a prompt, picks new songs each week, and answers questions about your history.
+A self-hosted dashboard for your own Spotify listening. It imports your full streaming history, keeps logging new plays, and shows what you listen to, when, and how that changes. With an AI provider (Anthropic, OpenAI, Google, or any OpenAI-compatible server such as OpenRouter or a local Ollama) it also builds playlists from a prompt, picks new songs each week, and answers questions about your history.
 
 One instance serves one person. Your data stays in a single SQLite file on your server.
 
@@ -17,7 +17,7 @@ One instance serves one person. Your data stays in a single SQLite file on your 
 - **Music**: every artist, album and song you have played, each with its own page, plus favourites you stopped playing and the podcasts you listen to.
 - **Patterns**: when in the week you listen, which artists defined which months, genres, moods and release decades over time, the music you find each month and the artists you come back to, your records and milestones, how plays end and when you skip, and trips and devices.
 
-**Play** (needs an Anthropic API key)
+**Play** (needs an AI provider)
 
 - **Sets**: describe a playlist; Claude builds it from your history plus songs you have never played, with a reason for each. Refine it by chat, save it to Spotify, or play it as a session that adapts as you skip.
 - **Weekly picks**: a few new songs picked each week, each with its reason, at the head of Playlists.
@@ -26,7 +26,7 @@ One instance serves one person. Your data stays in a single SQLite file on your 
 **Playlists**
 
 - One list of every playlist encore makes, each on the same page: how it fills, its songs, its changes, Play.
-- Private playlists encore keeps refilling: Weekly picks, Forgotten favourites, Most played lately, New from your artists, This month in past years, This year so far (which becomes that year's playlist when the year ends), and Right now (what you play at this hour on this weekday). Each can be seen and played in encore; Keep in Spotify adds it to your account; Freeze keeps its songs until you refresh it. Only Weekly picks needs the Anthropic key.
+- Private playlists encore keeps refilling: Weekly picks, Forgotten favourites, Most played lately, New from your artists, This month in past years, This year so far (which becomes that year's playlist when the year ends), and Right now (what you play at this hour on this weekday). Each can be seen and played in encore; Keep in Spotify adds it to your account; Freeze keeps its songs until you refresh it. Only Weekly picks needs an AI provider.
 - Build from rules: your own playlist from a rule (where the songs come from, filters on listens, dates, artists and release years, order, size, songs per artist, refresh), with a live preview. Sets and the playlists saved from recaps sit in the same list.
 
 **Upkeep**
@@ -47,7 +47,7 @@ Optional integrations: Discord commands and channel posts, and an MCP server ove
 - A Spotify account. Playback control needs Spotify Premium.
 - Your extended streaming history: request it in your Spotify account under Privacy settings, "Extended streaming history". Spotify sends it within about 30 days. encore works without it, but then starts from the day you connect.
 - A Spotify app from [developer.spotify.com/dashboard](https://developer.spotify.com/dashboard): Web API, development mode. No client secret is used.
-- Optional: an [Anthropic API key](https://console.anthropic.com/) for Sets, picks, Ask, liner notes and recaps. A monthly spend cap applies (default 100 USD, change it in Settings).
+- Optional: an AI provider for Sets, picks, Ask, liner notes and recap lines: an API key from Anthropic, OpenAI or Google, or the address of an OpenAI-compatible server (OpenRouter, Groq, Mistral, Ollama, LM Studio). Weekly picks cite web sources only with a provider that has web search (Anthropic, OpenAI, Google). A monthly spend cap applies (default 100 USD, change it in Settings › AI).
 
 Spotify limits development-mode apps: some endpoints have a daily quota per Spotify account. When Spotify answers `QUOTA_EXCEEDED`, encore pauses only that endpoint until the time Spotify gives, and fills in the missing track and artist details later.
 
@@ -90,7 +90,7 @@ The app walks you through setup:
 3. Connect Spotify.
 4. Choose your time zone, home country and weekend days. Do this before the import: the time zone applies only to plays stored after it is set.
 5. Upload the `Streaming_History_Audio_*.json` and `Streaming_History_Video_*.json` files from the export. Importing again is safe; rows already stored are skipped.
-6. Optional: add a Claude key, Discord and an MCP token.
+6. Optional: set up an AI provider, Discord and an MCP token.
 
 ## Connect Claude (MCP)
 
@@ -172,8 +172,8 @@ src/spotify/             OAuth (PKCE, rotating refresh), API client, call pacing
 src/auth/                passkeys, sessions
 src/tags/                tag vocabulary, validation, storage
 src/analytics/           pure query functions
-src/llm/                 Claude client wrapper, cost ledger and budget, agent loop, threads
-src/taste/               cached taste profile given to Claude
+src/llm/                 AI provider layer (Vercel AI SDK), cost ledger and budget, agent loop, threads
+src/taste/               cached taste profile given to the model
 src/sets/ src/picks/     set building and weekly picks
 src/covers/              playlist cover and share card drawing (Skia via @napi-rs/canvas); its fonts and their licences are in assets/fonts
 src/ask/ src/notes/      questions over the history, liner notes

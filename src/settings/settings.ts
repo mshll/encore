@@ -1,5 +1,6 @@
-import type { ModelPrice } from "../config";
 import type { ConstraintDefaults } from "../library/constraints";
+import { DEFAULT_MODELS, hasWebSearch, type KnownModel } from "../llm/providers";
+import type { AiProvider } from "../llm/types";
 
 export type DiscordConfig = {
   botToken?: string;
@@ -10,11 +11,20 @@ export type DiscordConfig = {
   ownerId: string;
 };
 
-export type LlmConfig = {
+/** Which provider and model AI features use. `model` is null only for an OpenAI-compatible server with no model set. */
+export type AiConfig = {
+  provider: AiProvider;
+  model: string | null;
   apiKey?: string;
-  model: string;
-  prices: Record<string, ModelPrice>;
-  webSearchPerRequest: number;
+  baseUrl?: string;
+  /** USD per million tokens the owner entered, for a model encore has no price for. */
+  ownerPrice: { input: number; output: number } | null;
+  webSearch: boolean;
+};
+
+export type LlmConfig = {
+  ai: AiConfig;
+  prices: Record<string, KnownModel>;
   monthlyBudgetUsd: number;
   picksPerWeek: number;
   picksFarOut: number;
@@ -81,8 +91,14 @@ export type RawSettings = {
   homeCountry?: string;
   weekendDays: number[];
   historyStart?: string;
+  aiProvider: AiProvider;
+  aiModel?: string;
+  aiApiKey?: string;
+  aiBaseUrl?: string;
+  aiInputPrice?: number;
+  aiOutputPrice?: number;
   claudeApiKey?: string;
-  claudeModel: string;
+  claudeModel?: string;
   monthlyBudgetUsd: number;
   defaultMaxPerArtist?: number;
   defaultMaxPerAlbum?: number;
@@ -141,7 +157,24 @@ const MINUTE = 60 * SECOND;
 const HOUR = 60 * MINUTE;
 const DAY = 24 * HOUR;
 
-export function resolveSettings(v: RawSettings, prices: Record<string, ModelPrice>): Settings {
+/** The new `ai*` fields win; with none set, ANTHROPIC_API_KEY and LLM_MODEL (or their stored values) configure Anthropic. */
+export function resolveAi(v: RawSettings): AiConfig {
+  const provider = v.aiProvider;
+  const anthropic = provider === "anthropic";
+  return {
+    provider,
+    model: v.aiModel ?? (anthropic ? v.claudeModel : undefined) ?? DEFAULT_MODELS[provider],
+    apiKey: v.aiApiKey ?? (anthropic ? v.claudeApiKey : undefined),
+    baseUrl: provider === "openai-compatible" ? v.aiBaseUrl : undefined,
+    ownerPrice: v.aiInputPrice !== undefined && v.aiOutputPrice !== undefined ? { input: v.aiInputPrice, output: v.aiOutputPrice } : null,
+    webSearch: hasWebSearch(provider),
+  };
+}
+
+/** Whether the settings name everything a call needs: a model, and a key (or, for an OpenAI-compatible server, its address). */
+export const aiReady = (ai: AiConfig): boolean => ai.model !== null && (ai.provider === "openai-compatible" ? ai.baseUrl !== undefined : ai.apiKey !== undefined);
+
+export function resolveSettings(v: RawSettings, prices: Record<string, KnownModel>): Settings {
   return {
     spotifyClientId: v.spotifyClientId,
     timezone: v.timezone,
@@ -168,10 +201,8 @@ export function resolveSettings(v: RawSettings, prices: Record<string, ModelPric
     librarySyncMs: v.librarySyncHours * HOUR,
     libraryPageMs: v.libraryPageSeconds * SECOND,
     llm: {
-      apiKey: v.claudeApiKey,
-      model: v.claudeModel,
+      ai: resolveAi(v),
       prices,
-      webSearchPerRequest: 0.01,
       monthlyBudgetUsd: v.monthlyBudgetUsd,
       picksPerWeek: v.picksPerWeek,
       picksFarOut: Math.min(v.picksFarOut, v.picksPerWeek),

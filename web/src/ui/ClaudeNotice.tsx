@@ -18,7 +18,7 @@ export type ClaudeGate = {
 };
 
 const settingsLink = (label: string) => (
-  <AppLink to="/settings/claude" className="font-medium text-primary underline decoration-line-strong underline-offset-2 hover:decoration-current">
+  <AppLink to="/settings/ai" className="font-medium text-primary underline decoration-line-strong underline-offset-2 hover:decoration-current">
     {label}
   </AppLink>
 );
@@ -33,13 +33,13 @@ export function useClaudeGate({ needsSpotify }: { needsSpotify: boolean }): Clau
   if (!status) return { ready: false, blocked: null, warning: null, spend: null };
   const { llm, spotify } = status;
   const spend = `${usd(llm.spentUsd)} of ${usd(llm.capUsd)} this month`;
-  if (!llm.configured) return { ready: true, blocked: <>Claude is not set up. {settingsLink("Add an API key")}</>, warning: null, spend: null };
+  if (!llm.configured) return { ready: true, blocked: <>AI is not set up. {settingsLink("Set it up in Settings › AI")}</>, warning: null, spend: null };
   if (llm.exhausted)
     return {
       ready: true,
       blocked: (
         <>
-          This month’s Claude budget is spent ({usd(llm.spentUsd)} of {usd(llm.capUsd)}). It resets on {resetDay(llm.month)}.{" "}
+          This month’s AI budget is spent ({usd(llm.spentUsd)} of {usd(llm.capUsd)}). It resets on {resetDay(llm.month)}.{" "}
           {settingsLink("Change the budget")}
         </>
       ),

@@ -29,7 +29,7 @@ function buildScript() {
         toolUse("verify_new_song", { title: "Woods", artist: "Mac Miller" }),
         toolUse("verify_new_song", { title: "Good News", artist: "Mac Miller" }),
       ],
-      "tool_use",
+      "tool_calls",
     ),
     toolCall("submit_set", {
       title: "Late drive",

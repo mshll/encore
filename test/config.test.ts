@@ -21,6 +21,6 @@ describe("config", () => {
     expect(() => loadConfig({ TIMEZONE: "Mars/Base" })).toThrow("TIMEZONE");
     expect(() => loadConfig({ POLL_INTERVAL_SECONDS: "abc" })).toThrow("POLL_INTERVAL_SECONDS");
     expect(() => loadConfig({ SECRETS_KEY: "too-short" })).toThrow("SECRETS_KEY");
-    expect(() => loadConfig({ LLM_MODEL: "claude-unknown" })).toThrow("no price for claude-unknown");
+    expect(() => loadConfig({ AI_PROVIDER: "mistral" })).toThrow("AI_PROVIDER");
   });
 });

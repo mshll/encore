@@ -8,7 +8,8 @@ import { createOps } from "../src/ops";
 import { createServices } from "../src/services";
 import { SettingsStore } from "../src/settings/store";
 import { SpotifyAuth } from "../src/spotify/auth";
-import type { LlmKeyCheck, LlmTransport } from "../src/llm/client";
+import type { Connect } from "../src/llm/client";
+import type { LlmTransport } from "../src/llm/types";
 import { SpotifyClient } from "../src/spotify/client";
 import { openDb, type Db } from "../src/db/client";
 import { spotifyAuth as spotifyAuthTable } from "../src/db/schema";
@@ -69,7 +70,7 @@ export function jsonResponse(body: unknown, status = 200, headers: Record<string
   return new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json", ...headers } });
 }
 
-export type TestAppOptions = { llmKeyCheck?: LlmKeyCheck; remote?: () => RemoteStore };
+export type TestAppOptions = { remote?: () => RemoteStore; llmConnect?: Connect };
 
 export function testApp(env: Record<string, string> = {}, fetchFn: typeof fetch = fetch, transport: LlmTransport | null = null, options: TestAppOptions = {}) {
   const db = testDb();
@@ -77,7 +78,7 @@ export function testApp(env: Record<string, string> = {}, fetchFn: typeof fetch 
   const settings = testSettings(db, config);
   const spotifyAuth = new SpotifyAuth(db, config, settings, fetchFn);
   const spotify = new SpotifyClient(db, spotifyAuth, settings, fetchFn);
-  const services = createServices(db, config, settings, spotify, { llmTransport: transport, llmKeyCheck: options.llmKeyCheck });
+  const services = createServices(db, config, settings, spotify, { llmTransport: transport, llmConnect: options.llmConnect });
   const jobs = createJobs(db, settings, spotifyAuth, spotify, services);
   const llm = services.llm;
   const discord = new DiscordHost(settings, { db, config, settings, services, now: Date.now }, fetchFn);

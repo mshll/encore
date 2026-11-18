@@ -1,85 +1,55 @@
-import type Anthropic from "@anthropic-ai/sdk";
 import type { Db } from "../src/db/client";
 import { spotifyAuth } from "../src/db/schema";
-import { Llm, type LlmMessage, type LlmTransport, type StreamParams } from "../src/llm/client";
+import { Llm } from "../src/llm/client";
 import type { FeatureContext } from "../src/llm/context";
+import type { AssistantMessage, LlmReply, LlmRequest, LlmTransport, SourcePart, StopReason, TextPart, ToolCallPart, ToolResultPart, Usage } from "../src/llm/types";
 import { SpotifyAuth } from "../src/spotify/auth";
 import { SpotifyClient } from "../src/spotify/client";
 import { upsertTags } from "../src/tags/service";
 import { play, seed, testConfig, testDb, track, uri, testSettings } from "./helpers";
 
-type Block = Anthropic.Beta.BetaContentBlock;
+type Part = AssistantMessage["content"][number];
 
 let ids = 0;
 
-export function usage(partial: Partial<Anthropic.Beta.BetaUsage> = {}): Anthropic.Beta.BetaUsage {
-  return {
-    cache_creation: null,
-    cache_creation_input_tokens: 0,
-    cache_read_input_tokens: 0,
-    fallback_credit: null,
-    inference_geo: null,
-    input_tokens: 1000,
-    iterations: null,
-    output_tokens: 100,
-    output_tokens_details: null,
-    server_tool_use: null,
-    service_tier: "standard",
-    speed: "standard",
-    ...partial,
-  };
+export function usage(partial: Partial<Usage> = {}): Usage {
+  return { inputTokens: 1000, outputTokens: 100, cacheReadTokens: 0, cacheWriteTokens: 0, webSearches: 0, ...partial };
 }
 
-export function message(content: Block[], stop: Anthropic.Beta.BetaStopReason = "end_turn", extra: Partial<LlmMessage> = {}): LlmMessage {
-  return {
-    id: `msg_${++ids}`,
-    type: "message",
-    role: "assistant",
-    model: "claude-opus-5-5",
-    content,
-    stop_reason: stop,
-    stop_sequence: null,
-    stop_details: null,
-    usage: usage(),
-    container: null,
-    context_management: null,
-    ...extra,
-  } as LlmMessage;
+/** A model reply. The stop reason defaults to tool_calls when the reply calls a tool, else end. */
+export function message(content: Part[], stop?: StopReason, extra: Partial<LlmReply> = {}): LlmReply {
+  return { content, stopReason: stop ?? (content.some((p) => p.type === "tool_call") ? "tool_calls" : "end"), usage: usage(), model: "claude-opus-5-5", ...extra };
 }
 
-export const text = (t: string): Block => ({ type: "text", text: t, citations: null }) as Block;
+export const text = (t: string): TextPart => ({ type: "text", text: t });
 
-export const toolUse = (name: string, input: unknown): Block => ({ type: "tool_use", id: `toolu_${++ids}`, name, input }) as Block;
+export const toolUse = (name: string, input: unknown): ToolCallPart => ({ type: "tool_call", id: `call_${++ids}`, name, input });
 
-export const toolCall = (name: string, input: unknown) => message([toolUse(name, input)], "tool_use");
+export const toolCall = (name: string, input: unknown) => message([toolUse(name, input)]);
 
-/** A server-side web search and its results, as they appear in an assistant message. */
-export function webSearch(query: string, results: { url: string; title: string }[]): Block[] {
-  const id = `srvtoolu_${++ids}`;
-  return [
-    { type: "server_tool_use", id, name: "web_search", input: { query } },
-    { type: "web_search_tool_result", tool_use_id: id, content: results.map((r) => ({ type: "web_search_result", url: r.url, title: r.title, encrypted_content: "", page_age: null })) },
-  ] as unknown as Block[];
+/** The pages a provider's web search returned, as they appear in a reply. */
+export function webSearch(_query: string, results: { url: string; title: string }[]): SourcePart[] {
+  return results.map((r) => ({ type: "source", url: r.url, title: r.title }));
 }
 
-/** Replays scripted responses in order and records every request it received. */
-export function scripted(...responses: (LlmMessage | ((params: StreamParams) => LlmMessage))[]) {
-  const requests: StreamParams[] = [];
-  const transport: LlmTransport = async (params, onText) => {
-    requests.push(structuredClone(params));
+/** Replays scripted replies in order and records every request it received. */
+export function scripted(...responses: (LlmReply | ((request: LlmRequest) => LlmReply))[]) {
+  const requests: LlmRequest[] = [];
+  const transport: LlmTransport = async (request, onText) => {
+    requests.push(structuredClone(request));
     const next = responses.shift();
     if (!next) throw new Error("scripted transport ran out of responses");
-    const msg = typeof next === "function" ? next(params) : next;
-    for (const b of msg.content) if (b.type === "text") onText(b.text);
-    return msg;
+    const reply = typeof next === "function" ? next(request) : next;
+    for (const p of reply.content) if (p.type === "text") onText(p.text);
+    return reply;
   };
   return { transport, requests, remaining: () => responses.length };
 }
 
 /** Tool results the model received in the last user message of a request. */
-export function toolResults(params: StreamParams) {
-  const last = params.messages[params.messages.length - 1]!;
-  return (last.content as Anthropic.Beta.BetaToolResultBlockParam[]).map((r) => ({ isError: r.is_error ?? false, value: JSON.parse(r.content as string) as Record<string, unknown> }));
+export function toolResults(request: LlmRequest) {
+  const last = request.messages[request.messages.length - 1]!;
+  return (last.content as ToolResultPart[]).map((r) => ({ isError: r.isError ?? false, value: JSON.parse(r.content) as Record<string, unknown> }));
 }
 
 export const SONGS = {

@@ -453,7 +453,7 @@ function worsen(path: string, body: Json): unknown {
   if (path === "/api/settings")
     return {
       ...body,
-      groups: (body.groups as { fields: Json[] }[]).map((g) => ({ ...g, fields: g.fields.map((f) => (f.key === "claudeApiKey" ? { ...f, set: true, unreadable: true, source: "db" } : f)) })),
+      groups: (body.groups as { fields: Json[] }[]).map((g) => ({ ...g, fields: g.fields.map((f) => (f.key === "aiApiKey" ? { ...f, set: true, unreadable: true, source: "db" } : f)) })),
     };
   return body;
 }
@@ -469,7 +469,7 @@ const PLAYING_NOW = {
 
 const realFetch = window.fetch.bind(window);
 
-const MIXED_ENV_GROUPS = ["spotify", "locale", "claude"];
+const MIXED_ENV_GROUPS = ["spotify", "locale", "ai"];
 const ENV_SAMPLES: Record<string, unknown> = { spotifyClientId: "3f9a1c0b7d2e4a6b8c0d1e2f3a4b5c6d", homeCountry: "KW", discordPublicKey: "a".repeat(64) };
 let settingsAdopted = settingsFixture === "stored";
 
@@ -700,8 +700,9 @@ async function runFixture(path: string, query: string, method: string, init: Req
     planMessages = body.threadId === PLAN_THREAD ? [...planMessages, body.message] : [body.message];
   }
   if (path === "/api/status" && method === "GET") {
-    const status = (await realFetch(path).then((r) => r.json())) as { llm: Json; spotify: Json };
+    const status = (await realFetch(path).then((r) => r.json())) as { llm: Json; ai: Json; spotify: Json };
     status.llm = { ...status.llm, configured: run !== "unconfigured" };
+    status.ai = { ...status.ai, configured: run !== "unconfigured" };
     if (run === "budget") status.llm = { ...status.llm, spentUsd: 100.04, capUsd: 100, remainingUsd: 0, exhausted: true };
     if (run === "paused") status.spotify = { ...status.spotify, paused: { reason: "rate_limited", until: PAUSED_UNTIL, since: new Date().toISOString() } };
     return json(status);
@@ -724,7 +725,7 @@ async function runFixture(path: string, query: string, method: string, init: Req
   if (run === "running") return sse([opened, ...stepFrames(path, STEPS.length)], signal, true);
   if (run === "failed")
     return sse(
-      [opened, ...stepFrames(path, 3), ["error", { error: { code: "llm_failed", message: "The Anthropic API returned 529 overloaded" } }, 1200]],
+      [opened, ...stepFrames(path, 3), ["error", { error: { code: "llm_failed", message: "AI provider error 529" } }, 1200]],
       signal,
       false,
     );

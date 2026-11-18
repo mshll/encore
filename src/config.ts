@@ -1,4 +1,6 @@
 import { z } from "zod";
+import { KNOWN_MODELS, type KnownModel } from "./llm/providers";
+import type { AiProvider } from "./llm/types";
 import { fromEnv, settingFields, type SettingValue } from "./settings/fields";
 
 const schema = z.object({
@@ -32,37 +34,32 @@ export type Config = {
   jobsEnabled: boolean;
   disabledJobs: string[];
   webDist: string;
-  llmPrices: Record<string, ModelPrice>;
+  /** Known models and their prices: the built-in table with LLM_PRICES over it. */
+  llmPrices: Record<string, KnownModel>;
   /** Setting values given by env vars, already validated. They override the stored values. */
   envSettings: Record<string, SettingValue>;
 };
 
-export type ModelPrice = { input: number; output: number; cacheWrite5m: number; cacheWrite1h: number; cacheRead: number };
-
-const usdPerMTok = (input: number, cacheWrite5m: number, cacheWrite1h: number, cacheRead: number, output: number): ModelPrice => ({
-  input: input / 1e6,
-  cacheWrite5m: cacheWrite5m / 1e6,
-  cacheWrite1h: cacheWrite1h / 1e6,
-  cacheRead: cacheRead / 1e6,
-  output: output / 1e6,
-});
-
-export const DEFAULT_PRICES: Record<string, ModelPrice> = {
-  "claude-opus-5-5": usdPerMTok(4, 5, 8, 0.2, 20),
-  "claude-opus-5": usdPerMTok(5, 6.25, 10, 0.5, 25),
-  "claude-opus-4-8": usdPerMTok(5, 6.25, 10, 0.5, 25),
-  "claude-sonnet-5-5": usdPerMTok(2, 2.5, 4, 0.1, 10),
-};
-
 const priceOverrides = z.record(
   z.string(),
-  z.strictObject({ input: z.number().min(0), output: z.number().min(0), cacheWrite5m: z.number().min(0), cacheWrite1h: z.number().min(0), cacheRead: z.number().min(0) }),
+  z.strictObject({
+    input: z.number().min(0),
+    output: z.number().min(0),
+    cacheRead: z.number().min(0).optional(),
+    cacheWrite: z.number().min(0).optional(),
+    cacheWrite5m: z.number().min(0).optional(),
+    cacheWrite1h: z.number().min(0).optional(),
+  }),
 );
 
 const invalid = (issues: string) => new Error(`Invalid configuration: ${issues}`);
 
-function parsePrices(raw: string | undefined): Record<string, ModelPrice> {
-  if (!raw) return DEFAULT_PRICES;
+const providerOfModel = (model: string): AiProvider =>
+  KNOWN_MODELS[model]?.provider ?? (model.startsWith("claude-") ? "anthropic" : model.startsWith("gemini-") ? "google" : /^(gpt-|o\d)/.test(model) ? "openai" : "openai-compatible");
+
+/** LLM_PRICES: USD per million tokens by model id, over the built-in table. */
+function parsePrices(raw: string | undefined): Record<string, KnownModel> {
+  if (!raw) return KNOWN_MODELS;
   let json: unknown;
   try {
     json = JSON.parse(raw);
@@ -71,24 +68,25 @@ function parsePrices(raw: string | undefined): Record<string, ModelPrice> {
   }
   const parsed = priceOverrides.safeParse(json);
   if (!parsed.success) throw invalid(`LLM_PRICES: ${parsed.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("; ")}`);
-  const perToken = Object.fromEntries(
-    Object.entries(parsed.data).map(([model, p]) => [model, usdPerMTok(p.input, p.cacheWrite5m, p.cacheWrite1h, p.cacheRead, p.output)]),
-  );
-  return { ...DEFAULT_PRICES, ...perToken };
+  const overrides = Object.entries(parsed.data).map(([model, p]): [string, KnownModel] => [
+    model,
+    {
+      provider: providerOfModel(model),
+      price: { input: p.input / 1e6, output: p.output / 1e6, cacheRead: (p.cacheRead ?? p.input) / 1e6, cacheWrite: (p.cacheWrite ?? p.cacheWrite5m ?? p.input) / 1e6 },
+    },
+  ]);
+  return { ...KNOWN_MODELS, ...Object.fromEntries(overrides) };
 }
 
-/** The models the cost ledger can price; the model setting must be one of them. */
-export const pricedModels = (prices: Record<string, ModelPrice>) => Object.keys(prices) as [string, ...string[]];
-
-function parseEnvSettings(env: Record<string, string>, prices: Record<string, ModelPrice>): Record<string, SettingValue> {
+function parseEnvSettings(env: Record<string, string>): Record<string, SettingValue> {
   const values: Record<string, SettingValue> = {};
   const issues: string[] = [];
-  for (const field of settingFields(pricedModels(prices))) {
+  for (const field of settingFields()) {
     const raw = env[field.env];
     if (raw === undefined) continue;
     const parsed = field.schema.safeParse(fromEnv(field, raw));
     if (parsed.success) values[field.key] = parsed.data;
-    else issues.push(`${field.env}: ${field.key === "claudeModel" ? `no price for ${raw}; add it to LLM_PRICES` : parsed.error.issues[0]!.message}`);
+    else issues.push(`${field.env}: ${parsed.error.issues[0]!.message}`);
   }
   if (issues.length) throw invalid(issues.join("; "));
   return values;
@@ -116,6 +114,6 @@ export function loadConfig(rawEnv: Record<string, string | undefined> = process.
     disabledJobs: e.JOBS_DISABLED.split(",").map((name) => name.trim()).filter(Boolean),
     webDist: e.WEB_DIST,
     llmPrices,
-    envSettings: parseEnvSettings(env, llmPrices),
+    envSettings: parseEnvSettings(env),
   };
 }

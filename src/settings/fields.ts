@@ -1,12 +1,13 @@
 import { z } from "zod";
 import { MAX_SET_ITEMS } from "../library/constraints";
+import { AI_PROVIDERS } from "../llm/types";
 import { localTime } from "../plays/localTime";
 
-export const SETTING_GROUPS = ["spotify", "locale", "claude", "picks", "digest", "dj", "discord", "mcp", "access", "jobs", "history", "backup", "alerts"] as const;
+export const SETTING_GROUPS = ["spotify", "locale", "ai", "picks", "digest", "dj", "discord", "mcp", "access", "jobs", "history", "backup", "alerts"] as const;
 export type SettingGroup = (typeof SETTING_GROUPS)[number];
 
 export type SettingType = "string" | "integer" | "number" | "boolean" | "enum" | "timezone" | "weekdays" | "date";
-export type SettingUnit = "ms" | "seconds" | "minutes" | "hours" | "days" | "usd" | "weekday" | "hour";
+export type SettingUnit = "ms" | "seconds" | "minutes" | "hours" | "days" | "usd" | "usdPerMTok" | "weekday" | "hour";
 export type SettingValue = string | number | boolean | number[];
 
 export type SettingField = {
@@ -78,6 +79,15 @@ const optionalInteger = (base: Base, bounds: { min: number; max: number }): Sett
   ...bounds,
 });
 
+const optionalNumber = (base: Base, bounds: { min: number; unit?: SettingUnit }): SettingField => ({
+  ...base,
+  type: "number",
+  secret: false,
+  default: null,
+  schema: z.number().min(bounds.min),
+  ...bounds,
+});
+
 const choice = (base: Base, options: readonly [string, ...string[]], def: string): SettingField => ({
   ...base,
   type: "enum",
@@ -93,7 +103,7 @@ const snowflake = z.string().regex(/^\d+$/, "expected a numeric Discord id");
 const token = z.string().min(24, "must be at least 24 characters");
 
 /** Every setting stored in the `settings` table. An env var of the same name, when set, overrides the stored value. */
-export function settingFields(models: readonly [string, ...string[]]): SettingField[] {
+export function settingFields(): SettingField[] {
   return [
     text({ key: "spotifyClientId", group: "spotify", env: "SPOTIFY_CLIENT_ID" }, z.string().regex(/^[A-Za-z0-9_-]{1,128}$/, "expected a Spotify client id")),
 
@@ -125,12 +135,18 @@ export function settingFields(models: readonly [string, ...string[]]): SettingFi
       unit: "weekday",
     },
 
-    text({ key: "claudeApiKey", group: "claude", env: "ANTHROPIC_API_KEY" }, z.string().min(1), { secret: true }),
-    choice({ key: "claudeModel", group: "claude", env: "LLM_MODEL" }, models, models.includes("claude-opus-5-5") ? "claude-opus-5-5" : models[0]),
-    numeric({ key: "monthlyBudgetUsd", group: "claude", env: "MONTHLY_BUDGET_USD" }, "number", 100, { min: 0, unit: "usd" }),
-    optionalInteger({ key: "defaultMaxPerArtist", group: "claude", env: "DEFAULT_MAX_PER_ARTIST" }, { min: 1, max: MAX_SET_ITEMS }),
-    optionalInteger({ key: "defaultMaxPerAlbum", group: "claude", env: "DEFAULT_MAX_PER_ALBUM" }, { min: 1, max: MAX_SET_ITEMS }),
-    optionalInteger({ key: "defaultNewSongs", group: "claude", env: "DEFAULT_NEW_SONGS" }, { min: 0, max: MAX_SET_ITEMS }),
+    choice({ key: "aiProvider", group: "ai", env: "AI_PROVIDER" }, AI_PROVIDERS, "anthropic"),
+    text({ key: "aiModel", group: "ai", env: "AI_MODEL" }, z.string().trim().min(1).max(200)),
+    text({ key: "aiApiKey", group: "ai", env: "AI_API_KEY" }, z.string().min(1), { secret: true }),
+    text({ key: "aiBaseUrl", group: "ai", env: "AI_BASE_URL" }, webUrl),
+    optionalNumber({ key: "aiInputPrice", group: "ai", env: "AI_INPUT_PRICE" }, { min: 0, unit: "usdPerMTok" }),
+    optionalNumber({ key: "aiOutputPrice", group: "ai", env: "AI_OUTPUT_PRICE" }, { min: 0, unit: "usdPerMTok" }),
+    text({ key: "claudeApiKey", group: "ai", env: "ANTHROPIC_API_KEY" }, z.string().min(1), { secret: true }),
+    text({ key: "claudeModel", group: "ai", env: "LLM_MODEL" }, z.string().trim().min(1).max(200)),
+    numeric({ key: "monthlyBudgetUsd", group: "ai", env: "MONTHLY_BUDGET_USD" }, "number", 100, { min: 0, unit: "usd" }),
+    optionalInteger({ key: "defaultMaxPerArtist", group: "ai", env: "DEFAULT_MAX_PER_ARTIST" }, { min: 1, max: MAX_SET_ITEMS }),
+    optionalInteger({ key: "defaultMaxPerAlbum", group: "ai", env: "DEFAULT_MAX_PER_ALBUM" }, { min: 1, max: MAX_SET_ITEMS }),
+    optionalInteger({ key: "defaultNewSongs", group: "ai", env: "DEFAULT_NEW_SONGS" }, { min: 0, max: MAX_SET_ITEMS }),
 
     numeric({ key: "picksPerWeek", group: "picks", env: "PICKS_PER_WEEK" }, "integer", 5, { min: 1, max: 20 }),
     numeric({ key: "picksFarOut", group: "picks", env: "PICKS_FAR_OUT" }, "integer", 1, { min: 0, max: 20 }),

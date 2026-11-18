@@ -1,7 +1,11 @@
 import { describe, expect, test } from "bun:test";
 import { createSession } from "../src/auth/sessions";
 import { passkeys } from "../src/db/schema";
-import { LlmKeyRejectedError, type LlmKeyCheck } from "../src/llm/client";
+import type { Connect } from "../src/llm/client";
+import { LlmProviderError } from "../src/llm/errors";
+import { llmCalls } from "../src/db/schema";
+import type { AiConfig } from "../src/settings/settings";
+import { message, text } from "./llmFakes";
 import type { SettingFieldView, SettingsView } from "../src/settings/view";
 import { connectSpotify, jsonResponse, play, routeFetch, seed, testApp, track, uri } from "./helpers";
 
@@ -10,10 +14,10 @@ const CLAUDE_KEY = "sk-ant-api03-secret-value-WXYZ";
 const MCP_TOKEN = "mcp-token-from-env-0123456789";
 const DISCORD = { DISCORD_APPLICATION_ID: "123", DISCORD_PUBLIC_KEY: "a".repeat(64), DISCORD_OWNER_ID: "42" };
 
-type Options = { env?: Record<string, string>; fetchFn?: typeof fetch; llmKeyCheck?: LlmKeyCheck };
+type Options = { env?: Record<string, string>; fetchFn?: typeof fetch; llmConnect?: Connect };
 
-function signedIn({ env = {}, fetchFn = fetch, llmKeyCheck }: Options = {}) {
-  const app = testApp({ SPOTIFY_CLIENT_ID: "", TIMEZONE: "", SECRETS_KEY, ...env }, fetchFn, null, { llmKeyCheck });
+function signedIn({ env = {}, fetchFn = fetch, llmConnect }: Options = {}) {
+  const app = testApp({ SPOTIFY_CLIENT_ID: "", TIMEZONE: "", SECRETS_KEY, ...env }, fetchFn, null, { llmConnect });
   const cookie = `encore_session=${createSession(app.db)}`;
   const get = (path: string) => app.request(path, { headers: { cookie } });
   const send = (method: string, path: string, json: unknown) =>
@@ -35,10 +39,10 @@ describe("GET /api/settings", () => {
 
     const view = (await (await get("/api/settings")).json()) as SettingsView;
 
-    expect(view.groups.map((g) => g.id)).toEqual(["spotify", "locale", "claude", "picks", "digest", "dj", "discord", "mcp", "access", "jobs", "history", "backup", "alerts"]);
+    expect(view.groups.map((g) => g.id)).toEqual(["spotify", "locale", "ai", "picks", "digest", "dj", "discord", "mcp", "access", "jobs", "history", "backup", "alerts"]);
     expect(field(view, "homeCountry")).toMatchObject({ value: "KW", source: "env", locked: true, env: "HOME_COUNTRY" });
     expect(field(view, "pollIntervalSeconds")).toMatchObject({ value: 300, default: 300, source: "default", locked: false, min: 60, unit: "seconds", type: "integer" });
-    expect(field(view, "claudeModel").options).toContain("claude-opus-5-5");
+    expect(field(view, "aiProvider")).toMatchObject({ value: "anthropic", options: ["anthropic", "openai", "google", "openai-compatible"] });
     expect(field(view, "timezone").options).toContain("Asia/Kuwait");
   });
 
@@ -168,27 +172,58 @@ describe("POST /api/settings/adopt-env", () => {
 });
 
 describe("settings actions", () => {
-  test("verifies a candidate Claude key without storing or echoing it", async () => {
-    const seen: string[] = [];
-    const check: LlmKeyCheck = async (apiKey) => {
-      seen.push(apiKey);
-      if (apiKey !== CLAUDE_KEY) throw new LlmKeyRejectedError("The API key was rejected");
-    };
-    const { send, settings } = signedIn({ llmKeyCheck: check });
+  const keyChecking = (seen: AiConfig[]): Connect => (ai) =>
+    ai.apiKey
+      ? async (request) => {
+          seen.push(ai);
+          if (ai.apiKey !== CLAUDE_KEY) throw new LlmProviderError(401);
+          return message([text("OK")], "end", { model: request.model });
+        }
+      : null;
 
-    const good = await send("POST", "/api/settings/claude/verify", { apiKey: CLAUDE_KEY });
-    const bad = await send("POST", "/api/settings/claude/verify", { apiKey: "sk-wrong" });
+  test("verifies a candidate key with one call through the ledger, without storing or echoing it", async () => {
+    const seen: AiConfig[] = [];
+    const { send, settings, db } = signedIn({ llmConnect: keyChecking(seen) });
 
-    expect(await good.json()).toEqual({ valid: true, model: "claude-opus-5-5" });
-    expect(await bad.json()).toEqual({ valid: false, model: "claude-opus-5-5", message: "The API key was rejected" });
-    expect(seen).toEqual([CLAUDE_KEY, "sk-wrong"]);
-    expect(settings.get().llm.apiKey).toBeUndefined();
+    const good = await send("POST", "/api/settings/ai/verify", { apiKey: CLAUDE_KEY });
+    const bad = await send("POST", "/api/settings/ai/verify", { apiKey: "sk-wrong" });
+
+    expect({
+      good: await good.json(),
+      bad: await bad.json(),
+      seen: seen.map((a) => a.apiKey),
+      saved: settings.get().llm.ai.apiKey,
+      ledger: db.select().from(llmCalls).all().map((c) => c.feature),
+    }).toEqual({
+      good: { valid: true, provider: "anthropic", model: "claude-opus-5-5" },
+      bad: { valid: false, provider: "anthropic", model: "claude-opus-5-5", message: "The API key was rejected" },
+      seen: [CLAUDE_KEY, "sk-wrong"],
+      saved: undefined,
+      ledger: ["verify"],
+    });
+  });
+
+  test("status reports the provider, model and whether picks can search the web", async () => {
+    const { get } = signedIn({ env: { AI_PROVIDER: "openai-compatible", AI_BASE_URL: "http://localhost:11434/v1", AI_MODEL: "llama4" }, llmConnect: keyChecking([]) });
+
+    const status = (await (await get("/api/status")).json()) as { ai: unknown };
+
+    expect(status.ai).toEqual({ configured: false, provider: "openai-compatible", model: "llama4", webSearch: false });
+  });
+
+  test("verifies an unsaved provider and model over the saved ones", async () => {
+    const seen: AiConfig[] = [];
+    const { send } = signedIn({ llmConnect: keyChecking(seen) });
+
+    const res = await send("POST", "/api/settings/ai/verify", { provider: "openai", model: "gpt-6.1-terra", apiKey: CLAUDE_KEY });
+
+    expect([await res.json(), seen[0]!.provider]).toEqual([{ valid: true, provider: "openai", model: "gpt-6.1-terra" }, "openai"]);
   });
 
   test("verifying with no key given and none set is a precondition error", async () => {
     const { send } = signedIn();
 
-    const res = await send("POST", "/api/settings/claude/verify", {});
+    const res = await send("POST", "/api/settings/ai/verify", {});
 
     expect([res.status, ((await res.json()) as { error: { code: string } }).error.code]).toEqual([409, "llm_not_configured"]);
   });

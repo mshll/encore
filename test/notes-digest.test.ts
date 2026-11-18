@@ -1,5 +1,4 @@
 import { describe, expect, test } from "bun:test";
-import type Anthropic from "@anthropic-ai/sdk";
 import type { Db } from "../src/db/client";
 import { digests, llmCalls } from "../src/db/schema";
 import { recapFacts } from "../src/digest/facts";
@@ -11,19 +10,13 @@ import { createAssistantJobs } from "../src/jobs/assistant";
 import { trackNote } from "../src/notes/service";
 import { songKey } from "../src/plays/song";
 import { play, seed, TZ, uri } from "./helpers";
-import { featureCtx, message, scripted, seedLibrary, text } from "./llmFakes";
+import { featureCtx, message, scripted, seedLibrary, text, webSearch } from "./llmFakes";
 
 const WOODS = songKey("Woods", "Mac Miller");
 
 describe("notes", () => {
-  const cited = {
-    type: "text",
-    text: "Woods closes the middle of Circles.",
-    citations: [{ type: "web_search_result_location", url: "https://example.org/circles", title: "Circles credits", cited_text: "x", encrypted_index: "e" }],
-  } as unknown as Anthropic.Beta.BetaContentBlock;
-
   test("a note is written once per song and then served from the cache, whichever key asks", async () => {
-    const fake = scripted(message([cited]));
+    const fake = scripted(message([...webSearch("woods credits", [{ url: "https://example.org/circles", title: "Circles credits" }]), text("Woods closes the middle of Circles.")]));
     const { ctx, db } = featureCtx(fake.transport);
     seedLibrary(db);
     const first = await trackNote(ctx, { songKey: WOODS });
@@ -32,24 +25,19 @@ describe("notes", () => {
     expect(await trackNote(ctx, { uri: uri("w1") })).toMatchObject({ cached: true, songKey: WOODS });
     expect(fake.requests).toHaveLength(1);
     const req = fake.requests[0]!;
-    expect(req.tools).toEqual([{ type: "web_search_20260209", name: "web_search", max_uses: 4 }]);
-    expect(req.output_config).toEqual({ effort: "medium" });
+    expect([req.webSearch, req.effort]).toEqual([{ maxUses: 4 }, "medium"]);
     expect(JSON.stringify(req.messages[0])).toContain("This song: 20 plays");
     expect(first).toMatchObject({ albumArtUrl: null, artistImageUrl: null });
   });
 
-  test("without citations, the searched pages become the sources", async () => {
-    const results = {
-      type: "web_search_tool_result",
-      tool_use_id: "srvtoolu_1",
-      content: [{ type: "web_search_result", url: "https://example.org/a", title: "A", encrypted_content: "", page_age: null }],
-    } as unknown as Anthropic.Beta.BetaContentBlock;
-    const { ctx, db } = featureCtx(scripted(message([results, text("Note.")])).transport);
+  test("a provider without web search writes the note without sources", async () => {
+    const fake = scripted(message([text("Note.")]));
+    const { ctx, db } = featureCtx(fake.transport, [], { AI_PROVIDER: "openai-compatible", AI_BASE_URL: "http://localhost:11434/v1", AI_MODEL: "llama4" });
     seedLibrary(db);
-    expect((await trackNote(ctx, { songKey: WOODS })).sources).toEqual([{ url: "https://example.org/a", title: "A" }]);
+    expect((await trackNote(ctx, { songKey: WOODS })).sources).toEqual([]);
+    expect(fake.requests[0]!.webSearch).toBeNull();
   });
 });
-
 const lines = (headline: string, takes: Record<string, string> = {}) => message([text(JSON.stringify({ headline, takes: Object.entries(takes).map(([section, t]) => ({ section, text: t })) }))]);
 
 /** January from seedLibrary, plus Woods each day from 2 to 11 February. */
@@ -117,7 +105,7 @@ describe("recaps", () => {
 
     const recap = await generateDigest(ctx, "monthly");
 
-    expect(fake.requests[0]!.output_config).toEqual({ effort: "low", format: { type: "json_schema", schema: RECAP_SCHEMA } });
+    expect([fake.requests[0]!.effort, fake.requests[0]!.jsonSchema]).toEqual(["low", RECAP_SCHEMA]);
     expect(recap).toMatchObject({ created: true, periodKey: "2026-02", title: "Your month, February 2026", page: { headline: "A quieter month, still mostly Mac Miller", headlineBy: "claude", compare: { label: "January 2026" } } });
     expect(recap.page.sections.map((s) => [s.id, s.take])).toEqual([
       ["listening", "Much less than January."],

@@ -7,7 +7,7 @@ Two kinds of configuration:
 
 To move settings from env vars to the dashboard, use Save them here in Settings (`POST /api/settings/adopt-env`): it stores the current env values without changing them. Then remove those env vars and restart; the stored values apply from then on.
 
-Secrets set from the dashboard (Claude key, Discord bot token, MCP token, admin token, S3 keys, ntfy topic and token, Discord webhook) are encrypted with `SECRETS_KEY` before they are stored. Without `SECRETS_KEY` they can only come from env vars. Changing `SECRETS_KEY` makes stored secrets unreadable; save them again.
+Secrets set from the dashboard (AI provider key, Discord bot token, MCP token, admin token, S3 keys, ntfy topic and token, Discord webhook) are encrypted with `SECRETS_KEY` before they are stored. Without `SECRETS_KEY` they can only come from env vars. Changing `SECRETS_KEY` makes stored secrets unreadable; save them again.
 
 All env values are validated at boot (the process exits on invalid values). See [.env.example](../.env.example).
 
@@ -36,7 +36,7 @@ All env values are validated at boot (the process exits on invalid values). See 
 | `JOBS_DISABLED` | empty | Comma-separated job names to skip: `poll`, `enrich`, `art`, `watch`, `radar`, `library`, `living`, `backup`, `alerts` |
 | `WATCHER_ACTIVE_SECONDS`, `WATCHER_IDLE_SECONDS`, `WATCHER_BACKOFF_MAX_SECONDS` | `15`, `60`, `900` | Player watcher cadence while playing, while idle, and the longest back-off after a 429 |
 | `DJ_SKIP_TRIGGER` | `2` | Consecutive skips in a DJ session that trigger a re-plan |
-| `DJ_REPLANNER`, `DJ_REPLAN_TIMEOUT_SECONDS` | `deterministic`, `20` | `llm` re-plans with Claude; any error, refusal, spent budget or timeout falls back to the deterministic plan |
+| `DJ_REPLANNER`, `DJ_REPLAN_TIMEOUT_SECONDS` | `deterministic`, `20` | `llm` re-plans with the AI provider; any error, refusal, spent budget or timeout falls back to the deterministic plan |
 | `RADAR_MIN_LISTENS`, `RADAR_INTERVAL_MINUTES`, `RADAR_ARTISTS_PER_RUN`, `RADAR_RECHECK_DAYS`, `RADAR_BASELINE_DAYS` | `20`, `60`, `2`, `7`, `30` | Release radar: which artists, how often it runs, Web API calls per run, days between checks of one artist, look-back on an artist's first check |
 | `LIBRARY_SYNC_HOURS`, `LIBRARY_PAGE_SECONDS` | `24`, `20` | Saved songs and own playlists: hours between full passes, seconds between page calls |
 | `DISCORD_APPLICATION_ID`, `DISCORD_PUBLIC_KEY`, `DISCORD_OWNER_ID` | unset | Enable `POST /api/discord/interactions`. Only `DISCORD_OWNER_ID` may use commands |
@@ -44,10 +44,14 @@ All env values are validated at boot (the process exits on invalid values). See 
 | `DISCORD_CHANNEL_ID` | unset | With `DISCORD_BOT_TOKEN`: channel for weekly picks, the weekly digest (with new releases) and the monthly recap, each posted once |
 | `MCP_TOKEN` | unset | Min 24 chars. Bearer token for `/mcp`, for clients that can send a header (Claude Code, scripts) |
 | `MCP_OAUTH` | `false` | OAuth sign-in for `/mcp`, for claude.ai custom connectors and other clients that cannot send a fixed token. `/mcp` is on when `MCP_TOKEN` is set or this is `true`; either way the other keeps working |
-| `ANTHROPIC_API_KEY` | unset | Enables the Claude features; without it they return `503 llm_not_configured` |
-| `LLM_MODEL` | `claude-opus-5-5` | |
-| `LLM_PRICES` | built in | JSON overrides, USD per million tokens, keyed by model |
-| `MONTHLY_BUDGET_USD` | `100` | Claude spend cap per local month. At the cap, LLM endpoints return `402` and LLM jobs skip |
+| `AI_PROVIDER` | `anthropic` | `anthropic`, `openai`, `google` or `openai-compatible` (OpenRouter, Groq, Mistral, Ollama, LM Studio and other servers with an OpenAI-style chat API). Without a usable provider the AI features return `503 llm_not_configured` and the rest of encore works as before |
+| `AI_MODEL` | per provider | Any model id the provider serves. Defaults: `claude-opus-5-5`, `gpt-6.2-sol`, `gemini-4-carbon`; an OpenAI-compatible server has no default and needs one |
+| `AI_API_KEY` | unset | Secret. The provider's API key. Optional for an OpenAI-compatible server that needs none (a local Ollama or LM Studio) |
+| `AI_BASE_URL` | unset | OpenAI-compatible only: the server's API address, for example `http://localhost:11434/v1` |
+| `AI_INPUT_PRICE`, `AI_OUTPUT_PRICE` | unset | USD per million input and output tokens, for a model encore has no price for. Both are needed. Without them an unknown model is charged at its provider's highest known rate, and an OpenAI-compatible model counts as free (its tokens are still recorded) |
+| `ANTHROPIC_API_KEY`, `LLM_MODEL` | unset | Earlier names, still read: with `AI_PROVIDER` at `anthropic` and `AI_API_KEY` or `AI_MODEL` unset, they give the key and the model |
+| `LLM_PRICES` | built in | Boot config. JSON overrides over the built-in price table, USD per million tokens, keyed by model: `input`, `output`, and optional `cacheRead` and `cacheWrite` (the older `cacheWrite5m` is read as `cacheWrite`) |
+| `MONTHLY_BUDGET_USD` | `100` | AI spend cap per local month, checked before every call. At the cap, AI endpoints return `402` and AI jobs skip |
 | `DEFAULT_MAX_PER_ARTIST`, `DEFAULT_MAX_PER_ALBUM`, `DEFAULT_NEW_SONGS` | unset | Default constraints (unset: no limit). A new set copies them, field by field, unless its request gives a value. Caps are 1-80; `DEFAULT_NEW_SONGS` is 0-80, the exact number of songs the owner has never played. DJ sessions not started from a set use the artist and album caps; weekly picks use the album cap |
 | `PICKS_PER_WEEK`, `PICKS_FAR_OUT` | `5`, `1` | Weekly picks, and how many of them are far from the owner's taste |
 | `PICKS_WEEKDAY`, `PICKS_HOUR` | `5`, `10` | When weekly picks run (ISO weekday, local hour) |
@@ -61,3 +65,5 @@ All env values are validated at boot (the process exits on invalid values). See 
 | `DIGEST_WEEKDAY`, `DIGEST_HOUR` | `5`, `9` | Weekly digest slot; the monthly recap runs on the 1st at `DIGEST_HOUR` |
 
 Weekend days are a setting (`WEEKEND_DAYS`, default Friday and Saturday). Unlike the timezone, a change applies to all stored plays at once: the weekday is stored, the weekend is decided at query time.
+
+Web search: weekly picks and liner notes use the provider's own web search when it has one (Anthropic, OpenAI, Google). An OpenAI-compatible server has none: picks are then chosen without sources (no source link under the reason), and notes are written from what the model knows. `GET /api/status` reports this as `ai.webSearch`.

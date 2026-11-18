@@ -125,6 +125,9 @@ export function App() {
           <Route path="/settings">
             <Redirect to="/settings/general" replace />
           </Route>
+          <Route path="/settings/claude">
+            <Redirect to="/settings/ai" replace />
+          </Route>
           <Route path="/settings/:section">{(p) => <Settings section={p.section} />}</Route>
 
           {Kit && <Route path="/dev/kit" component={Kit} />}

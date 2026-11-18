@@ -1,4 +1,3 @@
-import Anthropic from "@anthropic-ai/sdk";
 import type { Context } from "hono";
 import { streamSSE } from "hono/streaming";
 import { EmptyRecapPlaylistError } from "../digest/playlist";
@@ -9,7 +8,7 @@ import { StandingNotFoundError } from "../library/standing";
 import { ThreadNotFoundError } from "../ask/service";
 import type { AgentEvent } from "../llm/agent";
 import type { FeatureContext } from "../llm/context";
-import { LlmAbortedError, LlmBudgetExceededError, LlmIncompleteError, LlmNotConfiguredError, LlmRefusalError, LlmTruncatedError } from "../llm/errors";
+import { LlmAbortedError, LlmBudgetExceededError, LlmIncompleteError, LlmNotConfiguredError, LlmProviderError, LlmRefusalError, LlmTruncatedError } from "../llm/errors";
 import { NoteSubjectNotFoundError } from "../notes/service";
 import { PicksExistError, PicksNotSubmittedError } from "../picks/service";
 import { PickNotFoundError } from "../picks/state";
@@ -28,7 +27,7 @@ export function toApiError(error: unknown): unknown {
   if (error instanceof LlmRefusalError) return new ApiError(422, "llm_refused", error.message, { category: error.category });
   if (error instanceof LlmTruncatedError || error instanceof LlmIncompleteError || error instanceof SetNotBuiltError || error instanceof PicksNotSubmittedError || error instanceof PlanNotBuiltError)
     return new ApiError(502, "llm_incomplete", error.message);
-  if (error instanceof Anthropic.APIError) return new ApiError(502, "llm_failed", `Claude API error ${error.status ?? ""}`.trim());
+  if (error instanceof LlmProviderError) return new ApiError(502, "llm_failed", error.message);
   if (error instanceof SpotifyNotConnectedError) return new ApiError(409, "spotify_not_connected", error.message);
   if (error instanceof SpotifyBlockedError) return new ApiError(503, "spotify_paused", error.message, { reason: error.reason, until: new Date(error.blockedUntil).toISOString() });
   if (error instanceof SpotifyApiError) return new ApiError(502, "spotify_failed", error.message);

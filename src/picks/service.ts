@@ -3,7 +3,7 @@ import { z } from "zod";
 import type { Db } from "../db/client";
 import { picks } from "../db/schema";
 import { runAgent, tool, type AgentEvent } from "../llm/agent";
-import type { MessageParam } from "../llm/client";
+import type { ChatMessage, SourcePart } from "../llm/types";
 import { localNow, tagged, type FeatureContext } from "../llm/context";
 import { artistKey, blockedSets, type Blocked } from "../library/blocks";
 import { withArtwork } from "../library/artwork";
@@ -14,12 +14,14 @@ import { libraryTools, verifyTool } from "../library/tools";
 import { localTime } from "../plays/localTime";
 import { tasteProfile } from "../taste/profile";
 import { isHit, pickStats } from "./outcomes";
-import { PICKS_SYSTEM } from "./prompt";
+import { picksSystem } from "./prompt";
 
 const MAX_SEARCHES_PER_RUN = 40;
 const WEB_SEARCH_MAX_USES = 15;
 const RESURFACE_AFTER_MS = 28 * 86_400_000;
 const HISTORY_WEEKS = 12;
+
+const pickFields = { uri: z.string(), reason: z.string().min(1).max(400), distance: z.enum(["near", "far"]) };
 
 export class PicksExistError extends Error {
   constructor(readonly week: string) {
@@ -50,16 +52,8 @@ function previousPicks(db: Db) {
 export type SearchSources = Map<string, string>;
 
 /** Every page the run's web searches returned so far, url to title. */
-export function searchSources(messages: MessageParam[]): SearchSources {
-  const sources: SearchSources = new Map();
-  for (const m of messages) {
-    if (m.role !== "assistant" || typeof m.content === "string") continue;
-    for (const b of m.content ?? []) {
-      if (b.type !== "web_search_tool_result" || !Array.isArray(b.content)) continue;
-      for (const r of b.content) if (r.type === "web_search_result") sources.set(r.url, r.title);
-    }
-  }
-  return sources;
+export function searchSources(messages: ChatMessage[]): SearchSources {
+  return new Map(messages.flatMap((m) => (m.role === "assistant" ? m.content.filter((p): p is SourcePart => p.type === "source").map((p) => [p.url, p.title] as const) : [])));
 }
 
 const fold = (s: string) => s.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, "");
@@ -82,11 +76,12 @@ export function validatePicks(
   db: Db,
   blocked: Blocked,
   verifier: CandidateVerifier,
-  input: { picks: { uri: string; reason: string; distance: "near" | "far"; sourceUrl: string }[] },
+  input: { picks: { uri: string; reason: string; distance: "near" | "far"; sourceUrl?: string }[] },
   expected: { count: number; far: number },
   week: string,
   now: number,
-  sources: SearchSources,
+  /** Null when the run had no web search: picks then carry no source. */
+  sources: SearchSources | null,
   constraints: Constraints,
 ): { errors: string[]; rows: PickRow[] } {
   const errors: string[] = [];
@@ -107,7 +102,7 @@ export function validatePicks(
       return errors.push(`Pick ${n}: ${song.name} was already picked in the week of ${before.week}.`);
     }
     if (blocked.songs.has(song.songKey) || song.artists.some((a) => blocked.artists.has(artistKey(a)))) return errors.push(`Pick ${n}: ${song.name} is blocked.`);
-    const problem = sourceProblem(sources, p.sourceUrl, song);
+    const problem = sources ? sourceProblem(sources, p.sourceUrl ?? "", song) : null;
     if (problem) return errors.push(`Pick ${n}: ${song.name} is unsupported: ${problem}. Cite a search result that confirms the reason, or replace the pick.`);
     const artist = artistKey(song.artists[0]!);
     if (artists.has(artist)) return errors.push(`Pick ${n}: only one pick per artist (${song.artists[0]}).`);
@@ -124,8 +119,8 @@ export function validatePicks(
       releaseDate: song.releaseDate,
       albumArtUrl: song.albumArtUrl,
       reason: p.reason,
-      sourceUrl: p.sourceUrl,
-      sourceTitle: sources.get(p.sourceUrl) ?? null,
+      sourceUrl: sources && p.sourceUrl ? p.sourceUrl : null,
+      sourceTitle: (sources && p.sourceUrl && sources.get(p.sourceUrl)) || null,
       distance: p.distance,
       state: "new",
       stateAt: now,
@@ -175,8 +170,9 @@ async function generateWeek(ctx: FeatureContext, week: string, onEvent?: (e: Age
   const constraints = picksConstraints(llmSettings.constraints);
   const blocked = blockedSets(db);
   const verifier = new CandidateVerifier(db, spotify, blocked, MAX_SEARCHES_PER_RUN, ctx.now);
-  const system = [PICKS_SYSTEM, tagged("taste_profile", tasteProfile(db, { timezone, weekendDays }, now))];
-  const messages: MessageParam[] = [
+  const webSearch = llm.webSearch;
+  const system = [picksSystem(webSearch), tagged("taste_profile", tasteProfile(db, { timezone, weekendDays }, now))];
+  const messages: ChatMessage[] = [
     {
       role: "user",
       content: [
@@ -191,16 +187,18 @@ async function generateWeek(ctx: FeatureContext, week: string, onEvent?: (e: Age
   const submit = tool({
     name: "submit_picks",
     strict: true,
-    description: `Save this week's ${count} picks. Each needs the uri from verify_new_song, the reason shown to the owner, whether it is near or far, and sourceUrl: the url of a web_search result from this run that confirms the music side of the reason and names the song or its artist. Returns errors to fix, or accepted: true.`,
+    description: webSearch
+      ? `Save this week's ${count} picks. Each needs the uri from verify_new_song, the reason shown to the owner, whether it is near or far, and sourceUrl: the url of a web_search result from this run that confirms the music side of the reason and names the song or its artist. Returns errors to fix, or accepted: true.`
+      : `Save this week's ${count} picks. Each needs the uri from verify_new_song, the reason shown to the owner, and whether it is near or far. Returns errors to fix, or accepted: true.`,
     schema: z.strictObject({
       picks: z
-        .array(z.strictObject({ uri: z.string(), reason: z.string().min(1).max(400), distance: z.enum(["near", "far"]), sourceUrl: z.string() }))
+        .array(webSearch ? z.strictObject({ ...pickFields, sourceUrl: z.string() }) : z.strictObject(pickFields))
         .min(1)
         .max(20),
     }),
     terminal: true,
     run: (input) => {
-      const { errors, rows } = validatePicks(db, blocked, verifier, input, { count, far }, week, ctx.now(), searchSources(messages), constraints);
+      const { errors, rows } = validatePicks(db, blocked, verifier, input, { count, far }, week, ctx.now(), webSearch ? searchSources(messages) : null, constraints);
       if (errors.length) return { accepted: false, errors };
       db.transaction((tx) => {
         if (weekHasPicks(tx, week)) throw new PicksExistError(week);
@@ -215,7 +213,7 @@ async function generateWeek(ctx: FeatureContext, week: string, onEvent?: (e: Age
     ref: `week:${week}`,
     system,
     tools: [...libraryTools(db, blocked, now, weekendDays), verifyTool(verifier), submit],
-    serverTools: [{ type: "web_search_20260209", name: "web_search", max_uses: WEB_SEARCH_MAX_USES }],
+    webSearch: { maxUses: WEB_SEARCH_MAX_USES },
     messages,
     effort: "high",
     maxCalls: 40,

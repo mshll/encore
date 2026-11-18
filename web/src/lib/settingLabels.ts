@@ -5,9 +5,18 @@ export const SETTING_LABELS: Record<string, { label: string; hint?: string }> = 
   homeCountry: { label: "Home country", hint: "Two-letter code. Plays from other countries count as trips." },
   weekendDays: { label: "Weekend" },
   historyStart: { label: "Ignore plays before" },
+  aiProvider: { label: "Provider" },
+  aiModel: { label: "Model" },
+  aiApiKey: { label: "API key" },
+  aiBaseUrl: { label: "Base URL" },
+  aiInputPrice: { label: "Input price" },
+  aiOutputPrice: { label: "Output price" },
   claudeApiKey: { label: "Anthropic API key" },
   claudeModel: { label: "Model" },
   monthlyBudgetUsd: { label: "Monthly cap" },
+  defaultMaxPerArtist: { label: "Songs per artist" },
+  defaultMaxPerAlbum: { label: "Songs per album" },
+  defaultNewSongs: { label: "Songs you have never played" },
   picksPerWeek: { label: "Picks per week" },
   picksFarOut: { label: "Far from your taste", hint: "How many of the weekly picks." },
   picksWeekday: { label: "Day" },
@@ -60,4 +69,4 @@ export const SETTING_LABELS: Record<string, { label: string; hint?: string }> = 
 export const settingLabel = (key: string) => SETTING_LABELS[key]?.label ?? key;
 export const settingHint = (key: string) => SETTING_LABELS[key]?.hint;
 
-export const UNIT_LABELS: Record<string, string> = { ms: "ms", seconds: "seconds", minutes: "minutes", hours: "hours", days: "days", usd: "USD" };
+export const UNIT_LABELS: Record<string, string> = { ms: "ms", seconds: "seconds", minutes: "minutes", hours: "hours", days: "days", usd: "USD", usdPerMTok: "USD per 1M tokens" };

@@ -2,7 +2,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import { useLocation, useSearch } from "wouter";
 import { ApiError, request } from "../api/client";
 import { useOnboarding, useTimezone } from "../api/queries";
-import type { ClaudeKeyCheck, Onboarding, OnboardingStepId } from "../api/types";
+import type { AiKeyCheck, Onboarding, OnboardingStepId } from "../api/types";
 import { fmtInt } from "../lib/format";
 import { passkeyProblem, registerPasskey } from "../lib/passkey";
 import { connectSpotify } from "../lib/spotifyConnect";
@@ -350,7 +350,7 @@ function VerifyKey({ form }: { form: SettingsForm }) {
     setBusy(true);
     setResult(null);
     try {
-      const r = await request<ClaudeKeyCheck>("/api/settings/claude/verify", { json: typeof typed === "string" && typed ? { apiKey: typed } : {} });
+      const r = await request<AiKeyCheck>("/api/settings/ai/verify", { json: typeof typed === "string" && typed ? { provider: "anthropic", apiKey: typed } : {} });
       setResult(r.valid ? { tone: "info", text: `The key works with ${r.model}.` } : { tone: "danger", text: r.message });
     } catch (error) {
       setResult({ tone: "danger", text: describeError(error) });

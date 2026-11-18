@@ -9,20 +9,23 @@ import { Watcher } from "./ingest/live/watcher";
 import { PlayerApi } from "./player/api";
 import type { SettingsSource } from "./settings/settings";
 import type { SpotifyClient } from "./spotify/client";
-import { keyedSdkTransport, Llm, sdkKeyCheck, type LlmKeyCheck, type LlmTransport } from "./llm/client";
+import { Llm, type Connect } from "./llm/client";
+import { sdkConnect } from "./llm/sdk";
+import type { LlmTransport } from "./llm/types";
 import type { FeatureContext } from "./llm/context";
 
 export type ServiceOptions = {
   now?: () => number;
-  /** Defaults to the Anthropic SDK with the current API key; pass null to disable or a fake in tests. */
+  /** Defaults to the AI SDK with the current provider settings; pass null to disable or a fake in tests. */
   llmTransport?: LlmTransport | null;
-  llmKeyCheck?: LlmKeyCheck;
+  /** Picks the transport from the provider settings; in tests, a fake that looks at the key or model. Wins over `llmTransport`. */
+  llmConnect?: Connect;
 };
 
 export function createServices(db: Db, config: Config, settings: SettingsSource, spotify: SpotifyClient, options: ServiceOptions = {}) {
   const now = options.now ?? Date.now;
   const transport = options.llmTransport;
-  const llm = new Llm(db, settings, transport === undefined ? keyedSdkTransport(settings) : () => transport, now);
+  const llm = new Llm(db, settings, options.llmConnect ?? (transport === undefined ? sdkConnect() : () => transport), now);
   const assistant: FeatureContext = { db, config, settings, llm, spotify, now };
   const player = new PlayerApi(spotify);
   const watcher = new Watcher(db, player, settings, now);
@@ -32,7 +35,7 @@ export function createServices(db: Db, config: Config, settings: SettingsSource,
   const replanner: Replanner = (input) => (settings.get().djReplanner === "llm" ? llmReplanner : deterministic)(input);
   const dj = new DjService(db, player, playlists, replanner, () => settings.get().djSkipTrigger, now, (id) => sessionConstraints(db, id, settings.get().llm.constraints));
   watcher.subscribe((event) => dj.onWatchEvent(event));
-  return { player, watcher, playlists, dj, llm, assistant, llmKeyCheck: options.llmKeyCheck ?? sdkKeyCheck };
+  return { player, watcher, playlists, dj, llm, assistant };
 }
 
 export type Services = ReturnType<typeof createServices>;
