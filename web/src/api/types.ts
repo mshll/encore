@@ -277,7 +277,7 @@ export type RecapPeriod = {
   playlist: RecapPlaylist | null;
 };
 /** A public link to a frozen copy of a recap. The link itself is shown only in the answer that made it. */
-export type ShareLink = { id: number; kind: "recap"; ref: number; createdAt: string; expiresAt: string | null; revokedAt: string | null; views: number; lastViewedAt: string | null; status: "active" | "expired" | "revoked" };
+export type ShareLink = { id: number; kind: "recap" | "answer"; ref: number; turn: number | null; createdAt: string; expiresAt: string | null; revokedAt: string | null; views: number; lastViewedAt: string | null; status: "active" | "expired" | "revoked" };
 /** The songs that defined a period as a Spotify playlist. Only an ended period can be saved. */
 export type RecapPlaylist = { songs: number; canSave: boolean; saved: { url: string; savedAt: string; source: "recap" | "living" } | null; coverUrl: string | null };
 

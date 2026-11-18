@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import { z } from "zod";
-import { ask, deleteAskThread, getAskThread, listAskThreads } from "../../ask/service";
+import { answerCardInput, makeAnswerCard } from "../../answers/card";
+import { ask, askAnswer, deleteAskThread, getAskThread, listAskThreads } from "../../ask/service";
 import { PICK_STATES } from "../../db/schema";
 import { CARD_FORMATS, makeCard } from "../../covers/card";
 import { recapCardInput } from "../../digest/card";
@@ -142,6 +143,14 @@ export const askRoutes = new Hono<Env>()
     return c.json({ items: listAskThreads(c.var.deps.db, q.limit) });
   })
   .get("/threads/:id", async (c) => c.json(await mapped(() => getAskThread(c.var.deps.db, parse(id, c.req.param()).id))))
+  .get("/threads/:id/turns/:turn/card", async (c) => {
+    const p = parse(id.extend({ turn: z.coerce.number().int().min(0) }), c.req.param());
+    const { format } = parse(z.object({ format: z.enum(CARD_FORMATS).default("wide") }), c.req.query());
+    const { question, answer } = await mapped(() => askAnswer(c.var.deps.db, p.id, p.turn));
+    const png = await makeAnswerCard({ ...answerCardInput(question, answer), format });
+    const name = `encore-answer${format === "square" ? "-square" : ""}.png`;
+    return c.body(new Uint8Array(png), 200, { "content-type": "image/png", "content-disposition": `attachment; filename="${name}"`, "cache-control": "private, no-cache" });
+  })
   .delete("/threads/:id", async (c) => {
     await mapped(() => deleteAskThread(c.var.deps.db, parse(id, c.req.param()).id));
     return c.json({ deleted: true });

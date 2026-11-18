@@ -110,7 +110,7 @@ export function checkNumbers(answer: Answer, known: number[]): Answer {
 
 const plainNumber = (n: number) => (Number.isInteger(n) ? n.toLocaleString("en-GB") : (Math.round(n * 10) / 10).toLocaleString("en-GB"));
 
-function plainValue(v: number, unit: Unit): string {
+export function plainValue(v: number, unit: Unit): string {
   if (unit.type === "hours") return `${plainNumber(v)} h`;
   if (unit.type === "percent") return `${Math.round(v * 100)}%`;
   return `${plainNumber(v)} ${v === 1 ? unit.noun.replace(/s$/, "") : unit.noun}`;

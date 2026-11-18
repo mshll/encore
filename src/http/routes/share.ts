@@ -1,29 +1,36 @@
 import { Hono, type MiddlewareHandler } from "hono";
 import { z } from "zod";
+import { ThreadNotFoundError } from "../../ask/service";
 import { SHARE_KINDS } from "../../db/schema";
 import { DigestNotFoundError } from "../../digest/service";
 import { notFoundPage, sharePage } from "../../share/html";
 import { countView, createShare, listShares, MAX_EXPIRY_DAYS, resolveShare, revokeShare, shareCard, ShareNotFoundError, shareUrl, shareView } from "../../share/service";
-import type { RecapSnapshot } from "../../share/snapshot";
+import type { ShareSnapshot } from "../../share/snapshot";
 import type { Env } from "../context";
 import { ApiError, jsonBody, parse } from "../errors";
 import { rateLimit } from "../rateLimit";
 
+const expiresInDays = z.number().int().min(1).max(MAX_EXPIRY_DAYS).nullable().optional();
+const createBody = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("recap"), ref: z.number().int().min(1), expiresInDays }).strict(),
+  z.object({ kind: z.literal("answer"), ref: z.number().int().min(1), turn: z.number().int().min(0), expiresInDays }).strict(),
+]);
+
 /** The owner's links: make one (the only time its URL is shown), list them, revoke one. Behind the session like the rest of /api. */
 export const shareRoutes = new Hono<Env>()
   .get("/", (c) => {
-    const q = parse(z.object({ kind: z.enum(SHARE_KINDS).optional(), ref: z.coerce.number().int().min(1).optional() }), c.req.query());
+    const q = parse(z.object({ kind: z.enum(SHARE_KINDS).optional(), ref: z.coerce.number().int().min(1).optional(), turn: z.coerce.number().int().min(0).optional() }), c.req.query());
     const now = c.var.deps.now();
     return c.json({ items: listShares(c.var.deps.db, q).map((r) => shareView(r, now)) });
   })
   .post("/", async (c) => {
     const { db, now, config } = c.var.deps;
-    const body = parse(z.object({ kind: z.enum(SHARE_KINDS), ref: z.number().int().min(1), expiresInDays: z.number().int().min(1).max(MAX_EXPIRY_DAYS).nullable().optional() }).strict(), await jsonBody(c));
+    const body = parse(createBody, await jsonBody(c));
     try {
       const { token, row } = createShare(db, body, now());
       return c.json({ share: shareView(row, now()), url: shareUrl(config.publicBaseUrl, token) }, 201);
     } catch (error) {
-      if (error instanceof DigestNotFoundError) throw new ApiError(404, "not_found", "Not found");
+      if (error instanceof DigestNotFoundError || error instanceof ThreadNotFoundError) throw new ApiError(404, "not_found", "Not found");
       throw error;
     }
   })
@@ -77,7 +84,7 @@ export function publicShareRoutes(limits = { perClient: 60, everyone: 1200 }) {
       const row = resolveShare(db, token, now());
       if (!row) return c.html(notFoundPage(), 404);
       if (c.req.method === "GET") countView(db, row.id, now());
-      return c.html(sharePage(row.snapshot as RecapSnapshot, `${shareUrl(config.publicBaseUrl, token)}/card.png`));
+      return c.html(sharePage(row.snapshot as ShareSnapshot, `${shareUrl(config.publicBaseUrl, token)}/card.png`));
     })
     .get("/:token/card.png", async (c) => {
       const { db, now } = c.var.deps;

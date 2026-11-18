@@ -1,6 +1,6 @@
 import { desc, eq } from "drizzle-orm";
 import type Anthropic from "@anthropic-ai/sdk";
-import { answerText, checkNumbers, numbersOf, parseAnswer } from "../answers/answer";
+import { answerText, checkNumbers, numbersOf, parseAnswer, type Answer } from "../answers/answer";
 import { answersOf, saveAnswer } from "../answers/store";
 import { ResultRefs, RunVisuals, showTool, withRefs } from "../answers/visuals";
 import type { Db } from "../db/client";
@@ -122,6 +122,15 @@ export function getAskThread(db: Db, id: number) {
     return content ? { role, text: answerText(content), content } : { role, text };
   });
   return { id, title: threadTitle(turns), createdAt: new Date(thread.createdAt).toISOString(), updatedAt: new Date(thread.updatedAt).toISOString(), turns };
+}
+
+/** The answer at one turn of a thread (its index in `turns`) with the question before it. An answer from before structured answers is parsed from its text, without visuals. */
+export function askAnswer(db: Db, id: number, turn: number): { question: string; answer: Answer } {
+  const turns = getAskThread(db, id).turns;
+  const at = turns[turn];
+  if (!at || at.role !== "assistant") throw new ThreadNotFoundError();
+  const question = turns.slice(0, turn).findLast((t) => t.role === "owner")?.text ?? "";
+  return { question, answer: at.content ?? parseAnswer(at.text, {}) };
 }
 
 export function deleteAskThread(db: Db, id: number) {

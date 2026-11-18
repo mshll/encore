@@ -12,6 +12,7 @@ import { CaretRightIcon } from "../ui/icons";
 import { Skeleton } from "../ui/Skeleton";
 import { EmptyState, ErrorState } from "../ui/States";
 import { Thinking } from "./parts/Thinking";
+import { ShareAnswer } from "./ShareAnswer";
 import { threadKey, useChat, type ChatThread } from "./state";
 
 /** The owner's message: a soft block on the right that rises in (Beautiful UI's Chat). */
@@ -72,7 +73,7 @@ function AskTurns({ id }: { id: number }) {
           ) : (
             <>
               {i === lastAnswer && <FinishedSteps thread={{ kind: "ask", id }} />}
-              <AnswerView answer={t.content ?? answerFromText(t.text)} />
+              <AnswerView answer={t.content ?? answerFromText(t.text)} actions={<ShareAnswer threadId={id} turn={i} />} />
             </>
           )}
         </li>

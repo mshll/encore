@@ -1,3 +1,5 @@
+import type { Answer } from "../answers/answer";
+import { answerCardInput, publicVisual, type AnswerCardInput, type PublicVisual } from "../answers/card";
 import type { CardInput } from "../covers/card";
 import { recapCardInput } from "../digest/card";
 import type { RecapPage, RecapSection } from "../digest/page";
@@ -90,5 +92,39 @@ export function recapSnapshot(page: RecapPage): RecapSnapshot {
       sections: page.sections.map(section),
     },
     card: recapCardInput(page),
+  };
+}
+
+/**
+ * An answer as a stranger may see it, frozen when the link is made: the question, the prose with its visuals, and
+ * the "Based on" line. Built field by field like the recap, so the thread, the tool calls, the model, song keys and
+ * every other answer in the thread stay out.
+ */
+export type AnswerSnapshot = {
+  version: 1;
+  kind: "answer";
+  question: string;
+  answer: { blocks: Answer["blocks"]; visuals: Record<string, PublicVisual>; basis: string | null };
+  card: AnswerCardInput;
+};
+
+export type ShareSnapshot = RecapSnapshot | AnswerSnapshot;
+
+const block = (b: Answer["blocks"][number]): Answer["blocks"][number] =>
+  b.type === "visual"
+    ? { type: "visual", id: b.id }
+    : { type: "text", spans: b.spans.map((s) => ("visual" in s ? { visual: s.visual } : s.unchecked ? { text: s.text, unchecked: true as const } : { text: s.text })) };
+
+export function answerSnapshot(question: string, answer: Answer): AnswerSnapshot {
+  return {
+    version: 1,
+    kind: "answer",
+    question,
+    answer: {
+      blocks: answer.blocks.map(block),
+      visuals: Object.fromEntries(Object.entries(answer.visuals).map(([id, v]) => [id, publicVisual(v)])),
+      basis: answer.basis,
+    },
+    card: answerCardInput(question, answer),
   };
 }

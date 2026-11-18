@@ -862,17 +862,17 @@ For the weekly digest: `newReleasesSince(db, sinceMs)` in `src/radar/radar.ts` r
 
 ## Shares
 
-Public, read-only links to a frozen copy of a recap. The security model is in [sharing.md](sharing.md). Kinds: `recap` (more later).
+Public, read-only links to a frozen copy of a recap or of one Ask answer. The security model is in [sharing.md](sharing.md). Kinds: `recap`, `answer`.
 
 ### `POST /api/shares`
 
-Body `{ "kind": "recap", "ref": 12, "expiresInDays"?: 1-365 | null }` (`ref` is the recap id). Copies the recap page into a snapshot and makes a link. `201 { "share": Share, "url": "https://encore.example/s/<token>" }`. `url` is in this answer only: encore stores the token's SHA-256, not the token. `404` for an unknown recap.
+Body `{ "kind": "recap", "ref": 12, "expiresInDays"?: 1-365 | null }` (`ref` is the recap id) or `{ "kind": "answer", "ref": 3, "turn": 5, "expiresInDays"?: ... }` (`ref` is the Ask thread id, `turn` the answer's index in its `turns`). Copies the recap page, or the answer with the question before it, into a snapshot and makes a link. `201 { "share": Share, "url": "https://encore.example/s/<token>" }`. `url` is in this answer only: encore stores the token's SHA-256, not the token. `404` for an unknown recap or thread, a turn past the end or a turn that is a question. `400` for an answer without `turn` or a recap with one.
 
-Share shape: `{ "id": 1, "kind": "recap", "ref": 12, "createdAt": "...", "expiresAt": "..." | null, "revokedAt": "..." | null, "views": 3, "lastViewedAt": "..." | null, "status": "active" | "expired" | "revoked" }`.
+Share shape: `{ "id": 1, "kind": "recap" | "answer", "ref": 12, "turn": 5 | null, "createdAt": "...", "expiresAt": "..." | null, "revokedAt": "..." | null, "views": 3, "lastViewedAt": "..." | null, "status": "active" | "expired" | "revoked" }`. `turn` is null for a recap.
 
 ### `GET /api/shares`
 
-Params `kind`, `ref` (both optional). `{ "items": [Share] }`, newest first.
+Params `kind`, `ref`, `turn` (all optional). `{ "items": [Share] }`, newest first.
 
 ### `DELETE /api/shares/:id`
 
@@ -884,7 +884,7 @@ The shared page: server-rendered HTML with no script, the same for every visitor
 
 ### `GET /s/:token/card.png` (public)
 
-The 1200 x 630 card, drawn from the snapshot once and kept in memory. `404` as above.
+The 1200 x 630 card (the recap card, or the answer card of `GET /api/ask/threads/:id/turns/:turn/card`), drawn from the snapshot once and kept in memory. `404` as above.
 
 ### `GET /s/:token/snapshot.json` (public)
 
@@ -1419,6 +1419,10 @@ Param `limit` (1-100, default 20). `{ "items": [{ "id": 3, "title": "Why did I s
 #### `GET /api/ask/threads/:id`
 
 `{ "id": 3, "title": "...", "createdAt": "...", "updatedAt": "...", "turns": [{ "role": "owner" | "assistant", "text": "...", "content"?: Answer }] }`. `title` is the first question (up to 120 characters), as in the list. `content` is on Claude's answers written since answers were structured; `text` is then the plain-text form.
+
+#### `GET /api/ask/threads/:id/turns/:turn/card`
+
+An answer's share card as a PNG download (`Content-Disposition: attachment; filename="encore-answer.png"`). `turn` is the answer's index in `turns`. Param `format`: `wide` (1200 x 630, default) or `square` (1080 x 1080, filename ends `-square`). The encore mark, the question before the answer (two lines at most, cut with "…"), the answer's first sentence, and its leading visual on ink beside or above a dithered field drawn from the visual's art: the first block visual, else the first series, pair or share in the prose. A ranked list, a comparison or a chart is drawn as rows or columns; a pair as a one-row comparison; a share as figures. Text the bundled fonts cannot draw is left out. Drawn on request from the stored answer: no model call, no Web API call (art comes from Spotify's image CDN). `404` for an unknown thread, a turn past the end or a turn that is the owner's question.
 
 #### `DELETE /api/ask/threads/:id`
 

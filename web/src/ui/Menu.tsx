@@ -64,9 +64,17 @@ export function MenuItem({
   );
 }
 
-export function MenuLinkItem({ icon, children, className, href, target, rel }: Omit<ItemProps, "danger" | "hint"> & { className?: string; href: string; target?: string; rel?: string }) {
+export function MenuLinkItem({
+  icon,
+  children,
+  className,
+  href,
+  target,
+  rel,
+  download,
+}: Omit<ItemProps, "danger" | "hint"> & { className?: string; href: string; target?: string; rel?: string; download?: boolean }) {
   return (
-    <Item className={cx(MENU_ITEM, className)} render={<a href={href} target={target} rel={rel} />}>
+    <Item className={cx(MENU_ITEM, className)} render={<a href={href} target={target} rel={rel} download={download} />}>
       {icon && <Icon icon={icon} className="text-secondary" />}
       <span className="min-w-0 flex-1 truncate">{children}</span>
     </Item>

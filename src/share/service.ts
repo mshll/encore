@@ -1,10 +1,12 @@
 import { and, desc, eq, sql } from "drizzle-orm";
 import { randomId, sha256 } from "../auth/secrets";
+import { makeAnswerCard } from "../answers/card";
+import { askAnswer } from "../ask/service";
 import { makeCard } from "../covers/card";
 import type { Db } from "../db/client";
 import { shares, type SHARE_KINDS } from "../db/schema";
 import { getDigest } from "../digest/service";
-import { recapSnapshot, type RecapSnapshot } from "./snapshot";
+import { answerSnapshot, recapSnapshot, type ShareSnapshot } from "./snapshot";
 
 export type ShareKind = (typeof SHARE_KINDS)[number];
 export type ShareRow = typeof shares.$inferSelect;
@@ -34,6 +36,7 @@ export function shareView(row: ShareRow, now: number) {
     id: row.id,
     kind: row.kind,
     ref: row.refId,
+    turn: row.refIndex,
     createdAt: new Date(row.createdAt).toISOString(),
     expiresAt: iso(row.expiresAt),
     revokedAt: iso(row.revokedAt),
@@ -43,12 +46,21 @@ export function shareView(row: ShareRow, now: number) {
   };
 }
 
+/** What a link points at: a recap by id, or an answer by its thread and turn. */
+export type ShareTarget = { kind: "recap"; ref: number } | { kind: "answer"; ref: number; turn: number };
+
+function snapshotOf(db: Db, target: ShareTarget): ShareSnapshot {
+  if (target.kind === "recap") return recapSnapshot(getDigest(db, target.ref).page);
+  const { question, answer } = askAnswer(db, target.ref, target.turn);
+  return answerSnapshot(question, answer);
+}
+
 /**
- * Makes a public link to a frozen copy of a recap, only on the owner's explicit action. Returns the token once;
- * encore keeps only its hash, so the link cannot be shown again, only revoked.
+ * Makes a public link to a frozen copy of a recap or an answer, only on the owner's explicit action. Returns the token
+ * once; encore keeps only its hash, so the link cannot be shown again, only revoked.
  */
-export function createShare(db: Db, input: { kind: ShareKind; ref: number; expiresInDays?: number | null }, now: number): { token: string; row: ShareRow } {
-  const snapshot: RecapSnapshot = recapSnapshot(getDigest(db, input.ref).page);
+export function createShare(db: Db, input: ShareTarget & { expiresInDays?: number | null }, now: number): { token: string; row: ShareRow } {
+  const snapshot = snapshotOf(db, input);
   const token = randomId(32);
   const row = db
     .insert(shares)
@@ -56,6 +68,7 @@ export function createShare(db: Db, input: { kind: ShareKind; ref: number; expir
       tokenHash: hashToken(token),
       kind: input.kind,
       refId: input.ref,
+      refIndex: input.kind === "answer" ? input.turn : null,
       snapshot,
       createdAt: now,
       expiresAt: input.expiresInDays ? now + input.expiresInDays * DAY_MS : null,
@@ -68,11 +81,17 @@ export function createShare(db: Db, input: { kind: ShareKind; ref: number; expir
   return { token, row };
 }
 
-export function listShares(db: Db, filter: { kind?: ShareKind; ref?: number }) {
+export function listShares(db: Db, filter: { kind?: ShareKind; ref?: number; turn?: number }) {
   return db
     .select()
     .from(shares)
-    .where(and(filter.kind ? eq(shares.kind, filter.kind) : undefined, filter.ref !== undefined ? eq(shares.refId, filter.ref) : undefined))
+    .where(
+      and(
+        filter.kind ? eq(shares.kind, filter.kind) : undefined,
+        filter.ref !== undefined ? eq(shares.refId, filter.ref) : undefined,
+        filter.turn !== undefined ? eq(shares.refIndex, filter.turn) : undefined,
+      ),
+    )
     .orderBy(desc(shares.createdAt), desc(shares.id))
     .all();
 }
@@ -105,8 +124,8 @@ const cards = new Map<number, Promise<Uint8Array>>();
 export function shareCard(row: ShareRow, fetchFn?: typeof fetch): Promise<Uint8Array> {
   const hit = cards.get(row.id);
   if (hit) return hit;
-  const snapshot = row.snapshot as RecapSnapshot;
-  const card = makeCard({ ...snapshot.card, format: "wide", fetchFn });
+  const snapshot = row.snapshot as ShareSnapshot;
+  const card = snapshot.kind === "answer" ? makeAnswerCard({ ...snapshot.card, format: "wide", fetchFn }) : makeCard({ ...snapshot.card, format: "wide", fetchFn });
   card.catch(() => cards.delete(row.id));
   if (cards.size >= CARD_CACHE) cards.delete(cards.keys().next().value!);
   cards.set(row.id, card);

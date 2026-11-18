@@ -238,7 +238,7 @@ export const recapPlaylists = sqliteTable(
   (t) => [primaryKey({ columns: [t.kind, t.periodKey] })],
 );
 
-export const SHARE_KINDS = ["recap"] as const;
+export const SHARE_KINDS = ["recap", "answer"] as const;
 export type ShareKind = (typeof SHARE_KINDS)[number];
 
 /** A public link to a frozen copy of one thing. Only the token's hash is stored; the public page reads `snapshot` and nothing else. */
@@ -249,6 +249,8 @@ export const shares = sqliteTable(
     tokenHash: text("token_hash").notNull(),
     kind: text("kind", { enum: SHARE_KINDS }).notNull(),
     refId: integer("ref_id").notNull(),
+    /** For an answer, its turn in the thread `refId`; null for a recap. */
+    refIndex: integer("ref_index"),
     snapshot: text("snapshot", { mode: "json" }).$type<Record<string, unknown>>().notNull(),
     createdAt: integer("created_at").notNull(),
     expiresAt: integer("expires_at"),

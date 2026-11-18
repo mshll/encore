@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import type { Answer, AnswerBlock, AnswerSpan, AnswerVisual } from "../api/types";
 import { BlockVisual, InlineVisual } from "./AnswerVisual";
 import { Icon } from "./Icon";
@@ -80,7 +81,7 @@ function Caret() {
  * Claude's answer: prose with inline visuals, block visuals between paragraphs, and "Based on" folded away.
  * `streaming` draws the caret after the last words while the text still arrives.
  */
-export function AnswerView({ answer, streaming = false }: { answer: Answer; streaming?: boolean }) {
+export function AnswerView({ answer, streaming = false, actions }: { answer: Answer; streaming?: boolean; actions?: ReactNode }) {
   const last = answer.blocks.length - 1;
   return (
     <div className="flex flex-col gap-3">
@@ -94,15 +95,24 @@ export function AnswerView({ answer, streaming = false }: { answer: Answer; stre
         ),
       )}
       {hasUnchecked(answer) && <p className="text-caption text-secondary">Numbers with a dotted line are not in the data Claude read.</p>}
-      {answer.basis && (
-        <details className="group text-caption text-secondary">
-          <summary className="-my-2 flex w-fit cursor-pointer list-none items-center gap-1 rounded-xs py-2 hover:text-primary phone:-my-3 phone:py-3 [&::-webkit-details-marker]:hidden">
-            Based on
-            <Icon icon={CaretRightIcon} className="transition-transform duration-150 group-open:rotate-90" />
-          </summary>
-          <p className="mt-1 max-w-[60ch] text-pretty">{answer.basis}</p>
-        </details>
+      {(answer.basis || actions) && (
+        <div className="flex items-start justify-between gap-3">
+          {answer.basis ? <Basis basis={answer.basis} /> : <span />}
+          {actions && <div className="phone:-mt-2.5">{actions}</div>}
+        </div>
       )}
     </div>
+  );
+}
+
+function Basis({ basis }: { basis: string }) {
+  return (
+    <details className="group text-caption text-secondary">
+      <summary className="-my-2 flex w-fit cursor-pointer list-none items-center gap-1 rounded-xs py-2 hover:text-primary phone:-my-3 phone:py-3 [&::-webkit-details-marker]:hidden">
+        Based on
+        <Icon icon={CaretRightIcon} className="transition-transform duration-150 group-open:rotate-90" />
+      </summary>
+      <p className="mt-1 max-w-[60ch] text-pretty">{basis}</p>
+    </details>
   );
 }

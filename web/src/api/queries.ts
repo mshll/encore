@@ -303,7 +303,12 @@ export const useDigest = (id: number) => useQuery({ queryKey: ["digests", id], q
 export const useRecapPeriod = (kind: RecapKind, key: string) =>
   useQuery({ queryKey: ["digests", "period", kind, key], queryFn: () => get<RecapPeriod>(`/api/digests/periods/${kind}/${key}`), placeholderData: keepPreviousData });
 
-export const useShares = (ref: number) => useQuery({ queryKey: ["shares", ref], queryFn: () => get<{ items: ShareLink[] }>("/api/shares", { kind: "recap", ref }) });
+/** What a public link points at: a recap, or an answer by its thread and turn. */
+export type ShareTarget = { kind: "recap"; ref: number } | { kind: "answer"; ref: number; turn: number };
+
+export const shareKey = (target: ShareTarget) => ["shares", target.kind, target.ref, target.kind === "answer" ? target.turn : null];
+
+export const useShares = (target: ShareTarget) => useQuery({ queryKey: shareKey(target), queryFn: () => get<{ items: ShareLink[] }>("/api/shares", target) });
 
 export const useLatestRecapKey = (kind: RecapKind) => useQuery({ queryKey: ["digests", "latest", kind], queryFn: () => get<{ kind: RecapKind; key: string }>(`/api/digests/latest/${kind}`) });
 

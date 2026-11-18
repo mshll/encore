@@ -1,5 +1,7 @@
+import { plainValue } from "../answers/answer";
+import { axisLabel, type PublicVisual } from "../answers/card";
 import { MARK_PATH } from "../covers/mark";
-import type { RecapSnapshot, SnapshotSection } from "./snapshot";
+import type { AnswerSnapshot, RecapSnapshot, ShareSnapshot, SnapshotSection } from "./snapshot";
 
 /*
   The public share page: server-rendered HTML with no script at all, every value escaped. Styles are inline in a
@@ -158,6 +160,16 @@ section{margin-bottom:48px}
 .col{display:block;width:3px;background-image:${ditherTile(11)};background-size:8px 8px;image-rendering:pixelated}
 .col.mark{background-image:${ditherTile(16)}}
 .col.empty{background:var(--empty)}
+.chart{display:flex;align-items:flex-end;gap:2px;height:96px;width:100%}
+.chart .col{flex:1;width:auto;min-width:1px}
+.axis{display:flex;justify-content:space-between;color:var(--faint);font-size:13px;margin-top:6px}
+.ranked{grid-template-columns:20px minmax(0,1fr) 64px auto}
+.compare{grid-template-columns:minmax(0,1fr) 48px auto}
+.prose{max-width:60ch;text-wrap:pretty;margin:0 0 16px}
+.prose .pair,.prose .bar,.prose .cols{vertical-align:middle;margin:0 4px}
+.unchecked{text-decoration:underline dotted;text-underline-offset:4px}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
+article{margin-bottom:48px}
 footer{border-top:1px solid var(--line);padding-top:16px;color:var(--faint);font-size:14px}
 `;
 
@@ -167,8 +179,7 @@ function doc(head: string, body: string): string {
   return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="robots" content="noindex, nofollow, noarchive"><meta name="referrer" content="no-referrer"><link rel="icon" href="/favicon.svg" type="image/svg+xml">${head}<style>${STYLE}</style></head><body>${body}</body></html>`;
 }
 
-/** The share page for one snapshot. `cardUrl` is absolute, for link previews. */
-export function sharePage(snapshot: RecapSnapshot, cardUrl: string): string {
+function recapPage(snapshot: RecapSnapshot, cardUrl: string): string {
   const r = snapshot.recap;
   const label = r.inProgress ? `${r.label} so far` : r.label;
   const description = snapshot.card.figures.map((f) => `${f.value} ${f.label}`).join(" · ");
@@ -192,6 +203,106 @@ export function sharePage(snapshot: RecapSnapshot, cardUrl: string): string {
     r.note ? `<p class="muted">${esc(r.note)}</p>` : ""
   }</header>${r.quiet ? `<p class="muted">Almost no listening in this period.</p>` : ""}${r.sections.map((s) => sectionHtml(s, r)).join("")}<footer>Made with encore, a self-hosted listening dashboard.</footer></main>`;
   return doc(head, body);
+}
+
+const peakOf = (points: { y: number }[]) => points.reduce((top, p, i) => (p.y > points[top]!.y ? i : top), 0);
+
+function seriesLabel(v: Extract<PublicVisual, { kind: "series" }>): string {
+  const peak = v.points[peakOf(v.points)]!;
+  return `${v.title}: highest ${plainValue(peak.y, v.unit)}, ${axisLabel(peak.x, v.axis)}`;
+}
+
+function inlineVisual(v: PublicVisual): string {
+  switch (v.kind) {
+    case "pair":
+      return `${pair(v.now, v.before, `${v.label}: ${plainValue(v.now, v.unit)} against ${plainValue(v.before, v.unit)}`)}<span class="muted">${esc(change(v.now, v.before))}</span>`;
+    case "share":
+      return bar(v.share, `${v.label}: ${Math.round(v.share * 100)}%${v.before === null ? "" : `, from ${Math.round(v.before * 100)}%`}`, v.before);
+    case "series":
+      return columns(
+        v.points.map((p) => p.y),
+        peakOf(v.points),
+        seriesLabel(v),
+        24,
+      );
+    default:
+      return "";
+  }
+}
+
+function itemName(item: Extract<PublicVisual, { kind: "ranked" }>["rows"][number]["item"]): string {
+  if (item.kind === "label") return `<span class="clip">${esc(item.name)}</span>`;
+  const by = item.kind === "song" || item.kind === "album" ? ` <span class="muted">${esc(item.artist)}</span>` : "";
+  const name = `<span class="clip"><span class="song">${esc(item.name)}</span>${by}</span>`;
+  const url = item.kind === "song" ? spotifyUrl(item.uri) : null;
+  return `${art(item.art, item.kind === "artist")}${url ? `<a href="${esc(url)}" rel="noreferrer noopener" target="_blank">${name}</a>` : name}`;
+}
+
+function blockVisual(v: PublicVisual): string {
+  switch (v.kind) {
+    case "ranked": {
+      const max = Math.max(...v.rows.map((r) => r.value), 0) || 1;
+      return `<section><h2>${esc(v.title)}</h2><ol class="rows">${v.rows
+        .map((r, i) => `<li class="grid ranked"><span class="rank">${i + 1}</span><span class="name">${itemName(r.item)}</span>${bar(r.value / max, plainValue(r.value, v.unit))}<span class="num muted">${esc(plainValue(r.value, v.unit))}</span></li>`)
+        .join("")}</ol></section>`;
+    }
+    case "compare":
+      return `<section><h2>${esc(v.title)}</h2><ul class="rows">${v.rows
+        .map(
+          (r) =>
+            `<li class="grid compare"><span class="clip">${esc(r.label)}</span>${pair(r.now, r.before, `${r.label}: ${plainValue(r.now, v.unit)} in ${v.nowLabel}, ${plainValue(r.before, v.unit)} in ${v.beforeLabel}`)}<span class="num"><span>${esc(plainValue(r.now, v.unit))}</span> <span class="muted">${esc(`${v.beforeLabel} ${plainValue(r.before, v.unit)}`)}</span></span></li>`,
+        )
+        .join("")}</ul></section>`;
+    case "series": {
+      const max = Math.max(...v.points.map((p) => p.y), 0) || 1;
+      const peak = peakOf(v.points);
+      return `<section><h2>${esc(v.title)}</h2><span class="chart" role="img" aria-label="${esc(seriesLabel(v))}">${v.points
+        .map((p, i) => `<span class="${p.y <= 0 ? "col empty" : i === peak ? "col mark" : "col"}" style="height:${p.y <= 0 ? "2px" : pct(Math.max(0.03, p.y / max))}"></span>`)
+        .join("")}</span><p class="axis"><span>${esc(axisLabel(v.points[0]!.x, v.axis))}</span><span>${esc(axisLabel(v.points.at(-1)!.x, v.axis))}</span></p></section>`;
+    }
+    default:
+      return `<p>${inlineVisual(v)}</p>`;
+  }
+}
+
+function answerPage(snapshot: AnswerSnapshot, cardUrl: string): string {
+  const { question, answer, card } = snapshot;
+  const title = card.lead || question;
+  const head = [
+    `<title>${esc(question)} · encore</title>`,
+    `<meta name="description" content="${esc(card.lead)}">`,
+    `<meta property="og:type" content="article">`,
+    `<meta property="og:title" content="${esc(title)}">`,
+    `<meta property="og:description" content="${esc(question)}">`,
+    `<meta property="og:image" content="${esc(cardUrl)}">`,
+    `<meta property="og:image:width" content="1200">`,
+    `<meta property="og:image:height" content="630">`,
+    `<meta property="og:image:alt" content="${esc(`${question} ${card.lead}`)}">`,
+    `<meta name="twitter:card" content="summary_large_image">`,
+    `<meta name="twitter:title" content="${esc(title)}">`,
+    `<meta name="twitter:description" content="${esc(question)}">`,
+    `<meta name="twitter:image" content="${esc(cardUrl)}">`,
+  ].join("");
+  const blocks = answer.blocks
+    .map((b) => {
+      if (b.type === "visual") return answer.visuals[b.id] ? blockVisual(answer.visuals[b.id]!) : "";
+      return `<p class="prose">${b.spans
+        .map((s) => {
+          if ("visual" in s) return answer.visuals[s.visual] ? inlineVisual(answer.visuals[s.visual]!) : "";
+          return s.unchecked ? `<span class="unchecked">${esc(s.text)}<span class="sr"> (not in the data)</span></span>` : esc(s.text);
+        })
+        .join("")}</p>`;
+    })
+    .join("");
+  const body = `<main><header><div class="brand">${MARK_SVG}<span>encore</span></div><h1>${esc(question)}</h1></header><article>${blocks}${
+    answer.basis ? `<p class="muted">Based on: ${esc(answer.basis)}</p>` : ""
+  }</article><footer>Made with encore, a self-hosted listening dashboard.</footer></main>`;
+  return doc(head, body);
+}
+
+/** The share page for one snapshot. `cardUrl` is absolute, for link previews. */
+export function sharePage(snapshot: ShareSnapshot, cardUrl: string): string {
+  return snapshot.kind === "answer" ? answerPage(snapshot, cardUrl) : recapPage(snapshot, cardUrl);
 }
 
 /** The same page for every link that does not open: unknown, revoked or expired. */

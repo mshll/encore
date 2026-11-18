@@ -1,17 +1,18 @@
 # Share links
 
 encore is single-user and every page sits behind a passkey session. A share link is the one exception: a public,
-read-only copy of one recap that anyone holding the link can open. This page is the security model. The HTTP contract
+read-only copy of one recap or one Ask answer that anyone holding the link can open. This page is the security model. The HTTP contract
 is in [api.md](api.md#shares).
 
 ## What a link is
 
-- Made only by the owner, from the recap page (`POST /api/shares`). Nothing makes links on its own: no job, no Discord
+- Made only by the owner, from the recap page or from an answer in the chat panel (`POST /api/shares`). Nothing makes links on its own: no job, no Discord
   command, no default.
-- A frozen snapshot. The recap page is copied into the `shares` row when the link is made, field by field (see below).
+- A frozen snapshot. The recap page, or the answer and the question before it, is copied into the `shares` row when
+  the link is made, field by field (see below).
   The public routes read that row and nothing else: no query touches plays, tracks, settings, the recap row or any
-  other table. Importing, deleting or re-tagging plays, writing the recap again or deleting it never changes a shared
-  page. A share of today's year so far stays as it was on the day it was made.
+  other table. Importing, deleting or re-tagging plays, writing the recap again or deleting it, or deleting the Ask
+  thread never changes a shared page. A share of today's year so far stays as it was on the day it was made.
 - The token is 32 bytes from the CSPRNG (`crypto.randomBytes`), base64url: 43 characters, 256 bits. Only its SHA-256
   is stored (`shares.token_hash`, unique). The full URL is in the response that made it and nowhere else: not in the
   database, not in logs, not in the owner's list. A lost link cannot be shown again; make a new one.
@@ -26,7 +27,7 @@ Only three routes, all under `/s/:token`, all without a session:
 | Route | Answers |
 | --- | --- |
 | `GET /s/:token` | The page: server-rendered HTML, no script |
-| `GET /s/:token/card.png` | The 1200 x 630 share card, for link previews |
+| `GET /s/:token/card.png` | The 1200 x 630 share card (recap or answer), for link previews |
 | `GET /s/:token/snapshot.json` | The snapshot the page is drawn from |
 
 A token that is malformed, unknown, revoked or expired gets one and the same `404` page, with no hint of which. The
@@ -54,7 +55,21 @@ Every field, and nothing else (`src/share/snapshot.ts` builds it field by field 
   - `rhythm`: busiest day and hour, hours per hour of the day
 - `card`: the card's label, headline, a fallback headline, two or three figures, and the art URLs it is drawn from
 
-Left out on purpose: the owner's name, email, passkeys and Spotify user id; device names and platforms; countries and
+For an answer (`src/share/snapshot.ts`, `answerSnapshot`):
+
+- `version`, `kind` (`"answer"`)
+- `question`: the owner's question right before the answer, as they typed it (without the page context or local
+  time sent with it)
+- `answer.blocks`: the prose, with numbers that matched no tool result marked `unchecked`, and where each visual sits
+- `answer.visuals`: each visual's kind, title or label, unit and values; ranked rows name a song (name, artist,
+  Spotify track URI, album art), an artist (name, image), an album (name, artist, art) or a label
+- `answer.basis`: the closing "Based on" line
+- `card`: the question, the answer's first sentence, the visual that leads the card and the art URLs it is drawn from
+
+Left out of an answer on purpose: every other turn of the thread, the thread id and title, tool calls and their
+results, song keys, the model, token counts and spend.
+
+Left out of a recap on purpose: the owner's name, email, passkeys and Spotify user id; device names and platforms; countries and
 any IP data; Claude's model, token counts and spend; ids of rows (recap, songs, plays) and song keys; settings and the
 timezone name; skip data; the text of recaps written before recaps were pages. Images are Spotify CDN URLs only.
 
@@ -78,4 +93,5 @@ timezone name; skip data; the text of recaps written before recaps were pages. I
 ## Later
 
 The `shares.kind` column and the `/api/shares` routes take a kind so sets, playlists and top lists can be shared the
-same way. Each new kind needs its own snapshot builder that lists its fields, as `recapSnapshot` does.
+same way. Each new kind needs its own snapshot builder that lists its fields, as `recapSnapshot` and `answerSnapshot`
+do. `shares.ref_index` holds a position inside `ref_id` when one id is not enough (an answer's turn).

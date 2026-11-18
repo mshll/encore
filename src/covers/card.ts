@@ -1,4 +1,4 @@
-import { createCanvas, type Image, type SKRSContext2D } from "@napi-rs/canvas";
+import { createCanvas, type Canvas, type Image, type SKRSContext2D } from "@napi-rs/canvas";
 import { GRID, INK, PAPER, coverField, ditherIndices, type Field, type Rgb } from "./field";
 import { coverFonts, TITLE_FONT_STACK } from "./fonts";
 import { MARK_RUNS } from "./mark";
@@ -21,22 +21,23 @@ export type CardInput = {
   fetchFn?: typeof fetch;
 };
 
-type Rect = { x: number; y: number; w: number; h: number };
-type Layout = { width: number; height: number; field: Rect; text: Rect };
+export type Rect = { x: number; y: number; w: number; h: number };
+export type CardLayout = { width: number; height: number; field: Rect; text: Rect };
 
-const LAYOUTS: Record<CardFormat, Layout> = {
+export const CARD_LAYOUTS: Record<CardFormat, CardLayout> = {
   wide: { width: 1200, height: 630, field: { x: 690, y: 0, w: 510, h: 630 }, text: { x: 64, y: 56, w: 570, h: 518 } },
   square: { width: 1080, height: 1080, field: { x: 0, y: 0, w: 1080, h: 400 }, text: { x: 72, y: 456, w: 936, h: 560 } },
 };
 
 const MAX_ART = 8;
 const MARK_CELL = 4;
+export const MARK_HEIGHT = 16 * MARK_CELL;
 const FIGURE_LABEL_PX = 24;
 const FIGURE_GAP = 48;
 const HEADLINE_GAP = 40;
-const MUTED: Rgb = [170, 166, 158];
-const css = ([r, g, b]: Rgb) => `rgb(${r}, ${g}, ${b})`;
-const font = (px: number) => `600 ${px}px ${TITLE_FONT_STACK}`;
+export const MUTED: Rgb = [170, 166, 158];
+export const css = ([r, g, b]: Rgb): string => `rgb(${r}, ${g}, ${b})`;
+export const font = (px: number): string => `600 ${px}px ${TITLE_FONT_STACK}`;
 
 /** The field spread over a rectangle, cropped to fill it, with square cells. */
 function paintField(ctx: SKRSContext2D, indices: Uint8Array, stops: Rgb[], r: Rect) {
@@ -64,7 +65,7 @@ function paintMark(ctx: SKRSContext2D, x: number, y: number) {
   for (const run of MARK_RUNS) ctx.fillRect(x + run.x * MARK_CELL, y + run.y * MARK_CELL, run.w * MARK_CELL, MARK_CELL);
 }
 
-function lines(ctx: SKRSContext2D, text: string, fit: { maxWidth: number; maxPx: number; minPx: number; maxLines: number }) {
+export function lines(ctx: SKRSContext2D, text: string, fit: { maxWidth: number; maxPx: number; minPx: number; maxLines: number }) {
   const measure = (s: string, px: number) => {
     ctx.font = font(px);
     return ctx.measureText(s).width;
@@ -72,7 +73,7 @@ function lines(ctx: SKRSContext2D, text: string, fit: { maxWidth: number; maxPx:
   return layoutTitle(text, measure, fit);
 }
 
-function drawText(ctx: SKRSContext2D, text: string, x: number, y: number, px: number, colour: Rgb, width: number) {
+export function drawText(ctx: SKRSContext2D, text: string, x: number, y: number, px: number, colour: Rgb, width: number) {
   const rtl = isRtl(text);
   ctx.font = font(px);
   ctx.fillStyle = css(colour);
@@ -82,20 +83,42 @@ function drawText(ctx: SKRSContext2D, text: string, x: number, y: number, px: nu
 }
 
 /** Only text every glyph of which a bundled font can draw; the rest would come out as boxes or differ by host. */
-const drawable = (text: string) => titleCovered(cleanTitle(text), (cp) => coverFonts().has(cp));
+export const drawable = (text: string): boolean => titleCovered(cleanTitle(text), (cp) => coverFonts().has(cp));
+
+/** Up to three figures along the bottom of `t`, each a value over its label; figures that do not fit are left out. */
+export function drawFigures(ctx: SKRSContext2D, figures: CardInput["figures"], t: Rect, valuePx: number) {
+  const width = (text: string, px: number) => {
+    ctx.font = font(px);
+    return ctx.measureText(text).width;
+  };
+  const placed: { f: CardInput["figures"][number]; x: number; w: number }[] = [];
+  let x = t.x;
+  for (const f of figures.filter((f) => drawable(f.value) && drawable(f.label)).slice(0, 3)) {
+    const w = Math.ceil(Math.max(width(f.value, valuePx), width(f.label, FIGURE_LABEL_PX)));
+    if (x + w > t.x + t.w) break;
+    placed.push({ f, x, w });
+    x += w + FIGURE_GAP;
+  }
+  const bottom = t.y + t.h;
+  for (const { f, x: at, w } of placed) {
+    drawText(ctx, f.value, at, bottom - 36, valuePx, PAPER, w);
+    drawText(ctx, f.label, at, bottom, FIGURE_LABEL_PX, MUTED, w);
+  }
+}
+
+export type StartedCard = { canvas: Canvas; ctx: SKRSContext2D; images: (Image | null)[]; stops: Rgb[] };
 
 /**
- * Draws a share card: the encore mark, the period, the headline and two or three figures on ink, beside (wide) or
- * under (square) a dithered field made from the period's art. PNG, so the dither keeps its hard edges. A headline a
- * bundled font cannot draw is replaced by `fallbackHeadline`.
+ * Ink with a dithered field made from the art (rings with fewer than 2 that load) in `layout.field` and the encore mark
+ * at the top of `layout.text`. `images` keeps the order of `art`, with null where one did not load.
  */
-export async function makeCard(input: CardInput & { format: CardFormat; fallbackHeadline: string }): Promise<Uint8Array> {
-  const layout = LAYOUTS[input.format];
-  const images = (await Promise.all(input.art.slice(0, MAX_ART).map((s) => decode(s, input.fetchFn ?? fetch)))).filter((i): i is Image => i !== null);
-  const hues = images.map((i) => dominantHue(pixels(i)));
+export async function startCard(layout: CardLayout, art: string[], fetchFn: typeof fetch = fetch): Promise<StartedCard> {
+  const images = await Promise.all(art.slice(0, MAX_ART).map((s) => decode(s, fetchFn)));
+  const loaded = images.filter((i): i is Image => i !== null);
+  const hues = loaded.map((i) => dominantHue(pixels(i)));
   const lead = hues[0] ?? DEFAULT_HUE;
   const second = hues[Math.floor(hues.length / 2)] ?? lead;
-  const field: Field = images.length >= 2 ? coverField(images.map(luminance)) : ABSTRACT_FIELDS.rings();
+  const field: Field = loaded.length >= 2 ? coverField(loaded.map(luminance)) : ABSTRACT_FIELDS.rings();
   const stops = colourStops(lead, second);
 
   const canvas = createCanvas(layout.width, layout.height);
@@ -103,11 +126,20 @@ export async function makeCard(input: CardInput & { format: CardFormat; fallback
   ctx.fillStyle = css(INK);
   ctx.fillRect(0, 0, layout.width, layout.height);
   paintField(ctx, ditherIndices(field, stops.length), stops, layout.field);
-
-  const t = layout.text;
   ctx.textBaseline = "alphabetic";
-  paintMark(ctx, t.x, t.y);
-  let y = t.y + 16 * MARK_CELL + 56;
+  paintMark(ctx, layout.text.x, layout.text.y);
+  return { canvas, ctx, images, stops };
+}
+
+/**
+ * Draws a share card: the encore mark, the period, the headline and two or three figures on ink, beside (wide) or
+ * under (square) a dithered field made from the period's art. PNG, so the dither keeps its hard edges. A headline a
+ * bundled font cannot draw is replaced by `fallbackHeadline`.
+ */
+export async function makeCard(input: CardInput & { format: CardFormat; fallbackHeadline: string }): Promise<Uint8Array> {
+  const { canvas, ctx } = await startCard(CARD_LAYOUTS[input.format], input.art, input.fetchFn);
+  const t = CARD_LAYOUTS[input.format].text;
+  let y = t.y + MARK_HEIGHT + 56;
   const label = drawable(input.label) ? cleanTitle(input.label) : "";
   if (label) {
     drawText(ctx, label, t.x, y, 28, MUTED, t.w);
@@ -125,22 +157,6 @@ export async function makeCard(input: CardInput & { format: CardFormat; fallback
     drawText(ctx, line, t.x, y, head.px, PAPER, t.w);
   }
 
-  const width = (text: string, px: number) => {
-    ctx.font = font(px);
-    return ctx.measureText(text).width;
-  };
-  const placed: { f: CardInput["figures"][number]; x: number; w: number }[] = [];
-  let x = t.x;
-  for (const f of input.figures.filter((f) => drawable(f.value) && drawable(f.label)).slice(0, 3)) {
-    const w = Math.ceil(Math.max(width(f.value, valuePx), width(f.label, FIGURE_LABEL_PX)));
-    if (x + w > t.x + t.w) break;
-    placed.push({ f, x, w });
-    x += w + FIGURE_GAP;
-  }
-  const bottom = t.y + t.h;
-  for (const { f, x: at, w } of placed) {
-    drawText(ctx, f.value, at, bottom - 36, valuePx, PAPER, w);
-    drawText(ctx, f.label, at, bottom, FIGURE_LABEL_PX, MUTED, w);
-  }
+  drawFigures(ctx, input.figures, t, valuePx);
   return canvas.encode("png");
 }
