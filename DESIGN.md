@@ -205,6 +205,34 @@ For you was three tabs (Picks, Releases, Playlists) over the same things twice: 
 | Playlist page: songs or "would start with", Refresh now, Open in Spotify, failed, deferred, deleted, nothing new, Changes and each change's songs | The playlist's page, unchanged, plus Play (plays it in Spotify when kept there, otherwise its songs) |
 | "Waiting for you" on Overview: new picks, new releases | The For you covers' freshness line, and Home |
 
+### The revamp (November 2026, in progress)
+
+The target the surfaces move to. Each change updates the sitemap, the surfaces table and the layout recipes above when it lands, and adds a row here saying where the old capability went. No capability is dropped.
+
+```
+Listening                      Spotify                       Foot
+├── Home       /               ├── Playlists  /playlists     └── Settings /settings
+├── Plays      /plays          │   ├── /playlists/:id            + Data (backup, export)
+├── Music      /music          │   └── New: Describe it | Build from rules   + Alerts
+│   └── + Podcasts             └── Library    /library
+├── Patterns   /patterns
+│   ├── When  Eras  Taste (+ decades, listening age)
+│   ├── Discovery (new artists and songs, comebacks, loyalty)
+│   ├── Records (streaks, bests, milestones)
+│   └── Skips  Places
+└── Recaps     /recaps (a timeline of periods)
+
+Chat panel (⌘J) on every page, its history inside it; /ask is the panel expanded, not a sidebar item.
+```
+
+| Before | After |
+| --- | --- |
+| For you (six bands, each a different layout) and Sets (a list of one) | Playlists: every playlist encore makes in one list (Made for you, Sets, Rules, From recaps as filters), each row the same: cover, name, how it fills, fresh and in-Spotify line, Play. New playlist offers Describe it (Claude, a set) or Build from rules. Every playlist page is one template: header, its prompt or rules (caps per artist and album, share of new songs, exclusions, frozen), songs with reasons, changes |
+| Ask in the sidebar, a list beside the panel | The chat panel only, with History; `/ask` stays as the expanded panel |
+| Recaps opens the newest week | A timeline: years, their months, their weeks, each with its headline; the current period in progress first |
+| A recap's Claude lines at the foot ("As written then") | Each section carries its own line; new sections for discovery, comebacks and records; a year compares with the year before |
+| Home: this week, the long view | Adds one highlight line to This week: a streak, a record or a milestone, when there is one |
+
 ## 2. Tokens
 
 All in `web/src/styles/tokens.css`. Components use the Tailwind names in the right column, never a literal colour, radius, shadow or size. Light is the default; `.dark` on `<html>` swaps the values (set before paint by `public/theme.js`).

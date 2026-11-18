@@ -15,6 +15,7 @@ Self-hosted, single-user Spotify dashboard. Read [README.md](README.md) for setu
 - A skip is next pressed before the song's outro. Leaving in the outro is played through; going back, choosing another song or the app closing is no skip. The outcome is defined once, in `src/analytics/common.ts` (`playOutcome` and its SQL twin `OUTCOME`); never write a skip, listen or played-through test inline.
 - Cleanup never removes saved songs or playlist items by itself. It lists proposals; only an explicit approval through the HTTP route applies them, and every batch can be undone.
 - Never start playback without a user action.
+- Spotify is the only source of listening. No imports or scrobbles from Last.fm, ListenBrainz or other services.
 - Never store or log `ip_addr` from the export.
 - Every Claude call goes through `src/llm` so the ledger records it and the monthly cap applies.
 - Never log tokens, keys or cookies.
