@@ -25,6 +25,8 @@ export function assistantProblem(error: unknown): string {
     }
     case "llm_not_configured":
       return "AI is not set up. Set it up in Settings › AI.";
+    case "llm_price_required":
+      return "This model has no price. Set one in Settings › AI.";
     case "llm_refused":
       return "This request was declined. Try wording it differently.";
     case "llm_incomplete":

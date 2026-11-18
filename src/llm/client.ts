@@ -2,10 +2,10 @@ import type { Db } from "../db/client";
 import type { LlmFeature } from "../db/schema";
 import type { AiConfig, SettingsSource } from "../settings/settings";
 import { callCost } from "./cost";
-import { LlmAbortedError, LlmNotConfiguredError, LlmRefusalError } from "./errors";
+import { LlmAbortedError, LlmNotConfiguredError, LlmPriceRequiredError, LlmRefusalError } from "./errors";
 import { assertWithinBudget, recordCall } from "./ledger";
-import { priceFor, WEB_SEARCH_PRICE } from "./providers";
-import type { ChatMessage, Effort, LlmReply, LlmTransport, ToolSpec } from "./types";
+import { priceFor, WEB_SEARCH_PRICE, type ModelPrice } from "./providers";
+import type { ChatMessage, Effort, LlmReply, LlmTransport, ToolSpec, Usage } from "./types";
 
 /** The transport for a provider configuration, or null when it cannot make calls (no key, no base URL). */
 export type Connect = (ai: AiConfig) => LlmTransport | null;
@@ -60,8 +60,15 @@ export class Llm {
     return this.ai.webSearch;
   }
 
+  private priceOf(ai: AiConfig, model: string): ModelPrice {
+    const priced = priceFor(this.settings.get().llm.prices, ai.provider, model, ai.ownerPrice, ai.baseUrl);
+    if (!priced) throw new LlmPriceRequiredError(model);
+    return priced.price;
+  }
+
   assertAvailable(ai: AiConfig = this.ai) {
     if (ai.model === null || !this.connect(ai)) throw new LlmNotConfiguredError();
+    this.priceOf(ai, ai.model);
     const { timezone, llm } = this.settings.get();
     assertWithinBudget(this.db, timezone, llm.monthlyBudgetUsd, this.now());
   }
@@ -86,9 +93,12 @@ export class Llm {
     this.assertAvailable(ai);
     const transport = this.connect(ai)!;
     const model = ai.model!;
+    const price = this.priceOf(ai, model);
     const { timezone, llm } = this.settings.get();
     if (this.signal?.aborted) throw new LlmAbortedError();
     const started = this.now();
+    let billed: { usage: Usage; model: string } | null = null;
+    let stopReason: string | null = null;
     let reply: LlmReply;
     try {
       reply = await transport(
@@ -104,22 +114,29 @@ export class Llm {
         },
         input.onText ?? (() => {}),
         this.signal,
+        (usage, answered) => (billed = { usage, model: answered }),
       );
+      billed = { usage: reply.usage, model: reply.model };
+      stopReason = reply.stopReason;
     } catch (error) {
+      stopReason = this.signal?.aborted ? "aborted" : "error";
       if (this.signal?.aborted) throw new LlmAbortedError();
       throw error;
+    } finally {
+      if (billed) {
+        const { usage, model: answered } = billed;
+        recordCall(this.db, timezone, {
+          ...callCost(usage, llm.prices[answered]?.price ?? price, WEB_SEARCH_PRICE[ai.provider]),
+          ts: started,
+          feature: input.feature,
+          ref: input.ref ?? null,
+          requestedModel: model,
+          model: answered,
+          stopReason,
+          durationMs: this.now() - started,
+        });
+      }
     }
-    const { price } = priceFor(llm.prices, ai.provider, llm.prices[reply.model] ? reply.model : model, ai.ownerPrice);
-    recordCall(this.db, timezone, {
-      ...callCost(reply.usage, price, WEB_SEARCH_PRICE[ai.provider]),
-      ts: started,
-      feature: input.feature,
-      ref: input.ref ?? null,
-      requestedModel: model,
-      model: reply.model,
-      stopReason: reply.stopReason,
-      durationMs: this.now() - started,
-    });
     if (reply.stopReason === "refusal") throw new LlmRefusalError(null);
     return reply;
   }

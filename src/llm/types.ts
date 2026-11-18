@@ -45,8 +45,11 @@ export type LlmReply = {
   model: string;
 };
 
+/** The usage billed so far, reported as each step finishes, so a request that fails afterwards can still be recorded. */
+export type OnUsage = (usage: Usage, model: string) => void;
+
 /** One model request. Swapped for a scripted fake in tests. */
-export type LlmTransport = (request: LlmRequest, onText: (delta: string) => void, signal?: AbortSignal) => Promise<LlmReply>;
+export type LlmTransport = (request: LlmRequest, onText: (delta: string) => void, signal?: AbortSignal, onUsage?: OnUsage) => Promise<LlmReply>;
 
 export const replyText = (content: AssistantMessage["content"]): string =>
   content

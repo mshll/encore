@@ -239,8 +239,8 @@ export const llmRoutes = new Hono<Env>().get("/spend", (c) => {
   const budget = budgetStatus(db, timezone, llm.monthlyBudgetUsd, now());
   const detail = spendDetail(db, q.month ?? budget.month, q.limit);
   const perMTok = (p: ModelPrice) => Object.fromEntries(Object.entries(p).map(([k, v]) => [k, Math.round(v * 1e6 * 1000) / 1000]));
-  const { provider, model, ownerPrice } = llm.ai;
-  const current = model ? priceFor(llm.prices, provider, model, ownerPrice) : null;
+  const { provider, model, ownerPrice, baseUrl } = llm.ai;
+  const current = model ? priceFor(llm.prices, provider, model, ownerPrice, baseUrl) : null;
   return c.json({
     ...detail,
     budget,

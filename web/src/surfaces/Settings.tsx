@@ -324,6 +324,7 @@ const DEFAULT_KEYS = ["defaultMaxPerArtist", "defaultMaxPerAlbum", "defaultNewSo
 const PROVIDER_NAMES: Record<AiProvider, string> = { anthropic: "Anthropic", openai: "OpenAI", google: "Google Gemini", "openai-compatible": "OpenAI-compatible" };
 
 const text = (v: SettingValue | null) => (typeof v === "string" && v.trim() ? v.trim() : null);
+const price = (v: SettingValue | null | undefined) => (typeof v === "number" ? v : typeof v === "string" && v.trim() && Number.isFinite(Number(v)) ? Number(v) : null);
 
 /** The provider, model, key and address as the form holds them now, saved or not, with the earlier Anthropic fields filling in. */
 function draftAi(form: SettingsForm) {
@@ -341,11 +342,16 @@ function VerifyAi({ form, configured }: { form: SettingsForm; configured: boolea
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<{ ok: boolean; text: string } | null>(null);
   const edited = ["aiProvider", "aiModel", "aiApiKey", "aiBaseUrl"].filter((k) => k in form.draft && text(form.draft[k]!) !== null);
+  const inputPrice = price(form.draft.aiInputPrice);
+  const outputPrice = price(form.draft.aiOutputPrice);
   if (!configured && edited.length === 0) return null;
   const verify = async () => {
     setBusy(true);
     setResult(null);
-    const body = Object.fromEntries(edited.map((k) => [{ aiProvider: "provider", aiModel: "model", aiApiKey: "apiKey", aiBaseUrl: "baseUrl" }[k]!, text(form.draft[k]!)]));
+    const body = {
+      ...Object.fromEntries(edited.map((k) => [{ aiProvider: "provider", aiModel: "model", aiApiKey: "apiKey", aiBaseUrl: "baseUrl" }[k]!, text(form.draft[k]!)])),
+      ...(inputPrice !== null && outputPrice !== null ? { inputPrice, outputPrice } : {}),
+    };
     try {
       const r = await request<AiKeyCheck>("/api/settings/ai/verify", { json: body });
       setResult(r.valid ? { ok: true, text: `${r.model} answered.` } : { ok: false, text: r.message });

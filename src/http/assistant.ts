@@ -8,7 +8,7 @@ import { StandingNotFoundError } from "../library/standing";
 import { ThreadNotFoundError } from "../ask/service";
 import type { AgentEvent } from "../llm/agent";
 import type { FeatureContext } from "../llm/context";
-import { LlmAbortedError, LlmBudgetExceededError, LlmIncompleteError, LlmNotConfiguredError, LlmProviderError, LlmRefusalError, LlmTruncatedError } from "../llm/errors";
+import { LlmAbortedError, LlmBudgetExceededError, LlmIncompleteError, LlmNotConfiguredError, LlmPriceRequiredError, LlmProviderError, LlmRefusalError, LlmTruncatedError } from "../llm/errors";
 import { NoteSubjectNotFoundError } from "../notes/service";
 import { PicksExistError, PicksNotSubmittedError } from "../picks/service";
 import { PickNotFoundError } from "../picks/state";
@@ -22,6 +22,7 @@ import { runs, type Run, type RunEvent } from "./runs";
 export function toApiError(error: unknown): unknown {
   if (error instanceof ApiError) return error;
   if (error instanceof LlmNotConfiguredError) return new ApiError(503, "llm_not_configured", error.message);
+  if (error instanceof LlmPriceRequiredError) return new ApiError(409, "llm_price_required", error.message, { model: error.model });
   if (error instanceof LlmBudgetExceededError)
     return new ApiError(402, "llm_budget_exceeded", error.message, { month: error.month, spentUsd: Math.round(error.spentUsd * 100) / 100, capUsd: error.capUsd });
   if (error instanceof LlmRefusalError) return new ApiError(422, "llm_refused", error.message, { category: error.category });

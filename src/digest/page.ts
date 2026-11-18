@@ -1,8 +1,9 @@
+import { sql } from "drizzle-orm";
 import { withArtistImages } from "../analytics/common";
 import { yearCompare } from "../analytics/years";
 import type { Db } from "../db/client";
 import { withArtwork } from "../library/artwork";
-import { songKey } from "../plays/song";
+import { normalizeTitle, songKey } from "../plays/song";
 import { isRecapFacts, type LegacyFacts, type RecapFacts, type Share } from "./facts";
 import { baselineLabel, humanDay, humanDatesIn, periodLabel, type RecapKind, type Span } from "./periods";
 import { definingSongs } from "./songs";
@@ -174,6 +175,13 @@ function pageFromFacts(db: Db, d: Stored, f: RecapFacts, label: string): Pick<Re
   };
 }
 
+/** A stored song's key. Keys use the credited artist, and a stored artist can be the canonical name an alias put on the track. */
+function storedSongKey(db: Db, name: string, artist: string): string {
+  const title = `${normalizeTitle(name)}|`;
+  const keys = db.all<{ k: string }>(sql`select distinct song_key as k from tracks where artist = ${artist} or artist_credit = ${artist}`);
+  return keys.find((r) => r.k.startsWith(title))?.k ?? songKey(name, artist);
+}
+
 /** A recap stored before recaps were pages: its numbers become the same sections, its first line the headline. */
 function pageFromLegacy(db: Db, d: Stored, f: LegacyFacts): Pick<RecapPage, "sections" | "headline" | "headlineBy" | "compare" | "note" | "quiet"> {
   const t = f.totals;
@@ -197,7 +205,7 @@ function pageFromLegacy(db: Db, d: Stored, f: LegacyFacts): Pick<RecapPage, "sec
   const moved = (s: { value: string; sharePct: number; baselineSharePct: number }[] = []) => s.map(share).filter((x) => Math.abs(x.share - x.before) >= TASTE_MOVE).slice(0, 4);
   if (moved(f.genres).length || moved(f.moods).length) sections.push({ id: "taste", take: null, genres: moved(f.genres), moods: moved(f.moods) });
   if (f.newSongs?.count || f.newArtists?.count) {
-    const top = withArtwork(db, (f.newSongs?.top ?? []).map((s) => ({ songKey: songKey(s.name, s.artist), name: s.name, artist: s.artist, listens: s.listens })));
+    const top = withArtwork(db, (f.newSongs?.top ?? []).map((s) => ({ songKey: storedSongKey(db, s.name, s.artist), name: s.name, artist: s.artist, listens: s.listens })));
     sections.push({
       id: "finds",
       take: null,

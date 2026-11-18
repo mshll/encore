@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { Db } from "../src/db/client";
 import { digests, llmCalls } from "../src/db/schema";
+import { addAlias } from "../src/artists/aliases";
 import { recapFacts } from "../src/digest/facts";
 import { RECAP_SCHEMA } from "../src/digest/lines";
 import { baselineSpan, coveredSpan, humanDatesIn, latestKey, periodLabel, periodSpan } from "../src/digest/periods";
@@ -193,6 +194,25 @@ describe("recaps", () => {
 
     expect(recap.page).toMatchObject({ headline: "January recap: more Mac Miller.", headlineBy: "text", compare: { label: "a typical month before it", scaled: true }, legacyText: "January recap: more Mac Miller.\n\nBusiest on 2 Jan 2026." });
     expect(recap.page.sections.map((s) => s.id)).toEqual(["listening", "artists", "songs", "rhythm"]);
+  });
+
+  test("a stored recap's finds keep their artwork when the song's artist now counts as another", () => {
+    const { db } = featureCtx(null);
+    seed(
+      db,
+      [
+        { uri: uri("k1"), name: "Kite", artist: "Old Name", album: "Sky", albumArtUrl: "https://i.scdn.co/image/kite" },
+        { uri: uri("k2"), name: "Lake", artist: "New Name", album: "Sea" },
+      ],
+      [play("2026-01-03T10:00:00Z", uri("k1"), 200_000), play("2026-01-04T10:00:00Z", uri("k2"), 200_000)],
+    );
+    addAlias(db, "Old Name", "New Name");
+    const facts = { period: { from: "2026-01-01", to: "2026-01-31", days: 31 }, newSongs: { count: 1, top: [{ name: "Kite", artist: "New Name", listens: 1 }] } };
+    const row = db.insert(digests).values({ kind: "monthly", periodKey: "2026-01", fromDay: "2026-01-01", toDay: "2026-01-31", facts, text: "January.", model: "m", createdAt: 0 }).returning().get();
+
+    const finds = sectionOf(getDigest(db, row.id), "finds") as { songs: { top: { albumArtUrl: string | null }[] } };
+
+    expect(finds.songs.top.map((s) => s.albumArtUrl)).toEqual(["https://i.scdn.co/image/kite"]);
   });
 
   test("due on the recap weekday and hour (local), on the 1st for the month and on 1 January for the year", () => {

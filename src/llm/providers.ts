@@ -61,20 +61,33 @@ export const ZERO_PRICE: ModelPrice = { input: 0, output: 0, cacheRead: 0, cache
 
 export type PriceSource = "known" | "owner" | "local" | "highest";
 
+/** Whether the base URL points at this machine or a private network: loopback, 10/8, 172.16/12, 192.168/16, a .local name or a name with no dot (a Docker Compose service). */
+export function isLocalUrl(baseUrl: string): boolean {
+  const host = URL.parse(baseUrl)?.hostname.toLowerCase();
+  if (!host) return false;
+  if (host === "[::1]" || host.endsWith(".local") || !host.includes(".")) return true;
+  const octets = host.split(".").map(Number);
+  if (octets.length !== 4 || octets.some((n) => !Number.isInteger(n) || n < 0 || n > 255)) return false;
+  const [a, b] = octets as [number, number];
+  return a === 127 || a === 10 || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168);
+}
+
 /**
  * The price a call is charged at. A model with no known or entered price is charged at the provider's highest known
- * rate, so the ledger never undercounts a billed call; an OpenAI-compatible model with no price counts as free (a local server).
+ * rate, so the ledger never undercounts a billed call. An OpenAI-compatible model with no price counts as free on a
+ * local server and has no price (null) on a hosted one: the owner has to enter it.
  */
 export function priceFor(
   prices: Record<string, KnownModel>,
   provider: AiProvider,
   model: string,
   owner: { input: number; output: number } | null,
-): { price: ModelPrice; source: PriceSource } {
+  baseUrl?: string,
+): { price: ModelPrice; source: PriceSource } | null {
   const known = prices[model];
   if (known) return { price: known.price, source: "known" };
   if (owner) return { price: perMTok(owner.input, owner.output, owner.input), source: "owner" };
   const sameProvider = Object.values(prices).filter((m) => m.provider === provider);
-  if (sameProvider.length === 0) return { price: ZERO_PRICE, source: "local" };
+  if (sameProvider.length === 0) return baseUrl && isLocalUrl(baseUrl) ? { price: ZERO_PRICE, source: "local" } : null;
   return { price: sameProvider.reduce((a, b) => (b.price.output > a.price.output ? b : a)).price, source: "highest" };
 }

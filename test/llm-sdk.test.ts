@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { APICallError, simulateReadableStream } from "ai";
 import { MockLanguageModelV4 } from "ai/test";
 import type { LanguageModelV4StreamPart } from "@ai-sdk/provider";
-import { LlmProviderError } from "../src/llm/errors";
+import { LlmAbortedError, LlmProviderError } from "../src/llm/errors";
 import { sdkTransport, type SdkProvider } from "../src/llm/sdk";
 import type { LlmRequest } from "../src/llm/types";
 
@@ -109,6 +109,22 @@ describe("AI SDK transport", () => {
     const reply = await sdkTransport(provider(model))(request({ tools: [], jsonSchema: schema }), () => {});
 
     expect([model.doStreamCalls[0]!.responseFormat, reply.content]).toEqual([{ type: "json", schema }, [{ type: "text", text: '{"headline":"Quiet"}' }]]);
+  });
+
+  test("reports a step's usage as it arrives, so a request cancelled after it was billed still has its usage", async () => {
+    const model = mock([{ type: "text-start", id: "t" }, { type: "text-delta", id: "t", delta: "Hi" }, { type: "text-end", id: "t" }, finish("stop", "end_turn")]);
+    const cancel = new AbortController();
+    const reported: unknown[] = [];
+
+    const failure = await sdkTransport(provider(model))(request(), () => {}, cancel.signal, (usage, modelId) => {
+      reported.push({ usage, modelId });
+      cancel.abort();
+    }).catch((e: unknown) => e);
+
+    expect({ aborted: failure instanceof LlmAbortedError, reported }).toEqual({
+      aborted: true,
+      reported: [{ usage: { inputTokens: 1200, outputTokens: 80, cacheReadTokens: 0, cacheWriteTokens: 0, webSearches: 0 }, modelId: "claude-opus-5-5" }],
+    });
   });
 
   test("a rejected key becomes a provider error carrying only the status", async () => {

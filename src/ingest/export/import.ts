@@ -41,34 +41,52 @@ type Range = { from: number; to: number };
 
 const DAY_MS = 86_400_000;
 
-type Tombstone = { dedupe_key: string; track_uri: string; ts: number; ms_played: number | null; deleted_at: number };
+type Tombstone = { dedupe_key: string; source: string; track_uri: string; ts: number; ms_played: number | null; duration_ms: number | null; deleted_at: number };
+
+/**
+ * A live or export ts is the end of the listen. An api ts is Spotify's played_at, which may fall anywhere from
+ * the start of the listen to just after its end (the same window live reconcile uses), so the listen can end
+ * up to the track's length after it.
+ */
+function endsWithin(t: Tombstone, end: number): boolean {
+  if (t.source !== "api") return end >= t.ts - (t.ms_played ?? 0) - MATCH_BEFORE_MS && end <= t.ts + MATCH_AFTER_MS;
+  return end >= t.ts - MATCH_AFTER_MS && end <= t.ts + Math.max((t.duration_ms ?? 0) + MATCH_BEFORE_MS, MATCH_AFTER_MS);
+}
 
 /**
  * An export row is the same listen as a deleted api or live play of its track when it ends inside that play's
- * match window. The export row takes the deleted play's place, in the trash too, so the deletion holds and
- * Restore brings back the export row. Returns the rows still to insert and how many match a deleted play.
+ * match window; each deleted play takes the nearest such row, and each row matches once. The export row takes
+ * the deleted play's place, in the trash too, so the deletion holds and Restore brings back the export row. Returns the rows still to insert and how many match a deleted play.
  */
 function keepDeleted(tx: DbOrTx, rows: PlayInput[], timezone: string): { rows: PlayInput[]; deleted: number } {
   const tombstoned = tombstonedKeys(
     tx,
     rows.map((r) => r.dedupeKey),
   );
-  const candidates = rows.filter((r) => r.trackUri && !tombstoned.has(r.dedupeKey));
+  const stored = storedKeys(
+    tx,
+    rows.map((r) => r.dedupeKey),
+  );
+  const candidates = rows.filter((r) => r.trackUri && !tombstoned.has(r.dedupeKey) && !stored.has(r.dedupeKey));
   const span = rangeOf(candidates.map((r) => r.ts));
   const unchanged = { rows, deleted: tombstoned.size };
   if (!span) return unchanged;
-  const byTrack = new Map<string, Tombstone[]>();
-  for (const t of tx.all<Tombstone>(sql`
-    select dedupe_key, track_uri, ts, ms_played, deleted_at from play_tombstones
-    where source in ('api', 'live') and track_uri is not null and ts between ${span.from - MATCH_AFTER_MS} and ${span.to + DAY_MS}`))
-    byTrack.set(t.track_uri, [...(byTrack.get(t.track_uri) ?? []), t]);
-  if (byTrack.size === 0) return unchanged;
+  const tombstones = tx.all<Tombstone>(sql`
+    select t.dedupe_key, t.source, t.track_uri, t.ts, t.ms_played, k.duration_ms, t.deleted_at
+    from play_tombstones t left join tracks k on k.uri = t.track_uri
+    where t.source in ('api', 'live') and t.track_uri is not null and t.ts between ${span.from - DAY_MS} and ${span.to + DAY_MS}`);
+  if (tombstones.length === 0) return unchanged;
+  const pairs = candidates.flatMap((row) =>
+    tombstones
+      .filter((t) => t.track_uri === row.trackUri && endsWithin(t, row.ts))
+      .map((t) => ({ row, t, distance: Math.abs(row.ts - t.ts) })),
+  );
+  pairs.sort((a, b) => a.distance - b.distance);
   const replaced = new Set<string>();
-  for (const row of candidates) {
-    const options = byTrack.get(row.trackUri!) ?? [];
-    const i = options.findIndex((t) => row.ts >= t.ts - (t.ms_played ?? 0) - MATCH_BEFORE_MS && row.ts <= t.ts + MATCH_AFTER_MS);
-    if (i < 0) continue;
-    const [t] = options.splice(i, 1) as [Tombstone];
+  const used = new Set<string>();
+  for (const { row, t } of pairs) {
+    if (replaced.has(row.dedupeKey) || used.has(t.dedupe_key)) continue;
+    used.add(t.dedupe_key);
     replaced.add(row.dedupeKey);
     tx.delete(playTombstones).where(eq(playTombstones.dedupeKey, t.dedupe_key)).run();
     tx.insert(playTombstones).values({ dedupeKey: row.dedupeKey, source: row.source, trackUri: row.trackUri, ts: row.ts, msPlayed: row.msPlayed, deletedAt: t.deleted_at }).run();
@@ -80,6 +98,13 @@ function keepDeleted(tx: DbOrTx, rows: PlayInput[], timezone: string): { rows: P
       .run();
   }
   return { rows: rows.filter((r) => !replaced.has(r.dedupeKey)), deleted: tombstoned.size + replaced.size };
+}
+
+function storedKeys(tx: DbOrTx, keys: string[]): Set<string> {
+  const out = new Set<string>();
+  for (let i = 0; i < keys.length; i += 500)
+    for (const r of tx.select({ k: plays.dedupeKey }).from(plays).where(inArray(plays.dedupeKey, keys.slice(i, i + 500))).all()) out.add(r.k);
+  return out;
 }
 
 function rangeOf(timestamps: number[]): Range | null {

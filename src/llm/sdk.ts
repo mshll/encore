@@ -5,7 +5,7 @@ import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import { APICallError, jsonSchema, Output, streamText, tool, type AssistantModelMessage, type LanguageModel, type ModelMessage, type SystemModelMessage, type TextStreamPart, type ToolResultPart, type ToolSet } from "ai";
 import type { AiConfig } from "../settings/settings";
 import { LlmAbortedError, LlmProviderError } from "./errors";
-import type { AiProvider, AssistantMessage, ChatMessage, LlmReply, LlmRequest, LlmTransport, StopReason, Usage } from "./types";
+import type { AiProvider, AssistantMessage, ChatMessage, LlmReply, LlmRequest, LlmTransport, OnUsage, StopReason, Usage } from "./types";
 
 type ProviderTools = { webSearch: (maxUses: number) => ToolSet };
 
@@ -99,8 +99,8 @@ const json = <T>(value: T): T => JSON.parse(JSON.stringify(value)) as T;
 
 type Collected = { content: AssistantMessage["content"]; usage: Usage; unified?: string; raw?: string; model?: string };
 
-/** Folds the SDK's stream into encore's reply parts, passing text deltas on as they arrive. Provider-run tool calls (web search) are counted, not returned. */
-async function collect(stream: AsyncIterable<TextStreamPart<ToolSet>>, onText: (delta: string) => void): Promise<Collected> {
+/** Folds the SDK's stream into encore's reply parts, passing text deltas and each step's running usage on as they arrive. Provider-run tool calls (web search) are counted, not returned. */
+async function collect(stream: AsyncIterable<TextStreamPart<ToolSet>>, onText: (delta: string) => void, onUsage: OnUsage): Promise<Collected> {
   const out: Collected = { content: [], usage: { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0, webSearches: 0 } };
   const sources = new Set<string>();
   let searches = 0;
@@ -122,17 +122,19 @@ async function collect(stream: AsyncIterable<TextStreamPart<ToolSet>>, onText: (
       const cacheRead = u.inputTokenDetails.cacheReadTokens ?? 0;
       const cacheWrite = u.inputTokenDetails.cacheWriteTokens ?? 0;
       out.usage = {
-        inputTokens: u.inputTokenDetails.noCacheTokens ?? Math.max(0, (u.inputTokens ?? 0) - cacheRead - cacheWrite),
-        outputTokens: u.outputTokens ?? 0,
-        cacheReadTokens: cacheRead,
-        cacheWriteTokens: cacheWrite,
+        inputTokens: out.usage.inputTokens + (u.inputTokenDetails.noCacheTokens ?? Math.max(0, (u.inputTokens ?? 0) - cacheRead - cacheWrite)),
+        outputTokens: out.usage.outputTokens + (u.outputTokens ?? 0),
+        cacheReadTokens: out.usage.cacheReadTokens + cacheRead,
+        cacheWriteTokens: out.usage.cacheWriteTokens + cacheWrite,
         webSearches: 0,
       };
       out.unified = part.finishReason;
       out.raw = part.rawFinishReason;
       out.model = part.response.modelId;
       const google = part.providerMetadata?.google as { groundingMetadata?: { webSearchQueries?: unknown[] } } | undefined;
-      grounded = (google?.groundingMetadata?.webSearchQueries?.length ?? 0) > 0;
+      grounded ||= (google?.groundingMetadata?.webSearchQueries?.length ?? 0) > 0;
+      out.usage.webSearches = searches + (grounded ? 1 : 0);
+      onUsage({ ...out.usage }, out.model);
     } else if (part.type === "error") throw part.error;
   }
   out.usage.webSearches = searches + (grounded ? 1 : 0);
@@ -148,7 +150,7 @@ function providerOptions(provider: AiProvider, effort: LlmRequest["effort"]) {
 
 /** One streamed model request through the AI SDK. The tools have no `execute`, so the SDK stops after one step and encore's agent loop runs them. */
 export function sdkTransport(provider: SdkProvider): LlmTransport {
-  return async (request, onText, signal) => {
+  return async (request, onText, signal, onUsage = () => {}) => {
     const tools: ToolSet = Object.fromEntries(
       request.tools.map((t) => [t.name, tool({ description: t.description, inputSchema: jsonSchema(t.inputSchema), ...(provider.id === "anthropic" && t.strict ? { strict: true } : {}) })]),
     );
@@ -169,7 +171,7 @@ export function sdkTransport(provider: SdkProvider): LlmTransport {
     let collected: Collected;
     let messages: unknown[];
     try {
-      collected = await collect(result.fullStream, onText);
+      collected = await collect(result.fullStream, onText, onUsage);
       messages = (await result.response).messages;
     } catch (error) {
       if (signal?.aborted) throw new LlmAbortedError();

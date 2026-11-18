@@ -1,9 +1,10 @@
 import { describe, expect, test } from "bun:test";
+import { sql } from "drizzle-orm";
 import { z } from "zod";
 import { runAgent, tool, ToolError } from "../src/llm/agent";
 import { Llm } from "../src/llm/client";
 import { callCost } from "../src/llm/cost";
-import { LlmAbortedError, LlmBudgetExceededError, LlmNotConfiguredError, LlmRefusalError, LlmTruncatedError } from "../src/llm/errors";
+import { LlmAbortedError, LlmBudgetExceededError, LlmNotConfiguredError, LlmPriceRequiredError, LlmProviderError, LlmRefusalError, LlmTruncatedError } from "../src/llm/errors";
 import { budgetStatus, monthSpend, spendByFeature } from "../src/llm/ledger";
 import { KNOWN_MODELS, priceFor } from "../src/llm/providers";
 import { sdkConnect } from "../src/llm/sdk";
@@ -39,9 +40,40 @@ describe("cost", () => {
   });
 
   test("an unknown hosted model with no entered price is charged at its provider's highest known rate", () => {
-    const { price, source } = priceFor(KNOWN_MODELS, "google", "gemini-unknown", null);
+    const { price, source } = priceFor(KNOWN_MODELS, "google", "gemini-unknown", null)!;
     const googleOutputs = Object.values(KNOWN_MODELS).filter((m) => m.provider === "google").map((m) => m.price.output);
     expect([source, price.output]).toEqual(["highest", Math.max(...googleOutputs)]);
+  });
+
+  test("an OpenAI-compatible model with no price is free only on a loopback, private network or single-label address", () => {
+    const hosts = ["localhost", "127.0.0.2", "[::1]", "10.0.0.5", "172.16.0.1", "172.31.255.1", "192.168.1.20", "ollama.local", "ollama", "172.32.0.1", "api.example.com", "8.8.8.8"];
+
+    const free = hosts.filter((h) => priceFor(KNOWN_MODELS, "openai-compatible", "llama4", null, `http://${h}:11434/v1`)?.source === "local");
+
+    expect(free).toEqual(["localhost", "127.0.0.2", "[::1]", "10.0.0.5", "172.16.0.1", "172.31.255.1", "192.168.1.20", "ollama.local", "ollama"]);
+  });
+
+  test("a hosted OpenAI-compatible model with no price refuses calls until the owner sets one", async () => {
+    const fake = scripted(message([text("hi")], undefined, { model: "llama4" }));
+    const { ctx } = featureCtx(fake.transport, [], { AI_PROVIDER: "openai-compatible", AI_BASE_URL: "https://api.example.com/v1", AI_MODEL: "llama4" });
+
+    const failure = await ctx.llm.call(callInput).catch((e: unknown) => e);
+
+    expect([failure instanceof LlmPriceRequiredError, (failure as Error).message, fake.requests.length]).toEqual([true, "Set an input and output price for llama4: only a local server's calls count as free", 0]);
+  });
+
+  test("a hosted OpenAI-compatible model is charged at the price the owner entered", async () => {
+    const { ctx } = featureCtx(scripted(message([text("hi")], undefined, { model: "llama4" })).transport, [], {
+      AI_PROVIDER: "openai-compatible",
+      AI_BASE_URL: "https://api.example.com/v1",
+      AI_MODEL: "llama4",
+      AI_INPUT_PRICE: "2",
+      AI_OUTPUT_PRICE: "8",
+    });
+
+    await ctx.llm.call(callInput);
+
+    expect(monthSpend(ctx.db, "2026-02")).toBeCloseTo((1_000 * 2 + 100 * 8) / 1e6, 10);
   });
 
   test("a local model with no price costs nothing, and its tokens are still recorded", async () => {
@@ -93,6 +125,32 @@ describe("ledger and budget", () => {
     const { ctx } = featureCtx(scripted(message([], "refusal")).transport);
     await expect(ctx.llm.call(callInput)).rejects.toBeInstanceOf(LlmRefusalError);
     expect(spendByFeature(ctx.db, "2026-02")[0]?.calls).toBe(1);
+  });
+
+  test("a call cancelled after the provider reported usage is recorded as aborted and counts toward the cap", async () => {
+    const cancel = new AbortController();
+    const transport: LlmTransport = async (_request, _onText, _signal, onUsage) => {
+      onUsage?.(usage({ inputTokens: 0, outputTokens: 50_000 }), "claude-opus-5-5");
+      cancel.abort();
+      throw new Error("aborted");
+    };
+    const { ctx } = featureCtx(transport, [], { MONTHLY_BUDGET_USD: "1" });
+
+    await expect(ctx.llm.withSignal(cancel.signal).call(callInput)).rejects.toBeInstanceOf(LlmAbortedError);
+
+    expect({ spent: monthSpend(ctx.db, "2026-02"), stopReason: ctx.db.all<{ s: string }>(sql`select stop_reason as s from llm_calls`)[0]?.s }).toEqual({ spent: 1, stopReason: "aborted" });
+  });
+
+  test("a call that fails after the provider reported usage is recorded as an error", async () => {
+    const transport: LlmTransport = async (_request, _onText, _signal, onUsage) => {
+      onUsage?.(usage(), "claude-opus-5-5");
+      throw new LlmProviderError(500);
+    };
+    const { ctx } = featureCtx(transport);
+
+    await expect(ctx.llm.call(callInput)).rejects.toBeInstanceOf(LlmProviderError);
+
+    expect(ctx.db.all(sql`select stop_reason as stopReason, input_tokens as inputTokens from llm_calls`)).toEqual([{ stopReason: "error", inputTokens: 1000 }]);
   });
 
   test("cancelling stops the request and makes no further call", async () => {

@@ -19,6 +19,8 @@ const verifyBody = z.object({
   model: z.string().trim().min(1).max(200).optional(),
   apiKey: z.string().min(1).optional(),
   baseUrl: z.url({ protocol: /^https?$/ }).optional(),
+  inputPrice: z.number().min(0).optional(),
+  outputPrice: z.number().min(0).optional(),
 });
 
 function keyProblem(error: LlmProviderError, model: string): string | null {
@@ -34,14 +36,15 @@ async function verifyAi(c: Context<Env>) {
   const body = parse(verifyBody, await jsonBody(c));
   const saved = settings.get().llm.ai;
   const provider = body.provider ?? saved.provider;
-  const same = provider === saved.provider;
+  const savedKeyApplies = provider === saved.provider && (body.baseUrl === undefined || body.baseUrl === saved.baseUrl);
   const ai: AiConfig = {
     ...saved,
     provider,
-    model: body.model ?? (same ? saved.model : DEFAULT_MODELS[provider]),
-    apiKey: body.apiKey ?? (same ? saved.apiKey : undefined),
+    model: body.model ?? (provider === saved.provider ? saved.model : DEFAULT_MODELS[provider]),
+    apiKey: body.apiKey ?? (savedKeyApplies ? saved.apiKey : undefined),
     baseUrl: provider === "openai-compatible" ? (body.baseUrl ?? saved.baseUrl) : undefined,
     webSearch: hasWebSearch(provider),
+    ownerPrice: body.inputPrice !== undefined && body.outputPrice !== undefined ? { input: body.inputPrice, output: body.outputPrice } : saved.ownerPrice,
   };
   if (!aiReady(ai)) throw new ApiError(409, "llm_not_configured", "Choose a model and add an API key (or a base URL) first");
   const model = ai.model!;

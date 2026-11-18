@@ -220,6 +220,42 @@ describe("settings actions", () => {
     expect([await res.json(), seen[0]!.provider]).toEqual([{ valid: true, provider: "openai", model: "gpt-6.1-terra" }, "openai"]);
   });
 
+  test("verifying a hosted OpenAI-compatible server with no price asks for one; an unsaved price in the body is used", async () => {
+    const answers: Connect = () => async (request) => message([text("OK")], "end", { model: request.model });
+    const { send } = signedIn({ llmConnect: answers });
+    const candidate = { provider: "openai-compatible", model: "llama4", baseUrl: "https://api.example.com/v1", apiKey: "sk-hosted" };
+
+    const unpriced = await send("POST", "/api/settings/ai/verify", candidate);
+    const priced = await send("POST", "/api/settings/ai/verify", { ...candidate, inputPrice: 2, outputPrice: 8 });
+
+    expect([unpriced.status, ((await unpriced.json()) as { error: { code: string } }).error.code, await priced.json()]).toEqual([
+      409,
+      "llm_price_required",
+      { valid: true, provider: "openai-compatible", model: "llama4" },
+    ]);
+  });
+
+  test("verifying an unsaved base URL without a key checks it with no key, so the saved key never goes to another server", async () => {
+    const seen: AiConfig[] = [];
+    const answers: Connect = (ai) => async (request) => {
+      seen.push(ai);
+      return message([text("OK")], "end", { model: request.model });
+    };
+    const { send } = signedIn({ env: { AI_PROVIDER: "openai-compatible", AI_BASE_URL: "http://localhost:11434/v1", AI_MODEL: "llama4", AI_API_KEY: CLAUDE_KEY }, llmConnect: answers });
+
+    const moved = await send("POST", "/api/settings/ai/verify", { baseUrl: "http://ollama:11434/v1" });
+    const same = await send("POST", "/api/settings/ai/verify", { baseUrl: "http://localhost:11434/v1" });
+
+    expect([moved.status, same.status, seen.map((a) => [a.baseUrl, a.apiKey])]).toEqual([
+      200,
+      200,
+      [
+        ["http://ollama:11434/v1", undefined],
+        ["http://localhost:11434/v1", CLAUDE_KEY],
+      ],
+    ]);
+  });
+
   test("verifying with no key given and none set is a precondition error", async () => {
     const { send } = signedIn();
 

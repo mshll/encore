@@ -28,6 +28,12 @@ export class LlmTruncatedError extends Error {
 
 export class LlmIncompleteError extends Error {}
 
+export class LlmPriceRequiredError extends Error {
+  constructor(readonly model: string) {
+    super(`Set an input and output price for ${model}: only a local server's calls count as free`);
+  }
+}
+
 export class LlmAbortedError extends Error {
   constructor() {
     super("The request was cancelled");
