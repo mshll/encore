@@ -17,7 +17,8 @@ Self-hosted, single-user Spotify dashboard. Read [README.md](README.md) for setu
 - Never start playback without a user action.
 - Spotify is the only source of listening. No imports or scrobbles from Last.fm, ListenBrainz or other services.
 - Never store or log `ip_addr` from the export.
-- Every Claude call goes through `src/llm` so the ledger records it and the monthly cap applies.
+- AI is optional. Every surface works without an AI provider; AI entry points hide or point once to Settings, never a warning on every page.
+- Every AI call goes through `src/llm` (Vercel AI SDK; Anthropic, OpenAI, Google, OpenAI-compatible) so the ledger records it and the monthly cap applies.
 - Never log tokens, keys or cookies.
 - Never reset, recreate or rename the data volume, and never deploy with fresh volumes. The database holds track and artist details that cost days of Spotify quota to fetch again. Schema changes go through additive migrations.
 
@@ -30,7 +31,7 @@ Self-hosted, single-user Spotify dashboard. Read [README.md](README.md) for setu
 ## Code
 
 - Backend: Bun, Hono, bun:sqlite with Drizzle. Analytics are pure functions in `src/analytics`. Routes stay thin.
-- Long Claude runs (picks, sets, ask) are owned by the server (`src/http/runs.ts`). The client follows them with `web/src/lib/useRun.ts`; leaving a page stops listening, not the run. Only Cancel stops it.
+- Long AI runs (picks, sets, ask) are owned by the server (`src/http/runs.ts`). The client follows them with `web/src/lib/useRun.ts`; leaving a page stops listening, not the run. Only Cancel stops it.
 - UI: `web/` (Vite, React 19, Tailwind, UI SDK, Phosphor icons, TanStack Query). Design rules, tokens and the information architecture live in [DESIGN.md](DESIGN.md). Types for API responses live in `web/src/api/types.ts`; keep them in step with `docs/api.md`.
 - The Content Security Policy allows no inline scripts and no third-party script origins.
 - Update `docs/api.md` in the same commit as any API change.

@@ -231,6 +231,7 @@ Chat panel (⌘J) on every page, its history inside it; /ask is the panel expand
 | Ask in the sidebar, a list beside the panel | The chat panel only, with History; `/ask` stays as the expanded panel |
 | Recaps opens the newest week | A timeline: years, their months, their weeks, each with its headline; the current period in progress first |
 | A recap's Claude lines at the foot ("As written then") | Each section carries its own line; new sections for discovery, comebacks and records; a year compares with the year before |
+| Claude named everywhere; "Claude is not set up" warnings on For you, Ask and the chat composer | AI is optional and any provider: copy says what a feature does, not which model. With no provider set, AI entry points are absent (no chat button, no Describe it, no Weekly picks row, recaps show their figures) and Settings › AI is the one place that offers setup; the palette has Set up AI |
 | Home: this week, the long view | Adds one highlight line to This week: a streak, a record or a milestone, when there is one |
 
 ## 2. Tokens
