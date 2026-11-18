@@ -1195,7 +1195,7 @@ Set shape (`GET /api/sets/:id`, and `set` in create/refine):
 - `kind`: `library` (in the history) or `new` (never played, verified on Spotify).
 - `albumArtUrl`, `artistImageUrl`: artwork for the row, or `null` when not known yet. Album art comes from any known version of the song (or the Spotify search result for new songs); the artist image is the primary artist's. Picks and notes carry the same two fields.
 - A refinement that changes mood or direction ("less sad") is applied to every track: familiar songs whose tags conflict with it are rejected unless the owner asked to keep them.
-- `playlist` is `null` until saved. `outdated: true` when the set changed after the last save; saving again updates the same playlist.
+- `playlist` is `null` until saved. After the first save, a refinement or a removed track updates the playlist by itself. `outdated: true` when that update failed; saving again updates the same playlist.
 - `coverUrl`: the set's generated cover (see `GET /api/sets/:id/cover`), `null` while the set has no tracks. `v` changes whenever the cover would change.
 - `outcome` counts plays of the song after the set was saved (or created, if never saved), from all sources: `finished` counts plays played through and `skipped` plays skipped early or midway (see Outcome); API rows have no outcome and count in neither. Refreshed hourly.
 - `history`: for `library` tracks, the owner's all-time listens and last play of the song; `null` for `new` tracks.
@@ -1209,7 +1209,7 @@ Set shape (`GET /api/sets/:id`, and `set` in create/refine):
 
 #### `POST /api/sets/:id/messages`
 
-`{ "message": "less sad, and swap track 3 for something more upbeat", "context"?: PageContext }`. `200 { "set": Set, "changed": true, "reply": null }`. `changed: false` with a `reply` when Claude answered without changing the set.
+`{ "message": "less sad, and swap track 3 for something more upbeat", "context"?: PageContext }`. `200 { "set": Set, "changed": true, "reply": null }`. `changed: false` with a `reply` when Claude answered without changing the set. When the set changed and was saved to Spotify before, its playlist is updated as by `POST /api/sets/:id/playlist` before the response; if that fails, the change stands and `playlist.outdated` stays `true`.
 
 #### `GET /api/sets`
 
@@ -1235,7 +1235,7 @@ Body `{ "deviceId"? }` or no body. Starts a DJ session with the set's tracks in 
 
 #### `DELETE /api/sets/:id/items/:position`
 
-Removes one track and renumbers the rest. `200 Set` with `version` + 1 and a `changes` entry with `source: "owner"`, so a saved playlist becomes `outdated`. `404 not_found` for an unknown set or position.
+Removes one track and renumbers the rest. `200 Set` with `version` + 1 and a `changes` entry with `source: "owner"`. A set saved to Spotify before has its playlist updated the same way as after a refinement. `404 not_found` for an unknown set or position.
 
 #### `DELETE /api/sets/:id`
 

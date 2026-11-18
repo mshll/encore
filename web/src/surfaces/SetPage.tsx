@@ -340,7 +340,7 @@ export function SetPage({ id }: { id: number }) {
           setRemoving(null);
         }}
       >
-        {set.playlist ? "The set gets a new version without it. Update the playlist to match." : "The set gets a new version without it."}
+        {set.playlist ? "The set and its Spotify playlist get a new version without it." : "The set gets a new version without it."}
       </Confirm>
     </Page>
   );

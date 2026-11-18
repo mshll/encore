@@ -44,3 +44,14 @@ export async function saveSetPlaylist(db: Db, spotify: SpotifyClient, setId: num
   const cover = await uploadSetCover(db, spotify, setId, playlistId, { fetchFn: fetchArt, now });
   return { playlistId, playlistUrl, tracks: uris.length, cover };
 }
+
+/** A failed update is logged, not thrown: the set's change stands and the set stays outdated for a manual update. */
+export async function syncSetPlaylist(db: Db, spotify: SpotifyClient, setId: number, now: number, fetchArt: typeof fetch = fetch): Promise<void> {
+  const set = db.select({ playlistId: sets.playlistId, version: sets.version, savedVersion: sets.savedVersion }).from(sets).where(eq(sets.id, setId)).get();
+  if (!set?.playlistId || set.savedVersion === set.version) return;
+  try {
+    await saveSetPlaylist(db, spotify, setId, now, fetchArt);
+  } catch (error) {
+    console.error(`Set ${setId} playlist was not updated: ${error instanceof Error ? error.message : String(error)}`);
+  }
+}

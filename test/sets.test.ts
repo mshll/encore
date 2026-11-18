@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { Llm } from "../src/llm/client";
 import { songKey } from "../src/plays/song";
 import { refreshSetOutcomes } from "../src/sets/outcomes";
-import { saveSetPlaylist } from "../src/sets/playlist";
+import { saveSetPlaylist, syncSetPlaylist } from "../src/sets/playlist";
 import { createSet, diffSets, directionConflict, getSet, listSets, pinSetItem, refineSet, removeSetItem, SetItemNotFoundError, SetNotBuiltError } from "../src/sets/service";
 import { upsertTags } from "../src/tags/service";
 import { sql } from "drizzle-orm";
@@ -269,6 +269,53 @@ describe("save to playlist", () => {
       { method: "PUT", path: "/v1/playlists/pl1/items", body: { uris: [uri("s1")] } },
     ]);
     expect(getSet(env.db, id)!.playlist).toMatchObject({ savedVersion: 2, outdated: false });
+  });
+});
+
+describe("playlist sync after a change", () => {
+  test("a set never saved stays off Spotify", async () => {
+    const env = await builtSet();
+    env.spotifyCalls.length = 0;
+
+    await syncSetPlaylist(env.db, env.ctx.spotify, env.result.set.id, env.ctx.now());
+
+    expect(env.spotifyCalls).toEqual([]);
+  });
+
+  test("a saved set that changed has its playlist updated in place", async () => {
+    const env = await builtSet();
+    const id = env.result.set.id;
+    await saveSetPlaylist(env.db, env.ctx.spotify, id, env.ctx.now());
+    removeSetItem(env.db, id, 1, env.ctx.now());
+    env.spotifyCalls.length = 0;
+
+    await syncSetPlaylist(env.db, env.ctx.spotify, id, env.ctx.now());
+
+    expect(env.spotifyCalls).toContainEqual({ method: "PUT", path: "/v1/playlists/pl1/items", body: { uris: [uri("g1")] } });
+    expect(getSet(env.db, id)!.playlist).toMatchObject({ savedVersion: 2, outdated: false });
+  });
+
+  test("a saved set with no change since the save sends nothing", async () => {
+    const env = await builtSet();
+    await saveSetPlaylist(env.db, env.ctx.spotify, env.result.set.id, env.ctx.now());
+    env.spotifyCalls.length = 0;
+
+    await syncSetPlaylist(env.db, env.ctx.spotify, env.result.set.id, env.ctx.now());
+
+    expect(env.spotifyCalls).toEqual([]);
+  });
+
+  test("a failed update does not throw and leaves the set outdated", async () => {
+    const env = await builtSet();
+    const id = env.result.set.id;
+    await saveSetPlaylist(env.db, env.ctx.spotify, id, env.ctx.now());
+    removeSetItem(env.db, id, 1, env.ctx.now());
+    const failing = (async () => new Response(JSON.stringify({ error: { message: "Server error" } }), { status: 500 })) as unknown as typeof fetch;
+    const spotify = new SpotifyClient(env.db, env.auth, env.ctx.settings, failing, env.time.now);
+
+    await syncSetPlaylist(env.db, spotify, id, env.ctx.now());
+
+    expect(getSet(env.db, id)!.playlist).toMatchObject({ savedVersion: 1, outdated: true });
   });
 });
 

@@ -17,7 +17,7 @@ import { generatePicks, pickWeeks, weekOf, weekPicks } from "../../picks/service
 import { playSet } from "../../sets/play";
 import { savePick, updatePickState } from "../../assistant/api";
 import { ensureSetCover, setCoverSource } from "../../sets/cover";
-import { saveSetPlaylist } from "../../sets/playlist";
+import { saveSetPlaylist, syncSetPlaylist } from "../../sets/playlist";
 import { djSessionView } from "./dj";
 import { createSet, deleteSet, getSet, listSets, pinSetItem, refineSet, removeSetItem } from "../../sets/service";
 import { pageContextSchema } from "../../llm/pageContext";
@@ -59,7 +59,12 @@ export const setRoutes = new Hono<Env>()
     const setId = parse(id, c.req.param()).id;
     const body = parse(z.object({ message: text(2000), context: pageContextSchema.optional() }), await jsonBody(c));
     if (!getSet(c.var.deps.db, setId)) throw new ApiError(404, "not_found", "Not found");
-    return respond(c, (ctx, onEvent) => refineSet(ctx, setId, body.message, onEvent, body.context));
+    return respond(c, async (ctx, onEvent) => {
+      const result = await refineSet(ctx, setId, body.message, onEvent, body.context);
+      if (!result.changed) return result;
+      await syncSetPlaylist(ctx.db, ctx.spotify, setId, ctx.now());
+      return { ...result, set: getSet(ctx.db, setId)! };
+    });
   })
   .post("/:id/playlist", async (c) => {
     const { db, spotify, now } = c.var.deps;
@@ -79,7 +84,10 @@ export const setRoutes = new Hono<Env>()
   })
   .delete("/:id/items/:position", async (c) => {
     const p = parse(item, c.req.param());
-    return c.json(await mapped(() => removeSetItem(c.var.deps.db, p.id, p.position, c.var.deps.now())));
+    const { db, spotify, now } = c.var.deps;
+    await mapped(() => removeSetItem(db, p.id, p.position, now()));
+    await syncSetPlaylist(db, spotify, p.id, now());
+    return c.json(getSet(db, p.id)!);
   })
   .delete("/:id", async (c) => {
     await mapped(() => deleteSet(c.var.deps.db, parse(id, c.req.param()).id));

@@ -223,6 +223,22 @@ describe("set items", () => {
     expect(await removed.json()).toMatchObject({ version: 2, items: [{ position: 1, name: "Surf", pinned: true }], changes: [{ version: 2, source: "owner" }] });
     expect((await request("/api/sets/1/items/9", { method: "DELETE", headers: { cookie } })).status).toBe(404);
   });
+
+  test("removing a track from a saved set updates its Spotify playlist", async () => {
+    const { fn, calls } = routeFetch((call) => (call.url.includes("/v1/playlists/pl1") ? noContent() : undefined));
+    const { db, request } = testApp({}, fn);
+    connectSpotify(db);
+    const cookie = `encore_session=${createSession(db)}`;
+    db.$client.run("insert into llm_threads (id, feature, system, messages, created_at, updated_at) values (1, 'sets', '[]', '[]', 0, 0)");
+    db.$client.run("insert into sets (id, thread_id, request, title, description, version, saved_version, playlist_id, playlist_url, created_at, updated_at) values (1, 1, 'r', 'Late drive', '', 1, 1, 'pl1', 'https://open.spotify.com/playlist/pl1', 0, 0)");
+    for (const [n, name] of [[1, "Woods"], [2, "Surf"]] as const)
+      db.$client.run(`insert into set_items (set_id, position, kind, song_key, uri, name, artist, reason) values (1, ${n}, 'library', '${name.toLowerCase()}|mac miller', '${uri(name)}', '${name}', 'Mac Miller', 'r')`);
+
+    const removed = await request("/api/sets/1/items/1", { method: "DELETE", headers: { cookie } });
+
+    expect(calls).toContainEqual({ url: "https://api.spotify.com/v1/playlists/pl1/items", method: "PUT", body: { uris: [uri("Surf")] } });
+    expect(await removed.json()).toMatchObject({ version: 2, playlist: { savedVersion: 2, outdated: false } });
+  });
 });
 
 describe("SSE keep-alive", () => {
